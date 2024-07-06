@@ -1,5 +1,7 @@
-fn main() {
-    let r = prost_build::compile_protos(&["src/zilliqa.proto"], &["src/"]);
+mod generated {
+    include!("zilliqa_message.rs");
+}
 
-    dbg!(&r);
+fn main() {
+    dbg!("hello");
 }
