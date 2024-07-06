@@ -1,3 +1,5 @@
 fn main() {
-    println!("Hello, world!");
+    let r = prost_build::compile_protos(&["src/zilliqa.proto"], &["src/"]);
+
+    dbg!(&r);
 }
