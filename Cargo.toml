@@ -13,6 +13,9 @@ name = "shared"
 path = "shared/src/lib.rs"
 
 [workspace]
-members = ["proto", "shared", "zil_cc", "zil_errors"]
+members = ["crypto", "proto", "shared", "zil_errors"]
 
 [dependencies]
+hex = "0.4.3"
+rand = "0.8.5"
+sha2 = "0.10.8"
