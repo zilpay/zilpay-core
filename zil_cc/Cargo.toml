@@ -1,0 +1,8 @@
+[package]
+name = "zil_cc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+elliptic-curve = "0.13.8"
+k256 = "0.13.3"
