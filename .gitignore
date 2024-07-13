@@ -26,3 +26,8 @@ perf.*
 
 # RustRover
 .idea
+
+
+# Added by cargo
+
+/target

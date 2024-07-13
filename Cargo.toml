@@ -2,9 +2,17 @@
 name = "zilpa-core"
 version = "0.1.0"
 edition = "2021"
+readme = "README.md"
+repository = "https://github.com/zilpay/zilpay-core"
+license = "GPL-3"
+authors = ["Rinat.H <hicc0rus@gmail.com>"]
+resolver = "2"
+
+[lib]
+name = "shared"
+path = "shared/src/lib.rs"
+
+[workspace]
+members = ["proto", "shared"]
 
 [dependencies]
-prost = "0.12.6"
-
-[build-dependencies]
-prost-build = "0.12.6"
