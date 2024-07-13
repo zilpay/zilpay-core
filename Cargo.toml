@@ -13,6 +13,6 @@ name = "shared"
 path = "shared/src/lib.rs"
 
 [workspace]
-members = ["proto", "shared", "zil_cc"]
+members = ["proto", "shared", "zil_cc", "zil_errors"]
 
 [dependencies]

@@ -1,7 +1,6 @@
 [package]
-name = "shared"
+name = "zil_errors"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-zil_cc = { path = "../zil_cc" }
