@@ -18,4 +18,5 @@ members = ["crypto", "proto", "shared", "zil_errors"]
 [dependencies]
 hex = "0.4.3"
 rand = "0.8.5"
+serde = { version = "1.0.204", features = ["derive", "rc"] }
 sha2 = "0.10.8"
