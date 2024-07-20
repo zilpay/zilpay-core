@@ -4,7 +4,10 @@ use std::{
     str::FromStr,
 };
 
-use crate::zq1_proto::{Code, Data, Nonce, ProtoTransactionCoreInfo};
+use crate::{
+    address::Address,
+    zq1_proto::{Code, Data, Nonce, ProtoTransactionCoreInfo},
+};
 use crypto::schnorr::PublicKey;
 use serde::{Deserialize, Serialize};
 
