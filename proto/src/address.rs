@@ -4,12 +4,20 @@ use sha2::{Digest, Sha256};
 pub const CHARSET: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 pub const HRP: &str = "zil";
 pub const GENERATOR: [u32; 5] = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+pub const ADDR_LEN: usize = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Address([u8; 20]);
+pub struct Address([u8; ADDR_LEN]);
 
 impl Address {
-    pub fn from_zil_pub_key(pub_key: &[u8]) -> Option<[u8; 20]> {
+    pub fn from_base16(addr: &str) -> Option<Self> {
+        let mb_bytes = hex::decode(addr).ok()?;
+        let bytes = mb_bytes.try_into().ok()?;
+
+        Some(Address(bytes))
+    }
+
+    pub fn from_zil_pub_key(pub_key: &[u8]) -> Option<[u8; ADDR_LEN]> {
         let mut hasher = Sha256::new();
         hasher.update(pub_key);
         let hash = hasher.finalize();
@@ -21,7 +29,7 @@ impl Address {
         }
     }
 
-    pub fn from_bech32_address(address: &str) -> Option<[u8; 20]> {
+    pub fn from_bech32_address(address: &str) -> Option<Address> {
         let (hrp, data) = match decode(address) {
             Some(addr) => addr,
             None => return None,
@@ -34,15 +42,14 @@ impl Address {
             None => return None,
         };
 
-        buf.try_into().ok()
+        buf.try_into().ok().map(Address)
     }
 
-    pub fn to_bech32(&self) -> String {
-        // TODO: make convert to bech32
-        String::new()
+    pub fn to_bech32(&self) -> Option<String> {
+        convert_bits(&self.0, 8, 5, true).map(|addrbz| encode(HRP, &addrbz))
     }
 
-    pub fn as_slice(&self) -> [u8; 20] {
+    pub fn as_slice(&self) -> [u8; ADDR_LEN] {
         self.0
     }
 }
@@ -235,7 +242,7 @@ mod tests {
     fn test_from_bech32_address() {
         let bech32 = "zil1w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8";
         let base16_buff = Address::from_bech32_address(bech32).unwrap();
-        let base16 = hex::encode(base16_buff);
+        let base16 = hex::encode(base16_buff.0);
 
         assert_eq!(base16, "7793a8e8c09d189d4d421ce5bc5b3674656c5ac1");
 
@@ -243,5 +250,13 @@ mod tests {
             Address::from_bech32_address("zi21w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8");
 
         assert_eq!(base16_buff, None);
+    }
+
+    #[test]
+    fn test_to_bech32_address() {
+        let bech32 = "zil1w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8";
+        let addr = Address::from_base16("7793a8e8c09d189d4d421ce5bc5b3674656c5ac1").unwrap();
+
+        assert_eq!(bech32, addr.to_bech32().unwrap());
     }
 }
