@@ -21,7 +21,7 @@ impl Address {
         }
     }
 
-    pub fn from_bech32_address(address: &str) -> Option<Vec<u8>> {
+    pub fn from_bech32_address(address: &str) -> Option<[u8; 20]> {
         let (hrp, data) = match decode(address) {
             Some(addr) => addr,
             None => return None,
@@ -34,7 +34,7 @@ impl Address {
             None => return None,
         };
 
-        Some(buf)
+        buf.try_into().ok()
     }
 
     pub fn to_bech32(&self) -> String {
@@ -55,8 +55,10 @@ fn verify_checksum(hrp: &str, data: &[u8]) -> bool {
 fn decode(bech_string: &str) -> Option<(String, Vec<u8>)> {
     let mut has_lower = false;
     let mut has_upper = false;
+
     for c in bech_string.chars() {
         let code = c as u32;
+
         if code < 33 || code > 126 {
             return None;
         }
@@ -67,6 +69,7 @@ fn decode(bech_string: &str) -> Option<(String, Vec<u8>)> {
             has_upper = true;
         }
     }
+
     if has_lower && has_upper {
         return None;
     }
