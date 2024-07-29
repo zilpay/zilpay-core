@@ -16,6 +16,7 @@ path = "shared/src/lib.rs"
 members = ["crypto", "proto", "shared", "zil_errors"]
 
 [dependencies]
+ethers = "2.0.14"
 hex = "0.4.3"
 rand = "0.8.5"
 serde = { version = "1.0.204", features = ["derive", "rc"] }

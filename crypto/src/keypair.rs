@@ -4,6 +4,7 @@ use ethers::{
     core::k256::ecdsa::SigningKey,
     signers::{LocalWallet, Signer},
     types::{transaction::eip2718::TypedTransaction, H256},
+    utils::hash_message,
 };
 
 use k256::{ecdsa, SecretKey};
@@ -34,6 +35,13 @@ impl KeyPair {
         })
     }
 
+    pub fn get_ecdsa_wallet(&self) -> Result<LocalWallet, ZilliqaErrors> {
+        let signing_key =
+            SigningKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+
+        Ok(LocalWallet::from(signing_key))
+    }
+
     pub fn sign_secp256k1(&self, msg: &[u8]) -> Result<ecdsa::Signature, ZilliqaErrors> {
         let secret_key =
             SecretKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
@@ -45,13 +53,20 @@ impl KeyPair {
         &self,
         hash: H256,
     ) -> Result<ethers::core::types::Signature, ZilliqaErrors> {
-        let signing_key =
-            SigningKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
-        let wallet = LocalWallet::from(signing_key);
+        let wallet = self.get_ecdsa_wallet()?;
 
         wallet
             .sign_hash(hash)
             .or(Err(ZilliqaErrors::InvalidSignTry))
+    }
+
+    pub fn sign_ecdsa_message(
+        &self,
+        msg: &[u8],
+    ) -> Result<ethers::core::types::Signature, ZilliqaErrors> {
+        let hash_msg = hash_message(msg);
+
+        self.sign_ecdsa_hash(hash_msg)
     }
 }
 
