@@ -1,14 +1,17 @@
 pub use k256::{ecdsa::Signature, PublicKey, SecretKey};
 use k256::{
-    elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, Group},
-    AffinePoint, Scalar, U256,
+    elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, Group, PrimeField},
+    AffinePoint, FieldBytes, Scalar, U256,
 };
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use sha2::{Digest, Sha256};
 use zil_errors::ZilliqaErrors;
 
 pub const MAX_TRY_SIGN: usize = 100_000_000;
 
 pub fn sign<'a>(message: &[u8], secret_key: &SecretKey) -> Result<Signature, ZilliqaErrors<'a>> {
+    let mut rng = ChaCha20Rng::from_entropy();
     let safe_counter: usize = 0;
 
     loop {
@@ -16,10 +19,13 @@ pub fn sign<'a>(message: &[u8], secret_key: &SecretKey) -> Result<Signature, Zil
             return Err(ZilliqaErrors::InvalidSignTry);
         }
 
-        let k = Scalar::generate_vartime(&mut rand::thread_rng());
+        let mut k_bytes = FieldBytes::default();
+        rng.fill_bytes(&mut k_bytes);
 
-        if let Some(signature) = sign_inner(k, message, secret_key) {
-            return Ok(signature);
+        if let Some(scalar) = Scalar::from_repr(k_bytes).into() {
+            if let Some(signature) = sign_inner(scalar, message, secret_key) {
+                return Ok(signature);
+            }
         }
     }
 }

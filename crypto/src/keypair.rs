@@ -29,7 +29,7 @@ impl KeyPair {
         rng.fill_bytes(&mut sk_bytes);
 
         let secret_key = SecretKey::from_slice(&sk_bytes).or(Err(ZilliqaErrors::InvalidEntropy))?;
-        let pub_key: [u8; PUB_KEY_SIZE] = sk
+        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
             .public_key()
             .to_sec1_bytes()
             .to_vec()
