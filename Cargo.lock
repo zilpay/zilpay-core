@@ -475,6 +475,7 @@ dependencies = [
  "hex",
  "k256",
  "rand",
+ "rand_chacha",
  "sha2",
  "zil_errors",
 ]
@@ -3632,6 +3633,7 @@ dependencies = [
  "ethers",
  "hex",
  "rand",
+ "rand_chacha",
  "serde",
  "sha2",
 ]

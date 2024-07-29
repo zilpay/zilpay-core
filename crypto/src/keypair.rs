@@ -6,6 +6,8 @@ use ethers::{
     types::{transaction::eip2718::TypedTransaction, Signature as EvmSignature, H256},
     utils::hash_message,
 };
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 
 use k256::{ecdsa, SecretKey};
 use zil_errors::{EvmErrors, ZilliqaErrors};
@@ -20,6 +22,27 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
+    pub fn generate<'a>() -> Result<Self, ZilliqaErrors<'a>> {
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mut sk_bytes = [0u8; SECRET_KEY_SIZE];
+
+        rng.fill_bytes(&mut sk_bytes);
+
+        let secret_key = SecretKey::from_slice(&sk_bytes).or(Err(ZilliqaErrors::InvalidEntropy))?;
+        let pub_key: [u8; PUB_KEY_SIZE] = sk
+            .public_key()
+            .to_sec1_bytes()
+            .to_vec()
+            .try_into()
+            .or(Err(ZilliqaErrors::InvalidSecretKey))?;
+        let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
+
+        Ok(Self {
+            secret_key,
+            pub_key,
+        })
+    }
+
     pub fn from_secret_key<'a>(sk: SecretKey) -> Result<Self, ZilliqaErrors<'a>> {
         let pub_key: [u8; PUB_KEY_SIZE] = sk
             .public_key()
