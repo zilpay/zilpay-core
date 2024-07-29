@@ -2,13 +2,13 @@ use super::schnorr;
 
 use ethers::{
     core::k256::ecdsa::SigningKey,
-    signers::{LocalWallet, Signer},
-    types::{transaction::eip2718::TypedTransaction, H256},
+    signers::LocalWallet,
+    types::{transaction::eip2718::TypedTransaction, Signature as EvmSignature, H256},
     utils::hash_message,
 };
 
 use k256::{ecdsa, SecretKey};
-use zil_errors::ZilliqaErrors;
+use zil_errors::{EvmErrors, ZilliqaErrors};
 
 pub const PUB_KEY_SIZE: usize = 33;
 pub const SECRET_KEY_SIZE: usize = 32;
@@ -35,9 +35,9 @@ impl KeyPair {
         })
     }
 
-    pub fn get_ecdsa_wallet(&self) -> Result<LocalWallet, ZilliqaErrors> {
-        let signing_key =
-            SigningKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+    pub fn get_ecdsa_wallet(&self) -> Result<LocalWallet, EvmErrors> {
+        let signing_key = SigningKey::from_slice(&self.secret_key)
+            .map_err(|e| EvmErrors::InvalidSecretKey(e.to_string()))?;
 
         Ok(LocalWallet::from(signing_key))
     }
@@ -49,24 +49,26 @@ impl KeyPair {
         schnorr::sign(msg, &secret_key)
     }
 
-    pub fn sign_ecdsa_hash(
-        &self,
-        hash: H256,
-    ) -> Result<ethers::core::types::Signature, ZilliqaErrors> {
+    pub fn sign_ecdsa_hash(&self, hash: H256) -> Result<EvmSignature, EvmErrors> {
         let wallet = self.get_ecdsa_wallet()?;
 
         wallet
             .sign_hash(hash)
-            .or(Err(ZilliqaErrors::InvalidSignTry))
+            .map_err(|e| EvmErrors::InvalidSign(e.to_string()))
     }
 
-    pub fn sign_ecdsa_message(
-        &self,
-        msg: &[u8],
-    ) -> Result<ethers::core::types::Signature, ZilliqaErrors> {
+    pub fn sign_ecdsa_message(&self, msg: &[u8]) -> Result<EvmSignature, EvmErrors> {
         let hash_msg = hash_message(msg);
 
         self.sign_ecdsa_hash(hash_msg)
+    }
+
+    pub fn sign_ecdsa_tx(&self, tx: &TypedTransaction) -> Result<EvmSignature, EvmErrors> {
+        let wallet = self.get_ecdsa_wallet()?;
+
+        wallet
+            .sign_transaction_sync(tx)
+            .map_err(|e| EvmErrors::InvalidSign(e.to_string()))
     }
 }
 

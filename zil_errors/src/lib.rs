@@ -4,3 +4,9 @@ pub enum ZilliqaErrors<'a> {
     InvalidSecretKey,
     InvalidSignTry,
 }
+
+#[derive(Debug)]
+pub enum EvmErrors {
+    InvalidSecretKey(String),
+    InvalidSign(String),
+}
