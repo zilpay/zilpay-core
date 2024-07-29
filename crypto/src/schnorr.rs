@@ -4,18 +4,27 @@ use k256::{
     AffinePoint, Scalar, U256,
 };
 use sha2::{Digest, Sha256};
+use zil_errors::ZilliqaErrors;
 
-pub fn sign(message: &[u8], secret_key: &SecretKey) -> Signature {
+pub const MAX_TRY_SIGN: usize = 100_000_000;
+
+pub fn sign<'a>(message: &[u8], secret_key: &SecretKey) -> Result<Signature, ZilliqaErrors<'a>> {
+    let safe_counter: usize = 0;
+
     loop {
+        if safe_counter >= MAX_TRY_SIGN {
+            return Err(ZilliqaErrors::InvalidSignTry);
+        }
+
         let k = Scalar::generate_vartime(&mut rand::thread_rng());
 
         if let Some(signature) = sign_inner(k, message, secret_key) {
-            return signature;
+            return Ok(signature);
         }
     }
 }
 
-fn sign_inner(k: Scalar, message: &[u8], secret_key: &SecretKey) -> Option<Signature> {
+pub fn sign_inner(k: Scalar, message: &[u8], secret_key: &SecretKey) -> Option<Signature> {
     let public_key = secret_key.public_key();
 
     // 2. Compute the commitment Q = kG, where G is the base point.

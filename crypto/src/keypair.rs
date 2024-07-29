@@ -1,4 +1,5 @@
-use k256::SecretKey;
+use super::schnorr;
+use k256::{ecdsa, SecretKey};
 use zil_errors::ZilliqaErrors;
 
 pub const PUB_KEY_SIZE: usize = 33;
@@ -24,6 +25,13 @@ impl KeyPair {
             pub_key,
             secret_key,
         })
+    }
+
+    pub fn sign_secp256k1(&self, msg: &[u8]) -> Result<ecdsa::Signature, ZilliqaErrors> {
+        let secret_key =
+            SecretKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+
+        schnorr::sign(msg, &secret_key)
     }
 }
 
