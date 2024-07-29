@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+zil_errors = { path = "../zil_errors" }
 hex = "0.4.3"
 k256 = "0.13.3"
 rand = "0.8.5"
