@@ -9,7 +9,7 @@ use ethers::{
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use k256::{ecdsa, SecretKey};
+use k256::{ecdsa, PublicKey, SecretKey};
 use zil_errors::{EvmErrors, ZilliqaErrors};
 
 pub const PUB_KEY_SIZE: usize = 33;
@@ -58,14 +58,23 @@ impl KeyPair {
         })
     }
 
-    pub fn get_ecdsa_wallet(&self) -> Result<LocalWallet, EvmErrors> {
+    pub fn get_zil1_wallet<'a>(&self) -> Result<(SecretKey, PublicKey), ZilliqaErrors<'a>> {
+        let secret_key =
+            SecretKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+        let pub_key =
+            PublicKey::from_sec1_bytes(&self.pub_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+
+        Ok((secret_key, pub_key))
+    }
+
+    pub fn get_evm_wallet(&self) -> Result<LocalWallet, EvmErrors> {
         let signing_key = SigningKey::from_slice(&self.secret_key)
             .map_err(|e| EvmErrors::InvalidSecretKey(e.to_string()))?;
 
         Ok(LocalWallet::from(signing_key))
     }
 
-    pub fn sign_secp256k1(&self, msg: &[u8]) -> Result<ecdsa::Signature, ZilliqaErrors> {
+    pub fn sign_message_secp256k1(&self, msg: &[u8]) -> Result<ecdsa::Signature, ZilliqaErrors> {
         let secret_key =
             SecretKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
 
@@ -73,7 +82,7 @@ impl KeyPair {
     }
 
     pub fn sign_ecdsa_hash(&self, hash: H256) -> Result<EvmSignature, EvmErrors> {
-        let wallet = self.get_ecdsa_wallet()?;
+        let wallet = self.get_evm_wallet()?;
 
         wallet
             .sign_hash(hash)
@@ -87,7 +96,7 @@ impl KeyPair {
     }
 
     pub fn sign_ecdsa_tx(&self, tx: &TypedTransaction) -> Result<EvmSignature, EvmErrors> {
-        let wallet = self.get_ecdsa_wallet()?;
+        let wallet = self.get_evm_wallet()?;
 
         wallet
             .sign_transaction_sync(tx)
@@ -106,7 +115,7 @@ impl std::fmt::Display for KeyPair {
 
 mod tests {
     #[test]
-    fn signing() {
+    fn from_secret_key_secp256k1() {
         use crate::keypair::KeyPair;
         use k256::SecretKey;
 
@@ -119,5 +128,28 @@ mod tests {
             keypair.to_string(),
             "0f494b8312e8d257e51730c78f8fe3b47b6840c59aaaec7c2ebe404a2de8b25a:039e43c9810e6cc09f46aad38e716dae3191629534967dc457d3a687d2e2cddc6a"
         );
+    }
+
+    #[test]
+    fn test_sign_secp256k1() {
+        use super::schnorr;
+        use crate::keypair::KeyPair;
+        use rand::{RngCore, SeedableRng};
+        use rand_chacha::ChaCha20Rng;
+
+        let mut rng = ChaCha20Rng::from_entropy();
+
+        for _ in 0..100 {
+            let key_pair = KeyPair::generate().unwrap();
+            let mut message_bytes = [0u8; 100];
+            let (_, pub_key) = key_pair.get_zil1_wallet().unwrap();
+
+            rng.fill_bytes(&mut message_bytes);
+
+            let signature = key_pair.sign_message_secp256k1(&message_bytes).unwrap();
+            let verify = schnorr::verify(&message_bytes, pub_key, signature);
+
+            assert!(verify.is_some());
+        }
     }
 }
