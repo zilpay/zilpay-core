@@ -1,4 +1,11 @@
 use super::schnorr;
+
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    signers::{LocalWallet, Signer},
+    types::{transaction::eip2718::TypedTransaction, H256},
+};
+
 use k256::{ecdsa, SecretKey};
 use zil_errors::ZilliqaErrors;
 
@@ -32,6 +39,19 @@ impl KeyPair {
             SecretKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
 
         schnorr::sign(msg, &secret_key)
+    }
+
+    pub fn sign_ecdsa_hash(
+        &self,
+        hash: H256,
+    ) -> Result<ethers::core::types::Signature, ZilliqaErrors> {
+        let signing_key =
+            SigningKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+        let wallet = LocalWallet::from(signing_key);
+
+        wallet
+            .sign_hash(hash)
+            .or(Err(ZilliqaErrors::InvalidSignTry))
     }
 }
 
