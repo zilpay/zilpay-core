@@ -3627,6 +3627,15 @@ name = "zil_errors"
 version = "0.1.0"
 
 [[package]]
+name = "zilliqa"
+version = "0.1.0"
+dependencies = [
+ "crypto",
+ "proto",
+ "zil_errors",
+]
+
+[[package]]
 name = "zilpa-core"
 version = "0.1.0"
 dependencies = [

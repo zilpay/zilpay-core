@@ -43,6 +43,22 @@ impl KeyPair {
         })
     }
 
+    pub fn from_secret_key_bytes<'a>(sk: [u8; SECRET_KEY_SIZE]) -> Result<Self, ZilliqaErrors<'a>> {
+        let secret_key: SecretKey =
+            SecretKey::from_slice(&sk).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
+            .public_key()
+            .to_sec1_bytes()
+            .to_vec()
+            .try_into()
+            .or(Err(ZilliqaErrors::InvalidSecretKey))?;
+
+        Ok(Self {
+            pub_key,
+            secret_key: sk,
+        })
+    }
+
     pub fn from_secret_key<'a>(sk: SecretKey) -> Result<Self, ZilliqaErrors<'a>> {
         let pub_key: [u8; PUB_KEY_SIZE] = sk
             .public_key()

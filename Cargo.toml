@@ -13,7 +13,7 @@ name = "shared"
 path = "shared/src/lib.rs"
 
 [workspace]
-members = ["crypto", "proto", "shared", "zil_errors"]
+members = ["crypto", "proto", "shared", "zil_errors", "zilliqa"]
 
 [dependencies]
 ethers = "2.0.14"
