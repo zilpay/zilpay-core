@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use zil_errors::ZilliqaErrors;
 
 pub const CHARSET: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 pub const HRP: &str = "zil";
@@ -17,16 +18,16 @@ impl Address {
         Some(Address(bytes))
     }
 
-    pub fn from_zil_pub_key(pub_key: &[u8]) -> Option<[u8; ADDR_LEN]> {
+    pub fn from_zil_pub_key<'a>(pub_key: &[u8]) -> Result<Address, ZilliqaErrors<'a>> {
         let mut hasher = Sha256::new();
         hasher.update(pub_key);
         let hash = hasher.finalize();
         let hash_slice = &hash[12..];
+        let bytes: [u8; ADDR_LEN] = hash_slice
+            .try_into()
+            .or(Err(ZilliqaErrors::InvalidPubKey))?;
 
-        match hash_slice.try_into() {
-            Ok(value) => Some(value),
-            Err(_) => None,
-        }
+        Ok(Address(bytes))
     }
 
     pub fn from_bech32_address(address: &str) -> Option<Address> {

@@ -1,6 +1,7 @@
 #[derive(Debug)]
 pub enum ZilliqaErrors<'a> {
     Schnorr(&'a str),
+    InvalidPubKey,
     InvalidSecretKey,
     InvalidSignTry,
     InvalidEntropy,
