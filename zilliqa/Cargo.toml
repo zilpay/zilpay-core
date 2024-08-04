@@ -7,3 +7,4 @@ edition = "2021"
 zil_errors = { path = "../zil_errors" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }
+hex = "0.4.3"

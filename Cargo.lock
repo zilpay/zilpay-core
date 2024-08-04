@@ -3632,6 +3632,7 @@ name = "zilliqa"
 version = "0.1.0"
 dependencies = [
  "crypto",
+ "hex",
  "proto",
  "zil_errors",
 ]
