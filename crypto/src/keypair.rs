@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use super::schnorr;
 
 use ethers::{
@@ -15,7 +17,7 @@ use zil_errors::{EvmErrors, ZilliqaErrors};
 pub const PUB_KEY_SIZE: usize = 33;
 pub const SECRET_KEY_SIZE: usize = 32;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct KeyPair {
     pub pub_key: [u8; PUB_KEY_SIZE],
     pub secret_key: [u8; SECRET_KEY_SIZE],
@@ -148,7 +150,22 @@ impl std::fmt::Display for KeyPair {
     }
 }
 
+impl FromStr for KeyPair {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes: [u8; PUB_KEY_SIZE + SECRET_KEY_SIZE] = hex::decode(s)
+            .or(Err("Invalid string format".to_string()))?
+            .try_into()
+            .or(Err("Invalid string length".to_string()))?;
+
+        Ok(KeyPair::from_bytes(&bytes))
+    }
+}
+
 mod tests {
+    use std::str::FromStr;
+
     #[test]
     fn from_secret_key_secp256k1() {
         use crate::keypair::KeyPair;
@@ -163,6 +180,7 @@ mod tests {
             keypair.to_string(),
             "039e43c9810e6cc09f46aad38e716dae3191629534967dc457d3a687d2e2cddc6a0f494b8312e8d257e51730c78f8fe3b47b6840c59aaaec7c2ebe404a2de8b25a"
         );
+        assert_eq!(KeyPair::from_str(&keypair.to_string()).unwrap(), keypair);
     }
 
     #[test]
