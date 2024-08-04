@@ -73,6 +73,26 @@ impl KeyPair {
             secret_key,
         })
     }
+    pub fn from_bytes(bytes: &[u8; PUB_KEY_SIZE + SECRET_KEY_SIZE]) -> Self {
+        let mut pub_key = [0u8; PUB_KEY_SIZE];
+        let mut secret_key = [0u8; SECRET_KEY_SIZE];
+
+        pub_key.copy_from_slice(&bytes[..PUB_KEY_SIZE]);
+        secret_key.copy_from_slice(&bytes[PUB_KEY_SIZE..]);
+
+        KeyPair {
+            pub_key,
+            secret_key,
+        }
+    }
+
+    pub fn to_bytes(&self) -> [u8; PUB_KEY_SIZE + SECRET_KEY_SIZE] {
+        let mut result = [0u8; PUB_KEY_SIZE + SECRET_KEY_SIZE];
+
+        result[..PUB_KEY_SIZE].copy_from_slice(&self.pub_key);
+        result[PUB_KEY_SIZE..].copy_from_slice(&self.secret_key);
+        result
+    }
 
     pub fn get_zil1_wallet<'a>(&self) -> Result<(SecretKey, PublicKey), ZilliqaErrors<'a>> {
         let secret_key =
@@ -122,10 +142,9 @@ impl KeyPair {
 
 impl std::fmt::Display for KeyPair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let hex_sk = hex::encode(self.secret_key);
-        let hex_pk = hex::encode(self.pub_key);
+        let bytes_str = hex::encode(self.to_bytes());
 
-        write!(f, "{}:{}", hex_sk, hex_pk)
+        write!(f, "{}", bytes_str)
     }
 }
 
@@ -142,7 +161,7 @@ mod tests {
 
         assert_eq!(
             keypair.to_string(),
-            "0f494b8312e8d257e51730c78f8fe3b47b6840c59aaaec7c2ebe404a2de8b25a:039e43c9810e6cc09f46aad38e716dae3191629534967dc457d3a687d2e2cddc6a"
+            "039e43c9810e6cc09f46aad38e716dae3191629534967dc457d3a687d2e2cddc6a0f494b8312e8d257e51730c78f8fe3b47b6840c59aaaec7c2ebe404a2de8b25a"
         );
     }
 
@@ -167,5 +186,17 @@ mod tests {
 
             assert!(verify.is_some());
         }
+    }
+
+    #[test]
+    fn from_to_bytes() {
+        use crate::keypair::KeyPair;
+
+        let key_pair = KeyPair::generate().unwrap();
+        let bytes = key_pair.to_bytes();
+        let restored_key_pair = KeyPair::from_bytes(&bytes);
+
+        assert_eq!(restored_key_pair.pub_key, key_pair.pub_key);
+        assert_eq!(restored_key_pair.secret_key, key_pair.secret_key);
     }
 }
