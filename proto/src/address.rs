@@ -18,6 +18,10 @@ impl Address {
         Some(Address(bytes))
     }
 
+    pub fn from_bytes(bytes: [u8; ADDR_LEN]) -> Self {
+        Address(bytes)
+    }
+
     pub fn from_zil_pub_key<'a>(pub_key: &[u8]) -> Result<Address, ZilliqaErrors<'a>> {
         let mut hasher = Sha256::new();
         hasher.update(pub_key);
@@ -50,7 +54,7 @@ impl Address {
         convert_bits(&self.0, 8, 5, true).map(|addrbz| encode(HRP, &addrbz))
     }
 
-    pub fn as_slice(&self) -> [u8; ADDR_LEN] {
+    pub fn to_bytes(&self) -> [u8; ADDR_LEN] {
         self.0
     }
 }
