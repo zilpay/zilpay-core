@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use crypto::keypair::{KeyPair, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use proto::address::Address;
 use proto::address::ADDR_LEN;
@@ -61,5 +63,19 @@ impl std::fmt::Display for Account {
         let hex_acc = hex::encode(self.to_bytes());
 
         write!(f, "{}", hex_acc)
+    }
+}
+
+impl FromStr for Account {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes: [u8; PUB_KEY_SIZE + SECRET_KEY_SIZE + ADDR_LEN] = hex::decode(s)
+            .or(Err("Invalid string format".to_string()))?
+            .try_into()
+            .or(Err("Invalid string length".to_string()))?;
+        let account = Account::from_bytes(bytes).or(Err("Invalid hex".to_string()))?;
+
+        Ok(account)
     }
 }
