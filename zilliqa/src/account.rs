@@ -62,8 +62,6 @@ impl std::fmt::Display for Account {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hex_acc = hex::encode(self.to_bytes());
 
-        dbg!(&hex_acc);
-
         write!(f, "{}", hex_acc)
     }
 }
@@ -105,9 +103,10 @@ mod tests {
     #[test]
     fn test_str() {
         let acc = Account::generate().unwrap();
-        let shoudl_be = "02e91c375e5bdb8f99eb6ad70ab2f1004f7e735f4a949df7cd95b72e91e44e9bbde9d2a1c1f95e6a7226afdf56a9217afa44c076d3f16bf6d4ecd61ce3b29ab82dc3832f9b09525c14dca01cd4bd3f9d190762c27e";
+        let shoudl_be = acc.to_string();
+        let restored = Account::from_str(&shoudl_be).unwrap();
 
-        assert_eq!(acc.to_string(), shoudl_be);
-        // assert_eq!(acc, shoudl_be.parse::<Account>().unwrap());
+        assert_eq!(acc, restored);
+        assert_eq!(restored.to_string(), acc.to_string());
     }
 }
