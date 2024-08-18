@@ -15,7 +15,7 @@ impl<'a> ZilliqaJsonRPC<'a> {
         ZilliqaJsonRPC { nodes }
     }
 
-    pub async fn bootstrap(node_url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn bootstrap(node_url: &str) -> Result<Vec<String>, ZilliqaErrors> {
         let client = reqwest::Client::new();
         let payload = json!({
             "id": "1",
@@ -27,22 +27,32 @@ impl<'a> ZilliqaJsonRPC<'a> {
             .post(node_url)
             .json(&payload)
             .send()
-            .await?
+            .await
+            .or(Err(ZilliqaErrors::BadRequest))?
             .json()
-            .await?;
-        let result = response.get("result");
-        // map(|v| v.get("ssnlist"));
+            .await
+            .or(Err(ZilliqaErrors::FailToParseResponse))?;
+        let result = response
+            .get("result")
+            .ok_or(ZilliqaErrors::FailToParseResponse)?
+            .get("ssnlist")
+            .ok_or(ZilliqaErrors::FailToParseResponse)?;
+        let keys: Vec<String> = result
+            .as_object()
+            .ok_or(ZilliqaErrors::FailToParseResponse)?
+            .keys()
+            .filter_map(|addr| {
+                result
+                    .get(addr)
+                    .and_then(|obj| obj.get("arguments"))
+                    .and_then(|arr| arr.as_array())
+                    .and_then(|arr| arr.get(5))
+                    .and_then(|v| v.as_str())
+                    .map(|url| url.to_string())
+            })
+            .collect();
 
-        dbg!(&result);
-
-        // let res = response["result"]["balance"]
-        //     .as_str()
-        //     .unwrap_or("0")
-        //     .to_string();
-        //
-        // dbg!(res);
-
-        Ok(())
+        Ok(keys)
     }
 }
 
@@ -54,6 +64,8 @@ mod tests {
     #[tokio::test]
     async fn test_bootstrap() {
         let default_url = "https://api.zilliqa.com";
-        let rpc = ZilliqaJsonRPC::bootstrap(default_url).await;
+        let res = ZilliqaJsonRPC::bootstrap(default_url).await.unwrap();
+
+        dbg!(res);
     }
 }
