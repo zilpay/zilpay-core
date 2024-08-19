@@ -53,7 +53,7 @@ impl<'a> ZilliqaJsonRPC<'a> {
         Ok(keys)
     }
 
-    fn req_build(&self) {}
+    fn build_payload(&self, params: Value, method: ZilMethods) {}
 }
 
 #[cfg(test)]
