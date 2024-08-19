@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use crate::json_rpc::zil_methods::ZilMethods;
 use reqwest;
 use serde_json::{json, Value};
@@ -54,6 +52,8 @@ impl<'a> ZilliqaJsonRPC<'a> {
 
         Ok(keys)
     }
+
+    fn req_build(&self) {}
 }
 
 #[cfg(test)]

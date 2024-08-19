@@ -5,6 +5,8 @@ pub enum ZilliqaErrors<'a> {
     InvalidSecretKey,
     InvalidSignTry,
     InvalidEntropy,
+    BadRequest,
+    FailToParseResponse,
 }
 
 #[derive(Debug)]
