@@ -1,4 +1,5 @@
 use crate::json_rpc::zil_methods::ZilMethods;
+use config::contracts::STAKEING;
 use reqwest;
 use serde_json::{json, Value};
 use zil_errors::ZilliqaErrors;
@@ -19,7 +20,7 @@ impl<'a> ZilliqaJsonRPC<'a> {
             "id": "1",
             "jsonrpc": "2.0",
             "method": ZilMethods::GetSmartContractSubState.to_string(),
-            "params": ["a7C67D49C82c7dc1B73D231640B2e4d0661D37c1", "ssnlist", []]
+            "params": [STAKEING, "ssnlist", []]
         });
         let response: Value = client
             .post(node_url)
@@ -53,7 +54,14 @@ impl<'a> ZilliqaJsonRPC<'a> {
         Ok(keys)
     }
 
-    fn build_payload(&self, params: Value, method: ZilMethods) {}
+    fn build_payload(&self, params: Value, method: ZilMethods) -> Value {
+        json!({
+            "id": "1",
+            "jsonrpc": "2.0",
+            "method": method.to_string(),
+            "params": params
+        })
+    }
 }
 
 #[cfg(test)]
