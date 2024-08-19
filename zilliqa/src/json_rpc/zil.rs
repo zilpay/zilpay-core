@@ -5,16 +5,16 @@ use serde_json::{json, Value};
 use zil_errors::ZilliqaErrors;
 
 #[derive(Debug)]
-pub struct ZilliqaJsonRPC<'a> {
-    pub nodes: Vec<&'a str>,
+pub struct ZilliqaJsonRPC {
+    pub nodes: Vec<String>,
 }
 
-impl<'a> ZilliqaJsonRPC<'a> {
-    pub fn from_vec(nodes: Vec<&'a str>) -> Self {
+impl ZilliqaJsonRPC {
+    pub fn from_vec(nodes: Vec<String>) -> Self {
         ZilliqaJsonRPC { nodes }
     }
 
-    pub async fn bootstrap(node_url: &str) -> Result<Vec<String>, ZilliqaErrors> {
+    pub async fn bootstrap(node_url: &str) -> Result<Self, ZilliqaErrors> {
         let client = reqwest::Client::new();
         let payload = json!({
             "id": "1",
@@ -22,6 +22,7 @@ impl<'a> ZilliqaJsonRPC<'a> {
             "method": ZilMethods::GetSmartContractSubState.to_string(),
             "params": [STAKEING, "ssnlist", []]
         });
+
         let response: Value = client
             .post(node_url)
             .json(&payload)
@@ -36,7 +37,7 @@ impl<'a> ZilliqaJsonRPC<'a> {
             .ok_or(ZilliqaErrors::FailToParseResponse)?
             .get("ssnlist")
             .ok_or(ZilliqaErrors::FailToParseResponse)?;
-        let keys: Vec<String> = result
+        let nodes: Vec<String> = result
             .as_object()
             .ok_or(ZilliqaErrors::FailToParseResponse)?
             .keys()
@@ -51,10 +52,30 @@ impl<'a> ZilliqaJsonRPC<'a> {
             })
             .collect();
 
-        Ok(keys)
+        Ok(Self { nodes })
     }
 
-    fn build_payload(&self, params: Value, method: ZilMethods) -> Value {
+    pub async fn reqwest(&self, payloads: Vec<Value>) -> Result<(), ZilliqaErrors> {
+        let client = reqwest::Client::new();
+
+        for url in self.nodes.iter() {
+            let res: Value = client
+                .post::<&str>(url)
+                .json(&payloads)
+                .send()
+                .await
+                .or(Err(ZilliqaErrors::BadRequest))?
+                .json()
+                .await
+                .or(Err(ZilliqaErrors::FailToParseResponse))?;
+
+            dbg!(res);
+        }
+
+        Ok(())
+    }
+
+    pub fn build_payload(params: Value, method: ZilMethods) -> Value {
         json!({
             "id": "1",
             "jsonrpc": "2.0",
@@ -67,13 +88,22 @@ impl<'a> ZilliqaJsonRPC<'a> {
 #[cfg(test)]
 mod tests {
     use super::ZilliqaJsonRPC;
+    use crate::json_rpc::zil_methods::ZilMethods;
+    use config::contracts::STAKEING;
+    use serde_json::{json, Value};
     use tokio;
 
     #[tokio::test]
     async fn test_bootstrap() {
         let default_url = "https://api.zilliqa.com";
         let res = ZilliqaJsonRPC::bootstrap(default_url).await.unwrap();
+        let payloads = vec![ZilliqaJsonRPC::build_payload(
+            json!({
+                "params": [STAKEING, "ssnlist", []],
+            }),
+            ZilMethods::GetSmartContractSubState,
+        )];
 
-        dbg!(res);
+        res.reqwest(payloads).await.unwrap();
     }
 }
