@@ -3948,6 +3948,7 @@ dependencies = [
  "mockito",
  "proto",
  "reqwest",
+ "serde",
  "serde_json",
  "tokio",
  "zil_errors",

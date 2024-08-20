@@ -1,2 +1,3 @@
-pub mod contracts;
+pub const MAIN_URL: &str = "https://api.zilliqa.com";
 
+pub mod contracts;

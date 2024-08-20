@@ -74,17 +74,29 @@ impl ZilliqaJsonRPC {
     where
         SR: DeserializeOwned + std::fmt::Debug,
     {
+        const MAX_ERROR: usize = 5;
         let client = reqwest::Client::new();
+        let mut error: ZilliqaErrors = ZilliqaErrors::NetowrkIsDown;
+        let mut k = 0;
 
         for url in self.nodes.iter() {
             let res = match client.post::<&str>(url).json(&payloads).send().await {
                 Ok(response) => response,
                 Err(_) => continue,
             };
-            let res = match res.json().await {
+            let res: SR = match res.json().await {
                 Ok(json) => json,
                 Err(e) => {
-                    dbg!(e);
+                    let new_error = ZilliqaErrors::InvalidJson(e.to_string());
+
+                    if new_error == error && k == MAX_ERROR {
+                        break;
+                    } else if new_error == error && k != MAX_ERROR {
+                        error = new_error;
+                        k += 1;
+                        continue;
+                    }
+
                     continue;
                 }
             };
@@ -92,7 +104,7 @@ impl ZilliqaJsonRPC {
             return Ok(res);
         }
 
-        Err(ZilliqaErrors::NetowrkIsDown)
+        Err(error)
     }
 
     pub fn build_payload(params: Value, method: ZilMethods) -> Value {
@@ -115,13 +127,13 @@ mod tests {
     use serde_json::json;
     use tokio;
 
-    // #[tokio::test]
-    // async fn test_bootstrap() {
-    //     let default_url = "https://api.zilliqa.com";
-    //     let zil = ZilliqaJsonRPC::bootstrap(default_url).await.unwrap();
-    //
-    //     assert!(zil.nodes.len() > 1);
-    // }
+    #[tokio::test]
+    async fn test_bootstrap() {
+        let default_url = "https://api.zilliqa.com";
+        let zil = ZilliqaJsonRPC::bootstrap(default_url).await.unwrap();
+
+        assert!(zil.nodes.len() > 1);
+    }
 
     #[tokio::test]
     async fn test_get_balance() {
