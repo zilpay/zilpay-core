@@ -10,6 +10,7 @@ proto = { path = "../proto" }
 config = { path = "../config" }
 hex = "0.4.3"
 serde_json = "1.0.124"
+serde = { version = "1.0.204", features = ["derive", "rc"] }
 reqwest = "0.11"
 tokio = { version = "1.39.2", features = ["full", "test-util"] }
 

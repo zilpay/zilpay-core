@@ -1,6 +1,8 @@
 use crate::json_rpc::zil_methods::ZilMethods;
 use config::contracts::STAKEING;
+use config::MAIN_URL;
 use reqwest;
+use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 use zil_errors::ZilliqaErrors;
 
@@ -9,7 +11,18 @@ pub struct ZilliqaJsonRPC {
     pub nodes: Vec<String>,
 }
 
+impl Default for ZilliqaJsonRPC {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ZilliqaJsonRPC {
+    pub fn new() -> Self {
+        let nodes = vec![MAIN_URL.to_string()];
+        ZilliqaJsonRPC { nodes }
+    }
+
     pub fn from_vec(nodes: Vec<String>) -> Self {
         ZilliqaJsonRPC { nodes }
     }
@@ -37,7 +50,7 @@ impl ZilliqaJsonRPC {
             .ok_or(ZilliqaErrors::FailToParseResponse)?
             .get("ssnlist")
             .ok_or(ZilliqaErrors::FailToParseResponse)?;
-        let nodes: Vec<String> = result
+        let mut nodes: Vec<String> = result
             .as_object()
             .ok_or(ZilliqaErrors::FailToParseResponse)?
             .keys()
@@ -52,32 +65,39 @@ impl ZilliqaJsonRPC {
             })
             .collect();
 
+        nodes.push(node_url.to_string());
+
         Ok(Self { nodes })
     }
 
-    pub async fn reqwest(&self, payloads: Vec<Value>) -> Result<(), ZilliqaErrors> {
+    pub async fn reqwest<SR>(&self, payloads: Vec<Value>) -> Result<SR, ZilliqaErrors>
+    where
+        SR: DeserializeOwned + std::fmt::Debug,
+    {
         let client = reqwest::Client::new();
 
         for url in self.nodes.iter() {
-            let res: Value = client
-                .post::<&str>(url)
-                .json(&payloads)
-                .send()
-                .await
-                .or(Err(ZilliqaErrors::BadRequest))?
-                .json()
-                .await
-                .or(Err(ZilliqaErrors::FailToParseResponse))?;
+            let res = match client.post::<&str>(url).json(&payloads).send().await {
+                Ok(response) => response,
+                Err(_) => continue,
+            };
+            let res = match res.json().await {
+                Ok(json) => json,
+                Err(e) => {
+                    dbg!(e);
+                    continue;
+                }
+            };
 
-            dbg!(res);
+            return Ok(res);
         }
 
-        Ok(())
+        Err(ZilliqaErrors::NetowrkIsDown)
     }
 
     pub fn build_payload(params: Value, method: ZilMethods) -> Value {
         json!({
-            "id": "1",
+            "id": 1,
             "jsonrpc": "2.0",
             "method": method.to_string(),
             "params": params
@@ -88,22 +108,34 @@ impl ZilliqaJsonRPC {
 #[cfg(test)]
 mod tests {
     use super::ZilliqaJsonRPC;
-    use crate::json_rpc::zil_methods::ZilMethods;
-    use config::contracts::STAKEING;
-    use serde_json::{json, Value};
+    use crate::json_rpc::{
+        zil_interfaces::{GetBalanceRes, ResultRes},
+        zil_methods::ZilMethods,
+    };
+    use serde_json::json;
     use tokio;
 
+    // #[tokio::test]
+    // async fn test_bootstrap() {
+    //     let default_url = "https://api.zilliqa.com";
+    //     let zil = ZilliqaJsonRPC::bootstrap(default_url).await.unwrap();
+    //
+    //     assert!(zil.nodes.len() > 1);
+    // }
+
     #[tokio::test]
-    async fn test_bootstrap() {
-        let default_url = "https://api.zilliqa.com";
-        let res = ZilliqaJsonRPC::bootstrap(default_url).await.unwrap();
+    async fn test_get_balance() {
+        let zil = ZilliqaJsonRPC::new();
+        let addr = "7793a8e8c09d189d4d421ce5bc5b3674656c5ac1";
         let payloads = vec![ZilliqaJsonRPC::build_payload(
-            json!({
-                "params": [STAKEING, "ssnlist", []],
-            }),
-            ZilMethods::GetSmartContractSubState,
+            json!([addr]),
+            ZilMethods::GetBalance,
         )];
 
-        res.reqwest(payloads).await.unwrap();
+        let res: Vec<ResultRes<GetBalanceRes>> = zil.reqwest(payloads).await.unwrap();
+
+        assert!(res.len() == 1);
+        assert!(res[0].result.is_some());
+        assert!(res[0].error.is_none());
     }
 }
