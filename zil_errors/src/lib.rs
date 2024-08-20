@@ -9,6 +9,7 @@ pub enum ZilliqaErrors<'a> {
     FailToParseResponse,
     NetowrkIsDown,
     InvalidPayload,
+    InvalidRPCReq(String),
     InvalidJson(String),
 }
 

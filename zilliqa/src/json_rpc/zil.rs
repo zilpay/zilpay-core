@@ -66,11 +66,10 @@ impl ZilliqaJsonRPC {
             .collect();
 
         nodes.push(node_url.to_string());
-
         Ok(Self { nodes })
     }
 
-    pub async fn reqwest<SR>(&self, payloads: Vec<Value>) -> Result<SR, ZilliqaErrors>
+    pub async fn reqwest<'a, SR>(&self, payloads: Vec<Value>) -> Result<SR, ZilliqaErrors<'a>>
     where
         SR: DeserializeOwned + std::fmt::Debug,
     {
@@ -78,23 +77,37 @@ impl ZilliqaJsonRPC {
         let client = reqwest::Client::new();
         let mut error: ZilliqaErrors = ZilliqaErrors::NetowrkIsDown;
         let mut k = 0;
+        let mut handle_error = |e: String, zil_err: fn(String) -> ZilliqaErrors<'a>| -> bool {
+            let new_error = zil_err(e.to_string());
+            if new_error == error && k == MAX_ERROR {
+                false
+            } else if new_error == error && k != MAX_ERROR {
+                error = new_error;
+                k += 1;
+                true
+            } else {
+                error = new_error;
+                k = 1;
+                true
+            }
+        };
 
         for url in self.nodes.iter() {
             let res = match client.post::<&str>(url).json(&payloads).send().await {
                 Ok(response) => response,
-                Err(_) => continue,
+                Err(e) => {
+                    if handle_error(e.to_string(), ZilliqaErrors::InvalidRPCReq) {
+                        break;
+                    }
+
+                    continue;
+                }
             };
             let res: SR = match res.json().await {
                 Ok(json) => json,
                 Err(e) => {
-                    let new_error = ZilliqaErrors::InvalidJson(e.to_string());
-
-                    if new_error == error && k == MAX_ERROR {
+                    if handle_error(e.to_string(), ZilliqaErrors::InvalidJson) {
                         break;
-                    } else if new_error == error && k != MAX_ERROR {
-                        error = new_error;
-                        k += 1;
-                        continue;
                     }
 
                     continue;
