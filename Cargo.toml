@@ -13,7 +13,15 @@ name = "shared"
 path = "shared/src/lib.rs"
 
 [workspace]
-members = [ "cipher", "config","crypto", "proto", "shared", "zil_errors", "zilliqa"]
+members = [
+  "cipher",
+  "config",
+  "crypto",
+  "proto",
+  "shared",
+  "zil_errors",
+  "zilliqa",
+]
 
 [dependencies]
 ethers = "2.0.14"
@@ -25,6 +33,7 @@ serde = { version = "1.0.204", features = ["derive", "rc"] }
 serde_json = "1.0.124"
 sha2 = "0.10.8"
 tokio = { version = "1.39.2", features = ["full", "test-util"] }
+num_cpus = "1.16.0"
 
 [dev-dependencies]
 mockito = "1.5.0"

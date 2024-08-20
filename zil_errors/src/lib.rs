@@ -18,3 +18,14 @@ pub enum EvmErrors {
     InvalidSecretKey(String),
     InvalidSign(String),
 }
+
+#[derive(Debug)]
+pub enum CipherErrors {
+    ArgonKeyDerivingError(String),
+}
+
+#[derive(Debug)]
+pub enum AesGCMErrors {
+    EncryptError(String),
+    DecryptError(String),
+}
