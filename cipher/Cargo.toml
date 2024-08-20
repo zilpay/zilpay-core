@@ -10,3 +10,5 @@ ntrulp = { version = "0.1.9", features = ["ntrup1277"] }
 num_cpus = "1.16.0"
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
+rand_chacha = "0.3.1"
+rand = "0.8.5"
