@@ -47,7 +47,7 @@ impl KeyPair {
         })
     }
 
-    pub fn from_zil_bip39_seed(
+    pub fn from_bip39_seed(
         seed: &[u8; BIP39_SEED_SIZE],
         path: String,
     ) -> Result<Self, ZilliqaErrors> {
@@ -186,10 +186,10 @@ impl FromStr for KeyPair {
     }
 }
 
+#[cfg(test)]
 mod tests {
-    use bip39::Mnemonic;
-
     use super::KeyPair;
+    use bip39::Mnemonic;
 
     #[test]
     fn from_secret_key_secp256k1() {
@@ -264,8 +264,8 @@ mod tests {
             ],
             seed
         );
-        let zil_key_pair = KeyPair::from_zil_bip39_seed(&seed, zil_path).unwrap();
-        let eth_key_pair = KeyPair::from_zil_bip39_seed(&seed, eth_path).unwrap();
+        let zil_key_pair = KeyPair::from_bip39_seed(&seed, zil_path).unwrap();
+        let eth_key_pair = KeyPair::from_bip39_seed(&seed, eth_path).unwrap();
 
         assert_eq!(
             hex::encode(eth_key_pair.secret_key),
