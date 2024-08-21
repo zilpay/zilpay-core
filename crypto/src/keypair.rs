@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use super::schnorr;
+use tiny_hderive::bip32::ExtendedPrivKey;
 
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -16,6 +17,7 @@ use zil_errors::{EvmErrors, ZilliqaErrors};
 
 pub const PUB_KEY_SIZE: usize = 33;
 pub const SECRET_KEY_SIZE: usize = 32;
+pub const BIP39_SEED_SIZE: usize = 64;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct KeyPair {
@@ -31,6 +33,27 @@ impl KeyPair {
         rng.fill_bytes(&mut sk_bytes);
 
         let secret_key = SecretKey::from_slice(&sk_bytes).or(Err(ZilliqaErrors::InvalidEntropy))?;
+        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
+            .public_key()
+            .to_sec1_bytes()
+            .to_vec()
+            .try_into()
+            .or(Err(ZilliqaErrors::InvalidSecretKey))?;
+        let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
+
+        Ok(Self {
+            secret_key,
+            pub_key,
+        })
+    }
+
+    pub fn from_zil_bip39_seed(
+        seed: &[u8; BIP39_SEED_SIZE],
+        path: String,
+    ) -> Result<Self, ZilliqaErrors> {
+        let ext = ExtendedPrivKey::derive(seed, path.as_str()).unwrap();
+        let secret_key =
+            SecretKey::from_slice(&ext.secret()).or(Err(ZilliqaErrors::InvalidEntropy))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
             .public_key()
             .to_sec1_bytes()
@@ -164,12 +187,15 @@ impl FromStr for KeyPair {
 }
 
 mod tests {
-    use std::str::FromStr;
+    use bip39::Mnemonic;
+
+    use super::KeyPair;
 
     #[test]
     fn from_secret_key_secp256k1() {
         use crate::keypair::KeyPair;
         use k256::SecretKey;
+        use std::str::FromStr;
 
         let hex_key = "0F494B8312E8D257E51730C78F8FE3B47B6840C59AAAEC7C2EBE404A2DE8B25A";
         let bytes = hex::decode(hex_key).unwrap();
@@ -216,5 +242,42 @@ mod tests {
 
         assert_eq!(restored_key_pair.pub_key, key_pair.pub_key);
         assert_eq!(restored_key_pair.secret_key, key_pair.secret_key);
+    }
+
+    #[test]
+    fn test_bip39_zil() {
+        let mnemonic_str =
+            "green process gate doctor slide whip priority shrug diamond crumble average help";
+        let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
+        let index = 0;
+        let seed = m.to_seed("");
+
+        let zil_path = format!("m/44'/313'/0'/0/{}", index);
+        let eth_path = format!("m/44'/60'/0'/0/{}", index);
+
+        assert_eq!(
+            [
+                143, 219, 233, 88, 72, 55, 94, 13, 19, 72, 66, 197, 121, 69, 163, 46, 15, 247, 4,
+                104, 60, 132, 106, 5, 135, 186, 182, 62, 54, 56, 209, 5, 182, 104, 244, 78, 184,
+                167, 36, 156, 3, 14, 212, 191, 102, 69, 11, 214, 43, 181, 138, 7, 21, 241, 122,
+                192, 73, 244, 36, 136, 187, 175, 159, 181,
+            ],
+            seed
+        );
+        let zil_key_pair = KeyPair::from_zil_bip39_seed(&seed, zil_path).unwrap();
+        let eth_key_pair = KeyPair::from_zil_bip39_seed(&seed, eth_path).unwrap();
+
+        assert_eq!(
+            hex::encode(eth_key_pair.secret_key),
+            "b8ef60193eec0a55db93ba692035a8b5a388579c8dc58acc62ea470aba529e1c"
+        );
+
+        assert_eq!(
+            zil_key_pair.secret_key,
+            [
+                233, 60, 3, 81, 117, 176, 134, 19, 196, 176, 37, 28, 169, 44, 208, 7, 2, 108, 160,
+                50, 186, 83, 186, 250, 60, 131, 152, 56, 248, 181, 45, 4
+            ]
+        );
     }
 }
