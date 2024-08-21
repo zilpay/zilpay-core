@@ -34,22 +34,23 @@ pub fn ntru_keys_from_seed<'a>(
     Ok((pk, sk))
 }
 
-pub fn ntru_encrypt(pk: PubKey, plaintext: &[u8]) -> Result<Vec<u8>, NTRUPErrors> {
+pub fn ntru_encrypt<'a>(pk: &Arc<PubKey>, plaintext: Vec<u8>) -> Result<Vec<u8>, NTRUPErrors<'a>> {
     let num_threads = num_cpus::get();
     let mut pq_rng = ChaChaRng::from_entropy();
-    let plaintext = Arc::new(plaintext.to_vec());
-    let pk = Arc::new(pk);
+    let plaintext = Arc::new(plaintext);
 
-    ntru::cipher::parallel_bytes_encrypt(&mut pq_rng, &plaintext, &pk, num_threads)
+    ntru::cipher::parallel_bytes_encrypt(&mut pq_rng, &plaintext, pk, num_threads)
         .map_err(NTRUPErrors::EncryptError)
 }
 
-pub fn ntru_decrypt(sk: PrivKey, ciphertext: &[u8]) -> Result<Vec<u8>, NTRUPErrors> {
+pub fn ntru_decrypt<'a>(
+    sk: &Arc<PrivKey>,
+    ciphertext: Vec<u8>,
+) -> Result<Vec<u8>, NTRUPErrors<'a>> {
     let num_threads = num_cpus::get();
-    let sk = Arc::new(sk);
-    let ciphertext = Arc::new(ciphertext.to_vec());
+    let ciphertext = Arc::new(ciphertext);
 
-    ntru::cipher::parallel_bytes_decrypt(&ciphertext, &sk, num_threads)
+    ntru::cipher::parallel_bytes_decrypt(&ciphertext, sk, num_threads)
         .map_err(NTRUPErrors::DecryptError)
 }
 
@@ -58,6 +59,7 @@ mod tests {
     use super::{ntru_keys_from_seed, SHA512_SIZE};
     use crate::ntrup::{ntru_decrypt, ntru_encrypt};
     use rand::RngCore;
+    use std::sync::Arc;
 
     #[test]
     fn test_encrypt_and_decrypt() {
@@ -71,8 +73,8 @@ mod tests {
         rng.fill_bytes(&mut plaintext);
 
         let (pk, sk) = ntru_keys_from_seed(&seed).unwrap();
-        let ciphertext = ntru_encrypt(pk, &plaintext).unwrap();
-        let res = ntru_decrypt(sk, &ciphertext).unwrap();
+        let ciphertext = ntru_encrypt(&Arc::new(pk), plaintext.to_vec()).unwrap();
+        let res = ntru_decrypt(&Arc::new(sk), ciphertext).unwrap();
 
         assert_eq!(res, plaintext);
     }

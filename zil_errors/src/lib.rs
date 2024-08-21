@@ -17,18 +17,18 @@ pub enum ZilliqaErrors<'a> {
     InvalidJson(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum EvmErrors {
     InvalidSecretKey(String),
     InvalidSign(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CipherErrors {
     ArgonKeyDerivingError(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum AesGCMErrors {
     EncryptError(String),
     DecryptError(String),
@@ -48,4 +48,8 @@ pub enum KeyChainErrors<'a> {
     NTRUPrimeError(NTRUPErrors<'a>),
     Argon2CipherErrors(CipherErrors),
     AESKeySliceError(TryFromSliceError),
+    AESEncryptError(AesGCMErrors),
+    NTRUPrimeEncryptError(NTRUPErrors<'a>),
+    AESDecryptError(AesGCMErrors),
+    NTRUPrimeDecryptError(NTRUPErrors<'a>),
 }
