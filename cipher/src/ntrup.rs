@@ -1,3 +1,4 @@
+use config::sha::{SHA256_SIZE, SHA512_SIZE};
 use ntrulp::{
     key::{priv_key::PrivKey, pub_key::PubKey},
     ntru,
@@ -8,9 +9,6 @@ use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::sync::Arc;
 use zil_errors::NTRUPErrors;
-
-pub const SHA512_SIZE: usize = 64;
-pub const SHA256_SIZE: usize = SHA512_SIZE / 2;
 
 pub fn ntru_keys_from_seed<'a>(
     seed_bytes: &[u8; SHA512_SIZE],
@@ -57,12 +55,9 @@ pub fn ntru_decrypt(sk: PrivKey, ciphertext: &[u8]) -> Result<Vec<u8>, NTRUPErro
 
 #[cfg(test)]
 mod tests {
-    use rand::RngCore;
-    use std::sync::Arc;
-
-    use crate::ntrup::{ntru_decrypt, ntru_encrypt};
-
     use super::{ntru_keys_from_seed, SHA512_SIZE};
+    use crate::ntrup::{ntru_decrypt, ntru_encrypt};
+    use rand::RngCore;
 
     #[test]
     fn test_encrypt_and_decrypt() {

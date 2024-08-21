@@ -1,3 +1,7 @@
+use std::array::TryFromSliceError;
+
+use ntrulp::{ntru::errors::NTRUErrors, poly::errors::KemErrors, random::RandomErrors};
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum ZilliqaErrors<'a> {
     Schnorr(&'a str),
@@ -28,4 +32,20 @@ pub enum CipherErrors {
 pub enum AesGCMErrors {
     EncryptError(String),
     DecryptError(String),
+}
+
+#[derive(Debug)]
+pub enum NTRUPErrors<'a> {
+    EncryptError(NTRUErrors<'a>),
+    DecryptError(NTRUErrors<'a>),
+    KeySliceError,
+    KeyGenError(RandomErrors),
+    ComputeKeyError(KemErrors),
+}
+
+#[derive(Debug)]
+pub enum KeyChainErrors<'a> {
+    NTRUPrimeError(NTRUPErrors<'a>),
+    Argon2CipherErrors(CipherErrors),
+    AESKeySliceError(TryFromSliceError),
 }
