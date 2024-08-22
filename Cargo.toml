@@ -18,7 +18,7 @@ members = [
   "config",
   "crypto",
   "proto",
-  "shared",
+  "shared", "storage",
   "zil_errors",
   "zilliqa",
 ]
