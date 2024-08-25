@@ -1,6 +1,6 @@
 use crate::{
     aes::{aes_gcm_decrypt, aes_gcm_encrypt, AES_GCM_KEY_SIZE},
-    argon2::derive_key,
+    argon2::{derive_key, KEY_SIZE},
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
 };
 use config::sha::SHA256_SIZE;
@@ -47,8 +47,7 @@ impl KeyChain {
         })
     }
 
-    pub fn from_pass(password: &[u8]) -> Result<Self, KeyChainErrors> {
-        let seed_bytes = derive_key(password).map_err(KeyChainErrors::Argon2CipherErrors)?;
+    pub fn from_seed<'a>(seed_bytes: [u8; KEY_SIZE]) -> Result<Self, KeyChainErrors<'a>> {
         let (pk, sk) = ntru_keys_from_seed(&seed_bytes).map_err(KeyChainErrors::NTRUPrimeError)?;
         let aes_key: [u8; AES_GCM_KEY_SIZE] = seed_bytes[SHA256_SIZE..]
             .try_into()
@@ -58,6 +57,12 @@ impl KeyChain {
             ntrup_keys: (Arc::new(pk), Arc::new(sk)),
             aes_key,
         })
+    }
+
+    pub fn from_pass(password: &[u8]) -> Result<Self, KeyChainErrors> {
+        let seed_bytes = derive_key(password).map_err(KeyChainErrors::Argon2CipherErrors)?;
+
+        Self::from_seed(seed_bytes)
     }
 
     pub fn to_bytes(&self) -> [u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE] {
