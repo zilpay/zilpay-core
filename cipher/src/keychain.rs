@@ -11,6 +11,8 @@ use ntrulp::{
 use std::sync::Arc;
 use zil_errors::KeyChainErrors;
 
+pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
+
 pub enum CipherOrders {
     AESGCM256,
     NTRUP1277,
@@ -22,9 +24,7 @@ pub struct KeyChain {
 }
 
 impl KeyChain {
-    pub fn from_bytes<'a>(
-        bytes: &[u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE],
-    ) -> Result<Self, KeyChainErrors<'a>> {
+    pub fn from_bytes<'a>(bytes: &[u8; KEYCHAIN_BYTES_SIZE]) -> Result<Self, KeyChainErrors<'a>> {
         let pq_pk_bytes: [u8; PUBLICKEYS_BYTES] = bytes[..PUBLICKEYS_BYTES]
             .try_into()
             .map_err(KeyChainErrors::AESKeySliceError)?;
@@ -65,7 +65,7 @@ impl KeyChain {
         Self::from_seed(seed_bytes)
     }
 
-    pub fn to_bytes(&self) -> [u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE] {
+    pub fn to_bytes(&self) -> [u8; KEYCHAIN_BYTES_SIZE] {
         let mut res = [0u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE];
         let pq_pk = self.ntrup_keys.0.as_bytes();
         let pq_sk = self.ntrup_keys.1.as_bytes();
@@ -127,6 +127,7 @@ mod tests {
     use core::panic;
 
     use super::{CipherOrders, KeyChain};
+    use aes_gcm::aead::Buffer;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
     use zil_errors::{AesGCMErrors, KeyChainErrors};
@@ -154,7 +155,6 @@ mod tests {
 
         let keychain = KeyChain::from_pass(&password).unwrap();
         let bytes = keychain.to_bytes();
-
         let restore_keychain = KeyChain::from_bytes(&bytes).unwrap();
 
         assert_eq!(restore_keychain.aes_key, keychain.aes_key);

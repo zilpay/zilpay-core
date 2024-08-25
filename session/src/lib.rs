@@ -4,7 +4,7 @@ use rand_chacha::ChaCha20Rng;
 
 #[derive(Debug)]
 pub struct Session {
-    cipher_key: Vec<u8>, // TODO: know how much bytes
+    cipher_keychain: Vec<u8>, // TODO: know how much bytes
     nonce: u64,
 }
 
