@@ -4,7 +4,10 @@ use crate::{
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
 };
 use config::sha::SHA256_SIZE;
-use ntrulp::key::{priv_key::PrivKey, pub_key::PubKey};
+use ntrulp::{
+    key::{priv_key::PrivKey, pub_key::PubKey},
+    params::params1277::{PUBLICKEYS_BYTES, SECRETKEYS_BYTES},
+};
 use std::sync::Arc;
 use zil_errors::KeyChainErrors;
 
@@ -19,6 +22,31 @@ pub struct KeyChain {
 }
 
 impl KeyChain {
+    pub fn from_bytes<'a>(
+        bytes: &[u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE],
+    ) -> Result<Self, KeyChainErrors<'a>> {
+        let pq_pk_bytes: [u8; PUBLICKEYS_BYTES] = bytes[..PUBLICKEYS_BYTES]
+            .try_into()
+            .map_err(KeyChainErrors::AESKeySliceError)?;
+        let pq_sk_bytes: [u8; SECRETKEYS_BYTES] = bytes
+            [PUBLICKEYS_BYTES..PUBLICKEYS_BYTES + SECRETKEYS_BYTES]
+            .try_into()
+            .map_err(KeyChainErrors::AESKeySliceError)?;
+        let pq_pk =
+            PubKey::import(&pq_pk_bytes).map_err(|_| KeyChainErrors::NTRUPrimeImportKeyError)?;
+        let pq_sk =
+            PrivKey::import(&pq_sk_bytes).map_err(|_| KeyChainErrors::NTRUPrimeImportKeyError)?;
+
+        let mut aes_key = [0u8; AES_GCM_KEY_SIZE];
+
+        aes_key.copy_from_slice(&bytes[PUBLICKEYS_BYTES + SECRETKEYS_BYTES..]);
+
+        Ok(Self {
+            ntrup_keys: (Arc::new(pq_pk), Arc::new(pq_sk)),
+            aes_key,
+        })
+    }
+
     pub fn from_pass(password: &[u8]) -> Result<Self, KeyChainErrors> {
         let seed_bytes = derive_key(password).map_err(KeyChainErrors::Argon2CipherErrors)?;
         let (pk, sk) = ntru_keys_from_seed(&seed_bytes).map_err(KeyChainErrors::NTRUPrimeError)?;
@@ -30,6 +58,18 @@ impl KeyChain {
             ntrup_keys: (Arc::new(pk), Arc::new(sk)),
             aes_key,
         })
+    }
+
+    pub fn to_bytes(&self) -> [u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE] {
+        let mut res = [0u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE];
+        let pq_pk = self.ntrup_keys.0.as_bytes();
+        let pq_sk = self.ntrup_keys.1.as_bytes();
+
+        res[..PUBLICKEYS_BYTES].copy_from_slice(&pq_pk);
+        res[PUBLICKEYS_BYTES..PUBLICKEYS_BYTES + SECRETKEYS_BYTES].copy_from_slice(&pq_sk);
+        res[PUBLICKEYS_BYTES + SECRETKEYS_BYTES..].copy_from_slice(&self.aes_key);
+
+        res
     }
 
     pub fn decrypt(
@@ -96,6 +136,31 @@ mod tests {
         let keychain = KeyChain::from_pass(&password);
 
         assert!(keychain.is_ok());
+    }
+
+    #[test]
+    fn test_bytes() {
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mut password = [0u8; 32];
+        let mut plaintext = [0u8; 1024];
+
+        rng.fill_bytes(&mut password);
+        rng.fill_bytes(&mut plaintext);
+
+        let keychain = KeyChain::from_pass(&password).unwrap();
+        let bytes = keychain.to_bytes();
+
+        let restore_keychain = KeyChain::from_bytes(&bytes).unwrap();
+
+        assert_eq!(restore_keychain.aes_key, keychain.aes_key);
+        assert_eq!(
+            restore_keychain.ntrup_keys.0.as_bytes(),
+            keychain.ntrup_keys.0.as_bytes()
+        );
+        assert_eq!(
+            restore_keychain.ntrup_keys.1.as_bytes(),
+            keychain.ntrup_keys.1.as_bytes()
+        );
     }
 
     #[test]

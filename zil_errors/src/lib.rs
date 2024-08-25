@@ -46,6 +46,7 @@ pub enum NTRUPErrors<'a> {
 #[derive(Debug)]
 pub enum KeyChainErrors<'a> {
     NTRUPrimeError(NTRUPErrors<'a>),
+    NTRUPrimeImportKeyError,
     Argon2CipherErrors(CipherErrors),
     AESKeySliceError(TryFromSliceError),
     AESEncryptError(AesGCMErrors),
