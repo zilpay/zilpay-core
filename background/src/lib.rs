@@ -1,28 +1,24 @@
 use config::sha::SHA256_SIZE;
-use storage::Storage;
+use storage::LocalStorage;
 use wallet::Wallet;
+use zil_errors::ZilliqaErrors;
 
-#[derive(Debug)]
 pub struct Background {
+    storage: LocalStorage,
     wallets: Vec<Wallet>,
     selected: usize,
-    storage: Storage,
     indicators: Vec<[u8; SHA256_SIZE]>,
 }
 
-impl Default for Background {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Background {
-    pub fn new() -> Self {
-        Self {
+    pub fn from_storage_path<'a>(path: &str) -> Result<Self, ZilliqaErrors<'a>> {
+        let storage = LocalStorage::from(path).map_err(ZilliqaErrors::TryInitLocalStorageError)?;
+
+        Ok(Self {
+            storage,
             wallets: Vec::new(),
             selected: 0,
             indicators: Vec::new(),
-            storage: Storage {},
-        }
+        })
     }
 }

@@ -1,6 +1,5 @@
 use ntrulp::{ntru::errors::NTRUErrors, poly::errors::KemErrors, random::RandomErrors};
 use std::array::TryFromSliceError;
-use std::io::Error;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ZilliqaErrors<'a> {
@@ -15,6 +14,7 @@ pub enum ZilliqaErrors<'a> {
     InvalidPayload,
     InvalidRPCReq(String),
     InvalidJson(String),
+    TryInitLocalStorageError(LocalStorageError),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -64,7 +64,7 @@ pub enum SessionErrors<'a> {
     InvalidSeed(KeyChainErrors<'a>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum LocalStorageError {
     StoragePathError,
     StorageAccessError(String),
