@@ -4063,6 +4063,7 @@ dependencies = [
  "crypto",
  "num256",
  "proto",
+ "session",
  "zil_errors",
 ]
 

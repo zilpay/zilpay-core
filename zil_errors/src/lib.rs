@@ -61,6 +61,7 @@ pub enum SessionErrors<'a> {
     EncryptSessionError(AesGCMErrors),
     DecryptSessionError(AesGCMErrors),
     InvalidCipherKeySize,
+    SessionNotEnabled,
     InvalidSeed(KeyChainErrors<'a>),
 }
 

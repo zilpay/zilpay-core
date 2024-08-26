@@ -9,3 +9,4 @@ config = { path = "../config" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }
 num256 = "0.5.2"
+session = { path = "../session" }

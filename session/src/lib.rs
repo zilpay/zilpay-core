@@ -12,6 +12,16 @@ pub const CIPHER_KEYCHAIN_SIZE: usize = 92;
 #[derive(Debug)]
 pub struct Session {
     cipher_keychain: [u8; CIPHER_KEYCHAIN_SIZE],
+    pub is_enabdle: bool,
+}
+
+impl Default for Session {
+    fn default() -> Self {
+        Self {
+            cipher_keychain: [0u8; CIPHER_KEYCHAIN_SIZE],
+            is_enabdle: false,
+        }
+    }
 }
 
 impl Session {
@@ -26,7 +36,10 @@ impl Session {
             .map_err(SessionErrors::EncryptSessionError)?
             .try_into()
             .map_err(|_| SessionErrors::InvalidCipherKeySize)?;
-        let cipher_keychain = Self { cipher_keychain };
+        let cipher_keychain = Self {
+            cipher_keychain,
+            is_enabdle: true,
+        };
 
         Ok((cipher_keychain, key))
     }
@@ -35,6 +48,10 @@ impl Session {
         &self,
         key: &[u8; AES_GCM_KEY_SIZE],
     ) -> Result<KeyChain, SessionErrors> {
+        if !self.is_enabdle {
+            return Err(SessionErrors::SessionNotEnabled);
+        }
+
         let seed_bytes: [u8; KEY_SIZE] = aes_gcm_decrypt(key, &self.cipher_keychain)
             .map_err(SessionErrors::DecryptSessionError)?
             .try_into()
@@ -42,6 +59,11 @@ impl Session {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(SessionErrors::InvalidSeed)?;
 
         Ok(keychain)
+    }
+
+    pub fn logout(&mut self) {
+        self.is_enabdle = false;
+        self.cipher_keychain = [0u8; CIPHER_KEYCHAIN_SIZE];
     }
 }
 
@@ -65,6 +87,7 @@ mod tests {
         let (session, key) = Session::unlock(&password).unwrap();
         let keychain = session.decrypt_keychain(&key).unwrap();
 
+        assert!(session.is_enabdle);
         assert_eq!(
             keychain.ntrup_keys.0.as_bytes(),
             keychain_shouldbe.ntrup_keys.0.as_bytes()
