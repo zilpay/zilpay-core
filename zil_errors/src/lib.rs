@@ -54,3 +54,12 @@ pub enum KeyChainErrors<'a> {
     AESDecryptError(AesGCMErrors),
     NTRUPrimeDecryptError(NTRUPErrors<'a>),
 }
+
+#[derive(Debug)]
+pub enum SessionErrors<'a> {
+    DeriveKeyError(CipherErrors),
+    EncryptSessionError(AesGCMErrors),
+    DecryptSessionError(AesGCMErrors),
+    InvalidCipherKeySize,
+    InvalidSeed(KeyChainErrors<'a>),
+}
