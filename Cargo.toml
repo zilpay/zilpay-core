@@ -13,7 +13,7 @@ name = "shared"
 path = "shared/src/lib.rs"
 
 [workspace]
-members = [
+members = [ "background",
   "cipher",
   "config",
   "crypto",

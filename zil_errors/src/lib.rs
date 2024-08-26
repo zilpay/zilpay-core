@@ -1,6 +1,6 @@
-use std::array::TryFromSliceError;
-
 use ntrulp::{ntru::errors::NTRUErrors, poly::errors::KemErrors, random::RandomErrors};
+use std::array::TryFromSliceError;
+use std::io::Error;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ZilliqaErrors<'a> {
@@ -62,4 +62,18 @@ pub enum SessionErrors<'a> {
     DecryptSessionError(AesGCMErrors),
     InvalidCipherKeySize,
     InvalidSeed(KeyChainErrors<'a>),
+}
+
+#[derive(Debug)]
+pub enum LocalStorageError {
+    StoragePathError,
+    StorageAccessError(String),
+    FailToloadBytesTree,
+    FailToCreateFile,
+    FailToWriteFile,
+    StorageDataNotFound,
+    StorageDataBroken,
+    StorageHashsumError,
+    StorageWriteError,
+    StorageTimeWentBackwards,
 }
