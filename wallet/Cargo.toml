@@ -8,5 +8,8 @@ zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }
-num256 = "0.5.2"
 session = { path = "../session" }
+cipher = { path = "../cipher" }
+num256 = "0.5.2"
+bip39 = "2.0.0"
+sha2 = "0.10.8"
