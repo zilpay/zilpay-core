@@ -104,6 +104,7 @@ pub enum SchorrError {
 pub enum AddressError {
     InvalidLength,
     InvalidKeyType,
+    InvalidPubKey,
 }
 
 #[derive(Debug, PartialEq, Eq)]
