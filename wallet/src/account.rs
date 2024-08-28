@@ -29,11 +29,11 @@ impl Account {
     //     Self {}
     // }
 
-    pub fn from_sk<'a>(sk: [u8; SECRET_KEY_SIZE], name: String) -> Result<(), AccountErrors<'a>> {
+    pub fn from_sk(sk: [u8; SECRET_KEY_SIZE], name: String) -> Result<(), AccountErrors> {
         let account_type = AccountType::PrivateKey;
         let keypair =
             KeyPair::from_secret_key_bytes(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
-        let addr = Address::from_zil_pub_key(pub_key);
+        let addr = Address::from_zil_pub_key(&keypair.pub_key);
 
         Ok(())
     }

@@ -83,8 +83,8 @@ pub enum WalletErrors {
 }
 
 #[derive(Debug)]
-pub enum AccountErrors<'a> {
-    InvalidSecretKeyBytes(ZilliqaErrors<'a>),
+pub enum AccountErrors {
+    InvalidSecretKeyBytes(KeyPairError),
 }
 
 #[derive(Debug)]
@@ -103,4 +103,11 @@ pub enum SchorrError {
 #[derive(Debug)]
 pub enum AddressError {
     InvalidPubKey,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PubKeyError {
+    InvalidLength,
+    InvalidKeyType,
+    InvalidHex,
 }

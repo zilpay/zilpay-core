@@ -1,12 +1,7 @@
 pub mod account;
 
-use bip39::{Language, Mnemonic};
-use cipher::{
-    aes::AES_GCM_KEY_SIZE,
-    argon2::derive_key,
-    keychain::{CipherOrders, KeyChain},
-};
-use config::sha::{SHA256_SIZE, SHA512_SIZE};
+use cipher::keychain::{CipherOrders, KeyChain};
+use config::sha::SHA256_SIZE;
 use session::Session;
 use sha2::{Digest, Sha256};
 use zil_errors::WalletErrors;
@@ -94,8 +89,8 @@ mod tests {
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str).unwrap();
         let mnemonic_seed = mnemonic.to_seed_normalized(passphrase);
-
-        let wallet = Wallet::from_bip39_words(session, keychain, &mnemonic_seed).unwrap();
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let wallet = Wallet::from_bip39_words(session, keychain, &mnemonic_seed, &indexes).unwrap();
 
         dbg!(wallet);
     }

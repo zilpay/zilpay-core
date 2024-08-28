@@ -1,3 +1,4 @@
+use std::str::FromStr;
 use zil_errors::PubKeyError;
 
 pub const PUB_KEY_SIZE: usize = 33;
@@ -6,6 +7,24 @@ pub const PUB_KEY_SIZE: usize = 33;
 pub enum PubKey {
     Secp256k1Sha256([u8; PUB_KEY_SIZE]),    // ZILLIQA
     Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
+}
+
+impl PubKey {
+    pub fn to_bytes(&self) -> [u8; PUB_KEY_SIZE + 1] {
+        let mut result = [0u8; PUB_KEY_SIZE + 1];
+        result[0] = match self {
+            PubKey::Secp256k1Sha256(_) => 0,
+            PubKey::Secp256k1Keccak256(_) => 1,
+        };
+        result[1..].copy_from_slice(self.as_ref());
+        result
+    }
+}
+
+impl std::fmt::Display for PubKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.to_bytes()))
+    }
 }
 
 impl From<[u8; PUB_KEY_SIZE + 1]> for PubKey {
@@ -20,6 +39,7 @@ impl From<[u8; PUB_KEY_SIZE + 1]> for PubKey {
         }
     }
 }
+
 impl TryFrom<&[u8]> for PubKey {
     type Error = PubKeyError;
 
@@ -50,15 +70,25 @@ impl AsRef<[u8]> for PubKey {
     }
 }
 
-impl PubKey {
-    pub fn to_bytes(&self) -> [u8; PUB_KEY_SIZE + 1] {
-        let mut result = [0u8; PUB_KEY_SIZE + 1];
-        result[0] = match self {
-            PubKey::Secp256k1Sha256(_) => 0,
-            PubKey::Secp256k1Keccak256(_) => 1,
-        };
-        result[1..].copy_from_slice(self.as_ref());
-        result
+impl FromStr for PubKey {
+    type Err = PubKeyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() != PUB_KEY_SIZE * 2 + 1 {
+            return Err(PubKeyError::InvalidLength);
+        }
+
+        let data = hex::decode(s).map_err(|_| PubKeyError::InvalidHex)?;
+        let bytes: [u8; PUB_KEY_SIZE] = data[1..]
+            .try_into()
+            .map_err(|_| PubKeyError::InvalidLength)?;
+        let prefix = data[0];
+
+        match prefix {
+            0 => Ok(PubKey::Secp256k1Sha256(bytes)),
+            1 => Ok(PubKey::Secp256k1Keccak256(bytes)),
+            _ => Err(PubKeyError::InvalidKeyType),
+        }
     }
 }
 
@@ -142,5 +172,34 @@ mod tests {
 
         assert_eq!(zil_key, zil_key_roundtrip);
         assert_eq!(eth_key, eth_key_roundtrip);
+    }
+
+    #[test]
+    fn test_pubkey_to_string() {
+        let zil_data = [42u8; PUB_KEY_SIZE];
+        let eth_data = [69u8; PUB_KEY_SIZE];
+
+        let zil_key = PubKey::Secp256k1Sha256(zil_data);
+        let eth_key = PubKey::Secp256k1Keccak256(eth_data);
+
+        let zil_str = zil_key.to_string();
+        let eth_str = eth_key.to_string();
+
+        assert_eq!(PubKey::from_str(&zil_str).unwrap(), zil_key);
+        assert_eq!(PubKey::from_str(&eth_str).unwrap(), eth_key);
+
+        assert_eq!(PubKey::from_str("invalid"), Err(PubKeyError::InvalidLength));
+        assert_eq!(
+            PubKey::from_str(
+                "0303150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+            ),
+            Err(PubKeyError::InvalidKeyType)
+        );
+        assert_eq!(
+            PubKey::from_str(
+                "0030303150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+            ),
+            Err(PubKeyError::InvalidHex)
+        );
     }
 }

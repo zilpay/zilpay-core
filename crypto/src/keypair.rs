@@ -270,9 +270,18 @@ mod tests {
 
         assert_ne!(zil_key_pair.pub_key, eth_key_pair.pub_key);
         assert_ne!(zil_key_pair.secret_key, eth_key_pair.secret_key);
+
+        assert_eq!(
+            hex::encode(zil_key_pair.secret_key),
+            "e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+        );
         assert_eq!(
             hex::encode(eth_key_pair.secret_key),
             "b8ef60193eec0a55db93ba692035a8b5a388579c8dc58acc62ea470aba529e1c"
+        );
+        assert_eq!(
+            hex::encode(eth_key_pair.pub_key),
+            "0315bd7b9301a2cde69ef8092d6fb275a077e3c94e5ed166c915426850cf606600"
         );
         assert_eq!(
             hex::encode(zil_key_pair.pub_key),
