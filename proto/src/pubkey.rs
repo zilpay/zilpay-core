@@ -3,7 +3,7 @@ use ethers::utils::public_key_to_address;
 use std::str::FromStr;
 use zil_errors::PubKeyError;
 
-use crate::address::{from_zil_pub_key, ADDR_LEN};
+use crate::zil_address::{from_zil_pub_key, ADDR_LEN};
 
 pub const PUB_KEY_SIZE: usize = 33;
 
