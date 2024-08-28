@@ -1,6 +1,7 @@
 use crypto::keypair::{KeyPair, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use num256::uint256::Uint256;
 use proto::address::Address;
+use proto::pubkey::PubKey;
 use proto::zil_address::ADDR_LEN;
 use std::{collections::HashMap, io::Empty};
 use zil_errors::AccountErrors;
@@ -17,7 +18,7 @@ pub struct Account {
     pub name: String,
     pub account_type: AccountType,
     pub addr: Address,
-    pub pub_key: [u8; PUB_KEY_SIZE],
+    pub pub_key: PubKey,
     pub ft_map: HashMap<[u8; ADDR_LEN], Uint256>, // map with ft token address > balance
     pub nft_map: HashMap<[u8; ADDR_LEN], Empty>,  // TODO: add struct for NFT tokens
     pub cipher_sk: Vec<u8>,                       // know how much bytes
