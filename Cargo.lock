@@ -2745,6 +2745,7 @@ name = "proto"
 version = "0.1.0"
 dependencies = [
  "crypto",
+ "ethers",
  "hex",
  "prost",
  "prost-build",

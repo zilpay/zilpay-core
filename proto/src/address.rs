@@ -186,6 +186,16 @@ fn convert_bits(data: &[u8], from_width: u32, to_width: u32, pad: bool) -> Optio
     Some(ret)
 }
 
+pub fn from_zil_pub_key(pub_key: &[u8]) -> Result<[u8; ADDR_LEN], AddressError> {
+    let mut hasher = Sha256::new();
+    hasher.update(pub_key);
+    let hash = hasher.finalize();
+    let hash_slice = &hash[12..];
+    let value: [u8; ADDR_LEN] = hash_slice.try_into().or(Err(AddressError::InvalidPubKey))?;
+
+    Ok(value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{convert_bits, create_checksum, decode, encode, hrp_expand, polymod};

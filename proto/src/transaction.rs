@@ -8,7 +8,8 @@ use crate::{
     address::Address,
     zq1_proto::{Code, Data, Nonce, ProtoTransactionCoreInfo},
 };
-use crypto::schnorr::PublicKey;
+// use crypto::schnorr::PublicKey;
+use crate::pubkey::PubKey;
 use serde::{Deserialize, Serialize};
 
 pub const EVM_GAS_PER_SCILLA_GAS: u64 = 420;
@@ -94,13 +95,13 @@ pub struct TxZilliqa {
     pub data: String,
 }
 
-pub fn encode_zilliqa_transaction(txn: TxZilliqa, pub_key: PublicKey) -> Vec<u8> {
+pub fn encode_zilliqa_transaction(txn: TxZilliqa, pub_key: PubKey) -> Vec<u8> {
     let oneof8 = (!txn.code.is_empty()).then_some(Code::Code(txn.code.into_bytes()));
     let oneof9 = (!txn.data.is_empty()).then_some(Data::Data(txn.data.into_bytes()));
     let proto = ProtoTransactionCoreInfo {
         version: (((txn.chain_id) as u32) << 16) | 0x0001,
         toaddr: txn.to_addr.value.to_vec(),
-        senderpubkey: Some(pub_key.to_sec1_bytes().into()),
+        senderpubkey: Some(pub_key.to_sec1_bytes().to_vec().into()),
         amount: Some((txn.amount).to_be_bytes().to_vec().into()),
         gasprice: Some((txn.gas_price).to_be_bytes().to_vec().into()),
         gaslimit: txn.gas_limit.0,

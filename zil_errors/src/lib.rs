@@ -110,4 +110,6 @@ pub enum PubKeyError {
     InvalidLength,
     InvalidKeyType,
     InvalidHex,
+    InvalidVerifyingKey,
+    InvalidPubKey,
 }

@@ -1,5 +1,9 @@
+use ethers::core::k256::ecdsa::VerifyingKey;
+use ethers::utils::public_key_to_address;
 use std::str::FromStr;
 use zil_errors::PubKeyError;
+
+use crate::address::{from_zil_pub_key, ADDR_LEN};
 
 pub const PUB_KEY_SIZE: usize = 33;
 
@@ -18,6 +22,26 @@ impl PubKey {
         };
         result[1..].copy_from_slice(self.as_ref());
         result
+    }
+
+    pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN], PubKeyError> {
+        match self {
+            PubKey::Secp256k1Keccak256(pk) => {
+                let public_key =
+                    VerifyingKey::from_sec1_bytes(pk).or(Err(PubKeyError::InvalidVerifyingKey))?;
+                let addr = public_key_to_address(&public_key);
+
+                Ok(addr.into())
+            }
+            PubKey::Secp256k1Sha256(pk) => from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey)),
+        }
+    }
+
+    pub fn to_sec1_bytes(&self) -> &[u8; PUB_KEY_SIZE] {
+        match self {
+            PubKey::Secp256k1Keccak256(pk) => pk,
+            PubKey::Secp256k1Sha256(pk) => pk,
+        }
     }
 }
 
@@ -74,10 +98,6 @@ impl FromStr for PubKey {
     type Err = PubKeyError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() != PUB_KEY_SIZE * 2 + 1 {
-            return Err(PubKeyError::InvalidLength);
-        }
-
         let data = hex::decode(s).map_err(|_| PubKeyError::InvalidHex)?;
         let bytes: [u8; PUB_KEY_SIZE] = data[1..]
             .try_into()
@@ -188,7 +208,7 @@ mod tests {
         assert_eq!(PubKey::from_str(&zil_str).unwrap(), zil_key);
         assert_eq!(PubKey::from_str(&eth_str).unwrap(), eth_key);
 
-        assert_eq!(PubKey::from_str("invalid"), Err(PubKeyError::InvalidLength));
+        assert_eq!(PubKey::from_str("invalid"), Err(PubKeyError::InvalidHex));
         assert_eq!(
             PubKey::from_str(
                 "0303150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
@@ -200,6 +220,29 @@ mod tests {
                 "0030303150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
             ),
             Err(PubKeyError::InvalidHex)
+        );
+    }
+
+    #[test]
+    fn test_str_pubkey() {
+        let pubkey_eth: PubKey =
+            "0103150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+                .parse()
+                .unwrap();
+        let pubkey_zil: PubKey =
+            "0003150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+                .parse()
+                .unwrap();
+        let addr_eth = pubkey_eth.get_bytes_addr().unwrap();
+        let addr_zil = pubkey_zil.get_bytes_addr().unwrap();
+
+        assert_eq!(
+            hex::encode(addr_eth),
+            "c315295101461753b838e0be8688e744cf52dd6b"
+        );
+        assert_eq!(
+            hex::encode(addr_zil),
+            "ebd8b370dddb636faf641040d2181c55190840fb"
         );
     }
 }
