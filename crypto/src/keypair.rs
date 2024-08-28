@@ -13,7 +13,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 use k256::{ecdsa, PublicKey, SecretKey};
-use zil_errors::{EvmErrors, ZilliqaErrors};
+use zil_errors::{EvmErrors, KeyPairError};
 
 pub const PUB_KEY_SIZE: usize = 33;
 pub const SECRET_KEY_SIZE: usize = 32;
@@ -26,19 +26,19 @@ pub struct KeyPair {
 }
 
 impl KeyPair {
-    pub fn generate<'a>() -> Result<Self, ZilliqaErrors<'a>> {
+    pub fn generate() -> Result<Self, KeyPairError> {
         let mut rng = ChaCha20Rng::from_entropy();
         let mut sk_bytes = [0u8; SECRET_KEY_SIZE];
 
         rng.fill_bytes(&mut sk_bytes);
 
-        let secret_key = SecretKey::from_slice(&sk_bytes).or(Err(ZilliqaErrors::InvalidEntropy))?;
+        let secret_key = SecretKey::from_slice(&sk_bytes).or(Err(KeyPairError::InvalidEntropy))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
             .public_key()
             .to_sec1_bytes()
             .to_vec()
             .try_into()
-            .or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            .or(Err(KeyPairError::InvalidSecretKey))?;
         let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
 
         Ok(Self {
@@ -50,16 +50,17 @@ impl KeyPair {
     pub fn from_bip39_seed(
         seed: &[u8; BIP39_SEED_SIZE],
         path: String,
-    ) -> Result<Self, ZilliqaErrors> {
-        let ext = ExtendedPrivKey::derive(seed, path.as_str()).unwrap();
+    ) -> Result<Self, KeyPairError> {
+        let ext = ExtendedPrivKey::derive(seed, path.as_str())
+            .map_err(|_| KeyPairError::ExtendedPrivKeyDeriveError)?;
         let secret_key =
-            SecretKey::from_slice(&ext.secret()).or(Err(ZilliqaErrors::InvalidEntropy))?;
+            SecretKey::from_slice(&ext.secret()).or(Err(KeyPairError::InvalidEntropy))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
             .public_key()
             .to_sec1_bytes()
             .to_vec()
             .try_into()
-            .or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            .or(Err(KeyPairError::InvalidSecretKey))?;
         let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
 
         Ok(Self {
@@ -68,15 +69,15 @@ impl KeyPair {
         })
     }
 
-    pub fn from_secret_key_bytes<'a>(sk: [u8; SECRET_KEY_SIZE]) -> Result<Self, ZilliqaErrors<'a>> {
+    pub fn from_secret_key_bytes(sk: [u8; SECRET_KEY_SIZE]) -> Result<Self, KeyPairError> {
         let secret_key: SecretKey =
-            SecretKey::from_slice(&sk).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            SecretKey::from_slice(&sk).or(Err(KeyPairError::InvalidSecretKey))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
             .public_key()
             .to_sec1_bytes()
             .to_vec()
             .try_into()
-            .or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            .or(Err(KeyPairError::InvalidSecretKey))?;
 
         Ok(Self {
             pub_key,
@@ -84,13 +85,13 @@ impl KeyPair {
         })
     }
 
-    pub fn from_secret_key<'a>(sk: SecretKey) -> Result<Self, ZilliqaErrors<'a>> {
+    pub fn from_secret_key(sk: SecretKey) -> Result<Self, KeyPairError> {
         let pub_key: [u8; PUB_KEY_SIZE] = sk
             .public_key()
             .to_sec1_bytes()
             .to_vec()
             .try_into()
-            .or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            .or(Err(KeyPairError::InvalidSecretKey))?;
         let secret_key: [u8; SECRET_KEY_SIZE] = sk.to_bytes().into();
 
         Ok(Self {
@@ -119,11 +120,11 @@ impl KeyPair {
         result
     }
 
-    pub fn get_zil1_wallet<'a>(&self) -> Result<(SecretKey, PublicKey), ZilliqaErrors<'a>> {
+    pub fn get_zil1_wallet(&self) -> Result<(SecretKey, PublicKey), KeyPairError> {
         let secret_key =
-            SecretKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            SecretKey::from_slice(&self.secret_key).or(Err(KeyPairError::InvalidSecretKey))?;
         let pub_key =
-            PublicKey::from_sec1_bytes(&self.pub_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            PublicKey::from_sec1_bytes(&self.pub_key).or(Err(KeyPairError::InvalidSecretKey))?;
 
         Ok((secret_key, pub_key))
     }
@@ -135,11 +136,11 @@ impl KeyPair {
         Ok(LocalWallet::from(signing_key))
     }
 
-    pub fn sign_message_secp256k1(&self, msg: &[u8]) -> Result<ecdsa::Signature, ZilliqaErrors> {
+    pub fn sign_message_secp256k1(&self, msg: &[u8]) -> Result<ecdsa::Signature, KeyPairError> {
         let secret_key =
-            SecretKey::from_slice(&self.secret_key).or(Err(ZilliqaErrors::InvalidSecretKey))?;
+            SecretKey::from_slice(&self.secret_key).or(Err(KeyPairError::InvalidSecretKey))?;
 
-        schnorr::sign(msg, &secret_key)
+        schnorr::sign(msg, &secret_key).map_err(KeyPairError::SchorrError)
     }
 
     pub fn sign_ecdsa_hash(&self, hash: H256) -> Result<EvmSignature, EvmErrors> {
@@ -267,17 +268,15 @@ mod tests {
         let zil_key_pair = KeyPair::from_bip39_seed(&seed, zil_path).unwrap();
         let eth_key_pair = KeyPair::from_bip39_seed(&seed, eth_path).unwrap();
 
+        assert_ne!(zil_key_pair.pub_key, eth_key_pair.pub_key);
+        assert_ne!(zil_key_pair.secret_key, eth_key_pair.secret_key);
         assert_eq!(
             hex::encode(eth_key_pair.secret_key),
             "b8ef60193eec0a55db93ba692035a8b5a388579c8dc58acc62ea470aba529e1c"
         );
-
         assert_eq!(
-            zil_key_pair.secret_key,
-            [
-                233, 60, 3, 81, 117, 176, 134, 19, 196, 176, 37, 28, 169, 44, 208, 7, 2, 108, 160,
-                50, 186, 83, 186, 250, 60, 131, 152, 56, 248, 181, 45, 4
-            ]
+            hex::encode(zil_key_pair.pub_key),
+            "03150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
         );
     }
 }

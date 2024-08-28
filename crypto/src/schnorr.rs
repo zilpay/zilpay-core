@@ -6,17 +6,17 @@ use k256::{
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sha2::{Digest, Sha256};
-use zil_errors::ZilliqaErrors;
+use zil_errors::SchorrError;
 
 pub const MAX_TRY_SIGN: usize = 100_000_000;
 
-pub fn sign<'a>(message: &[u8], secret_key: &SecretKey) -> Result<Signature, ZilliqaErrors<'a>> {
+pub fn sign(message: &[u8], secret_key: &SecretKey) -> Result<Signature, SchorrError> {
     let mut rng = ChaCha20Rng::from_entropy();
     let safe_counter: usize = 0;
 
     loop {
         if safe_counter >= MAX_TRY_SIGN {
-            return Err(ZilliqaErrors::InvalidSignTry);
+            return Err(SchorrError::InvalidSignTry);
         }
 
         let mut k_bytes = FieldBytes::default();

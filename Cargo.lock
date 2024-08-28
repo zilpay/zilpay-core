@@ -4059,11 +4059,14 @@ dependencies = [
 name = "wallet"
 version = "0.1.0"
 dependencies = [
+ "bip39",
+ "cipher 0.1.0",
  "config",
  "crypto",
  "num256",
  "proto",
  "session",
+ "sha2 0.10.8",
  "zil_errors",
 ]
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use zil_errors::ZilliqaErrors;
+use zil_errors::AddressError;
 
 pub const CHARSET: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
 pub const HRP: &str = "zil";
@@ -22,14 +22,12 @@ impl Address {
         Address(bytes)
     }
 
-    pub fn from_zil_pub_key<'a>(pub_key: &[u8]) -> Result<Address, ZilliqaErrors<'a>> {
+    pub fn from_zil_pub_key(pub_key: &[u8]) -> Result<Address, AddressError> {
         let mut hasher = Sha256::new();
         hasher.update(pub_key);
         let hash = hasher.finalize();
         let hash_slice = &hash[12..];
-        let bytes: [u8; ADDR_LEN] = hash_slice
-            .try_into()
-            .or(Err(ZilliqaErrors::InvalidPubKey))?;
+        let bytes: [u8; ADDR_LEN] = hash_slice.try_into().or(Err(AddressError::InvalidPubKey))?;
 
         Ok(Address(bytes))
     }
@@ -184,10 +182,10 @@ fn convert_bits(data: &[u8], from_width: u32, to_width: u32, pad: bool) -> Optio
     Some(ret)
 }
 
+#[cfg(test)]
 mod tests {
-    use crate::address::Address;
-
     use super::{convert_bits, create_checksum, decode, encode, hrp_expand, polymod};
+    use crate::address::Address;
 
     #[test]
     fn test_polymod() {
@@ -263,5 +261,18 @@ mod tests {
         let addr = Address::from_base16("7793a8e8c09d189d4d421ce5bc5b3674656c5ac1").unwrap();
 
         assert_eq!(bech32, addr.to_bech32().unwrap());
+    }
+
+    #[test]
+    fn test_addr_from_pubkey() {
+        let pubkey =
+            hex::decode("03150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da")
+                .unwrap();
+        let addr = Address::from_zil_pub_key(&pubkey).unwrap();
+
+        assert_eq!(
+            addr.to_bech32().unwrap(),
+            "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
+        );
     }
 }

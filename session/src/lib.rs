@@ -25,14 +25,15 @@ impl Default for Session {
 }
 
 impl Session {
-    pub fn unlock(password: &[u8]) -> Result<(Self, [u8; AES_GCM_KEY_SIZE]), SessionErrors> {
+    pub fn unlock(
+        seed_bytes: &[u8; KEY_SIZE],
+    ) -> Result<(Self, [u8; AES_GCM_KEY_SIZE]), SessionErrors> {
         let mut rng = ChaCha20Rng::from_entropy();
         let mut key = [0u8; AES_GCM_KEY_SIZE];
 
         rng.fill_bytes(&mut key);
 
-        let seed_bytes = derive_key(password).map_err(SessionErrors::DeriveKeyError)?;
-        let cipher_keychain: [u8; CIPHER_KEYCHAIN_SIZE] = aes_gcm_encrypt(&key, &seed_bytes)
+        let cipher_keychain: [u8; CIPHER_KEYCHAIN_SIZE] = aes_gcm_encrypt(&key, seed_bytes)
             .map_err(SessionErrors::EncryptSessionError)?
             .try_into()
             .map_err(|_| SessionErrors::InvalidCipherKeySize)?;
@@ -84,7 +85,8 @@ mod tests {
 
         let seed_bytes = derive_key(&password).unwrap();
         let keychain_shouldbe = KeyChain::from_seed(seed_bytes).unwrap();
-        let (session, key) = Session::unlock(&password).unwrap();
+        let seed_bytes = derive_key(&password).unwrap();
+        let (session, key) = Session::unlock(&seed_bytes).unwrap();
         let keychain = session.decrypt_keychain(&key).unwrap();
 
         assert!(session.is_enabdle);

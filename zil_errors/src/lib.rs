@@ -4,10 +4,6 @@ use std::array::TryFromSliceError;
 #[derive(Debug, PartialEq, Eq)]
 pub enum ZilliqaErrors<'a> {
     Schnorr(&'a str),
-    InvalidPubKey,
-    InvalidSecretKey,
-    InvalidSignTry,
-    InvalidEntropy,
     BadRequest,
     FailToParseResponse,
     NetowrkIsDown,
@@ -77,4 +73,34 @@ pub enum LocalStorageError {
     StorageHashsumError,
     StorageWriteError,
     StorageTimeWentBackwards,
+}
+
+#[derive(Debug)]
+pub enum WalletErrors {
+    Bip39NotValid(String),
+    KeyChainErrors,
+    KeyChainSliceError,
+}
+
+#[derive(Debug)]
+pub enum AccountErrors<'a> {
+    InvalidSecretKeyBytes(ZilliqaErrors<'a>),
+}
+
+#[derive(Debug)]
+pub enum KeyPairError {
+    ExtendedPrivKeyDeriveError,
+    InvalidEntropy,
+    InvalidSecretKey,
+    SchorrError(SchorrError),
+}
+
+#[derive(Debug)]
+pub enum SchorrError {
+    InvalidSignTry,
+}
+
+#[derive(Debug)]
+pub enum AddressError {
+    InvalidPubKey,
 }
