@@ -8,18 +8,24 @@ pub const GENERATOR: [u32; 5] = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd,
 pub const ADDR_LEN: usize = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Address([u8; ADDR_LEN]);
+pub enum AddressTypes {
+    ZIL,
+    EVM,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Address {
+    pub addr_type: AddressTypes,
+    pub value: [u8; ADDR_LEN],
+}
 
 impl Address {
-    pub fn from_base16(addr: &str) -> Option<Self> {
+    pub fn from_zil_base16(addr: &str) -> Option<Self> {
         let mb_bytes = hex::decode(addr).ok()?;
-        let bytes = mb_bytes.try_into().ok()?;
+        let value = mb_bytes.try_into().ok()?;
+        let addr_type = AddressTypes::ZIL;
 
-        Some(Address(bytes))
-    }
-
-    pub fn from_bytes(bytes: [u8; ADDR_LEN]) -> Self {
-        Address(bytes)
+        Some(Self { value, addr_type })
     }
 
     pub fn from_zil_pub_key(pub_key: &[u8]) -> Result<Address, AddressError> {
@@ -27,12 +33,13 @@ impl Address {
         hasher.update(pub_key);
         let hash = hasher.finalize();
         let hash_slice = &hash[12..];
-        let bytes: [u8; ADDR_LEN] = hash_slice.try_into().or(Err(AddressError::InvalidPubKey))?;
+        let value: [u8; ADDR_LEN] = hash_slice.try_into().or(Err(AddressError::InvalidPubKey))?;
+        let addr_type = AddressTypes::ZIL;
 
-        Ok(Address(bytes))
+        Ok(Self { addr_type, value })
     }
 
-    pub fn from_bech32_address(address: &str) -> Option<Address> {
+    pub fn from_zil_bech32_address(address: &str) -> Option<Address> {
         let (hrp, data) = match decode(address) {
             Some(addr) => addr,
             None => return None,
@@ -44,16 +51,13 @@ impl Address {
             Some(buf) => buf,
             None => return None,
         };
+        let addr_type = AddressTypes::ZIL;
 
-        buf.try_into().ok().map(Address)
+        buf.try_into().ok().map(|value| Self { addr_type, value })
     }
 
-    pub fn to_bech32(&self) -> Option<String> {
-        convert_bits(&self.0, 8, 5, true).map(|addrbz| encode(HRP, &addrbz))
-    }
-
-    pub fn to_bytes(&self) -> [u8; ADDR_LEN] {
-        self.0
+    pub fn to_zil_bech32(&self) -> Option<String> {
+        convert_bits(&self.value, 8, 5, true).map(|addrbz| encode(HRP, &addrbz))
     }
 }
 
@@ -185,7 +189,7 @@ fn convert_bits(data: &[u8], from_width: u32, to_width: u32, pad: bool) -> Optio
 #[cfg(test)]
 mod tests {
     use super::{convert_bits, create_checksum, decode, encode, hrp_expand, polymod};
-    use crate::address::Address;
+    use crate::address::{Address, AddressTypes};
 
     #[test]
     fn test_polymod() {
@@ -244,13 +248,14 @@ mod tests {
     #[test]
     fn test_from_bech32_address() {
         let bech32 = "zil1w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8";
-        let base16_buff = Address::from_bech32_address(bech32).unwrap();
-        let base16 = hex::encode(base16_buff.0);
+        let base16_buff = Address::from_zil_bech32_address(bech32).unwrap();
+        let base16 = hex::encode(base16_buff.value);
 
         assert_eq!(base16, "7793a8e8c09d189d4d421ce5bc5b3674656c5ac1");
+        assert_eq!(base16_buff.addr_type, AddressTypes::ZIL);
 
         let base16_buff =
-            Address::from_bech32_address("zi21w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8");
+            Address::from_zil_bech32_address("zi21w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8");
 
         assert_eq!(base16_buff, None);
     }
@@ -258,9 +263,10 @@ mod tests {
     #[test]
     fn test_to_bech32_address() {
         let bech32 = "zil1w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8";
-        let addr = Address::from_base16("7793a8e8c09d189d4d421ce5bc5b3674656c5ac1").unwrap();
+        let addr = Address::from_zil_base16("7793a8e8c09d189d4d421ce5bc5b3674656c5ac1").unwrap();
 
-        assert_eq!(bech32, addr.to_bech32().unwrap());
+        assert_eq!(bech32, addr.to_zil_bech32().unwrap());
+        assert_eq!(addr.addr_type, AddressTypes::ZIL);
     }
 
     #[test]
@@ -270,8 +276,10 @@ mod tests {
                 .unwrap();
         let addr = Address::from_zil_pub_key(&pubkey).unwrap();
 
+        assert_eq!(addr.addr_type, AddressTypes::ZIL);
+
         assert_eq!(
-            addr.to_bech32().unwrap(),
+            addr.to_zil_bech32().unwrap(),
             "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
         );
     }

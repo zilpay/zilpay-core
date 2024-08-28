@@ -99,7 +99,7 @@ pub fn encode_zilliqa_transaction(txn: TxZilliqa, pub_key: PublicKey) -> Vec<u8>
     let oneof9 = (!txn.data.is_empty()).then_some(Data::Data(txn.data.into_bytes()));
     let proto = ProtoTransactionCoreInfo {
         version: (((txn.chain_id) as u32) << 16) | 0x0001,
-        toaddr: txn.to_addr.to_bytes().to_vec(),
+        toaddr: txn.to_addr.value.to_vec(),
         senderpubkey: Some(pub_key.to_sec1_bytes().into()),
         amount: Some((txn.amount).to_be_bytes().to_vec().into()),
         gasprice: Some((txn.gas_price).to_be_bytes().to_vec().into()),
