@@ -1,4 +1,5 @@
-use crate::zil_address::ADDR_LEN;
+use crate::zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32, ADDR_LEN};
+
 use serde::{Deserialize, Serialize};
 use zil_errors::AddressError;
 
@@ -9,6 +10,18 @@ pub enum Address {
 }
 
 impl Address {
+    pub fn from_zil_base16(addr: &str) -> Result<Self, AddressError> {
+        let addr = from_zil_base16(addr).ok_or(AddressError::InvalidBase16Address)?;
+
+        Ok(Self::Secp256k1Sha256(addr))
+    }
+
+    pub fn from_zil_pub_key(pk: &[u8]) -> Result<Self, AddressError> {
+        let addr = from_zil_pub_key(pk)?;
+
+        Ok(Self::Secp256k1Sha256(addr))
+    }
+
     pub fn to_bytes(&self) -> [u8; ADDR_LEN + 1] {
         let mut result = [0u8; ADDR_LEN + 1];
         result[0] = match self {
@@ -23,6 +36,15 @@ impl Address {
         match self {
             Address::Secp256k1Sha256(v) => v,
             Address::Secp256k1Keccak256(v) => v,
+        }
+    }
+
+    pub fn get_bech32(&self) -> Result<String, AddressError> {
+        match self {
+            Address::Secp256k1Sha256(v) => {
+                to_zil_bech32(v).ok_or(AddressError::InvalidAddressBytesForBech32)
+            }
+            _ => Err(AddressError::InvalidSecp256k1Sha256Type),
         }
     }
 }

@@ -105,6 +105,9 @@ pub enum AddressError {
     InvalidLength,
     InvalidKeyType,
     InvalidPubKey,
+    InvalidSecp256k1Sha256Type,
+    InvalidAddressBytesForBech32,
+    InvalidBase16Address,
 }
 
 #[derive(Debug, PartialEq, Eq)]

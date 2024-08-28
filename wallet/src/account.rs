@@ -1,6 +1,7 @@
 use crypto::keypair::{KeyPair, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use num256::uint256::Uint256;
-use proto::address::{Address, ADDR_LEN};
+use proto::address::Address;
+use proto::zil_address::ADDR_LEN;
 use std::{collections::HashMap, io::Empty};
 use zil_errors::AccountErrors;
 
@@ -33,7 +34,7 @@ impl Account {
         let account_type = AccountType::PrivateKey;
         let keypair =
             KeyPair::from_secret_key_bytes(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
-        let addr = Address::from_zil_pub_key(&keypair.pub_key);
+        // let addr = Address::from_zil_pub_key(&keypair.pub_key);
 
         Ok(())
     }
