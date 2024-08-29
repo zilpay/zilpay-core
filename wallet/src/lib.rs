@@ -92,6 +92,6 @@ mod tests {
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
         let wallet = Wallet::from_bip39_words(session, keychain, &mnemonic_seed, &indexes).unwrap();
 
-        dbg!(wallet);
+        // dbg!(wallet);
     }
 }

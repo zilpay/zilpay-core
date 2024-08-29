@@ -83,8 +83,11 @@ pub enum WalletErrors {
 }
 
 #[derive(Debug)]
-pub enum AccountErrors {
+pub enum AccountErrors<'a> {
     InvalidSecretKeyBytes(KeyPairError),
+    AddressParseError(AddressError),
+    TryEncryptSecretKeyError(KeyChainErrors<'a>),
+    SKSliceError,
 }
 
 #[derive(Debug)]

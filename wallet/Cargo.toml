@@ -13,3 +13,4 @@ cipher = { path = "../cipher" }
 num256 = "0.5.2"
 bip39 = "2.0.0"
 sha2 = "0.10.8"
+hex = "0.4.3"

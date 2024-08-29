@@ -7,7 +7,7 @@ edition = "2021"
 prost = "0.12.6"
 crypto = { path = "../crypto" }
 zil_errors = { path = "../zil_errors" }
-serde = { version = "1.0.204", features = ["derive", "rc"] }
+serde = { version = "1.0.204", features = ["derive"] }
 sha2 = "0.10.8"
 hex = "0.4.3"
 ethers = "2.0.14"
