@@ -1,4 +1,5 @@
 use config::sha::SHA256_SIZE;
+use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use wallet::Wallet;
 use zil_errors::ZilliqaErrors;
@@ -9,6 +10,7 @@ pub struct Background {
     selected: usize,
     indicators: Vec<[u8; SHA256_SIZE]>,
     is_old_storage: bool,
+    settings: CommonSettings,
 }
 
 impl Background {
@@ -22,6 +24,7 @@ impl Background {
             selected: 0,
             indicators: Vec::new(),
             is_old_storage,
+            settings: Default::default(),
         })
     }
 }

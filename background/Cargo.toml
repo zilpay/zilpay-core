@@ -9,3 +9,4 @@ session = { path = "../session" }
 wallet = { path = "../wallet" }
 storage = { path = "../storage" }
 config = { path = "../config" }
+settings = { path = "../settings" }

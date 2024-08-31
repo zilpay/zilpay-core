@@ -171,6 +171,7 @@ version = "0.1.0"
 dependencies = [
  "config",
  "session",
+ "settings",
  "storage",
  "wallet",
  "zil_errors",
@@ -4083,6 +4084,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "session",
+ "settings",
  "sha2 0.10.8",
  "storage",
  "zil_errors",

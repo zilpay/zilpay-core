@@ -3,6 +3,7 @@ pub mod account;
 use cipher::keychain::{CipherOrders, KeyChain};
 use config::sha::SHA256_SIZE;
 use session::Session;
+use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use zil_errors::WalletErrors;
 
@@ -29,6 +30,7 @@ pub struct Wallet {
     pub product_id: Option<usize>, // Ledger only device id
     pub accounts: Vec<account::Account>,
     pub selected: usize,
+    pub settings: WalletSettings,
 }
 
 impl Wallet {
@@ -37,6 +39,7 @@ impl Wallet {
         keychain: KeyChain,
         mnemonic_seed: &[u8], // Mnemonic seed bytes [u8; 64]
         indexes: &[u8],
+        settings: WalletSettings,
     ) -> Result<Self, WalletErrors> {
         let options = [CipherOrders::AESGCM256, CipherOrders::NTRUP1277];
         let cipher_seed: [u8; CIPHER_SEED_SIZE] = keychain
@@ -55,10 +58,12 @@ impl Wallet {
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
         let mut accounts: Vec<account::Account> = Vec::with_capacity(indexes.len());
 
+        // TODO: list accounts by index
         for index in indexes {}
 
         Ok(Self {
             session,
+            settings,
             wallet_address,
             cipher_seed,
             wallet_type: WalletTypes::SecretPhrase,
@@ -90,7 +95,14 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str).unwrap();
         let mnemonic_seed = mnemonic.to_seed_normalized(passphrase);
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-        let wallet = Wallet::from_bip39_words(session, keychain, &mnemonic_seed, &indexes).unwrap();
+        let wallet = Wallet::from_bip39_words(
+            session,
+            keychain,
+            &mnemonic_seed,
+            &indexes,
+            Default::default(),
+        )
+        .unwrap();
 
         // dbg!(wallet);
     }
