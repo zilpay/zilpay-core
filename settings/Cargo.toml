@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
+cipher = { path = "../cipher" }

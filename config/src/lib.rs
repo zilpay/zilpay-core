@@ -6,3 +6,4 @@ pub mod contracts;
 pub mod key;
 pub mod sha;
 pub mod storage;
+pub mod wallet;

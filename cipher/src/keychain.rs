@@ -13,6 +13,7 @@ use zil_errors::KeyChainErrors;
 
 pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
 
+#[derive(Debug)]
 pub enum CipherOrders {
     AESGCM256,
     NTRUP1277,
@@ -127,7 +128,6 @@ mod tests {
     use core::panic;
 
     use super::{CipherOrders, KeyChain};
-    use aes_gcm::aead::Buffer;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
     use zil_errors::{AesGCMErrors, KeyChainErrors};

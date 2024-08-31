@@ -3330,6 +3330,7 @@ dependencies = [
 name = "settings"
 version = "0.1.0"
 dependencies = [
+ "cipher 0.1.0",
  "config",
  "zil_errors",
 ]
@@ -4074,6 +4075,7 @@ dependencies = [
 name = "wallet"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "bip39",
  "cipher 0.1.0",
  "config",

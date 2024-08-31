@@ -1,12 +1,13 @@
-use cipher::keychain::{CipherOrders, KeyChain};
-use config::address::ADDR_LEN;
+use cipher::keychain::KeyChain;
 use config::key::SECRET_KEY_SIZE;
+use config::{address::ADDR_LEN, sha::SHA512_SIZE};
 use crypto::keypair::KeyPair;
 use num256::uint256::Uint256;
 use proto::address::Address;
 use proto::pubkey::PubKey;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use settings::wallet_settings::WalletSettings;
 use std::{collections::HashMap, io::Empty};
 use storage::LocalStorage;
 use zil_errors::AccountErrors;
@@ -42,17 +43,15 @@ impl Account {
         name: String,
         keychain: &'a KeyChain,
         storage: &'a LocalStorage,
+        settings: &'a WalletSettings,
     ) -> Result<Self, AccountErrors<'a>> {
         let keypair =
             KeyPair::from_secret_key_bytes(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
         let addr = Address::from_zil_pub_key(&keypair.pub_key)
             .map_err(AccountErrors::AddressParseError)?;
 
-        // TODO: move options to settings.
-        let options = [CipherOrders::AESGCM256, CipherOrders::NTRUP1277];
-
         let cipher_sk: [u8; CIPHER_SK_SIZE] = keychain
-            .encrypt(sk.to_vec(), &options)
+            .encrypt(sk.to_vec(), &settings.crypto.cipher_orders)
             .map_err(AccountErrors::TryEncryptSecretKeyError)?
             .try_into()
             .or(Err(AccountErrors::SKSliceError))?;
@@ -76,7 +75,12 @@ impl Account {
         })
     }
 
-    pub fn from_hd() {}
+    pub fn from_hd(mnemonic_seed: &[u8; SHA512_SIZE], index: usize) {
+        let zil_path = format!("m/44'/313'/0'/0/{}", index);
+        let eth_path = format!("m/44'/60'/0'/0/{}", index);
+
+        let keypair = KeyPair::from_bip39_seed(mnemonic_seed, path);
+    }
 }
 
 #[cfg(test)]
@@ -100,7 +104,14 @@ mod tests {
         let storage =
             LocalStorage::new("com.test_write", "WriteTest Corp", "WriteTest App").unwrap();
 
-        let acc = Account::from_zil_sk(sk_bytes, name.to_string(), &keychain, &storage).unwrap();
+        let acc = Account::from_zil_sk(
+            sk_bytes,
+            name.to_string(),
+            &keychain,
+            &storage,
+            &Default::default(),
+        )
+        .unwrap();
 
         dbg!(acc);
     }

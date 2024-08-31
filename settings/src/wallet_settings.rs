@@ -11,7 +11,7 @@ pub struct WalletSettings {
 impl Default for WalletSettings {
     fn default() -> Self {
         Self {
-            crypto: CryptoSettings {},
+            crypto: CryptoSettings::default(),
             currency: Currency {},
             network: Network {},
             security: Security {},

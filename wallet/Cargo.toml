@@ -12,6 +12,7 @@ session = { path = "../session" }
 cipher = { path = "../cipher" }
 storage = { path = "../storage" }
 settings = { path = "../settings" }
+bincode = { path = "../bincode" }
 num256 = "0.5.2"
 bip39 = "2.0.0"
 sha2 = "0.10.8"

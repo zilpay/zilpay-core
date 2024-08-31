@@ -16,6 +16,9 @@ use rand_chacha::ChaCha20Rng;
 use k256::{ecdsa, PublicKey, SecretKey};
 use zil_errors::{EvmErrors, KeyPairError};
 
+#[derive(Debug)]
+pub enum HDDerivePathes {}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct KeyPair {
     pub pub_key: [u8; PUB_KEY_SIZE],
