@@ -69,10 +69,13 @@ pub enum LocalStorageError {
     FailToCreateFile,
     FailToWriteFile,
     StorageDataNotFound,
-    StorageDataBroken,
-    StorageHashsumError,
     StorageWriteError,
     StorageTimeWentBackwards,
+    PayloadVersionParseError,
+    PayloadParseError,
+    InsufficientBytes,
+    PayloadLengthError,
+    InvalidBytesSizeOverflow,
 }
 
 #[derive(Debug)]

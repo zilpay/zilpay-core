@@ -229,6 +229,10 @@ checksum = "d86b93f97252c47b41663388e6d155714a9d0c398b99f1005cbc5f978b29f445"
 
 [[package]]
 name = "bincode"
+version = "0.1.0"
+
+[[package]]
+name = "bincode"
 version = "2.0.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f11ea1a0346b94ef188834a65c068a03aec181c94896d481d7a0a40d85b0ce95"
@@ -3518,7 +3522,8 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "storage"
 version = "0.1.0"
 dependencies = [
- "bincode",
+ "bincode 0.1.0",
+ "config",
  "directories",
  "hex",
  "sha2 0.10.8",
@@ -4469,7 +4474,7 @@ dependencies = [
 name = "zilpa-core"
 version = "0.1.0"
 dependencies = [
- "bincode",
+ "bincode 2.0.0-rc.3",
  "bip39",
  "ethers",
  "hex",
