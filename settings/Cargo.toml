@@ -1,0 +1,8 @@
+[package]
+name = "settings"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+zil_errors = { path = "../zil_errors" }
+config = { path = "../config" }
