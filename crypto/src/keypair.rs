@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use super::bip49::Bip49DerivationPath;
 use super::schnorr;
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use tiny_hderive::bip32::ExtendedPrivKey;
@@ -49,8 +50,9 @@ impl KeyPair {
 
     pub fn from_bip39_seed(
         seed: &[u8; BIP39_SEED_SIZE],
-        path: String,
+        bip49: &Bip49DerivationPath,
     ) -> Result<Self, KeyPairError> {
+        let path = bip49.get_path();
         let ext = ExtendedPrivKey::derive(seed, path.as_str())
             .map_err(|_| KeyPairError::ExtendedPrivKeyDeriveError)?;
         let secret_key =
@@ -189,6 +191,8 @@ impl FromStr for KeyPair {
 
 #[cfg(test)]
 mod tests {
+    use crate::bip49::Bip49DerivationPath;
+
     use super::KeyPair;
     use bip39::Mnemonic;
 
@@ -253,8 +257,8 @@ mod tests {
         let index = 0;
         let seed = m.to_seed("");
 
-        let zil_path = format!("m/44'/313'/0'/0/{}", index);
-        let eth_path = format!("m/44'/60'/0'/0/{}", index);
+        let zil_path = Bip49DerivationPath::Zilliqa(index);
+        let eth_path = Bip49DerivationPath::Ethereum(index);
 
         assert_eq!(
             [
@@ -265,8 +269,8 @@ mod tests {
             ],
             seed
         );
-        let zil_key_pair = KeyPair::from_bip39_seed(&seed, zil_path).unwrap();
-        let eth_key_pair = KeyPair::from_bip39_seed(&seed, eth_path).unwrap();
+        let zil_key_pair = KeyPair::from_bip39_seed(&seed, &zil_path).unwrap();
+        let eth_key_pair = KeyPair::from_bip39_seed(&seed, &eth_path).unwrap();
 
         assert_ne!(zil_key_pair.pub_key, eth_key_pair.pub_key);
         assert_ne!(zil_key_pair.secret_key, eth_key_pair.secret_key);

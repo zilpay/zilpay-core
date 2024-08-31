@@ -1,6 +1,7 @@
 use cipher::keychain::KeyChain;
 use config::key::SECRET_KEY_SIZE;
 use config::{address::ADDR_LEN, sha::SHA512_SIZE};
+use crypto::bip49::Bip49DerivationPath;
 use crypto::keypair::KeyPair;
 use num256::uint256::Uint256;
 use proto::address::Address;
@@ -75,11 +76,8 @@ impl Account {
         })
     }
 
-    pub fn from_hd(mnemonic_seed: &[u8; SHA512_SIZE], index: usize) {
-        let zil_path = format!("m/44'/313'/0'/0/{}", index);
-        let eth_path = format!("m/44'/60'/0'/0/{}", index);
-
-        let keypair = KeyPair::from_bip39_seed(mnemonic_seed, path);
+    pub fn from_hd(mnemonic_seed: &[u8; SHA512_SIZE], bip49: &Bip49DerivationPath) {
+        let keypair = KeyPair::from_bip39_seed(mnemonic_seed, bip49);
     }
 }
 
