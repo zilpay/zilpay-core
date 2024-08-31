@@ -53,9 +53,9 @@ impl LocalStorage {
         Ok(data.payload)
     }
 
-    pub fn set(&self, key: &[u8], payload: Vec<u8>) -> Result<(), LocalStorageError> {
+    pub fn set(&self, key: &[u8], payload: &[u8]) -> Result<(), LocalStorageError> {
         let data = DataWarp {
-            payload,
+            payload: payload.into(),
             version: self.version,
         };
         let vec = IVec::from(data.to_bytes());
@@ -79,7 +79,7 @@ mod storage_tests {
         let payload = b"Hello, World!".to_vec();
         let db = LocalStorage::new("com.test_write", "WriteTest Corp", "WriteTest App").unwrap();
 
-        db.set(KEY, payload.clone()).unwrap();
+        db.set(KEY, &payload).unwrap();
 
         let out = db.get(KEY).unwrap();
 

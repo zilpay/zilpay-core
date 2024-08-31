@@ -1,10 +1,11 @@
 use cipher::keychain::{CipherOrders, KeyChain};
-use crypto::keypair::{KeyPair, SECRET_KEY_SIZE};
+use config::address::ADDR_LEN;
+use config::key::SECRET_KEY_SIZE;
+use crypto::keypair::KeyPair;
 use num256::uint256::Uint256;
 use proto::address::Address;
 use proto::pubkey::PubKey;
-use proto::zil_address::ADDR_LEN;
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{collections::HashMap, io::Empty};
 use storage::LocalStorage;
@@ -36,12 +37,12 @@ impl Account {
     //     Self {}
     // }
 
-    pub fn from_zil_sk<'a, 'b>(
+    pub fn from_zil_sk<'a>(
         sk: [u8; SECRET_KEY_SIZE],
         name: String,
         keychain: &'a KeyChain,
         storage: &'a LocalStorage,
-    ) -> Result<Self, AccountErrors<'b>> {
+    ) -> Result<Self, AccountErrors<'a>> {
         let keypair =
             KeyPair::from_secret_key_bytes(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
         let addr = Address::from_zil_pub_key(&keypair.pub_key)
@@ -57,10 +58,13 @@ impl Account {
             .or(Err(AccountErrors::SKSliceError))?;
         let pub_key = PubKey::Secp256k1Sha256(keypair.pub_key);
         let mut rng = ChaCha20Rng::from_entropy();
-        let num_storage_key: usize = rng.r#gen();
+        let num_storage_key = rng.r#gen();
         let account_type = AccountType::PrivateKey(num_storage_key);
+        let num_storage_key_bytes = usize::to_le_bytes(num_storage_key);
 
-        storage.set(&key, cipher_sk);
+        storage
+            .set(&num_storage_key_bytes, &cipher_sk)
+            .map_err(AccountErrors::FailToSaveCipher)?;
 
         Ok(Self {
             account_type,
@@ -91,8 +95,12 @@ mod tests {
         let name = "Account 0";
         let password = b"Test_password";
         let argon_seed = derive_key(password).unwrap();
+
         let keychain = KeyChain::from_seed(argon_seed).unwrap();
-        let acc = Account::from_zil_sk(sk_bytes, name.to_string(), &keychain).unwrap();
+        let storage =
+            LocalStorage::new("com.test_write", "WriteTest Corp", "WriteTest App").unwrap();
+
+        let acc = Account::from_zil_sk(sk_bytes, name.to_string(), &keychain, &storage).unwrap();
 
         dbg!(acc);
     }

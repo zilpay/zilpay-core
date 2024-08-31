@@ -91,6 +91,7 @@ pub enum AccountErrors<'a> {
     AddressParseError(AddressError),
     TryEncryptSecretKeyError(KeyChainErrors<'a>),
     SKSliceError,
+    FailToSaveCipher(LocalStorageError),
 }
 
 #[derive(Debug)]
