@@ -40,10 +40,7 @@ impl LocalStorage {
         self.tree.size_on_disk().unwrap_or(0)
     }
 
-    pub fn get<ST>(&self, key: &[u8]) -> Result<ST, LocalStorageError>
-    where
-        ST: FromBytes + ToVecBytes,
-    {
+    pub fn get(&self, key: &[u8]) -> Result<Vec<u8>, LocalStorageError> {
         let some_value = self
             .tree
             .get(key)
@@ -51,15 +48,12 @@ impl LocalStorage {
         let value = some_value
             .ok_or(LocalStorageError::StorageDataNotFound)?
             .to_vec();
-        let data: DataWarp<ST> = DataWarp::from_bytes(&value)?;
+        let data = DataWarp::from_bytes(value.into())?;
 
         Ok(data.payload)
     }
 
-    pub fn set<ST>(&self, key: &[u8], payload: ST) -> Result<(), LocalStorageError>
-    where
-        ST: FromBytes + ToVecBytes,
-    {
+    pub fn set(&self, key: &[u8], payload: Vec<u8>) -> Result<(), LocalStorageError> {
         let data = DataWarp {
             payload,
             version: self.version,
@@ -78,39 +72,16 @@ impl LocalStorage {
 mod storage_tests {
     use super::*;
 
-    #[derive(Debug, PartialEq, Clone)]
-    struct TestPayload {
-        data: String,
-    }
-
-    impl bincode::ToVecBytes for TestPayload {
-        fn to_bytes(&self) -> Vec<u8> {
-            self.data.as_bytes().to_vec()
-        }
-    }
-
-    impl bincode::FromBytes for TestPayload {
-        type Error = LocalStorageError;
-
-        fn from_bytes(bytes: &[u8]) -> Result<Self, Self::Error> {
-            String::from_utf8(bytes.to_vec())
-                .map(|data| TestPayload { data })
-                .map_err(|_| LocalStorageError::PayloadParseError)
-        }
-    }
-
     #[test]
     fn test_read_write() {
         const KEY: &[u8] = b"TEST_KEY_FOR_STORAGE";
 
-        let payload = TestPayload {
-            data: "Hello, World!".to_string(),
-        };
+        let payload = b"Hello, World!".to_vec();
         let db = LocalStorage::new("com.test_write", "WriteTest Corp", "WriteTest App").unwrap();
 
         db.set(KEY, payload.clone()).unwrap();
 
-        let out = db.get::<TestPayload>(KEY).unwrap();
+        let out = db.get(KEY).unwrap();
 
         assert_eq!(out, payload);
     }
