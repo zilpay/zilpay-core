@@ -1,7 +1,6 @@
-use std::{mem::size_of, ops::Add};
-
 use bincode::{FromBytes, ToVecBytes};
 use config::storage::STORAGE_VERSION;
+use std::mem::size_of;
 use zil_errors::LocalStorageError;
 
 #[derive(Debug)]
