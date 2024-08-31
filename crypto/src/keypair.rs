@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use super::schnorr;
+use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use tiny_hderive::bip32::ExtendedPrivKey;
 
 use ethers::{
@@ -14,10 +15,6 @@ use rand_chacha::ChaCha20Rng;
 
 use k256::{ecdsa, PublicKey, SecretKey};
 use zil_errors::{EvmErrors, KeyPairError};
-
-pub const PUB_KEY_SIZE: usize = 33;
-pub const SECRET_KEY_SIZE: usize = 32;
-pub const BIP39_SEED_SIZE: usize = 64;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct KeyPair {

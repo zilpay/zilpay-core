@@ -1,5 +1,6 @@
-use crate::zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32, ADDR_LEN};
+use crate::zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32};
 
+use config::address::ADDR_LEN;
 use serde::{Deserialize, Serialize};
 use zil_errors::AddressError;
 

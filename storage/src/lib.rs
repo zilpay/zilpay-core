@@ -1,10 +1,10 @@
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
-
+use bincode::{config, Decode, Encode};
 use directories::ProjectDirs;
 use sha2::{Digest, Sha256};
 use sled::{Db, IVec};
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use zil_errors::LocalStorageError;
 
@@ -18,7 +18,7 @@ pub struct Data<ST> {
     // last update for sync with server
     pub last_update: u64,
     // hash sum for compare with server
-    pub hashsum: String,
+    pub hashsum: [u8; ],
 }
 
 pub struct LocalStorage {
@@ -71,7 +71,7 @@ impl LocalStorage {
         self.tree.size_on_disk().unwrap_or(0)
     }
 
-    pub fn get<ST>(&self, key: &str) -> Result<ST, LocalStorageError>
+    pub fn get<ST>(&self, key: &[u8]) -> Result<ST, LocalStorageError>
     where
         ST: for<'a> Deserialize<'a> + Serialize,
     {
@@ -95,7 +95,7 @@ impl LocalStorage {
         Ok(data.payload)
     }
 
-    pub fn set<ST>(&self, key: &str, payload: ST) -> Result<(), LocalStorageError>
+    pub fn set<ST>(&self, key: &[u8], payload: ST) -> Result<(), LocalStorageError>
     where
         ST: Serialize,
     {
@@ -144,7 +144,7 @@ mod storage_tests {
 
     #[test]
     fn test_read_write() {
-        const KEY: &str = "TEST_KEY_FOR_STORAGE";
+        const KEY: &[u8] = b"TEST_KEY_FOR_STORAGE";
 
         let db = LocalStorage::new("com.test_write", "WriteTest Corp", "WriteTest App").unwrap();
         let payload = vec!["test1", "test2", "test3"];
