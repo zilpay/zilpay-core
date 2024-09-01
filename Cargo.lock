@@ -2750,6 +2750,7 @@ dependencies = [
 name = "proto"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "config",
  "crypto",
  "ethers",

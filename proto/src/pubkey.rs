@@ -1,4 +1,6 @@
+use bincode::ToBytes;
 use config::address::ADDR_LEN;
+use config::key::PUB_KEY_SIZE;
 use ethers::core::k256::ecdsa::VerifyingKey;
 use ethers::utils::public_key_to_address;
 use std::str::FromStr;
@@ -6,25 +8,13 @@ use zil_errors::PubKeyError;
 
 use crate::zil_address::from_zil_pub_key;
 
-pub const PUB_KEY_SIZE: usize = 33;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PubKey {
     Secp256k1Sha256([u8; PUB_KEY_SIZE]),    // ZILLIQA
     Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
 }
 
 impl PubKey {
-    pub fn to_bytes(&self) -> [u8; PUB_KEY_SIZE + 1] {
-        let mut result = [0u8; PUB_KEY_SIZE + 1];
-        result[0] = match self {
-            PubKey::Secp256k1Sha256(_) => 0,
-            PubKey::Secp256k1Keccak256(_) => 1,
-        };
-        result[1..].copy_from_slice(self.as_ref());
-        result
-    }
-
     pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN], PubKeyError> {
         match self {
             PubKey::Secp256k1Keccak256(pk) => {
@@ -46,9 +36,25 @@ impl PubKey {
     }
 }
 
+impl ToBytes<{ PUB_KEY_SIZE + 1 }> for PubKey {
+    type Error = PubKeyError;
+    fn to_bytes(&self) -> Result<[u8; PUB_KEY_SIZE + 1], Self::Error> {
+        let mut result = [0u8; PUB_KEY_SIZE + 1];
+
+        result[0] = match self {
+            PubKey::Secp256k1Sha256(_) => 0,
+            PubKey::Secp256k1Keccak256(_) => 1,
+        };
+        result[1..].copy_from_slice(self.as_ref());
+
+        Ok(result)
+    }
+}
+
 impl std::fmt::Display for PubKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(self.to_bytes()))
+        // TODO: remove unwrap!
+        write!(f, "{}", hex::encode(self.to_bytes().unwrap()))
     }
 }
 
@@ -170,8 +176,8 @@ mod tests {
         let zil_key = PubKey::Secp256k1Sha256(data);
         let eth_key = PubKey::Secp256k1Keccak256(data);
 
-        let zil_bytes = zil_key.to_bytes();
-        let eth_bytes = eth_key.to_bytes();
+        let zil_bytes = zil_key.to_bytes().unwrap();
+        let eth_bytes = eth_key.to_bytes().unwrap();
 
         assert_eq!(zil_bytes[0], 0);
         assert_eq!(eth_bytes[0], 1);
@@ -185,8 +191,8 @@ mod tests {
         let zil_key = PubKey::Secp256k1Sha256(original_data);
         let eth_key = PubKey::Secp256k1Keccak256(original_data);
 
-        let zil_bytes = zil_key.to_bytes();
-        let eth_bytes = eth_key.to_bytes();
+        let zil_bytes = zil_key.to_bytes().unwrap();
+        let eth_bytes = eth_key.to_bytes().unwrap();
 
         let zil_key_roundtrip = PubKey::from(zil_bytes);
         let eth_key_roundtrip = PubKey::from(eth_bytes);

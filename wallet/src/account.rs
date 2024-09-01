@@ -76,8 +76,14 @@ impl Account {
         })
     }
 
-    pub fn from_hd(mnemonic_seed: &[u8; SHA512_SIZE], bip49: &Bip49DerivationPath) {
-        let keypair = KeyPair::from_bip39_seed(mnemonic_seed, bip49);
+    pub fn from_hd<'a>(
+        mnemonic_seed: &[u8; SHA512_SIZE],
+        bip49: &Bip49DerivationPath,
+    ) -> Result<(), AccountErrors<'a>> {
+        let keypair =
+            KeyPair::from_bip39_seed(mnemonic_seed, bip49).map_err(AccountErrors::InvalidSeed)?;
+
+        Ok(())
     }
 }
 

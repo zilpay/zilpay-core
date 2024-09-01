@@ -92,6 +92,7 @@ pub enum AccountErrors<'a> {
     TryEncryptSecretKeyError(KeyChainErrors<'a>),
     SKSliceError,
     FailToSaveCipher(LocalStorageError),
+    InvalidSeed(KeyPairError),
 }
 
 #[derive(Debug)]
@@ -115,6 +116,11 @@ pub enum AddressError {
     InvalidSecp256k1Sha256Type,
     InvalidAddressBytesForBech32,
     InvalidBase16Address,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum SecretKeyError {
+    SecretKeySliceError,
 }
 
 #[derive(Debug, PartialEq, Eq)]

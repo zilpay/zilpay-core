@@ -4,6 +4,7 @@ use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use config::wallet::{CIPHER_SEED_SIZE, N_BYTES_HASH, N_SALT};
+use crypto::bip49::Bip49DerivationPath;
 use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
@@ -35,7 +36,7 @@ impl Wallet {
         keychain: KeyChain,
         mnemonic: &Mnemonic,
         passphrase: &str,
-        indexes: &[usize],
+        indexes: &[Bip49DerivationPath],
         settings: WalletSettings,
     ) -> Result<Self, WalletErrors> {
         let cipher_entropy: [u8; CIPHER_SEED_SIZE] = keychain
@@ -43,7 +44,7 @@ impl Wallet {
             .map_err(|_| WalletErrors::KeyChainErrors)?
             .try_into()
             .map_err(|_| WalletErrors::KeyChainSliceError)?;
-        let mut combined = [0u8; 32];
+        let mut combined = [0u8; SHA256_SIZE];
         let mnemonic_seed = mnemonic.to_seed_normalized(passphrase);
 
         combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
@@ -78,6 +79,7 @@ impl Wallet {
 mod tests {
     use bip39::Mnemonic;
     use cipher::{argon2::derive_key, keychain::KeyChain};
+    use crypto::bip49::Bip49DerivationPath;
     use session::Session;
 
     use crate::Wallet;
@@ -93,7 +95,7 @@ mod tests {
         let keychain = KeyChain::from_seed(argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str).unwrap();
-        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(Bip49DerivationPath::Zilliqa);
         let wallet = Wallet::from_bip39_words(
             session,
             keychain,
