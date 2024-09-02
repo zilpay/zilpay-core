@@ -141,9 +141,12 @@ pub enum PubKeyError {
     InvalidHex,
     InvalidVerifyingKey,
     InvalidPubKey,
+    FailIntoPubKey,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SignatureError {
     InvalidLength,
+    FailParseSignature,
+    FailIntoPubKey(PubKeyError),
 }

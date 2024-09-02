@@ -3,6 +3,7 @@ use config::address::ADDR_LEN;
 use config::key::PUB_KEY_SIZE;
 use ethers::core::k256::ecdsa::VerifyingKey;
 use ethers::utils::public_key_to_address;
+use k256::PublicKey as K256PublicKey;
 use std::str::FromStr;
 use zil_errors::PubKeyError;
 
@@ -33,6 +34,25 @@ impl PubKey {
             PubKey::Secp256k1Keccak256(pk) => pk,
             PubKey::Secp256k1Sha256(pk) => pk,
         }
+    }
+}
+
+impl TryInto<K256PublicKey> for PubKey {
+    type Error = PubKeyError;
+
+    fn try_into(self) -> Result<K256PublicKey, Self::Error> {
+        let pk =
+            K256PublicKey::from_sec1_bytes(self.as_ref()).or(Err(PubKeyError::FailIntoPubKey))?;
+
+        Ok(pk)
+    }
+}
+
+impl TryFrom<&PubKey> for K256PublicKey {
+    type Error = PubKeyError;
+
+    fn try_from(pk: &PubKey) -> Result<Self, Self::Error> {
+        K256PublicKey::from_sec1_bytes(pk.as_ref()).map_err(|_| PubKeyError::FailIntoPubKey)
     }
 }
 

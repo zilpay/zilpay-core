@@ -5,6 +5,7 @@ use config::{
 };
 use crypto::bip49::Bip49DerivationPath;
 use crypto::schnorr;
+use k256::ecdsa::Signature as SchnorrSignature;
 use k256::{ecdsa, PublicKey as K256PublicKey, SecretKey as K256SecretKey};
 
 use crate::{address::Address, pubkey::PubKey, signature::Signature};
@@ -144,6 +145,8 @@ impl KeyPair {
             }
         }
     }
+
+    pub fn verify_sig(&self, msg_byte: &[u8], sig: Signature) -> Result<bool, KeyPairError> {}
 }
 
 impl ToBytes<{ KEYPAIR_BYTES_SIZE }> for KeyPair {
@@ -282,7 +285,7 @@ mod tests {
 
             rng.fill_bytes(&mut message_bytes);
 
-            // let signature = key_pair.sign_message(&message_bytes).unwrap();
+            let signature = key_pair.sign_message(&message_bytes).unwrap();
             // let verify = schnorr::verify(&message_bytes, pub_key, signature);
 
             // assert!(verify.is_some());
@@ -294,7 +297,7 @@ mod tests {
 
             rng.fill_bytes(&mut message_bytes);
 
-            let signature = key_pair.sign_message(&message_bytes).unwrap();
+            // let signature = key_pair.sign_message(&message_bytes).unwrap();
             // let verify = schnorr::verify(&message_bytes, pub_key, signature);
 
             // assert!(verify.is_some());
