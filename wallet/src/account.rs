@@ -1,4 +1,3 @@
-use bincode::ToBytes;
 use cipher::keychain::KeyChain;
 use config::{address::ADDR_LEN, sha::SHA512_SIZE};
 use crypto::bip49::Bip49DerivationPath;
