@@ -55,7 +55,7 @@ impl KeyPair {
         Ok((pub_key, secret_key))
     }
 
-    pub fn from_secret_key(sk: SecretKey) -> Result<Self, KeyPairError> {
+    pub fn from_secret_key(sk: &SecretKey) -> Result<Self, KeyPairError> {
         let secret_key: K256SecretKey =
             K256SecretKey::from_slice(sk.as_ref()).or(Err(KeyPairError::InvalidSecretKey))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
@@ -66,8 +66,8 @@ impl KeyPair {
             .or(Err(KeyPairError::InvalidSecretKey))?;
 
         match sk {
-            SecretKey::Secp256k1Keccak256(sk) => Ok(KeyPair::Secp256k1Keccak256((pub_key, sk))),
-            SecretKey::Secp256k1Sha256(sk) => Ok(KeyPair::Secp256k1Sha256((pub_key, sk))),
+            SecretKey::Secp256k1Keccak256(sk) => Ok(KeyPair::Secp256k1Keccak256((pub_key, *sk))),
+            SecretKey::Secp256k1Sha256(sk) => Ok(KeyPair::Secp256k1Sha256((pub_key, *sk))),
         }
     }
 
@@ -205,7 +205,7 @@ mod tests {
     use bip39::Mnemonic;
 
     use super::*;
-    use std::borrow::{Borrow, Cow};
+    use std::borrow::Cow;
 
     fn create_test_keypair(key_type: u8) -> KeyPair {
         let pk = [1u8; PUB_KEY_SIZE];

@@ -1,11 +1,12 @@
+use bincode::ToBytes;
 use cipher::keychain::KeyChain;
-use config::key::SECRET_KEY_SIZE;
 use config::{address::ADDR_LEN, sha::SHA512_SIZE};
 use crypto::bip49::Bip49DerivationPath;
-use crypto::keypair::KeyPair;
 use num256::uint256::Uint256;
 use proto::address::Address;
+use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
+use proto::secret_key::SecretKey;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use settings::wallet_settings::WalletSettings;
@@ -39,24 +40,21 @@ impl Account {
     //     Self {}
     // }
 
-    pub fn from_zil_sk<'a>(
-        sk: [u8; SECRET_KEY_SIZE],
+    pub fn from_secret_key<'a>(
+        sk: &SecretKey,
         name: String,
         keychain: &'a KeyChain,
         storage: &'a LocalStorage,
         settings: &'a WalletSettings,
     ) -> Result<Self, AccountErrors<'a>> {
-        let keypair =
-            KeyPair::from_secret_key_bytes(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
-        let addr = Address::from_zil_pub_key(&keypair.pub_key)
-            .map_err(AccountErrors::AddressParseError)?;
-
+        let keypair = KeyPair::from_secret_key(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
         let cipher_sk: [u8; CIPHER_SK_SIZE] = keychain
             .encrypt(sk.to_vec(), &settings.crypto.cipher_orders)
             .map_err(AccountErrors::TryEncryptSecretKeyError)?
             .try_into()
             .or(Err(AccountErrors::SKSliceError))?;
-        let pub_key = PubKey::Secp256k1Sha256(keypair.pub_key);
+        let pub_key = keypair.get_pubkey().map_err(AccountErrors::InvalidPubKey)?;
+        let addr = keypair.get_addr().map_err(AccountErrors::InvalidAddress)?;
         let mut rng = ChaCha20Rng::from_entropy();
         let num_storage_key = rng.r#gen();
         let account_type = AccountType::PrivateKey(num_storage_key);
@@ -95,11 +93,9 @@ mod tests {
 
     #[test]
     fn test_from_zil_sk() {
-        let sk_bytes: [u8; SECRET_KEY_SIZE] =
-            hex::decode("e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04")
-                .unwrap()
-                .try_into()
-                .unwrap();
+        let sk: SecretKey = "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+            .parse()
+            .unwrap();
         let name = "Account 0";
         let password = b"Test_password";
         let argon_seed = derive_key(password).unwrap();
@@ -108,8 +104,8 @@ mod tests {
         let storage =
             LocalStorage::new("com.test_write", "WriteTest Corp", "WriteTest App").unwrap();
 
-        let acc = Account::from_zil_sk(
-            sk_bytes,
+        let acc = Account::from_secret_key(
+            &sk,
             name.to_string(),
             &keychain,
             &storage,

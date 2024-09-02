@@ -88,11 +88,13 @@ pub enum WalletErrors {
 #[derive(Debug)]
 pub enum AccountErrors<'a> {
     InvalidSecretKeyBytes(KeyPairError),
-    AddressParseError(AddressError),
+    InvalidPubKey(KeyPairError),
+    InvalidAddress(KeyPairError),
     TryEncryptSecretKeyError(KeyChainErrors<'a>),
     SKSliceError,
     FailToSaveCipher(LocalStorageError),
     InvalidSeed(KeyPairError),
+    InvalidSecretBytes,
 }
 
 #[derive(Debug)]
@@ -132,6 +134,9 @@ pub enum AddressError {
 #[derive(Debug, PartialEq, Eq)]
 pub enum SecretKeyError {
     SecretKeySliceError,
+    InvalidHex,
+    InvalidLength,
+    InvalidKeyType,
 }
 
 #[derive(Debug, PartialEq, Eq)]

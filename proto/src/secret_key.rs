@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use bincode::{FromBytes, ToBytes};
 use config::key::SECRET_KEY_SIZE;
 use zil_errors::SecretKeyError;
@@ -8,9 +10,18 @@ pub enum SecretKey {
     Secp256k1Keccak256([u8; SECRET_KEY_SIZE]), // Ethereum
 }
 
+impl SecretKey {
+    pub fn to_vec(&self) -> Vec<u8> {
+        match self {
+            SecretKey::Secp256k1Sha256(buf) => buf.to_vec(),
+            SecretKey::Secp256k1Keccak256(buf) => buf.to_vec(),
+        }
+    }
+}
+
 impl std::fmt::Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(self.as_ref()))
+        write!(f, "{}", hex::encode(self.to_bytes().unwrap()))
     }
 }
 
@@ -26,6 +37,15 @@ impl ToBytes<{ SECRET_KEY_SIZE + 1 }> for SecretKey {
         result[1..].copy_from_slice(self.as_ref());
 
         Ok(result)
+    }
+}
+
+impl TryInto<Vec<u8>> for SecretKey {
+    type Error = SecretKeyError;
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        let bytes = self.to_bytes()?;
+
+        Ok(bytes.to_vec())
     }
 }
 
@@ -51,6 +71,24 @@ impl AsRef<[u8]> for SecretKey {
         match self {
             SecretKey::Secp256k1Sha256(data) => data,
             SecretKey::Secp256k1Keccak256(data) => data,
+        }
+    }
+}
+
+impl FromStr for SecretKey {
+    type Err = SecretKeyError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let data = hex::decode(s).map_err(|_| SecretKeyError::InvalidHex)?;
+        let bytes: [u8; SECRET_KEY_SIZE] = data[1..]
+            .try_into()
+            .map_err(|_| SecretKeyError::InvalidLength)?;
+        let prefix = data[0];
+
+        match prefix {
+            0 => Ok(SecretKey::Secp256k1Sha256(bytes)),
+            1 => Ok(SecretKey::Secp256k1Keccak256(bytes)),
+            _ => Err(SecretKeyError::InvalidKeyType),
         }
     }
 }
