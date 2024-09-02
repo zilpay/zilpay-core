@@ -149,4 +149,5 @@ pub enum SignatureError {
     InvalidLength,
     FailParseSignature,
     FailIntoPubKey(PubKeyError),
+    FailParseRecover(String),
 }

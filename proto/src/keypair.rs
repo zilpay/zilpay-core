@@ -146,7 +146,14 @@ impl KeyPair {
         }
     }
 
-    pub fn verify_sig(&self, msg_byte: &[u8], sig: Signature) -> Result<bool, KeyPairError> {}
+    pub fn verify_sig(&self, msg_bytes: &[u8], sig: &Signature) -> Result<bool, KeyPairError> {
+        let pk = self.get_pubkey()?;
+        let is_verify = sig
+            .verify(msg_bytes, &pk)
+            .map_err(KeyPairError::InvalidSignature)?;
+
+        Ok(is_verify)
+    }
 }
 
 impl ToBytes<{ KEYPAIR_BYTES_SIZE }> for KeyPair {
@@ -279,28 +286,29 @@ mod tests {
 
         let mut rng = ChaCha20Rng::from_entropy();
 
-        for _ in 0..1 {
+        for _ in 0..10 {
             let key_pair = KeyPair::gen_sha256().unwrap();
             let mut message_bytes = [0u8; 100];
 
             rng.fill_bytes(&mut message_bytes);
 
             let signature = key_pair.sign_message(&message_bytes).unwrap();
-            // let verify = schnorr::verify(&message_bytes, pub_key, signature);
+            let verify = key_pair.verify_sig(&message_bytes, &signature);
 
-            // assert!(verify.is_some());
+            assert!(verify.is_ok());
+            assert!(verify.unwrap());
         }
 
-        for _ in 0..1 {
+        for _ in 0..10 {
             let key_pair = KeyPair::gen_keccak256().unwrap();
             let mut message_bytes = [0u8; 100];
 
             rng.fill_bytes(&mut message_bytes);
+            let signature = key_pair.sign_message(&message_bytes).unwrap();
+            let verify = key_pair.verify_sig(&message_bytes, &signature);
 
-            // let signature = key_pair.sign_message(&message_bytes).unwrap();
-            // let verify = schnorr::verify(&message_bytes, pub_key, signature);
-
-            // assert!(verify.is_some());
+            assert!(verify.is_ok());
+            assert!(verify.unwrap());
         }
     }
 }
