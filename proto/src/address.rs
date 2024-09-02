@@ -1,6 +1,11 @@
-use crate::zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32};
+use crate::{
+    pubkey::PubKey,
+    zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32},
+};
+use ethers::core::k256::ecdsa::VerifyingKey;
 
 use config::address::ADDR_LEN;
+use ethers::utils::public_key_to_address;
 use serde::{Deserialize, Serialize};
 use zil_errors::AddressError;
 
@@ -17,10 +22,21 @@ impl Address {
         Ok(Self::Secp256k1Sha256(addr))
     }
 
-    pub fn from_zil_pub_key(pk: &[u8]) -> Result<Self, AddressError> {
-        let addr = from_zil_pub_key(pk)?;
+    pub fn from_pubkey(pk: &PubKey) -> Result<Self, AddressError> {
+        match pk {
+            PubKey::Secp256k1Sha256(pk) => {
+                let addr = from_zil_pub_key(pk)?;
 
-        Ok(Self::Secp256k1Sha256(addr))
+                Ok(Self::Secp256k1Sha256(addr))
+            }
+            PubKey::Secp256k1Keccak256(pk) => {
+                let public_key =
+                    VerifyingKey::from_sec1_bytes(pk).or(Err(AddressError::InvalidVerifyingKey))?;
+                let addr: [u8; ADDR_LEN] = public_key_to_address(&public_key).into();
+
+                Ok(Self::Secp256k1Keccak256(addr))
+            }
+        }
     }
 
     pub fn to_bytes(&self) -> [u8; ADDR_LEN + 1] {
@@ -52,7 +68,7 @@ impl Address {
 
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(self.to_bytes()))
+        write!(f, "{}", hex::encode(self.addr_bytes()))
     }
 }
 
@@ -136,7 +152,7 @@ mod tests {
         let zil_data = [1u8; ADDR_LEN];
         let zil_addr = Address::Secp256k1Sha256(zil_data);
 
-        let expected = format!("00{}", hex::encode(zil_data));
+        let expected = hex::encode(zil_data);
         assert_eq!(zil_addr.to_string(), expected);
     }
 
@@ -188,5 +204,30 @@ mod tests {
         let bytes = addr.to_bytes();
         let roundtrip_addr = Address::from(bytes);
         assert_eq!(addr, roundtrip_addr);
+    }
+
+    #[test]
+    fn test_addr() {
+        let pubkey_eth: PubKey =
+            "0103150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+                .parse()
+                .unwrap();
+        let pubkey_zil: PubKey =
+            "0003150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+                .parse()
+                .unwrap();
+        let addr_eth = Address::from_pubkey(&pubkey_eth).unwrap();
+        let addr_zil = Address::from_pubkey(&pubkey_zil).unwrap();
+
+        // dbg!(addr_zil.to_string());
+
+        assert_eq!(
+            addr_eth.to_string(),
+            "c315295101461753b838e0be8688e744cf52dd6b"
+        );
+        assert_eq!(
+            addr_zil.to_string(),
+            "ebd8b370dddb636faf641040d2181c55190840fb"
+        );
     }
 }

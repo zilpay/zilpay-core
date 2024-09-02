@@ -1,7 +1,20 @@
 use bincode::{FromBytes, ToBytes};
-use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
+use config::{
+    key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE},
+    sha::SHA512_SIZE,
+};
 use crypto::bip49::Bip49DerivationPath;
+use crypto::schnorr;
 use k256::{ecdsa, PublicKey as K256PublicKey, SecretKey as K256SecretKey};
+
+use crate::{address::Address, pubkey::PubKey, signature::Signature};
+
+use ethers::{
+    core::k256::ecdsa::SigningKey,
+    signers::LocalWallet,
+    types::{transaction::eip2718::TypedTransaction, Signature as EvmSignature, H256},
+    utils::hash_message,
+};
 
 use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
@@ -86,6 +99,49 @@ impl KeyPair {
         match bip49 {
             Bip49DerivationPath::Zilliqa(_) => Ok(Self::Secp256k1Sha256((pub_key, secret_key))),
             Bip49DerivationPath::Ethereum(_) => Ok(Self::Secp256k1Keccak256((pub_key, secret_key))),
+        }
+    }
+
+    pub fn get_addr(&self) -> Result<Address, KeyPairError> {
+        let pk = self.get_pubkey()?;
+        let addr = Address::from_pubkey(&pk).map_err(KeyPairError::AddressParseError)?;
+
+        Ok(addr)
+    }
+
+    pub fn get_pubkey(&self) -> Result<PubKey, KeyPairError> {
+        match self {
+            KeyPair::Secp256k1Sha256((pk, _)) => Ok(PubKey::Secp256k1Sha256(*pk)),
+            KeyPair::Secp256k1Keccak256((pk, _)) => Ok(PubKey::Secp256k1Keccak256(*pk)),
+        }
+    }
+
+    pub fn sign_message(&self, msg: &[u8]) -> Result<Signature, KeyPairError> {
+        match self {
+            KeyPair::Secp256k1Keccak256((_, sk)) => {
+                let hash_msg = hash_message(msg);
+                let signing_key = SigningKey::from_slice(sk)
+                    .map_err(|e| KeyPairError::EthersInvalidSecretKey(e.to_string()))?;
+                let wallet = LocalWallet::from(signing_key);
+
+                let sig: Signature = wallet
+                    .sign_hash(hash_msg)
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?
+                    .try_into()
+                    .map_err(KeyPairError::InvalidSignature)?;
+
+                Ok(sig)
+            }
+            KeyPair::Secp256k1Sha256((_, sk)) => {
+                let secret_key =
+                    K256SecretKey::from_slice(sk).or(Err(KeyPairError::InvalidSecretKey))?;
+                let sig: Signature = schnorr::sign(msg, &secret_key)
+                    .map_err(KeyPairError::SchorrError)?
+                    .try_into()
+                    .map_err(KeyPairError::InvalidSignature)?;
+
+                Ok(sig)
+            }
         }
     }
 }
@@ -211,5 +267,37 @@ mod tests {
         let bytes = original.to_bytes().unwrap();
         let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
         assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn test_sign_message() {
+        use rand::{RngCore, SeedableRng};
+        use rand_chacha::ChaCha20Rng;
+
+        let mut rng = ChaCha20Rng::from_entropy();
+
+        for _ in 0..1 {
+            let key_pair = KeyPair::gen_sha256().unwrap();
+            let mut message_bytes = [0u8; 100];
+
+            rng.fill_bytes(&mut message_bytes);
+
+            // let signature = key_pair.sign_message(&message_bytes).unwrap();
+            // let verify = schnorr::verify(&message_bytes, pub_key, signature);
+
+            // assert!(verify.is_some());
+        }
+
+        for _ in 0..1 {
+            let key_pair = KeyPair::gen_keccak256().unwrap();
+            let mut message_bytes = [0u8; 100];
+
+            rng.fill_bytes(&mut message_bytes);
+
+            let signature = key_pair.sign_message(&message_bytes).unwrap();
+            // let verify = schnorr::verify(&message_bytes, pub_key, signature);
+
+            // assert!(verify.is_some());
+        }
     }
 }

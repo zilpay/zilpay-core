@@ -106,6 +106,10 @@ pub enum KeyPairError {
     InvalidEntropy,
     InvalidPublicKey,
     InvalidKeyType,
+    AddressParseError(AddressError),
+    EthersInvalidSecretKey(String),
+    EthersInvalidSign(String),
+    InvalidSignature(SignatureError),
 }
 
 #[derive(Debug)]
@@ -121,6 +125,8 @@ pub enum AddressError {
     InvalidSecp256k1Sha256Type,
     InvalidAddressBytesForBech32,
     InvalidBase16Address,
+    InvalidVerifyingKey,
+    InvalidAddressSize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -135,4 +141,9 @@ pub enum PubKeyError {
     InvalidHex,
     InvalidVerifyingKey,
     InvalidPubKey,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum SignatureError {
+    InvalidLength,
 }
