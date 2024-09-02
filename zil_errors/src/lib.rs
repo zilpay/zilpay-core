@@ -98,9 +98,14 @@ pub enum AccountErrors<'a> {
 #[derive(Debug)]
 pub enum KeyPairError {
     ExtendedPrivKeyDeriveError,
-    InvalidEntropy,
-    InvalidSecretKey,
     SchorrError(SchorrError),
+
+    // New
+    InvalidLength,
+    InvalidSecretKey,
+    InvalidEntropy,
+    InvalidPublicKey,
+    InvalidKeyType,
 }
 
 #[derive(Debug)]

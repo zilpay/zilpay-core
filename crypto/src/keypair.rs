@@ -17,9 +17,6 @@ use rand_chacha::ChaCha20Rng;
 use k256::{ecdsa, PublicKey, SecretKey};
 use zil_errors::{EvmErrors, KeyPairError};
 
-#[derive(Debug)]
-pub enum HDDerivePathes {}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct KeyPair {
     pub pub_key: [u8; PUB_KEY_SIZE],
@@ -101,6 +98,7 @@ impl KeyPair {
             secret_key,
         })
     }
+
     pub fn from_bytes(bytes: &[u8; PUB_KEY_SIZE + SECRET_KEY_SIZE]) -> Self {
         let mut pub_key = [0u8; PUB_KEY_SIZE];
         let mut secret_key = [0u8; SECRET_KEY_SIZE];
