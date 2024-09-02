@@ -101,7 +101,7 @@ pub fn encode_zilliqa_transaction(txn: TxZilliqa, pub_key: PubKey) -> Vec<u8> {
     let proto = ProtoTransactionCoreInfo {
         version: (((txn.chain_id) as u32) << 16) | 0x0001,
         toaddr: txn.to_addr.addr_bytes().to_vec(),
-        senderpubkey: Some(pub_key.to_sec1_bytes().to_vec().into()),
+        senderpubkey: Some(pub_key.as_ref().to_vec().into()),
         amount: Some((txn.amount).to_be_bytes().to_vec().into()),
         gasprice: Some((txn.gas_price).to_be_bytes().to_vec().into()),
         gaslimit: txn.gas_limit.0,

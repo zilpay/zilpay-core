@@ -2750,6 +2750,7 @@ name = "proto"
 version = "0.1.0"
 dependencies = [
  "bincode",
+ "bip39",
  "config",
  "crypto",
  "ethers",

@@ -5,6 +5,7 @@ use crate::{
 use ethers::core::k256::ecdsa::VerifyingKey;
 
 use config::address::ADDR_LEN;
+use ethers::types::Address as EtherAddress;
 use ethers::utils::public_key_to_address;
 use serde::{Deserialize, Serialize};
 use zil_errors::AddressError;
@@ -68,7 +69,14 @@ impl Address {
 
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(self.addr_bytes()))
+        match self {
+            Self::Secp256k1Sha256(bytes) => {
+                write!(f, "{}", hex::encode(bytes))
+            }
+            Self::Secp256k1Keccak256(bytes) => {
+                write!(f, "{}", EtherAddress::from(bytes))
+            }
+        }
     }
 }
 

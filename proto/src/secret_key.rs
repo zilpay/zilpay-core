@@ -8,12 +8,9 @@ pub enum SecretKey {
     Secp256k1Keccak256([u8; SECRET_KEY_SIZE]), // Ethereum
 }
 
-impl SecretKey {
-    pub fn get_sk(&self) -> &[u8; SECRET_KEY_SIZE] {
-        match self {
-            Self::Secp256k1Sha256(bytes) => bytes,
-            Self::Secp256k1Keccak256(bytes) => bytes,
-        }
+impl std::fmt::Display for SecretKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(self.as_ref()))
     }
 }
 

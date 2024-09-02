@@ -28,13 +28,6 @@ impl PubKey {
             PubKey::Secp256k1Sha256(pk) => from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey)),
         }
     }
-
-    pub fn to_sec1_bytes(&self) -> &[u8; PUB_KEY_SIZE] {
-        match self {
-            PubKey::Secp256k1Keccak256(pk) => pk,
-            PubKey::Secp256k1Sha256(pk) => pk,
-        }
-    }
 }
 
 impl TryInto<K256PublicKey> for PubKey {
@@ -73,7 +66,6 @@ impl ToBytes<{ PUB_KEY_SIZE + 1 }> for PubKey {
 
 impl std::fmt::Display for PubKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO: remove unwrap!
         write!(f, "{}", hex::encode(self.to_bytes().unwrap()))
     }
 }

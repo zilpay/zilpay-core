@@ -1,21 +1,12 @@
 use bincode::{FromBytes, ToBytes};
-use config::{
-    key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE},
-    sha::SHA512_SIZE,
-};
+use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use crypto::bip49::Bip49DerivationPath;
 use crypto::schnorr;
-use k256::ecdsa::Signature as SchnorrSignature;
-use k256::{ecdsa, PublicKey as K256PublicKey, SecretKey as K256SecretKey};
+use k256::SecretKey as K256SecretKey;
 
 use crate::{address::Address, pubkey::PubKey, signature::Signature};
 
-use ethers::{
-    core::k256::ecdsa::SigningKey,
-    signers::LocalWallet,
-    types::{transaction::eip2718::TypedTransaction, Signature as EvmSignature, H256},
-    utils::hash_message,
-};
+use ethers::{core::k256::ecdsa::SigningKey, signers::LocalWallet, utils::hash_message};
 
 use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
@@ -108,6 +99,13 @@ impl KeyPair {
         let addr = Address::from_pubkey(&pk).map_err(KeyPairError::AddressParseError)?;
 
         Ok(addr)
+    }
+
+    pub fn get_secretkey(&self) -> Result<SecretKey, KeyPairError> {
+        match self {
+            KeyPair::Secp256k1Sha256((_, sk)) => Ok(SecretKey::Secp256k1Sha256(*sk)),
+            KeyPair::Secp256k1Keccak256((_, sk)) => Ok(SecretKey::Secp256k1Keccak256(*sk)),
+        }
     }
 
     pub fn get_pubkey(&self) -> Result<PubKey, KeyPairError> {
@@ -204,8 +202,10 @@ impl FromBytes for KeyPair {
 
 #[cfg(test)]
 mod tests {
+    use bip39::Mnemonic;
+
     use super::*;
-    use std::borrow::Cow;
+    use std::borrow::{Borrow, Cow};
 
     fn create_test_keypair(key_type: u8) -> KeyPair {
         let pk = [1u8; PUB_KEY_SIZE];
@@ -310,5 +310,80 @@ mod tests {
             assert!(verify.is_ok());
             assert!(verify.unwrap());
         }
+    }
+
+    #[test]
+    fn from_to_bytes() {
+        use crate::keypair::KeyPair;
+
+        let key_pair = KeyPair::gen_keccak256().unwrap();
+        let bytes = key_pair.to_bytes().unwrap();
+        let restored_key_pair = KeyPair::from_bytes(bytes[..].into()).unwrap();
+
+        assert_eq!(restored_key_pair, key_pair);
+    }
+
+    #[test]
+    fn test_bip39_zil() {
+        let mnemonic_str =
+            "green process gate doctor slide whip priority shrug diamond crumble average help";
+        let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
+        let index = 0;
+        let seed = m.to_seed("");
+
+        let zil_path = Bip49DerivationPath::Zilliqa(index);
+        let eth_path = Bip49DerivationPath::Ethereum(index);
+
+        assert_eq!(
+            [
+                143, 219, 233, 88, 72, 55, 94, 13, 19, 72, 66, 197, 121, 69, 163, 46, 15, 247, 4,
+                104, 60, 132, 106, 5, 135, 186, 182, 62, 54, 56, 209, 5, 182, 104, 244, 78, 184,
+                167, 36, 156, 3, 14, 212, 191, 102, 69, 11, 214, 43, 181, 138, 7, 21, 241, 122,
+                192, 73, 244, 36, 136, 187, 175, 159, 181,
+            ],
+            seed
+        );
+        let zil_key_pair = KeyPair::from_bip39_seed(&seed, &zil_path).unwrap();
+        let eth_key_pair = KeyPair::from_bip39_seed(&seed, &eth_path).unwrap();
+
+        let addr_eth = eth_key_pair.get_addr().unwrap();
+        let addr_zil = zil_key_pair.get_addr().unwrap();
+
+        dbg!(addr_eth.to_string());
+
+        assert_eq!(
+            addr_eth.to_string(),
+            "c315295101461753b838e0be8688e744cf52dd6b"
+        );
+        assert_eq!(
+            addr_zil.to_string(),
+            "ebd8b370dddb636faf641040d2181c55190840fb"
+        );
+
+        assert_ne!(
+            zil_key_pair.get_pubkey().unwrap(),
+            eth_key_pair.get_pubkey().unwrap()
+        );
+        assert_ne!(
+            zil_key_pair.get_secretkey().unwrap(),
+            eth_key_pair.get_secretkey().unwrap()
+        );
+
+        assert_eq!(
+            zil_key_pair.get_secretkey().unwrap().to_string(),
+            "e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+        );
+        assert_eq!(
+            eth_key_pair.get_secretkey().unwrap().to_string(),
+            "b8ef60193eec0a55db93ba692035a8b5a388579c8dc58acc62ea470aba529e1c"
+        );
+        assert_eq!(
+            eth_key_pair.get_pubkey().unwrap().to_string(),
+            "010315bd7b9301a2cde69ef8092d6fb275a077e3c94e5ed166c915426850cf606600"
+        );
+        assert_eq!(
+            zil_key_pair.get_pubkey().unwrap().to_string(),
+            "0003150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+        );
     }
 }
