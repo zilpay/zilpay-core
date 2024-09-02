@@ -3,7 +3,6 @@ use std::str::FromStr;
 use super::bip49::Bip49DerivationPath;
 use super::schnorr;
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
-use tiny_hderive::bip32::ExtendedPrivKey;
 
 use ethers::{
     core::k256::ecdsa::SigningKey,
@@ -45,28 +44,28 @@ impl KeyPair {
         })
     }
 
-    pub fn from_bip39_seed(
-        seed: &[u8; BIP39_SEED_SIZE],
-        bip49: &Bip49DerivationPath,
-    ) -> Result<Self, KeyPairError> {
-        let path = bip49.get_path();
-        let ext = ExtendedPrivKey::derive(seed, path.as_str())
-            .map_err(|_| KeyPairError::ExtendedPrivKeyDeriveError)?;
-        let secret_key =
-            SecretKey::from_slice(&ext.secret()).or(Err(KeyPairError::InvalidEntropy))?;
-        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
-            .public_key()
-            .to_sec1_bytes()
-            .to_vec()
-            .try_into()
-            .or(Err(KeyPairError::InvalidSecretKey))?;
-        let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
-
-        Ok(Self {
-            secret_key,
-            pub_key,
-        })
-    }
+    // pub fn from_bip39_seed(
+    //     seed: &[u8; BIP39_SEED_SIZE],
+    //     bip49: &Bip49DerivationPath,
+    // ) -> Result<Self, KeyPairError> {
+    //     let path = bip49.get_path();
+    //     let ext = ExtendedPrivKey::derive(seed, path.as_str())
+    //         .map_err(|_| KeyPairError::ExtendedPrivKeyDeriveError)?;
+    //     let secret_key =
+    //         SecretKey::from_slice(&ext.secret()).or(Err(KeyPairError::InvalidEntropy))?;
+    //     let pub_key: [u8; PUB_KEY_SIZE] = secret_key
+    //         .public_key()
+    //         .to_sec1_bytes()
+    //         .to_vec()
+    //         .try_into()
+    //         .or(Err(KeyPairError::InvalidSecretKey))?;
+    //     let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
+    //
+    //     Ok(Self {
+    //         secret_key,
+    //         pub_key,
+    //     })
+    // }
 
     pub fn from_secret_key_bytes(sk: [u8; SECRET_KEY_SIZE]) -> Result<Self, KeyPairError> {
         let secret_key: SecretKey =

@@ -650,7 +650,6 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha2 0.10.8",
- "tiny-hderive",
  "zil_errors",
 ]
 
@@ -2762,6 +2761,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "serde",
  "sha2 0.10.8",
+ "tiny-hderive",
  "zil_errors",
 ]
 

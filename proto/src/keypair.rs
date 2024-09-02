@@ -1,8 +1,12 @@
 use bincode::{FromBytes, ToBytes};
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
-use k256::{ecdsa, PublicKey, SecretKey};
+use crypto::bip49::Bip49DerivationPath;
+use k256::{ecdsa, PublicKey as K256PublicKey, SecretKey as K256SecretKey};
+
+use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
+use tiny_hderive::bip32::ExtendedPrivKey;
 use zil_errors::KeyPairError;
 
 // One byte for enum type
@@ -33,7 +37,8 @@ impl KeyPair {
 
         rng.fill_bytes(&mut sk_bytes);
 
-        let secret_key = SecretKey::from_slice(&sk_bytes).or(Err(KeyPairError::InvalidEntropy))?;
+        let secret_key =
+            K256SecretKey::from_slice(&sk_bytes).or(Err(KeyPairError::InvalidEntropy))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
             .public_key()
             .to_sec1_bytes()
@@ -43,6 +48,45 @@ impl KeyPair {
         let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
 
         Ok((pub_key, secret_key))
+    }
+
+    pub fn from_secret_key(sk: SecretKey) -> Result<Self, KeyPairError> {
+        let secret_key: K256SecretKey =
+            K256SecretKey::from_slice(sk.as_ref()).or(Err(KeyPairError::InvalidSecretKey))?;
+        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
+            .public_key()
+            .to_sec1_bytes()
+            .to_vec()
+            .try_into()
+            .or(Err(KeyPairError::InvalidSecretKey))?;
+
+        match sk {
+            SecretKey::Secp256k1Keccak256(sk) => Ok(KeyPair::Secp256k1Keccak256((pub_key, sk))),
+            SecretKey::Secp256k1Sha256(sk) => Ok(KeyPair::Secp256k1Sha256((pub_key, sk))),
+        }
+    }
+
+    pub fn from_bip39_seed(
+        seed: &[u8; BIP39_SEED_SIZE],
+        bip49: &Bip49DerivationPath,
+    ) -> Result<Self, KeyPairError> {
+        let path = bip49.get_path();
+        let ext = ExtendedPrivKey::derive(seed, path.as_str())
+            .map_err(|_| KeyPairError::ExtendedPrivKeyDeriveError)?;
+        let secret_key =
+            K256SecretKey::from_slice(&ext.secret()).or(Err(KeyPairError::InvalidEntropy))?;
+        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
+            .public_key()
+            .to_sec1_bytes()
+            .to_vec()
+            .try_into()
+            .or(Err(KeyPairError::InvalidSecretKey))?;
+        let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
+
+        match bip49 {
+            Bip49DerivationPath::Zilliqa(_) => Ok(Self::Secp256k1Sha256((pub_key, secret_key))),
+            Bip49DerivationPath::Ethereum(_) => Ok(Self::Secp256k1Keccak256((pub_key, secret_key))),
+        }
     }
 }
 
