@@ -2,7 +2,7 @@ use crate::{
     pubkey::PubKey,
     zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32},
 };
-use ethers::core::k256::ecdsa::VerifyingKey;
+use ethers::{core::k256::ecdsa::VerifyingKey, types::H160, utils::to_checksum};
 
 use config::address::ADDR_LEN;
 use ethers::types::Address as EtherAddress;
@@ -71,10 +71,12 @@ impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Secp256k1Sha256(bytes) => {
-                write!(f, "{}", hex::encode(bytes))
+                // unwrap shouldn't execpt
+                write!(f, "{}", to_zil_bech32(bytes).unwrap())
             }
             Self::Secp256k1Keccak256(bytes) => {
-                write!(f, "{}", EtherAddress::from(bytes))
+                let h = H160::from_slice(bytes);
+                write!(f, "{}", to_checksum(&h, None))
             }
         }
     }
@@ -160,7 +162,7 @@ mod tests {
         let zil_data = [1u8; ADDR_LEN];
         let zil_addr = Address::Secp256k1Sha256(zil_data);
 
-        let expected = hex::encode(zil_data);
+        let expected = to_zil_bech32(&zil_data).unwrap();
         assert_eq!(zil_addr.to_string(), expected);
     }
 
@@ -227,15 +229,13 @@ mod tests {
         let addr_eth = Address::from_pubkey(&pubkey_eth).unwrap();
         let addr_zil = Address::from_pubkey(&pubkey_zil).unwrap();
 
-        // dbg!(addr_zil.to_string());
-
         assert_eq!(
             addr_eth.to_string(),
-            "c315295101461753b838e0be8688e744cf52dd6b"
+            "0xC315295101461753b838E0BE8688E744cf52Dd6b"
         );
         assert_eq!(
             addr_zil.to_string(),
-            "ebd8b370dddb636faf641040d2181c55190840fb"
+            "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
         );
     }
 }

@@ -349,15 +349,13 @@ mod tests {
         let addr_eth = eth_key_pair.get_addr().unwrap();
         let addr_zil = zil_key_pair.get_addr().unwrap();
 
-        dbg!(addr_eth.to_string());
-
         assert_eq!(
             addr_eth.to_string(),
-            "c315295101461753b838e0be8688e744cf52dd6b"
+            "0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe"
         );
         assert_eq!(
             addr_zil.to_string(),
-            "ebd8b370dddb636faf641040d2181c55190840fb"
+            "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
         );
 
         assert_ne!(
