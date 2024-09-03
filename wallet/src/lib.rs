@@ -1,6 +1,7 @@
 pub mod account;
 
 use cipher::aes::AES_GCM_KEY_SIZE;
+use cipher::argon2::derive_key;
 use proto::secret_key::SecretKey;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -27,6 +28,7 @@ pub enum WalletTypes {
 pub struct Wallet<'a> {
     session: Session,
     storage: &'a LocalStorage,
+    // session_proof: [u8; SHA256_SIZE], // to know is session is right
     pub wallet_type: WalletTypes,
     pub settings: WalletSettings,
     pub wallet_address: [u8; SHA256_SIZE],
@@ -182,6 +184,15 @@ impl<'a> Wallet<'a> {
     pub fn lock(&mut self) {
         self.session.logout();
     }
+
+    pub fn unlock(&mut self, password: &[u8]) -> Result<[u8; AES_GCM_KEY_SIZE], WalletErrors> {
+        let argon_seed = derive_key(password).map_err(WalletErrors::ArgonCipherErrors)?;
+        let (session, key) =
+            Session::unlock(&argon_seed).or(Err(WalletErrors::UnlockSessionError))?;
+        self.session = session;
+
+        Ok(key)
+    }
 }
 
 impl<'a> std::fmt::Debug for Wallet<'a> {
@@ -225,7 +236,7 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             .map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
-        let wallet = Wallet::from_bip39_words(
+        let mut wallet = Wallet::from_bip39_words(
             session,
             keychain,
             &mnemonic,
@@ -239,6 +250,13 @@ mod tests {
         assert_eq!(wallet.accounts.len(), indexes.len());
         assert_eq!(wallet.reveal_mnemonic(&key).unwrap(), mnemonic);
 
-        dbg!(wallet);
+        wallet.lock();
+
+        assert!(wallet.reveal_mnemonic(&key).is_err());
+        assert!(wallet.unlock(b"worng password").is_err());
+
+        wallet.unlock(password).unwrap();
+
+        assert_eq!(wallet.reveal_mnemonic(&key).unwrap(), mnemonic);
     }
 }

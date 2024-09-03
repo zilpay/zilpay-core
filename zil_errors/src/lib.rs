@@ -83,6 +83,7 @@ pub enum WalletErrors {
     Bip39NotValid(String),
     KeyChainErrors,
     MnemonicError(String),
+    ArgonCipherErrors(CipherErrors),
     SKSliceError,
     KeyChainSliceError,
     InvalidBip39Account,
@@ -92,6 +93,7 @@ pub enum WalletErrors {
     TryEncryptSecretKeyError,
     InvalidAccountType,
     DisabledSessions,
+    UnlockSessionError,
 }
 
 #[derive(Debug)]

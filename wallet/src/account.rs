@@ -80,6 +80,6 @@ mod tests {
         let name = "Account 0";
         let acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
 
-        dbg!(acc);
+        // dbg!(acc);
     }
 }

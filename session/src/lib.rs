@@ -1,6 +1,6 @@
 use cipher::{
     aes::{aes_gcm_decrypt, aes_gcm_encrypt, AES_GCM_KEY_SIZE},
-    argon2::{derive_key, KEY_SIZE},
+    argon2::KEY_SIZE,
     keychain::KeyChain,
 };
 use rand::{RngCore, SeedableRng};
