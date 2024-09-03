@@ -83,11 +83,13 @@ pub enum WalletErrors {
     Bip39NotValid(String),
     KeyChainErrors,
     KeyChainSliceError,
+    InvalidBip39Account,
 }
 
 #[derive(Debug)]
 pub enum AccountErrors<'a> {
     InvalidSecretKeyBytes(KeyPairError),
+    InvalidSecretKey(KeyPairError),
     InvalidPubKey(KeyPairError),
     InvalidAddress(KeyPairError),
     TryEncryptSecretKeyError(KeyChainErrors<'a>),

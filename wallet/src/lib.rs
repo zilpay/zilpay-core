@@ -8,6 +8,7 @@ use crypto::bip49::Bip49DerivationPath;
 use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
+use storage::LocalStorage;
 use zil_errors::WalletErrors;
 
 #[derive(Debug)]
@@ -35,8 +36,9 @@ impl Wallet {
         session: Session,
         keychain: KeyChain,
         mnemonic: &Mnemonic,
+        storage: &LocalStorage,
         passphrase: &str,
-        indexes: &[Bip49DerivationPath],
+        indexes: &[(Bip49DerivationPath, String)],
         settings: WalletSettings,
     ) -> Result<Self, WalletErrors> {
         let cipher_entropy: [u8; CIPHER_SEED_SIZE] = keychain
@@ -56,9 +58,19 @@ impl Wallet {
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
         let mut accounts: Vec<account::Account> = Vec::with_capacity(indexes.len());
 
-        // TODO: list accounts by index
         for index in indexes {
-            let hd_account = account::Account::from_hd(&mnemonic_seed, index);
+            let (bip49, name) = index;
+            let hd_account = account::Account::from_hd(
+                &mnemonic_seed,
+                name.to_owned(),
+                bip49,
+                &keychain,
+                storage,
+                &settings,
+            )
+            .or(Err(WalletErrors::InvalidBip39Account))?;
+
+            accounts.push(hd_account);
         }
 
         Ok(Self {
@@ -81,6 +93,7 @@ mod tests {
     use cipher::{argon2::derive_key, keychain::KeyChain};
     use crypto::bip49::Bip49DerivationPath;
     use session::Session;
+    use storage::LocalStorage;
 
     use crate::Wallet;
 
@@ -92,20 +105,28 @@ mod tests {
         let passphrase = "";
         let argon_seed = derive_key(password).unwrap();
         let (session, key) = Session::unlock(&argon_seed).unwrap();
+        let storage = LocalStorage::new(
+            "com.test_write_wallet",
+            "WriteTest Wallet Corp",
+            "WalletWriteTest App",
+        )
+        .unwrap();
         let keychain = KeyChain::from_seed(argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str).unwrap();
-        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(Bip49DerivationPath::Zilliqa);
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+            .map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
         let wallet = Wallet::from_bip39_words(
             session,
             keychain,
             &mnemonic,
+            &storage,
             passphrase,
             &indexes,
             Default::default(),
         )
         .unwrap();
 
-        // dbg!(wallet);
+        dbg!(wallet);
     }
 }

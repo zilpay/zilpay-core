@@ -75,12 +75,41 @@ impl Account {
 
     pub fn from_hd<'a>(
         mnemonic_seed: &[u8; SHA512_SIZE],
+        name: String,
         bip49: &Bip49DerivationPath,
-    ) -> Result<(), AccountErrors<'a>> {
+        keychain: &'a KeyChain,
+        storage: &'a LocalStorage,
+        settings: &'a WalletSettings,
+    ) -> Result<Self, AccountErrors<'a>> {
         let keypair =
             KeyPair::from_bip39_seed(mnemonic_seed, bip49).map_err(AccountErrors::InvalidSeed)?;
+        let sk = keypair
+            .get_secretkey()
+            .map_err(AccountErrors::InvalidSecretKey)?;
+        let cipher_sk: [u8; CIPHER_SK_SIZE] = keychain
+            .encrypt(sk.to_vec(), &settings.crypto.cipher_orders)
+            .map_err(AccountErrors::TryEncryptSecretKeyError)?
+            .try_into()
+            .or(Err(AccountErrors::SKSliceError))?;
+        let pub_key = keypair.get_pubkey().map_err(AccountErrors::InvalidPubKey)?;
+        let addr = keypair.get_addr().map_err(AccountErrors::InvalidAddress)?;
+        let mut rng = ChaCha20Rng::from_entropy();
+        let num_storage_key = rng.r#gen();
+        let account_type = AccountType::PrivateKey(num_storage_key);
+        let num_storage_key_bytes = usize::to_le_bytes(num_storage_key);
 
-        Ok(())
+        storage
+            .set(&num_storage_key_bytes, &cipher_sk)
+            .map_err(AccountErrors::FailToSaveCipher)?;
+
+        Ok(Self {
+            account_type,
+            addr,
+            pub_key,
+            name,
+            ft_map: HashMap::new(),
+            nft_map: HashMap::new(),
+        })
     }
 }
 
