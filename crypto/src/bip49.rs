@@ -14,4 +14,11 @@ impl<'a> Bip49DerivationPath {
             Bip49DerivationPath::Ethereum(index) => format!("{}{}", Self::ETH_PATH, index),
         }
     }
+
+    pub fn get_index(&self) -> usize {
+        match self {
+            Bip49DerivationPath::Zilliqa(i) => *i,
+            Bip49DerivationPath::Ethereum(i) => *i,
+        }
+    }
 }

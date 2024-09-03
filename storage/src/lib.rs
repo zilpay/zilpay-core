@@ -40,6 +40,12 @@ impl LocalStorage {
         self.tree.size_on_disk().unwrap_or(0)
     }
 
+    pub fn exists(&self, key: &[u8]) -> Result<bool, LocalStorageError> {
+        self.tree
+            .contains_key(key)
+            .map_err(|e| LocalStorageError::StorageAccessError(e.to_string()))
+    }
+
     pub fn get(&self, key: &[u8]) -> Result<Vec<u8>, LocalStorageError> {
         let some_value = self
             .tree

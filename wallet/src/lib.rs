@@ -1,9 +1,13 @@
 pub mod account;
 
+use proto::secret_key::SecretKey;
+use rand::{Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+
 use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
-use config::wallet::{CIPHER_SEED_SIZE, N_BYTES_HASH, N_SALT};
+use config::wallet::{CIPHER_SEED_SIZE, CIPHER_SK_SIZE, N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
 use session::Session;
 use settings::wallet_settings::WalletSettings;
@@ -13,8 +17,9 @@ use zil_errors::WalletErrors;
 
 #[derive(Debug)]
 pub enum WalletTypes {
-    Ledger,
-    SecretPhrase,
+    Ledger(usize), // Ledger product_id
+    // Cipher for entropy secret words storage_key / passphrase
+    SecretPhrase((usize, bool)),
     SecretKey,
 }
 
@@ -23,15 +28,77 @@ pub struct Wallet {
     session: Session,
     pub wallet_type: WalletTypes,
     pub settings: WalletSettings,
-    pub cipher_entropy: [u8; CIPHER_SEED_SIZE],
     pub wallet_address: [u8; SHA256_SIZE],
-    pub product_id: Option<usize>, // Ledger only device id
     pub accounts: Vec<account::Account>,
-    pub selected: usize,
-    pub passphrase: bool,
+    pub selected_account: usize,
+}
+
+fn safe_storage_save(cipher_entropy: &[u8], storage: &LocalStorage) -> Result<usize, WalletErrors> {
+    let mut rng = ChaCha20Rng::from_entropy();
+    let mut cipher_entropy_key: usize;
+
+    loop {
+        cipher_entropy_key = rng.r#gen();
+        let key = usize::to_le_bytes(cipher_entropy_key);
+        let is_exists_key = storage
+            .exists(&key)
+            .map_err(WalletErrors::FailToSaveCipher)?;
+
+        if is_exists_key {
+            continue;
+        }
+
+        storage
+            .set(&key, cipher_entropy)
+            .map_err(WalletErrors::FailToSaveCipher)?;
+
+        break;
+    }
+
+    Ok(cipher_entropy_key)
 }
 
 impl Wallet {
+    pub fn from_sk(
+        sk: &SecretKey,
+        name: String,
+        storage: &LocalStorage,
+        session: Session,
+        keychain: KeyChain,
+        settings: WalletSettings,
+    ) -> Result<Self, WalletErrors> {
+        let sk_as_vec = sk.to_vec();
+        let mut combined = [0u8; SHA256_SIZE];
+
+        combined[..N_BYTES_HASH].copy_from_slice(&sk_as_vec[..N_BYTES_HASH]);
+        combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
+
+        let cipher_sk: [u8; CIPHER_SK_SIZE] = keychain
+            .encrypt(sk_as_vec, &settings.crypto.cipher_orders)
+            .or(Err(WalletErrors::TryEncryptSecretKeyError))?
+            .try_into()
+            .or(Err(WalletErrors::SKSliceError))?;
+        let cipher_entropy_key = safe_storage_save(&cipher_sk, storage)?;
+
+        let mut hasher = Sha256::new();
+        hasher.update(combined);
+
+        let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
+        // SecretKey may stores only one account.
+        let account = account::Account::from_secret_key(sk, name, cipher_entropy_key)
+            .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
+        let accounts: Vec<account::Account> = vec![account];
+
+        Ok(Self {
+            session,
+            settings,
+            wallet_address,
+            accounts,
+            wallet_type: WalletTypes::SecretKey,
+            selected_account: 0,
+        })
+    }
+
     pub fn from_bip39_words(
         session: Session,
         keychain: KeyChain,
@@ -48,6 +115,7 @@ impl Wallet {
             .map_err(|_| WalletErrors::KeyChainSliceError)?;
         let mut combined = [0u8; SHA256_SIZE];
         let mnemonic_seed = mnemonic.to_seed_normalized(passphrase);
+        let cipher_entropy_key = safe_storage_save(&cipher_entropy, storage)?;
 
         combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
@@ -60,15 +128,8 @@ impl Wallet {
 
         for index in indexes {
             let (bip49, name) = index;
-            let hd_account = account::Account::from_hd(
-                &mnemonic_seed,
-                name.to_owned(),
-                bip49,
-                &keychain,
-                storage,
-                &settings,
-            )
-            .or(Err(WalletErrors::InvalidBip39Account))?;
+            let hd_account = account::Account::from_hd(&mnemonic_seed, name.to_owned(), bip49)
+                .or(Err(WalletErrors::InvalidBip39Account))?;
 
             accounts.push(hd_account);
         }
@@ -77,12 +138,9 @@ impl Wallet {
             session,
             settings,
             wallet_address,
-            cipher_entropy,
-            wallet_type: WalletTypes::SecretPhrase,
-            product_id: None,
-            accounts: Vec::new(),
-            selected: 0,
-            passphrase: !passphrase.is_empty(),
+            accounts,
+            wallet_type: WalletTypes::SecretPhrase((cipher_entropy_key, passphrase.is_empty())),
+            selected_account: 0,
         })
     }
 }

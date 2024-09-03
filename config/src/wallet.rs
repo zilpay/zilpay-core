@@ -4,3 +4,4 @@ pub const N_SALT: [u8; 26] = [
     106, 5, 135, 186, 182,
 ];
 pub const CIPHER_SEED_SIZE: usize = 2578;
+pub const CIPHER_SK_SIZE: usize = 2578;

@@ -82,18 +82,20 @@ pub enum LocalStorageError {
 pub enum WalletErrors {
     Bip39NotValid(String),
     KeyChainErrors,
+    SKSliceError,
     KeyChainSliceError,
     InvalidBip39Account,
+    InvalidSecretKeyAccount,
+    FailToSaveCipher(LocalStorageError),
+    TryEncryptSecretKeyError,
 }
 
 #[derive(Debug)]
-pub enum AccountErrors<'a> {
+pub enum AccountErrors {
     InvalidSecretKeyBytes(KeyPairError),
     InvalidSecretKey(KeyPairError),
     InvalidPubKey(KeyPairError),
     InvalidAddress(KeyPairError),
-    TryEncryptSecretKeyError(KeyChainErrors<'a>),
-    SKSliceError,
     FailToSaveCipher(LocalStorageError),
     InvalidSeed(KeyPairError),
     InvalidSecretBytes,
