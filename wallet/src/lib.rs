@@ -1,5 +1,6 @@
 pub mod account;
 
+use cipher::aes::AES_GCM_KEY_SIZE;
 use proto::secret_key::SecretKey;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -23,9 +24,9 @@ pub enum WalletTypes {
     SecretKey,
 }
 
-#[derive(Debug)]
-pub struct Wallet {
+pub struct Wallet<'a> {
     session: Session,
+    storage: &'a LocalStorage,
     pub wallet_type: WalletTypes,
     pub settings: WalletSettings,
     pub wallet_address: [u8; SHA256_SIZE],
@@ -58,11 +59,11 @@ fn safe_storage_save(cipher_entropy: &[u8], storage: &LocalStorage) -> Result<us
     Ok(cipher_entropy_key)
 }
 
-impl Wallet {
+impl<'a> Wallet<'a> {
     pub fn from_sk(
         sk: &SecretKey,
         name: String,
-        storage: &LocalStorage,
+        storage: &'a LocalStorage,
         session: Session,
         keychain: KeyChain,
         settings: WalletSettings,
@@ -94,6 +95,7 @@ impl Wallet {
             settings,
             wallet_address,
             accounts,
+            storage,
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0,
         })
@@ -103,7 +105,7 @@ impl Wallet {
         session: Session,
         keychain: KeyChain,
         mnemonic: &Mnemonic,
-        storage: &LocalStorage,
+        storage: &'a LocalStorage,
         passphrase: &str,
         indexes: &[(Bip49DerivationPath, String)],
         settings: WalletSettings,
@@ -137,11 +139,60 @@ impl Wallet {
         Ok(Self {
             session,
             settings,
+            storage,
             wallet_address,
             accounts,
             wallet_type: WalletTypes::SecretPhrase((cipher_entropy_key, passphrase.is_empty())),
             selected_account: 0,
         })
+    }
+
+    pub fn reveal_mnemonic(
+        &self,
+        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+    ) -> Result<Mnemonic, WalletErrors> {
+        if !self.session.is_enabdle {
+            return Err(WalletErrors::DisabledSessions);
+        }
+
+        match self.wallet_type {
+            WalletTypes::SecretPhrase((key, _)) => {
+                let keychain = self
+                    .session
+                    .decrypt_keychain(cipher_key)
+                    .or(Err(WalletErrors::KeyChainErrors))?;
+                let storage_key = usize::to_le_bytes(key);
+                let cipher_entropy = self
+                    .storage
+                    .get(&storage_key)
+                    .map_err(WalletErrors::FailToGetContent)?;
+                let entropy = keychain
+                    .decrypt(cipher_entropy, &self.settings.crypto.cipher_orders)
+                    .map_err(|_| WalletErrors::KeyChainErrors)?;
+                // TODO: add more Languages
+                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
+                    .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
+
+                Ok(m)
+            }
+            _ => Err(WalletErrors::InvalidAccountType),
+        }
+    }
+
+    pub fn lock(&mut self) {
+        self.session.logout();
+    }
+}
+
+impl<'a> std::fmt::Debug for Wallet<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Wallet")
+            .field("wallet_type", &self.wallet_type)
+            .field("settings", &self.settings)
+            .field("wallet_address", &self.wallet_address)
+            .field("accounts", &self.accounts)
+            .field("selected_account", &self.selected_account)
+            .finish_non_exhaustive()
     }
 }
 
@@ -184,6 +235,9 @@ mod tests {
             Default::default(),
         )
         .unwrap();
+
+        assert_eq!(wallet.accounts.len(), indexes.len());
+        assert_eq!(wallet.reveal_mnemonic(&key).unwrap(), mnemonic);
 
         dbg!(wallet);
     }
