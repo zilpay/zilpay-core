@@ -369,11 +369,11 @@ mod tests {
 
         assert_eq!(
             zil_key_pair.get_secretkey().unwrap().to_string(),
-            "e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+            "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
         );
         assert_eq!(
             eth_key_pair.get_secretkey().unwrap().to_string(),
-            "b8ef60193eec0a55db93ba692035a8b5a388579c8dc58acc62ea470aba529e1c"
+            "01b8ef60193eec0a55db93ba692035a8b5a388579c8dc58acc62ea470aba529e1c"
         );
         assert_eq!(
             eth_key_pair.get_pubkey().unwrap().to_string(),
