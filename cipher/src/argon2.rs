@@ -1,8 +1,6 @@
 use argon2::Argon2;
+use config::argon::{KEY_SIZE, WALLET_SALT};
 use zil_errors::CipherErrors;
-
-pub const KEY_SIZE: usize = 64;
-pub const WALLET_SALT: &[u8] = b"ZILPAY:54040c2f-1ec1-4eb1-9595-6e4294d14fd6";
 
 pub fn derive_key(password: &[u8]) -> Result<[u8; KEY_SIZE], CipherErrors> {
     let mut output_key_material = [0u8; KEY_SIZE];

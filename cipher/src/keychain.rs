@@ -1,8 +1,9 @@
 use crate::{
     aes::{aes_gcm_decrypt, aes_gcm_encrypt, AES_GCM_KEY_SIZE},
-    argon2::{derive_key, KEY_SIZE},
+    argon2::derive_key,
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
 };
+use config::argon::KEY_SIZE;
 use config::sha::SHA256_SIZE;
 use ntrulp::{
     key::{priv_key::PrivKey, pub_key::PubKey},
@@ -48,8 +49,8 @@ impl KeyChain {
         })
     }
 
-    pub fn from_seed<'a>(seed_bytes: [u8; KEY_SIZE]) -> Result<Self, KeyChainErrors<'a>> {
-        let (pk, sk) = ntru_keys_from_seed(&seed_bytes).map_err(KeyChainErrors::NTRUPrimeError)?;
+    pub fn from_seed<'a>(seed_bytes: &[u8; KEY_SIZE]) -> Result<Self, KeyChainErrors<'a>> {
+        let (pk, sk) = ntru_keys_from_seed(seed_bytes).map_err(KeyChainErrors::NTRUPrimeError)?;
         let aes_key: [u8; AES_GCM_KEY_SIZE] = seed_bytes[SHA256_SIZE..]
             .try_into()
             .map_err(KeyChainErrors::AESKeySliceError)?;
@@ -63,7 +64,7 @@ impl KeyChain {
     pub fn from_pass(password: &[u8]) -> Result<Self, KeyChainErrors> {
         let seed_bytes = derive_key(password).map_err(KeyChainErrors::Argon2CipherErrors)?;
 
-        Self::from_seed(seed_bytes)
+        Self::from_seed(&seed_bytes)
     }
 
     pub fn to_bytes(&self) -> [u8; KEYCHAIN_BYTES_SIZE] {
@@ -121,13 +122,39 @@ impl KeyChain {
 
         Ok(plaintext)
     }
+
+    pub fn make_proof(
+        &self,
+        seed: &[u8; KEY_SIZE],
+        options: &[CipherOrders],
+    ) -> Result<Vec<u8>, KeyChainErrors> {
+        let cipher = self.encrypt(seed.to_vec(), options)?;
+
+        Ok(cipher)
+    }
+
+    pub fn get_proof(
+        &self,
+        cipher_proof: &[u8],
+        options: &[CipherOrders],
+    ) -> Result<[u8; KEY_SIZE], KeyChainErrors> {
+        let origin_seed: [u8; KEY_SIZE] = self
+            .decrypt(cipher_proof.to_vec(), options)?
+            .try_into()
+            .or(Err(KeyChainErrors::FailSlicedProofCipher))?;
+
+        Ok(origin_seed)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use core::panic;
 
+    use crate::argon2::derive_key;
+
     use super::{CipherOrders, KeyChain};
+    use config::cipher::PROOF_SIZE;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
     use zil_errors::{AesGCMErrors, KeyChainErrors};
@@ -195,5 +222,22 @@ mod tests {
                 _ => panic!("should be fall with AESDecryptError"),
             },
         };
+    }
+
+    #[test]
+    fn test_make_verify_proof() {
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mut password = [0u8; 32];
+
+        rng.fill_bytes(&mut password);
+
+        let options = [CipherOrders::NTRUP1277, CipherOrders::AESGCM256];
+        let seed_bytes = derive_key(&password).unwrap();
+        let keychain = KeyChain::from_seed(&seed_bytes).unwrap();
+        let origin_proof = derive_key(&seed_bytes[..PROOF_SIZE]).unwrap();
+        let proof_cipher = keychain.make_proof(&origin_proof, &options).unwrap();
+        let proof = keychain.get_proof(&proof_cipher, &options).unwrap();
+
+        assert_eq!(origin_proof, proof);
     }
 }

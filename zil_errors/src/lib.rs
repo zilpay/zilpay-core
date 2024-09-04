@@ -49,6 +49,7 @@ pub enum KeyChainErrors<'a> {
     NTRUPrimeEncryptError(NTRUPErrors<'a>),
     AESDecryptError(AesGCMErrors),
     NTRUPrimeDecryptError(NTRUPErrors<'a>),
+    FailSlicedProofCipher,
 }
 
 #[derive(Debug)]
@@ -78,7 +79,7 @@ pub enum LocalStorageError {
     InvalidBytesSizeOverflow,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum WalletErrors {
     Bip39NotValid(String),
     KeyChainErrors,

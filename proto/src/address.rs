@@ -5,7 +5,6 @@ use crate::{
 use ethers::{core::k256::ecdsa::VerifyingKey, types::H160, utils::to_checksum};
 
 use config::address::ADDR_LEN;
-use ethers::types::Address as EtherAddress;
 use ethers::utils::public_key_to_address;
 use serde::{Deserialize, Serialize};
 use zil_errors::AddressError;

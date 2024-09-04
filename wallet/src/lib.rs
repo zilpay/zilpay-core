@@ -28,7 +28,6 @@ pub enum WalletTypes {
 pub struct Wallet<'a> {
     session: Session,
     storage: &'a LocalStorage,
-    // session_proof: [u8; SHA256_SIZE], // to know is session is right
     pub wallet_type: WalletTypes,
     pub settings: WalletSettings,
     pub wallet_address: [u8; SHA256_SIZE],
@@ -212,18 +211,21 @@ mod tests {
     use bip39::Mnemonic;
     use cipher::{argon2::derive_key, keychain::KeyChain};
     use crypto::bip49::Bip49DerivationPath;
+    use proto::keypair::KeyPair;
     use session::Session;
     use storage::LocalStorage;
+    use zil_errors::WalletErrors;
 
     use crate::Wallet;
 
+    const MNEMONIC_STR: &str =
+        "green process gate doctor slide whip priority shrug diamond crumble average help";
+    const PASSWORD: &[u8] = b"Test_password";
+    const PASSPHRASE: &str = "";
+
     #[test]
-    fn test_init_from_bip39() {
-        let mnemonic_str =
-            "green process gate doctor slide whip priority shrug diamond crumble average help";
-        let password = b"Test_password";
-        let passphrase = "";
-        let argon_seed = derive_key(password).unwrap();
+    fn test_init_from_bip39_zil() {
+        let argon_seed = derive_key(PASSWORD).unwrap();
         let (session, key) = Session::unlock(&argon_seed).unwrap();
         let storage = LocalStorage::new(
             "com.test_write_wallet",
@@ -233,7 +235,7 @@ mod tests {
         .unwrap();
         let keychain = KeyChain::from_seed(argon_seed).unwrap();
         let mnemonic =
-            Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str).unwrap();
+            Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             .map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
         let mut wallet = Wallet::from_bip39_words(
@@ -241,7 +243,7 @@ mod tests {
             keychain,
             &mnemonic,
             &storage,
-            passphrase,
+            PASSPHRASE,
             &indexes,
             Default::default(),
         )
@@ -255,8 +257,39 @@ mod tests {
         assert!(wallet.reveal_mnemonic(&key).is_err());
         assert!(wallet.unlock(b"worng password").is_err());
 
-        wallet.unlock(password).unwrap();
+        wallet.unlock(PASSWORD).unwrap();
 
         assert_eq!(wallet.reveal_mnemonic(&key).unwrap(), mnemonic);
+    }
+
+    #[test]
+    fn test_init_from_sk() {
+        let argon_seed = derive_key(PASSWORD).unwrap();
+        let (session, key) = Session::unlock(&argon_seed).unwrap();
+        let storage = LocalStorage::new(
+            "com.test_write_wallet_sk",
+            "WriteTest Wallet_sk Corp",
+            "WalletWriteTest App_sk",
+        )
+        .unwrap();
+        let keychain = KeyChain::from_seed(argon_seed).unwrap();
+        let keypair = KeyPair::gen_keccak256().unwrap();
+        let sk = keypair.get_secretkey().unwrap();
+        let name = "SK Account 0";
+        let wallet = Wallet::from_sk(
+            &sk,
+            name.to_string(),
+            &storage,
+            session,
+            keychain,
+            Default::default(),
+        )
+        .unwrap();
+
+        assert_eq!(wallet.accounts.len(), 1);
+        assert_eq!(
+            wallet.reveal_mnemonic(&key),
+            Err(WalletErrors::InvalidAccountType)
+        );
     }
 }

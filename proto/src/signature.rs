@@ -1,4 +1,4 @@
-use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA256_SIZE, SHA512_SIZE};
+use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA512_SIZE};
 use crypto::schnorr;
 use ethers::core::types::Signature as EthersSignature;
 use ethers::types::H160;
@@ -48,9 +48,7 @@ impl TryFrom<EthersSignature> for Signature {
     type Error = SignatureError;
 
     fn try_from(eth_sig: EthersSignature) -> Result<Self, Self::Error> {
-        let sig_bytes: [u8; ECDSAS_ECP256K1_KECCAK256_SIZE] = eth_sig
-            .try_into()
-            .map_err(|_| SignatureError::InvalidLength)?;
+        let sig_bytes: [u8; ECDSAS_ECP256K1_KECCAK256_SIZE] = eth_sig.into();
 
         Ok(Signature::ECDSASecp256k1Keccak256(sig_bytes))
     }
@@ -60,10 +58,7 @@ impl TryFrom<SchnorrSignature> for Signature {
     type Error = SignatureError;
 
     fn try_from(sig: SchnorrSignature) -> Result<Self, Self::Error> {
-        let sig_bytes: [u8; SHA512_SIZE] = sig
-            .to_bytes()
-            .try_into()
-            .map_err(|_| SignatureError::InvalidLength)?;
+        let sig_bytes: [u8; SHA512_SIZE] = sig.to_bytes().into();
 
         Ok(Signature::SchnorrSecp256k1Sha256(sig_bytes))
     }
