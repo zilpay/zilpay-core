@@ -95,6 +95,11 @@ pub enum WalletErrors {
     InvalidAccountType,
     DisabledSessions,
     UnlockSessionError,
+    KeyChainMakeCipherProofError,
+    FailToGetProofFromStorage(LocalStorageError),
+    SessionDecryptError,
+    KeyChainFailToGetProof,
+    ProofNotMatch,
 }
 
 #[derive(Debug)]

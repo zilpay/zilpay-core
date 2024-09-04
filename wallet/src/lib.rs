@@ -2,6 +2,8 @@ pub mod account;
 
 use cipher::aes::AES_GCM_KEY_SIZE;
 use cipher::argon2::derive_key;
+use config::argon::KEY_SIZE;
+use config::cipher::PROOF_SIZE;
 use proto::secret_key::SecretKey;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -25,9 +27,17 @@ pub enum WalletTypes {
     SecretKey,
 }
 
+pub struct WalletConfig<'a> {
+    storage: &'a LocalStorage,
+    session: Session,
+    keychain: KeyChain,
+    settings: WalletSettings,
+}
+
 pub struct Wallet<'a> {
     session: Session,
     storage: &'a LocalStorage,
+    proof_key: usize,
     pub wallet_type: WalletTypes,
     pub settings: WalletSettings,
     pub wallet_address: [u8; SHA256_SIZE],
@@ -64,10 +74,8 @@ impl<'a> Wallet<'a> {
     pub fn from_sk(
         sk: &SecretKey,
         name: String,
-        storage: &'a LocalStorage,
-        session: Session,
-        keychain: KeyChain,
-        settings: WalletSettings,
+        proof: &[u8; KEY_SIZE],
+        config: WalletConfig<'a>,
     ) -> Result<Self, WalletErrors> {
         let sk_as_vec = sk.to_vec();
         let mut combined = [0u8; SHA256_SIZE];
@@ -75,12 +83,19 @@ impl<'a> Wallet<'a> {
         combined[..N_BYTES_HASH].copy_from_slice(&sk_as_vec[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
 
-        let cipher_sk: [u8; CIPHER_SK_SIZE] = keychain
-            .encrypt(sk_as_vec, &settings.crypto.cipher_orders)
+        let cipher_sk: [u8; CIPHER_SK_SIZE] = config
+            .keychain
+            .encrypt(sk_as_vec, &config.settings.crypto.cipher_orders)
             .or(Err(WalletErrors::TryEncryptSecretKeyError))?
             .try_into()
             .or(Err(WalletErrors::SKSliceError))?;
-        let cipher_entropy_key = safe_storage_save(&cipher_sk, storage)?;
+        let cipher_proof = config
+            .keychain
+            .make_proof(proof, &config.settings.crypto.cipher_orders)
+            .or(Err(WalletErrors::KeyChainMakeCipherProofError))?;
+        let proof_key = safe_storage_save(&cipher_proof, config.storage)?;
+        drop(cipher_proof);
+        let cipher_entropy_key = safe_storage_save(&cipher_sk, config.storage)?;
 
         let mut hasher = Sha256::new();
         hasher.update(combined);
@@ -92,33 +107,39 @@ impl<'a> Wallet<'a> {
         let accounts: Vec<account::Account> = vec![account];
 
         Ok(Self {
-            session,
-            settings,
+            proof_key,
+            session: config.session,
+            settings: config.settings,
             wallet_address,
             accounts,
-            storage,
+            storage: config.storage,
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0,
         })
     }
 
     pub fn from_bip39_words(
-        session: Session,
-        keychain: KeyChain,
+        proof: &[u8; KEY_SIZE],
         mnemonic: &Mnemonic,
-        storage: &'a LocalStorage,
         passphrase: &str,
         indexes: &[(Bip49DerivationPath, String)],
-        settings: WalletSettings,
+        config: WalletConfig<'a>,
     ) -> Result<Self, WalletErrors> {
-        let cipher_entropy: [u8; CIPHER_SEED_SIZE] = keychain
-            .encrypt(mnemonic.to_entropy(), &settings.crypto.cipher_orders)
+        let cipher_entropy: [u8; CIPHER_SEED_SIZE] = config
+            .keychain
+            .encrypt(mnemonic.to_entropy(), &config.settings.crypto.cipher_orders)
             .map_err(|_| WalletErrors::KeyChainErrors)?
             .try_into()
             .map_err(|_| WalletErrors::KeyChainSliceError)?;
         let mut combined = [0u8; SHA256_SIZE];
         let mnemonic_seed = mnemonic.to_seed_normalized(passphrase);
-        let cipher_entropy_key = safe_storage_save(&cipher_entropy, storage)?;
+        let cipher_proof = config
+            .keychain
+            .make_proof(proof, &config.settings.crypto.cipher_orders)
+            .or(Err(WalletErrors::KeyChainMakeCipherProofError))?;
+        let proof_key = safe_storage_save(&cipher_proof, config.storage)?;
+        drop(cipher_proof);
+        let cipher_entropy_key = safe_storage_save(&cipher_entropy, config.storage)?;
 
         combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
@@ -138,9 +159,10 @@ impl<'a> Wallet<'a> {
         }
 
         Ok(Self {
-            session,
-            settings,
-            storage,
+            proof_key,
+            session: config.session,
+            settings: config.settings,
+            storage: config.storage,
             wallet_address,
             accounts,
             wallet_type: WalletTypes::SecretPhrase((cipher_entropy_key, passphrase.is_empty())),
@@ -188,6 +210,24 @@ impl<'a> Wallet<'a> {
         let argon_seed = derive_key(password).map_err(WalletErrors::ArgonCipherErrors)?;
         let (session, key) =
             Session::unlock(&argon_seed).or(Err(WalletErrors::UnlockSessionError))?;
+        let proof_key = usize::to_le_bytes(self.proof_key);
+        let cipher_proof = self
+            .storage
+            .get(&proof_key)
+            .map_err(WalletErrors::FailToGetProofFromStorage)?;
+        let keychain = session
+            .decrypt_keychain(&key)
+            .or(Err(WalletErrors::SessionDecryptError))?;
+        let origin_proof = keychain
+            .get_proof(&cipher_proof, &self.settings.crypto.cipher_orders)
+            .or(Err(WalletErrors::KeyChainFailToGetProof))?;
+        let proof =
+            derive_key(&argon_seed[..PROOF_SIZE]).map_err(WalletErrors::ArgonCipherErrors)?;
+
+        if proof != origin_proof {
+            return Err(WalletErrors::ProofNotMatch);
+        }
+
         self.session = session;
 
         Ok(key)
@@ -210,13 +250,14 @@ impl<'a> std::fmt::Debug for Wallet<'a> {
 mod tests {
     use bip39::Mnemonic;
     use cipher::{argon2::derive_key, keychain::KeyChain};
+    use config::cipher::PROOF_SIZE;
     use crypto::bip49::Bip49DerivationPath;
     use proto::keypair::KeyPair;
     use session::Session;
     use storage::LocalStorage;
     use zil_errors::WalletErrors;
 
-    use crate::Wallet;
+    use crate::{Wallet, WalletConfig};
 
     const MNEMONIC_STR: &str =
         "green process gate doctor slide whip priority shrug diamond crumble average help";
@@ -238,16 +279,16 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             .map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
-        let mut wallet = Wallet::from_bip39_words(
+        let proof = derive_key(&argon_seed[..PROOF_SIZE]).unwrap();
+        let wallet_config = WalletConfig {
             session,
             keychain,
-            &mnemonic,
-            &storage,
-            PASSPHRASE,
-            &indexes,
-            Default::default(),
-        )
-        .unwrap();
+            storage: &storage,
+            settings: Default::default(),
+        };
+        let mut wallet =
+            Wallet::from_bip39_words(&proof, &mnemonic, PASSPHRASE, &indexes, wallet_config)
+                .unwrap();
 
         assert_eq!(wallet.accounts.len(), indexes.len());
         assert_eq!(wallet.reveal_mnemonic(&key).unwrap(), mnemonic);
@@ -257,14 +298,20 @@ mod tests {
         assert!(wallet.reveal_mnemonic(&key).is_err());
         assert!(wallet.unlock(b"worng password").is_err());
 
-        wallet.unlock(PASSWORD).unwrap();
+        let new_right_key = wallet.unlock(PASSWORD).unwrap();
 
-        assert_eq!(wallet.reveal_mnemonic(&key).unwrap(), mnemonic);
+        assert_eq!(
+            wallet.reveal_mnemonic(&key),
+            Err(WalletErrors::KeyChainErrors)
+        );
+
+        assert_eq!(wallet.reveal_mnemonic(&new_right_key).unwrap(), mnemonic);
     }
 
     #[test]
     fn test_init_from_sk() {
         let argon_seed = derive_key(PASSWORD).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE]).unwrap();
         let (session, key) = Session::unlock(&argon_seed).unwrap();
         let storage = LocalStorage::new(
             "com.test_write_wallet_sk",
@@ -276,15 +323,13 @@ mod tests {
         let keypair = KeyPair::gen_keccak256().unwrap();
         let sk = keypair.get_secretkey().unwrap();
         let name = "SK Account 0";
-        let wallet = Wallet::from_sk(
-            &sk,
-            name.to_string(),
-            &storage,
+        let wallet_config = WalletConfig {
             session,
             keychain,
-            Default::default(),
-        )
-        .unwrap();
+            storage: &storage,
+            settings: Default::default(),
+        };
+        let wallet = Wallet::from_sk(&sk, name.to_string(), &proof, wallet_config).unwrap();
 
         assert_eq!(wallet.accounts.len(), 1);
         assert_eq!(
