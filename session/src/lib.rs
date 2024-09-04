@@ -1,8 +1,8 @@
 use cipher::{
     aes::{aes_gcm_decrypt, aes_gcm_encrypt, AES_GCM_KEY_SIZE},
-    argon2::KEY_SIZE,
     keychain::KeyChain,
 };
+use config::argon::KEY_SIZE;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use zil_errors::SessionErrors;
@@ -57,7 +57,7 @@ impl Session {
             .map_err(SessionErrors::DecryptSessionError)?
             .try_into()
             .map_err(|_| SessionErrors::InvalidCipherKeySize)?;
-        let keychain = KeyChain::from_seed(seed_bytes).map_err(SessionErrors::InvalidSeed)?;
+        let keychain = KeyChain::from_seed(&seed_bytes).map_err(SessionErrors::InvalidSeed)?;
 
         Ok(keychain)
     }
@@ -84,7 +84,7 @@ mod tests {
         rng.fill_bytes(&mut password);
 
         let seed_bytes = derive_key(&password).unwrap();
-        let keychain_shouldbe = KeyChain::from_seed(seed_bytes).unwrap();
+        let keychain_shouldbe = KeyChain::from_seed(&seed_bytes).unwrap();
         let seed_bytes = derive_key(&password).unwrap();
         let (session, key) = Session::unlock(&seed_bytes).unwrap();
         let keychain = session.decrypt_keychain(&key).unwrap();

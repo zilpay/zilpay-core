@@ -3326,6 +3326,7 @@ name = "session"
 version = "0.1.0"
 dependencies = [
  "cipher 0.1.0",
+ "config",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "zil_errors",
