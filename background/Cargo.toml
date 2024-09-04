@@ -10,3 +10,7 @@ wallet = { path = "../wallet" }
 storage = { path = "../storage" }
 config = { path = "../config" }
 settings = { path = "../settings" }
+crypto = { path = "../crypto" }
+proto = { path = "../proto" }
+cipher = { path = "../cipher" }
+bip39 = "2.0.0"

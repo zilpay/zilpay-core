@@ -28,10 +28,10 @@ pub enum WalletTypes {
 }
 
 pub struct WalletConfig<'a> {
-    storage: &'a LocalStorage,
-    session: Session,
-    keychain: KeyChain,
-    settings: WalletSettings,
+    pub storage: &'a LocalStorage,
+    pub session: Session,
+    pub keychain: KeyChain,
+    pub settings: WalletSettings,
 }
 
 pub struct Wallet<'a> {
