@@ -31,8 +31,8 @@ members = [
 
 [dependencies]
 zilpay = { path = "./zilpay" }
-zil_errors = { path = "../zil_errors" }
-background = { path = "../background" }
+zil_errors = { path = "./zil_errors" }
+background = { path = "./background" }
 ethers = "2.0.14"
 hex = "0.4.3"
 rand = "0.8.5"
