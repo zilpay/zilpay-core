@@ -14,3 +14,4 @@ crypto = { path = "../crypto" }
 proto = { path = "../proto" }
 cipher = { path = "../cipher" }
 bip39 = "2.0.0"
+hex = "0.4.3"

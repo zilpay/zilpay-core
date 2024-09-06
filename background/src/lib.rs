@@ -32,7 +32,12 @@ impl<'a> Background<'a> {
         })
     }
 
-    pub fn wallet_from_bip39(&'a mut self, password: &str, mnemonic_str: &str, indexes: &[usize]) {
+    pub fn wallet_from_bip39(
+        &'a mut self,
+        password: &str,
+        mnemonic_str: &str,
+        indexes: &[usize],
+    ) -> String {
         let argon_seed = argon2::derive_key(password.as_bytes()).unwrap();
         let (session, key) = Session::unlock(&argon_seed).unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
@@ -52,6 +57,8 @@ impl<'a> Background<'a> {
         let wallet =
             Wallet::from_bip39_words(&proof, &mnemonic, "", &indexes, wallet_config).unwrap();
 
-        self.wallets.push(wallet)
+        self.wallets.push(wallet);
+
+        hex::encode(key)
     }
 }

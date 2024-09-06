@@ -179,6 +179,7 @@ dependencies = [
  "cipher 0.1.0",
  "config",
  "crypto",
+ "hex",
  "proto",
  "session",
  "settings",
