@@ -1,5 +1,5 @@
 [package]
-name = "zilpa-core"
+name = "zilpay_core"
 version = "0.1.0"
 edition = "2021"
 readme = "README.md"
@@ -9,25 +9,30 @@ authors = ["Rinat.H <hicc0rus@gmail.com>"]
 resolver = "2"
 
 [lib]
-name = "shared"
-path = "shared/src/lib.rs"
+name = "zilpay"
+path = "zilpay/src/lib.rs"
 
 [workspace]
 members = [
-  "background", "bincode",
+  "background",
+  "bincode",
   "cipher",
   "config",
   "crypto",
   "proto",
-  "session", "settings",
-  "shared",
+  "session",
+  "settings",
   "storage",
   "wallet",
   "zil_errors",
   "zilliqa",
+  "zilpay",
 ]
 
 [dependencies]
+zilpay = { path = "./zilpay" }
+zil_errors = { path = "../zil_errors" }
+background = { path = "../background" }
 ethers = "2.0.14"
 hex = "0.4.3"
 rand = "0.8.5"
