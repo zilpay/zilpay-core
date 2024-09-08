@@ -11,7 +11,7 @@ use rand_chacha::ChaCha20Rng;
 use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
-use config::wallet::{CIPHER_SEED_SIZE, CIPHER_SK_SIZE, N_BYTES_HASH, N_SALT};
+use config::wallet::{N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
 use session::Session;
 use settings::wallet_settings::WalletSettings;
@@ -83,16 +83,14 @@ impl<'a> Wallet<'a> {
         combined[..N_BYTES_HASH].copy_from_slice(&sk_as_vec[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
 
-        let cipher_sk: [u8; CIPHER_SK_SIZE] = config
+        let cipher_sk = config
             .keychain
             .encrypt(sk_as_vec, &config.settings.crypto.cipher_orders)
-            .or(Err(WalletErrors::TryEncryptSecretKeyError))?
-            .try_into()
-            .or(Err(WalletErrors::SKSliceError))?;
+            .or(Err(WalletErrors::TryEncryptSecretKeyError))?;
         let cipher_proof = config
             .keychain
             .make_proof(proof, &config.settings.crypto.cipher_orders)
-            .or(Err(WalletErrors::KeyChainMakeCipherProofError))?;
+            .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
         let proof_key = safe_storage_save(&cipher_proof, config.storage)?;
         drop(cipher_proof);
         let cipher_entropy_key = safe_storage_save(&cipher_sk, config.storage)?;
@@ -125,18 +123,16 @@ impl<'a> Wallet<'a> {
         indexes: &[(Bip49DerivationPath, String)],
         config: WalletConfig<'a>,
     ) -> Result<Self, WalletErrors> {
-        let cipher_entropy: [u8; CIPHER_SEED_SIZE] = config
+        let cipher_entropy = config
             .keychain
             .encrypt(mnemonic.to_entropy(), &config.settings.crypto.cipher_orders)
-            .map_err(|_| WalletErrors::KeyChainErrors)?
-            .try_into()
-            .map_err(|_| WalletErrors::KeyChainSliceError)?;
+            .map_err(WalletErrors::EncryptKeyChainErrors)?;
         let mut combined = [0u8; SHA256_SIZE];
         let mnemonic_seed = mnemonic.to_seed_normalized(passphrase);
         let cipher_proof = config
             .keychain
             .make_proof(proof, &config.settings.crypto.cipher_orders)
-            .or(Err(WalletErrors::KeyChainMakeCipherProofError))?;
+            .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
         let proof_key = safe_storage_save(&cipher_proof, config.storage)?;
         drop(cipher_proof);
         let cipher_entropy_key = safe_storage_save(&cipher_entropy, config.storage)?;
@@ -183,7 +179,7 @@ impl<'a> Wallet<'a> {
                 let keychain = self
                     .session
                     .decrypt_keychain(cipher_key)
-                    .or(Err(WalletErrors::KeyChainErrors))?;
+                    .map_err(WalletErrors::SessionDecryptKeychainError)?;
                 let storage_key = usize::to_le_bytes(key);
                 let cipher_entropy = self
                     .storage
@@ -191,7 +187,7 @@ impl<'a> Wallet<'a> {
                     .map_err(WalletErrors::FailToGetContent)?;
                 let entropy = keychain
                     .decrypt(cipher_entropy, &self.settings.crypto.cipher_orders)
-                    .map_err(|_| WalletErrors::KeyChainErrors)?;
+                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
                 // TODO: add more Languages
                 let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
                     .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
@@ -255,7 +251,7 @@ mod tests {
     use proto::keypair::KeyPair;
     use session::Session;
     use storage::LocalStorage;
-    use zil_errors::WalletErrors;
+    use zil_errors::{AesGCMErrors, WalletErrors};
 
     use crate::{Wallet, WalletConfig};
 
@@ -302,7 +298,11 @@ mod tests {
 
         assert_eq!(
             wallet.reveal_mnemonic(&key),
-            Err(WalletErrors::KeyChainErrors)
+            Err(WalletErrors::SessionDecryptKeychainError(
+                zil_errors::SessionErrors::DecryptSessionError(AesGCMErrors::DecryptError(
+                    "aead::Error".to_string()
+                ))
+            ))
         );
 
         assert_eq!(wallet.reveal_mnemonic(&new_right_key).unwrap(), mnemonic);
