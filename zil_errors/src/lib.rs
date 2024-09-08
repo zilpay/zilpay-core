@@ -1,5 +1,7 @@
 use std::array::TryFromSliceError;
 
+pub mod ntru;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum ZilliqaErrors<'a> {
     Schnorr(&'a str),
