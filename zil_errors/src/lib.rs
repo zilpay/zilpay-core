@@ -1,4 +1,3 @@
-use ntrulp::{ntru::errors::NTRUErrors, poly::errors::KemErrors, random::RandomErrors};
 use std::array::TryFromSliceError;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -31,35 +30,26 @@ pub enum AesGCMErrors {
 }
 
 #[derive(Debug)]
-pub enum NTRUPErrors<'a> {
-    EncryptError(NTRUErrors<'a>),
-    DecryptError(NTRUErrors<'a>),
-    KeySliceError,
-    KeyGenError(RandomErrors),
-    ComputeKeyError(KemErrors),
-}
-
-#[derive(Debug)]
-pub enum KeyChainErrors<'a> {
-    NTRUPrimeError(NTRUPErrors<'a>),
+pub enum KeyChainErrors {
+    NTRUPrimeError,
     NTRUPrimeImportKeyError,
     Argon2CipherErrors(CipherErrors),
     AESKeySliceError(TryFromSliceError),
     AESEncryptError(AesGCMErrors),
-    NTRUPrimeEncryptError(NTRUPErrors<'a>),
+    NTRUPrimeEncryptError,
     AESDecryptError(AesGCMErrors),
-    NTRUPrimeDecryptError(NTRUPErrors<'a>),
+    NTRUPrimeDecryptError,
     FailSlicedProofCipher,
 }
 
 #[derive(Debug)]
-pub enum SessionErrors<'a> {
+pub enum SessionErrors {
     DeriveKeyError(CipherErrors),
     EncryptSessionError(AesGCMErrors),
     DecryptSessionError(AesGCMErrors),
     InvalidCipherKeySize,
     SessionNotEnabled,
-    InvalidSeed(KeyChainErrors<'a>),
+    InvalidSeed(KeyChainErrors),
 }
 
 #[derive(Debug, PartialEq, Eq)]

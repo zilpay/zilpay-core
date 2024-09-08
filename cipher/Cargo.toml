@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
-ntrulp = { version = "0.1.9", features = ["ntrup1277"] }
+ntrulp = { version = "0.2.0", features = ["ntrup1277", "std"] }
 tokio = { version = "1.39.2", features = ["full", "test-util"] }
 num_cpus = "1.16.0"
 aes-gcm = "0.10.3"

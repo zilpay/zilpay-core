@@ -2181,11 +2181,13 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "ntrulp"
-version = "0.1.9"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c51545bfd18e9b8034e4867cfa7888218bf12a11bf26b75df525d479de374ec"
+checksum = "f66227f6432d98159e9df373bc63422f1d6a4eef39cdfe9ab5394c0e2e8cf11c"
 dependencies = [
+ "num_cpus",
  "rand 0.8.5",
+ "rand_chacha 0.3.1",
 ]
 
 [[package]]
@@ -4480,9 +4482,6 @@ checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 [[package]]
 name = "zil_errors"
 version = "0.1.0"
-dependencies = [
- "ntrulp",
-]
 
 [[package]]
 name = "zilliqa"

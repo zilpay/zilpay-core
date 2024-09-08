@@ -1,21 +1,20 @@
 use config::sha::{SHA256_SIZE, SHA512_SIZE};
 use ntrulp::{
-    key::{priv_key::PrivKey, pub_key::PubKey},
+    key::{kem_error::KemErrors, priv_key::PrivKey, pub_key::PubKey},
     ntru,
     poly::{r3::R3, rq::Rq},
-    random::{random_small, short_random},
+    rng::{random_small, short_random},
 };
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::sync::Arc;
-use zil_errors::NTRUPErrors;
 
-pub fn ntru_keys_from_seed<'a>(
+pub fn ntru_keys_from_seed(
     seed_bytes: &[u8; SHA512_SIZE],
-) -> Result<(PubKey, PrivKey), NTRUPErrors<'a>> {
+) -> Result<(PubKey, PrivKey), CipherError> {
     let seed_pq: [u8; SHA256_SIZE] = seed_bytes[..SHA256_SIZE]
         .try_into()
-        .or(Err(NTRUPErrors::KeySliceError))?;
+        .or(Err(KemErrors::InvalidR3GInvrBytes))?;
     let mut pq_rng = ChaChaRng::from_seed(seed_pq);
     let f: Rq = Rq::from(short_random(&mut pq_rng).map_err(NTRUPErrors::KeyGenError)?);
 
