@@ -7,10 +7,9 @@ use config::argon::KEY_SIZE;
 use config::sha::SHA256_SIZE;
 use ntrulp::{
     key::{priv_key::PrivKey, pub_key::PubKey},
-    params::params1277::{PUBLICKEYS_BYTES, SECRETKEYS_BYTES},
+    params::params::{PUBLICKEYS_BYTES, SECRETKEYS_BYTES},
 };
-use std::sync::Arc;
-use zil_errors::KeyChainErrors;
+use zil_errors::keychain::KeyChainErrors;
 
 pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
 
@@ -21,12 +20,12 @@ pub enum CipherOrders {
 }
 
 pub struct KeyChain {
-    pub ntrup_keys: (Arc<PubKey>, Arc<PrivKey>),
+    pub ntrup_keys: (PubKey, PrivKey),
     pub aes_key: [u8; AES_GCM_KEY_SIZE],
 }
 
 impl KeyChain {
-    pub fn from_bytes<'a>(bytes: &[u8; KEYCHAIN_BYTES_SIZE]) -> Result<Self, KeyChainErrors<'a>> {
+    pub fn from_bytes(bytes: &[u8; KEYCHAIN_BYTES_SIZE]) -> Result<Self, KeyChainErrors> {
         let pq_pk_bytes: [u8; PUBLICKEYS_BYTES] = bytes[..PUBLICKEYS_BYTES]
             .try_into()
             .map_err(KeyChainErrors::AESKeySliceError)?;
@@ -34,29 +33,29 @@ impl KeyChain {
             [PUBLICKEYS_BYTES..PUBLICKEYS_BYTES + SECRETKEYS_BYTES]
             .try_into()
             .map_err(KeyChainErrors::AESKeySliceError)?;
-        let pq_pk =
-            PubKey::import(&pq_pk_bytes).map_err(|_| KeyChainErrors::NTRUPrimeImportKeyError)?;
+        let pq_pk = PubKey::import(&pq_pk_bytes);
         let pq_sk =
-            PrivKey::import(&pq_sk_bytes).map_err(|_| KeyChainErrors::NTRUPrimeImportKeyError)?;
+            PrivKey::import(&pq_sk_bytes).map_err(KeyChainErrors::NTRUPrimePubKeyImportError)?;
 
         let mut aes_key = [0u8; AES_GCM_KEY_SIZE];
 
         aes_key.copy_from_slice(&bytes[PUBLICKEYS_BYTES + SECRETKEYS_BYTES..]);
 
         Ok(Self {
-            ntrup_keys: (Arc::new(pq_pk), Arc::new(pq_sk)),
+            ntrup_keys: (pq_pk, pq_sk),
             aes_key,
         })
     }
 
-    pub fn from_seed<'a>(seed_bytes: &[u8; KEY_SIZE]) -> Result<Self, KeyChainErrors<'a>> {
-        let (pk, sk) = ntru_keys_from_seed(seed_bytes).map_err(KeyChainErrors::NTRUPrimeError)?;
+    pub fn from_seed(seed_bytes: &[u8; KEY_SIZE]) -> Result<Self, KeyChainErrors> {
+        let (pk, sk) =
+            ntru_keys_from_seed(seed_bytes).map_err(KeyChainErrors::NTRUPrimeCipherError)?;
         let aes_key: [u8; AES_GCM_KEY_SIZE] = seed_bytes[SHA256_SIZE..]
             .try_into()
             .map_err(KeyChainErrors::AESKeySliceError)?;
 
         Ok(Self {
-            ntrup_keys: (Arc::new(pk), Arc::new(sk)),
+            ntrup_keys: (pk, sk),
             aes_key,
         })
     }
@@ -69,8 +68,8 @@ impl KeyChain {
 
     pub fn to_bytes(&self) -> [u8; KEYCHAIN_BYTES_SIZE] {
         let mut res = [0u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE];
-        let pq_pk = self.ntrup_keys.0.as_bytes();
-        let pq_sk = self.ntrup_keys.1.as_bytes();
+        let pq_pk = self.ntrup_keys.0.to_bytes();
+        let pq_sk = self.ntrup_keys.1.to_bytes();
 
         res[..PUBLICKEYS_BYTES].copy_from_slice(&pq_pk);
         res[PUBLICKEYS_BYTES..PUBLICKEYS_BYTES + SECRETKEYS_BYTES].copy_from_slice(&pq_sk);
@@ -91,7 +90,7 @@ impl KeyChain {
                         .map_err(KeyChainErrors::AESDecryptError)?
                 }
                 CipherOrders::NTRUP1277 => {
-                    ciphertext = ntru_decrypt(&self.ntrup_keys.1, ciphertext)
+                    ciphertext = ntru_decrypt(self.ntrup_keys.1.clone(), ciphertext)
                         .map_err(KeyChainErrors::NTRUPrimeDecryptError)?
                 }
             };
@@ -114,7 +113,7 @@ impl KeyChain {
                         .map_err(KeyChainErrors::AESEncryptError)?
                 }
                 CipherOrders::NTRUP1277 => {
-                    plaintext = ntru_encrypt(pk, plaintext)
+                    plaintext = ntru_encrypt(pk.clone(), &plaintext)
                         .map_err(KeyChainErrors::NTRUPrimeEncryptError)?
                 }
             };
@@ -157,7 +156,7 @@ mod tests {
     use config::cipher::PROOF_SIZE;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
-    use zil_errors::{AesGCMErrors, KeyChainErrors};
+    use zil_errors::{keychain::KeyChainErrors, AesGCMErrors};
 
     #[test]
     fn test_init_keychain() {
@@ -186,12 +185,12 @@ mod tests {
 
         assert_eq!(restore_keychain.aes_key, keychain.aes_key);
         assert_eq!(
-            restore_keychain.ntrup_keys.0.as_bytes(),
-            keychain.ntrup_keys.0.as_bytes()
+            restore_keychain.ntrup_keys.0.to_bytes(),
+            keychain.ntrup_keys.0.to_bytes()
         );
         assert_eq!(
-            restore_keychain.ntrup_keys.1.as_bytes(),
-            keychain.ntrup_keys.1.as_bytes()
+            restore_keychain.ntrup_keys.1.to_bytes(),
+            keychain.ntrup_keys.1.to_bytes()
         );
     }
 

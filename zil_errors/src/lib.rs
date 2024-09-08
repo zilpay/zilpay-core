@@ -1,5 +1,6 @@
-use std::array::TryFromSliceError;
+use keychain::KeyChainErrors;
 
+pub mod keychain;
 pub mod ntru;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -29,19 +30,6 @@ pub enum CipherErrors {
 pub enum AesGCMErrors {
     EncryptError(String),
     DecryptError(String),
-}
-
-#[derive(Debug)]
-pub enum KeyChainErrors {
-    NTRUPrimeError,
-    NTRUPrimeImportKeyError,
-    Argon2CipherErrors(CipherErrors),
-    AESKeySliceError(TryFromSliceError),
-    AESEncryptError(AesGCMErrors),
-    NTRUPrimeEncryptError,
-    AESDecryptError(AesGCMErrors),
-    NTRUPrimeDecryptError,
-    FailSlicedProofCipher,
 }
 
 #[derive(Debug)]
