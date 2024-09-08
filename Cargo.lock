@@ -2180,9 +2180,9 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "ntrulp"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0440a618ddae795382385c47f87f5382dd7ea95560b367dee9d7e2ad5c8b4f81"
+checksum = "74131f852a50b9cbc0b5cae02165fddc39dc5236d18d08b258438cfdc1467706"
 dependencies = [
  "num_cpus",
  "rand 0.8.5",

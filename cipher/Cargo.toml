@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
-ntrulp = { version = "0.2.2", features = ["ntrup761", "std"] }
+ntrulp = { version = "0.2.3", features = ["ntrup761", "std"] }
 tokio = { version = "1.39.2", features = ["full", "test-util"] }
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"

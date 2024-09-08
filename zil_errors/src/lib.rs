@@ -32,7 +32,7 @@ pub enum AesGCMErrors {
     DecryptError(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SessionErrors {
     DeriveKeyError(CipherErrors),
     EncryptSessionError(AesGCMErrors),
@@ -61,12 +61,12 @@ pub enum LocalStorageError {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum WalletErrors {
+    SessionDecryptKeychainError(SessionErrors),
     Bip39NotValid(String),
-    KeyChainErrors,
+    DecryptKeyChainErrors(KeyChainErrors),
+    EncryptKeyChainErrors(KeyChainErrors),
     MnemonicError(String),
     ArgonCipherErrors(CipherErrors),
-    SKSliceError,
-    KeyChainSliceError,
     InvalidBip39Account,
     InvalidSecretKeyAccount,
     FailToSaveCipher(LocalStorageError),
@@ -75,7 +75,7 @@ pub enum WalletErrors {
     InvalidAccountType,
     DisabledSessions,
     UnlockSessionError,
-    KeyChainMakeCipherProofError,
+    KeyChainMakeCipherProofError(KeyChainErrors),
     FailToGetProofFromStorage(LocalStorageError),
     SessionDecryptError,
     KeyChainFailToGetProof,

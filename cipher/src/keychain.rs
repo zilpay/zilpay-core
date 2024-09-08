@@ -28,11 +28,11 @@ impl KeyChain {
     pub fn from_bytes(bytes: &[u8; KEYCHAIN_BYTES_SIZE]) -> Result<Self, KeyChainErrors> {
         let pq_pk_bytes: [u8; PUBLICKEYS_BYTES] = bytes[..PUBLICKEYS_BYTES]
             .try_into()
-            .map_err(KeyChainErrors::AESKeySliceError)?;
+            .or(Err(KeyChainErrors::AESKeySliceError))?;
         let pq_sk_bytes: [u8; SECRETKEYS_BYTES] = bytes
             [PUBLICKEYS_BYTES..PUBLICKEYS_BYTES + SECRETKEYS_BYTES]
             .try_into()
-            .map_err(KeyChainErrors::AESKeySliceError)?;
+            .or(Err(KeyChainErrors::AESKeySliceError))?;
         let pq_pk = PubKey::import(&pq_pk_bytes);
         let pq_sk =
             PrivKey::import(&pq_sk_bytes).map_err(KeyChainErrors::NTRUPrimePubKeyImportError)?;
@@ -52,7 +52,7 @@ impl KeyChain {
             ntru_keys_from_seed(seed_bytes).map_err(KeyChainErrors::NTRUPrimeCipherError)?;
         let aes_key: [u8; AES_GCM_KEY_SIZE] = seed_bytes[SHA256_SIZE..]
             .try_into()
-            .map_err(KeyChainErrors::AESKeySliceError)?;
+            .or(Err(KeyChainErrors::AESKeySliceError))?;
 
         Ok(Self {
             ntrup_keys: (pk, sk),

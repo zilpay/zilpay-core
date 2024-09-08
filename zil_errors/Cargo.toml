@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ntrulp = { version = "0.2.2", features = ["ntrup761", "std"] }
+ntrulp = { version = "0.2.3", features = ["ntrup761", "std"] }

@@ -91,12 +91,12 @@ mod tests {
 
         assert!(session.is_enabdle);
         assert_eq!(
-            keychain.ntrup_keys.0.as_bytes(),
-            keychain_shouldbe.ntrup_keys.0.as_bytes()
+            keychain.ntrup_keys.0.to_bytes(),
+            keychain_shouldbe.ntrup_keys.0.to_bytes()
         );
         assert_eq!(
-            keychain.ntrup_keys.1.as_bytes(),
-            keychain_shouldbe.ntrup_keys.1.as_bytes()
+            keychain.ntrup_keys.1.to_bytes(),
+            keychain_shouldbe.ntrup_keys.1.to_bytes()
         );
         assert_eq!(keychain.aes_key, keychain_shouldbe.aes_key);
     }
