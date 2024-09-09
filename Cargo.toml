@@ -11,6 +11,7 @@ resolver = "2"
 [lib]
 name = "zilpay"
 path = "zilpay/src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [workspace]
 members = [

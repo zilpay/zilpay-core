@@ -1,2 +1,5 @@
-[target.aarch64-linux-android]
-linker = "/home/rinat/Android/Sdk/ndk/23.1.7779620/build/core/toolchains/aarch64-linux-android-clang"
+[target.i686-linux-android]
+rustflags = [
+  "-C",
+  "link-arg=-Wl,-rpath,/home/rinat/.android/openssl-i686-android/usr/local/lib",
+]
