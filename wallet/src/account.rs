@@ -70,20 +70,28 @@ impl ToVecBytes for Account {
         // this unwrap never call.
         let type_bytes = self.account_type.to_bytes().unwrap();
         let addr_bytes = self.addr.to_bytes();
-        // let ft_map = self.ft_map
 
-        Vec::new()
+        let mut bytes_ft_map = Vec::new();
+        let len = self.ft_map.len() as u64;
+
+        bytes_ft_map.extend_from_slice(&len.to_le_bytes());
+
+        for (key, value) in &self.ft_map {
+            bytes_ft_map.extend_from_slice(key);
+            bytes_ft_map.extend_from_slice(&value.to_le_bytes());
+        }
+
+        dbg!(&bytes_ft_map);
+
+        bytes_ft_map
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::str::FromStr;
 
-    #[test]
-    fn test_account_type_bytes() {
-        let acc_type = AccountType::Ledger(32432);
-    }
+    use super::*;
 
     #[test]
     fn test_from_zil_sk() {
@@ -91,8 +99,11 @@ mod tests {
             .parse()
             .unwrap();
         let name = "Account 0";
-        let acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
+        let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
 
-        // dbg!(acc);
+        acc.ft_map
+            .insert(*acc.addr.addr_bytes(), Uint256::from_str("42").unwrap());
+
+        acc.to_bytes();
     }
 }
