@@ -1,4 +1,5 @@
 pub mod account;
+pub mod account_type;
 
 use cipher::aes::AES_GCM_KEY_SIZE;
 use cipher::argon2::derive_key;

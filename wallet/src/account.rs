@@ -1,6 +1,5 @@
 use bincode::{ToBytes, ToVecBytes};
-use config::SYS_SIZE;
-use config::{address::ADDR_LEN, sha::SHA512_SIZE};
+use config::{address::ADDR_LEN, sha::SHA512_SIZE, SYS_SIZE};
 use crypto::bip49::Bip49DerivationPath;
 use num256::uint256::Uint256;
 use proto::address::Address;
@@ -10,37 +9,7 @@ use proto::secret_key::SecretKey;
 use std::{collections::HashMap, io::Empty};
 use zil_errors::AccountErrors;
 
-#[derive(Debug)]
-pub enum AccountType {
-    Ledger(usize),     // Ledger index
-    Bip39HD(usize),    // HD key bip39 index
-    PrivateKey(usize), // A storage key for cipher secret key
-}
-
-impl ToBytes<{ SYS_SIZE + 1 }> for AccountType {
-    type Error = AccountErrors;
-
-    fn to_bytes(&self) -> Result<[u8; SYS_SIZE + 1], Self::Error> {
-        let mut res: [u8; SYS_SIZE + 1] = [0u8; SYS_SIZE + 1];
-
-        match self {
-            AccountType::Ledger(v) => {
-                res[0] = 0;
-                res[1..].copy_from_slice(&v.to_ne_bytes());
-            }
-            AccountType::Bip39HD(v) => {
-                res[0] = 1;
-                res[1..].copy_from_slice(&v.to_ne_bytes());
-            }
-            AccountType::PrivateKey(v) => {
-                res[0] = 2;
-                res[1..].copy_from_slice(&v.to_ne_bytes());
-            }
-        };
-
-        Ok(res)
-    }
-}
+use crate::account_type::AccountType;
 
 #[derive(Debug)]
 pub struct Account {
@@ -98,6 +67,10 @@ impl Account {
 impl ToVecBytes for Account {
     fn to_bytes(&self) -> Vec<u8> {
         let name_bytes = self.name.as_bytes();
+        // this unwrap never call.
+        let type_bytes = self.account_type.to_bytes().unwrap();
+        let addr_bytes = self.addr.to_bytes();
+        // let ft_map = self.ft_map
 
         Vec::new()
     }
@@ -106,6 +79,11 @@ impl ToVecBytes for Account {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_account_type_bytes() {
+        let acc_type = AccountType::Ledger(32432);
+    }
 
     #[test]
     fn test_from_zil_sk() {

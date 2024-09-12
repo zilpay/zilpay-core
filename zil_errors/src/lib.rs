@@ -82,7 +82,7 @@ pub enum WalletErrors {
     ProofNotMatch,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum AccountErrors {
     InvalidSecretKeyBytes(KeyPairError),
     InvalidSecretKey(KeyPairError),
@@ -91,9 +91,10 @@ pub enum AccountErrors {
     FailToSaveCipher(LocalStorageError),
     InvalidSeed(KeyPairError),
     InvalidSecretBytes,
+    InvalidAccountTypeCode,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum KeyPairError {
     ExtendedPrivKeyDeriveError,
     SchorrError(SchorrError),
@@ -110,12 +111,12 @@ pub enum KeyPairError {
     InvalidSignature(SignatureError),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SchorrError {
     InvalidSignTry,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum AddressError {
     InvalidLength,
     InvalidKeyType,
