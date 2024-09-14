@@ -88,10 +88,12 @@ pub enum AccountErrors {
     InvalidSecretKey(KeyPairError),
     InvalidPubKey(KeyPairError),
     InvalidAddress(KeyPairError),
+    AddrFromPubKeyError(AddressError),
     FailToSaveCipher(LocalStorageError),
     InvalidSeed(KeyPairError),
     InvalidSecretBytes,
     InvalidAccountTypeCode,
+    FromBytesErrorNotEnoughBytes,
 }
 
 #[derive(Debug, PartialEq, Eq)]
