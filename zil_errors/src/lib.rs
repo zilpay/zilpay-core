@@ -130,6 +130,7 @@ pub enum AddressError {
     InvalidAddressSize,
     InvalidHRP,
     InvalidBech32Len,
+    NotImpl,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -148,6 +149,7 @@ pub enum PubKeyError {
     InvalidVerifyingKey,
     InvalidPubKey,
     FailIntoPubKey,
+    NotImpl,
 }
 
 #[derive(Debug, PartialEq, Eq)]

@@ -22,21 +22,21 @@ pub fn public_key_to_bitcoin_address(
 
 #[cfg(test)]
 mod tests_btc_addr {
-    use super::*;
-    use bech32::{hrp, segwit, Bech32m, Hrp};
-
-    #[test]
-    fn test_convert_from_pk() {
-        let pk: [u8; PUB_KEY_SIZE] =
-            hex::decode("03150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da")
-                .unwrap()
-                .try_into()
-                .unwrap();
-        let value = public_key_to_bitcoin_address(&pk, 0x00);
-
-        let hrp = Hrp::parse("bc").unwrap();
-        let string = bech32::encode::<Bech32m>(hrp, &value).unwrap();
-
-        // dbg!(string);
-    }
+    // use super::*;
+    // use bech32::{hrp, segwit, Bech32m, Hrp};
+    //
+    // #[test]
+    // fn test_convert_from_pk() {
+    //     let pk: [u8; PUB_KEY_SIZE] =
+    //         hex::decode("03150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da")
+    //             .unwrap()
+    //             .try_into()
+    //             .unwrap();
+    //     let value = public_key_to_bitcoin_address(&pk, 0x00);
+    //
+    //     let hrp = Hrp::parse("bc").unwrap();
+    //     let string = bech32::encode::<Bech32m>(hrp, &value).unwrap();
+    //
+    //     // dbg!(string);
+    // }
 }

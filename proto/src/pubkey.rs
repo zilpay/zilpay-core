@@ -7,6 +7,7 @@ use k256::PublicKey as K256PublicKey;
 use std::str::FromStr;
 use zil_errors::PubKeyError;
 
+use crate::address::Address;
 use crate::zil_address::from_zil_pub_key;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -30,8 +31,19 @@ impl PubKey {
             PubKey::Secp256k1Sha256Zilliqa(pk) => {
                 from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey))
             }
-            PubKey::Secp256k1Bitcoin(pk) => Err(PubKeyError::InvalidPubKey),
-            PubKey::Ed25519Solana(pk) => Err(PubKeyError::InvalidPubKey),
+            PubKey::Secp256k1Bitcoin(_) => Err(PubKeyError::NotImpl),
+            PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
+        }
+    }
+
+    pub fn get_addr(&self) -> Result<Address, PubKeyError> {
+        let buf = self.get_bytes_addr()?;
+
+        match self {
+            PubKey::Secp256k1Keccak256Ethereum(_) => Ok(Address::Secp256k1Keccak256Ethereum(buf)),
+            PubKey::Secp256k1Sha256Zilliqa(_) => Ok(Address::Secp256k1Sha256Zilliqa(buf)),
+            PubKey::Secp256k1Bitcoin(_) => Err(PubKeyError::NotImpl),
+            PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
         }
     }
 }
@@ -147,8 +159,6 @@ impl FromStr for PubKey {
 
 #[cfg(test)]
 mod tests {
-    use crate::address::Address;
-
     use super::*;
 
     #[test]
