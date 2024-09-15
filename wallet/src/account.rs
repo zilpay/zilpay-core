@@ -249,6 +249,7 @@ impl ToVecBytes for Account {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bip39::Mnemonic;
     use rand::{Rng, RngCore};
     use std::str::FromStr;
 
@@ -261,6 +262,42 @@ mod tests {
             .unwrap();
         let name = "Account 0";
         let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
+
+        for _ in 0..100 {
+            let mut nft_addr = [0u8; ADDR_LEN];
+            let mut ft_addr = [0u8; ADDR_LEN];
+            let n128: u128 = rng.gen();
+            let n8: u8 = rng.gen();
+
+            rng.fill_bytes(&mut nft_addr);
+            rng.fill_bytes(&mut ft_addr);
+
+            acc.ft_map
+                .insert(ft_addr, Uint256::from_str(&n128.to_string()).unwrap());
+            acc.nft_map.insert(nft_addr, n8);
+        }
+
+        let buf = acc.to_bytes();
+        let res = Account::from_bytes(buf.into()).unwrap();
+
+        assert_eq!(res.pub_key, acc.pub_key);
+        assert_eq!(res.addr, acc.addr);
+        assert_eq!(res.ft_map, acc.ft_map);
+        assert_eq!(res.nft_map, acc.nft_map);
+        assert_eq!(res, acc);
+    }
+
+    #[test]
+    fn test_init_from_bip39() {
+        let mut rng = rand::thread_rng();
+
+        let mnemonic_str =
+            "green process gate doctor slide whip priority shrug diamond crumble average help";
+        let name = "Account 0";
+        let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
+        let bip49 = Bip49DerivationPath::Zilliqa(0);
+        let seed = m.to_seed("");
+        let mut acc = Account::from_hd(&seed, name.to_owned(), &bip49).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
