@@ -6,15 +6,15 @@ use zil_errors::SecretKeyError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKey {
-    Secp256k1Sha256([u8; SECRET_KEY_SIZE]),    // ZILLIQA
-    Secp256k1Keccak256([u8; SECRET_KEY_SIZE]), // Ethereum
+    Secp256k1Sha256Zilliqa([u8; SECRET_KEY_SIZE]), // ZILLIQA
+    Secp256k1Keccak256Ethereum([u8; SECRET_KEY_SIZE]), // Ethereum
 }
 
 impl SecretKey {
     pub fn to_vec(&self) -> Vec<u8> {
         match self {
-            SecretKey::Secp256k1Sha256(buf) => buf.to_vec(),
-            SecretKey::Secp256k1Keccak256(buf) => buf.to_vec(),
+            SecretKey::Secp256k1Sha256Zilliqa(buf) => buf.to_vec(),
+            SecretKey::Secp256k1Keccak256Ethereum(buf) => buf.to_vec(),
         }
     }
 }
@@ -31,8 +31,8 @@ impl ToBytes<{ SECRET_KEY_SIZE + 1 }> for SecretKey {
         let mut result = [0u8; SECRET_KEY_SIZE + 1];
 
         result[0] = match self {
-            SecretKey::Secp256k1Sha256(_) => 0,
-            SecretKey::Secp256k1Keccak256(_) => 1,
+            SecretKey::Secp256k1Sha256Zilliqa(_) => 0,
+            SecretKey::Secp256k1Keccak256Ethereum(_) => 1,
         };
         result[1..].copy_from_slice(self.as_ref());
 
@@ -59,8 +59,8 @@ impl FromBytes for SecretKey {
             .or(Err(SecretKeyError::SecretKeySliceError))?;
 
         match key_type {
-            0 => Ok(SecretKey::Secp256k1Sha256(key_data)),
-            1 => Ok(SecretKey::Secp256k1Keccak256(key_data)),
+            0 => Ok(SecretKey::Secp256k1Sha256Zilliqa(key_data)),
+            1 => Ok(SecretKey::Secp256k1Keccak256Ethereum(key_data)),
             _ => panic!("Invalid key type"),
         }
     }
@@ -69,8 +69,8 @@ impl FromBytes for SecretKey {
 impl AsRef<[u8]> for SecretKey {
     fn as_ref(&self) -> &[u8] {
         match self {
-            SecretKey::Secp256k1Sha256(data) => data,
-            SecretKey::Secp256k1Keccak256(data) => data,
+            SecretKey::Secp256k1Sha256Zilliqa(data) => data,
+            SecretKey::Secp256k1Keccak256Ethereum(data) => data,
         }
     }
 }
@@ -86,8 +86,8 @@ impl FromStr for SecretKey {
         let prefix = data[0];
 
         match prefix {
-            0 => Ok(SecretKey::Secp256k1Sha256(bytes)),
-            1 => Ok(SecretKey::Secp256k1Keccak256(bytes)),
+            0 => Ok(SecretKey::Secp256k1Sha256Zilliqa(bytes)),
+            1 => Ok(SecretKey::Secp256k1Keccak256Ethereum(bytes)),
             _ => Err(SecretKeyError::InvalidKeyType),
         }
     }
