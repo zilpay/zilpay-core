@@ -11,21 +11,27 @@ use crate::zil_address::from_zil_pub_key;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PubKey {
-    Secp256k1Sha256([u8; PUB_KEY_SIZE]),    // ZILLIQA
-    Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
+    Secp256k1Sha256Zilliqa([u8; PUB_KEY_SIZE]),     // ZILLIQA
+    Secp256k1Keccak256Ethereum([u8; PUB_KEY_SIZE]), // Ethereum
+    Secp256k1Bitcoin([u8; PUB_KEY_SIZE]),           // Bitcoin
+    Ed25519Solana([u8; PUB_KEY_SIZE]),              // Solana
 }
 
 impl PubKey {
     pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN], PubKeyError> {
         match self {
-            PubKey::Secp256k1Keccak256(pk) => {
+            PubKey::Secp256k1Keccak256Ethereum(pk) => {
                 let public_key =
                     VerifyingKey::from_sec1_bytes(pk).or(Err(PubKeyError::InvalidVerifyingKey))?;
                 let addr = public_key_to_address(&public_key);
 
                 Ok(addr.into())
             }
-            PubKey::Secp256k1Sha256(pk) => from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey)),
+            PubKey::Secp256k1Sha256Zilliqa(pk) => {
+                from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey))
+            }
+            PubKey::Secp256k1Bitcoin(pk) => Err(PubKeyError::InvalidPubKey),
+            PubKey::Ed25519Solana(pk) => Err(PubKeyError::InvalidPubKey),
         }
     }
 }
@@ -55,8 +61,10 @@ impl ToBytes<{ PUB_KEY_SIZE + 1 }> for PubKey {
         let mut result = [0u8; PUB_KEY_SIZE + 1];
 
         result[0] = match self {
-            PubKey::Secp256k1Sha256(_) => 0,
-            PubKey::Secp256k1Keccak256(_) => 1,
+            PubKey::Secp256k1Sha256Zilliqa(_) => 0,
+            PubKey::Secp256k1Keccak256Ethereum(_) => 1,
+            PubKey::Secp256k1Bitcoin(_) => 2,
+            PubKey::Ed25519Solana(_) => 3,
         };
         result[1..].copy_from_slice(self.as_ref());
 
@@ -76,8 +84,10 @@ impl From<[u8; PUB_KEY_SIZE + 1]> for PubKey {
         let key_data: [u8; PUB_KEY_SIZE] = bytes[1..].try_into().unwrap();
 
         match key_type {
-            0 => PubKey::Secp256k1Sha256(key_data),
-            1 => PubKey::Secp256k1Keccak256(key_data),
+            0 => PubKey::Secp256k1Sha256Zilliqa(key_data),
+            1 => PubKey::Secp256k1Keccak256Ethereum(key_data),
+            2 => PubKey::Secp256k1Bitcoin(key_data),
+            3 => PubKey::Ed25519Solana(key_data),
             _ => panic!("Invalid key type"),
         }
     }
@@ -97,8 +107,8 @@ impl TryFrom<&[u8]> for PubKey {
             .map_err(|_| PubKeyError::InvalidLength)?;
 
         match key_type {
-            0 => Ok(PubKey::Secp256k1Sha256(key_data)),
-            1 => Ok(PubKey::Secp256k1Keccak256(key_data)),
+            0 => Ok(PubKey::Secp256k1Sha256Zilliqa(key_data)),
+            1 => Ok(PubKey::Secp256k1Keccak256Ethereum(key_data)),
             _ => Err(PubKeyError::InvalidKeyType),
         }
     }
@@ -107,8 +117,10 @@ impl TryFrom<&[u8]> for PubKey {
 impl AsRef<[u8]> for PubKey {
     fn as_ref(&self) -> &[u8] {
         match self {
-            PubKey::Secp256k1Sha256(data) => data,
-            PubKey::Secp256k1Keccak256(data) => data,
+            PubKey::Secp256k1Sha256Zilliqa(data) => data,
+            PubKey::Secp256k1Keccak256Ethereum(data) => data,
+            PubKey::Secp256k1Bitcoin(data) => data,
+            PubKey::Ed25519Solana(data) => data,
         }
     }
 }
@@ -124,8 +136,10 @@ impl FromStr for PubKey {
         let prefix = data[0];
 
         match prefix {
-            0 => Ok(PubKey::Secp256k1Sha256(bytes)),
-            1 => Ok(PubKey::Secp256k1Keccak256(bytes)),
+            0 => Ok(PubKey::Secp256k1Sha256Zilliqa(bytes)),
+            1 => Ok(PubKey::Secp256k1Keccak256Ethereum(bytes)),
+            2 => Ok(PubKey::Secp256k1Bitcoin(bytes)),
+            3 => Ok(PubKey::Ed25519Solana(bytes)),
             _ => Err(PubKeyError::InvalidKeyType),
         }
     }
@@ -133,6 +147,8 @@ impl FromStr for PubKey {
 
 #[cfg(test)]
 mod tests {
+    use crate::address::Address;
+
     use super::*;
 
     #[test]
@@ -143,8 +159,8 @@ mod tests {
         let zil_key = PubKey::from(zil_bytes);
         let eth_key = PubKey::from(eth_bytes);
 
-        assert!(matches!(zil_key, PubKey::Secp256k1Sha256(_)));
-        assert!(matches!(eth_key, PubKey::Secp256k1Keccak256(_)));
+        assert!(matches!(zil_key, PubKey::Secp256k1Sha256Zilliqa(_)));
+        assert!(matches!(eth_key, PubKey::Secp256k1Keccak256Ethereum(_)));
     }
 
     #[test]
@@ -156,11 +172,11 @@ mod tests {
 
         assert!(matches!(
             PubKey::try_from(zil_slice),
-            Ok(PubKey::Secp256k1Sha256(_))
+            Ok(PubKey::Secp256k1Sha256Zilliqa(_))
         ));
         assert!(matches!(
             PubKey::try_from(eth_slice),
-            Ok(PubKey::Secp256k1Keccak256(_))
+            Ok(PubKey::Secp256k1Keccak256Ethereum(_))
         ));
         assert!(matches!(
             PubKey::try_from(invalid_slice),
@@ -175,8 +191,8 @@ mod tests {
     #[test]
     fn test_as_ref() {
         let data = [42u8; PUB_KEY_SIZE];
-        let zil_key = PubKey::Secp256k1Sha256(data);
-        let eth_key = PubKey::Secp256k1Keccak256(data);
+        let zil_key = PubKey::Secp256k1Sha256Zilliqa(data);
+        let eth_key = PubKey::Secp256k1Keccak256Ethereum(data);
 
         assert_eq!(zil_key.as_ref(), &data);
         assert_eq!(eth_key.as_ref(), &data);
@@ -185,8 +201,8 @@ mod tests {
     #[test]
     fn test_to_bytes() {
         let data = [42u8; PUB_KEY_SIZE];
-        let zil_key = PubKey::Secp256k1Sha256(data);
-        let eth_key = PubKey::Secp256k1Keccak256(data);
+        let zil_key = PubKey::Secp256k1Sha256Zilliqa(data);
+        let eth_key = PubKey::Secp256k1Keccak256Ethereum(data);
 
         let zil_bytes = zil_key.to_bytes().unwrap();
         let eth_bytes = eth_key.to_bytes().unwrap();
@@ -200,8 +216,8 @@ mod tests {
     #[test]
     fn test_roundtrip() {
         let original_data = [42u8; PUB_KEY_SIZE];
-        let zil_key = PubKey::Secp256k1Sha256(original_data);
-        let eth_key = PubKey::Secp256k1Keccak256(original_data);
+        let zil_key = PubKey::Secp256k1Sha256Zilliqa(original_data);
+        let eth_key = PubKey::Secp256k1Keccak256Ethereum(original_data);
 
         let zil_bytes = zil_key.to_bytes().unwrap();
         let eth_bytes = eth_key.to_bytes().unwrap();
@@ -218,8 +234,8 @@ mod tests {
         let zil_data = [42u8; PUB_KEY_SIZE];
         let eth_data = [69u8; PUB_KEY_SIZE];
 
-        let zil_key = PubKey::Secp256k1Sha256(zil_data);
-        let eth_key = PubKey::Secp256k1Keccak256(eth_data);
+        let zil_key = PubKey::Secp256k1Sha256Zilliqa(zil_data);
+        let eth_key = PubKey::Secp256k1Keccak256Ethereum(eth_data);
 
         let zil_str = zil_key.to_string();
         let eth_str = eth_key.to_string();
@@ -230,7 +246,7 @@ mod tests {
         assert_eq!(PubKey::from_str("invalid"), Err(PubKeyError::InvalidHex));
         assert_eq!(
             PubKey::from_str(
-                "0303150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+                "0903150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
             ),
             Err(PubKeyError::InvalidKeyType)
         );
@@ -252,6 +268,7 @@ mod tests {
             "0003150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
                 .parse()
                 .unwrap();
+
         let addr_eth = pubkey_eth.get_bytes_addr().unwrap();
         let addr_zil = pubkey_zil.get_bytes_addr().unwrap();
 

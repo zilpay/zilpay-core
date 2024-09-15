@@ -110,8 +110,8 @@ impl KeyPair {
 
     pub fn get_pubkey(&self) -> Result<PubKey, KeyPairError> {
         match self {
-            KeyPair::Secp256k1Sha256((pk, _)) => Ok(PubKey::Secp256k1Sha256(*pk)),
-            KeyPair::Secp256k1Keccak256((pk, _)) => Ok(PubKey::Secp256k1Keccak256(*pk)),
+            KeyPair::Secp256k1Sha256((pk, _)) => Ok(PubKey::Secp256k1Sha256Zilliqa(*pk)),
+            KeyPair::Secp256k1Keccak256((pk, _)) => Ok(PubKey::Secp256k1Keccak256Ethereum(*pk)),
         }
     }
 

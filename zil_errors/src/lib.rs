@@ -128,6 +128,8 @@ pub enum AddressError {
     InvalidBase16Address,
     InvalidVerifyingKey,
     InvalidAddressSize,
+    InvalidHRP,
+    InvalidBech32Len,
 }
 
 #[derive(Debug, PartialEq, Eq)]

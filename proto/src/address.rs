@@ -24,17 +24,23 @@ impl Address {
 
     pub fn from_pubkey(pk: &PubKey) -> Result<Self, AddressError> {
         match pk {
-            PubKey::Secp256k1Sha256(pk) => {
+            PubKey::Secp256k1Sha256Zilliqa(pk) => {
                 let addr = from_zil_pub_key(pk)?;
 
                 Ok(Self::Secp256k1Sha256(addr))
             }
-            PubKey::Secp256k1Keccak256(pk) => {
+            PubKey::Secp256k1Keccak256Ethereum(pk) => {
                 let public_key =
                     VerifyingKey::from_sec1_bytes(pk).or(Err(AddressError::InvalidVerifyingKey))?;
                 let addr: [u8; ADDR_LEN] = public_key_to_address(&public_key).into();
 
                 Ok(Self::Secp256k1Keccak256(addr))
+            }
+            PubKey::Secp256k1Bitcoin(pk) => {
+                return Err(AddressError::InvalidPubKey);
+            }
+            PubKey::Ed25519Solana(pk) => {
+                return Err(AddressError::InvalidPubKey);
             }
         }
     }
@@ -58,9 +64,7 @@ impl Address {
 
     pub fn get_bech32(&self) -> Result<String, AddressError> {
         match self {
-            Address::Secp256k1Sha256(v) => {
-                to_zil_bech32(v).ok_or(AddressError::InvalidAddressBytesForBech32)
-            }
+            Address::Secp256k1Sha256(v) => to_zil_bech32(v),
             _ => Err(AddressError::InvalidSecp256k1Sha256Type),
         }
     }
