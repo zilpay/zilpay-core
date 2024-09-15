@@ -11,19 +11,19 @@ use proto::address::Address;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
-use std::{collections::HashMap, io::Empty};
+use std::collections::HashMap;
 use zil_errors::AccountErrors;
 
 use crate::account_type::AccountType;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Account {
     pub name: String,
     pub account_type: AccountType,
     pub addr: Address,
     pub pub_key: PubKey,
     pub ft_map: HashMap<[u8; ADDR_LEN], Uint256>, // map with ft token address > balance
-    pub nft_map: HashMap<[u8; ADDR_LEN], Empty>,  // TODO: add struct for NFT tokens
+    pub nft_map: HashMap<[u8; ADDR_LEN], u8>,     // TODO: add struct for NFT tokens
 }
 
 impl Account {
@@ -70,69 +70,69 @@ impl Account {
 }
 
 impl FromBytes for Account {
-    type Error = AccountErrors;
+    type Error = &'static str;
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
         let mut offset = 0;
 
         if bytes.len() < SYS_SIZE * 3 {
-            return Err(AccountErrors::FromBytesErrorNotEnoughBytes);
+            return Err("Invalid Bytes sys * 3");
         }
 
         let name_len = usize::from_be_bytes(
             bytes[offset..offset + SYS_SIZE]
                 .try_into()
-                .or(Err(AccountErrors::FromBytesErrorNotEnoughBytes))?,
+                .or(Err("invalid name size"))?,
         );
         offset += SYS_SIZE;
 
         let ft_map_len = usize::from_be_bytes(
             bytes[offset..offset + SYS_SIZE]
                 .try_into()
-                .or(Err(AccountErrors::FromBytesErrorNotEnoughBytes))?,
+                .or(Err("invalid ft map size"))?,
         );
         offset += SYS_SIZE;
 
         let nft_map_len = usize::from_be_bytes(
             bytes[offset..offset + SYS_SIZE]
                 .try_into()
-                .or(Err(AccountErrors::FromBytesErrorNotEnoughBytes))?,
+                .or(Err("invalid nft map size"))?,
         );
         offset += SYS_SIZE;
 
         if offset + name_len > bytes.len() {
-            return Err(AccountErrors::FromBytesErrorNotEnoughBytes);
+            return Err("invalid name size > bytes");
         }
 
-        let name = String::from_utf8(bytes[offset..offset + name_len].to_vec())
-            .or(Err(AccountErrors::FromBytesErrorNotEnoughBytes))?;
+        let name =
+            String::from_utf8(bytes[offset..offset + name_len].to_vec()).or(Err("invalid name"))?;
         offset += name_len;
 
         if offset + 1 > bytes.len() {
-            return Err(AccountErrors::FromBytesErrorNotEnoughBytes);
+            return Err("invalid bytes size");
         }
 
         let account_type = AccountType::from_bytes(
-            &bytes[offset..offset + 1]
+            &bytes[offset..offset + 1 + SYS_SIZE]
                 .try_into()
-                .or(Err(AccountErrors::FromBytesErrorNotEnoughBytes))?,
+                .or(Err("invlaid account type size"))?,
         )
-        .or(Err(AccountErrors::FromBytesErrorNotEnoughBytes))?;
-        offset += 1;
+        .or(Err("invalid account type"))?;
+        offset += 1 + SYS_SIZE;
 
         if offset + PUB_KEY_SIZE + 1 > bytes.len() {
-            return Err(AccountErrors::FromBytesErrorNotEnoughBytes);
+            return Err("invlaid pup key size");
         }
 
         let mut pub_key = [0u8; PUB_KEY_SIZE + 1];
         pub_key.copy_from_slice(&bytes[offset..offset + PUB_KEY_SIZE + 1]);
         offset += PUB_KEY_SIZE + 1;
         let pub_key: PubKey = pub_key.into();
-        let addr = Address::from_pubkey(&pub_key).map_err(AccountErrors::AddrFromPubKeyError)?;
+        let addr = Address::from_pubkey(&pub_key).map_err(|_| "invlaid addr")?;
 
         let mut ft_map = HashMap::new();
         for _ in 0..ft_map_len {
             if offset + ADDR_LEN + SHA256_SIZE > bytes.len() {
-                return Err(AccountErrors::FromBytesErrorNotEnoughBytes);
+                return Err("invlaid ft map addr + value size");
             }
             let mut addr = [0u8; ADDR_LEN];
             addr.copy_from_slice(&bytes[offset..offset + ADDR_LEN]);
@@ -140,7 +140,7 @@ impl FromBytes for Account {
             let value = Uint256::from_be_bytes(
                 bytes[offset..offset + SHA256_SIZE]
                     .try_into()
-                    .or(Err(AccountErrors::FromBytesErrorNotEnoughBytes))?,
+                    .or(Err("invalid ft map value size"))?,
             );
             offset += SHA256_SIZE;
             ft_map.insert(addr, value);
@@ -149,13 +149,13 @@ impl FromBytes for Account {
         let mut nft_map = HashMap::new();
         for _ in 0..nft_map_len {
             if offset + ADDR_LEN + 1 > bytes.len() {
-                return Err(AccountErrors::FromBytesErrorNotEnoughBytes);
+                return Err("invalid nft map size");
             }
             let mut addr = [0u8; ADDR_LEN];
             addr.copy_from_slice(&bytes[offset..offset + ADDR_LEN]);
             offset += ADDR_LEN;
             offset += 1;
-            nft_map.insert(addr, Empty::default());
+            nft_map.insert(addr, 0);
         }
 
         Ok(Self {
@@ -262,11 +262,15 @@ mod tests {
         acc.ft_map
             .insert([33u8; ADDR_LEN], Uint256::from_str("69").unwrap());
 
-        acc.nft_map.insert(*acc.addr.addr_bytes(), Empty::default());
+        acc.nft_map.insert(*acc.addr.addr_bytes(), 0);
 
         let buf = acc.to_bytes();
         let res = Account::from_bytes(buf.into()).unwrap();
 
-        dbg!(res);
+        assert_eq!(res.pub_key, acc.pub_key);
+        assert_eq!(res.addr, acc.addr);
+        assert_eq!(res.ft_map, acc.ft_map);
+        assert_eq!(res.nft_map, acc.nft_map);
+        assert_eq!(res, acc);
     }
 }
