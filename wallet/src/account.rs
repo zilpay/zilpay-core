@@ -154,8 +154,11 @@ impl FromBytes for Account {
             let mut addr = [0u8; ADDR_LEN];
             addr.copy_from_slice(&bytes[offset..offset + ADDR_LEN]);
             offset += ADDR_LEN;
+
+            let value = &bytes[offset..offset + 1][0];
+
+            nft_map.insert(addr, *value);
             offset += 1;
-            nft_map.insert(addr, 0);
         }
 
         Ok(Self {
@@ -189,11 +192,11 @@ impl ToVecBytes for Account {
         let mut bytes_nft_map: Vec<u8> = Vec::new();
 
         // TODO: value should be a struct
-        for (addr, _) in &self.nft_map {
+        for (addr, value) in &self.nft_map {
             let mut bytes = [0u8; ADDR_LEN + 1];
 
             bytes[..ADDR_LEN].copy_from_slice(addr);
-            bytes[ADDR_LEN..].copy_from_slice(&[0]);
+            bytes[ADDR_LEN..].copy_from_slice(&[*value]);
 
             bytes_nft_map.extend_from_slice(&bytes);
         }
@@ -245,24 +248,33 @@ impl ToVecBytes for Account {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use rand::{Rng, RngCore};
     use std::str::FromStr;
 
-    use super::*;
-
     #[test]
-    fn test_from_zil_sk() {
+    fn test_from_zil_sk_ser() {
+        let mut rng = rand::thread_rng();
+
         let sk: SecretKey = "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
             .parse()
             .unwrap();
         let name = "Account 0";
         let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
 
-        acc.ft_map
-            .insert(*acc.addr.addr_bytes(), Uint256::from_str("42").unwrap());
-        acc.ft_map
-            .insert([33u8; ADDR_LEN], Uint256::from_str("69").unwrap());
+        for _ in 0..100 {
+            let mut nft_addr = [0u8; ADDR_LEN];
+            let mut ft_addr = [0u8; ADDR_LEN];
+            let n128: u128 = rng.gen();
+            let n8: u8 = rng.gen();
 
-        acc.nft_map.insert(*acc.addr.addr_bytes(), 0);
+            rng.fill_bytes(&mut nft_addr);
+            rng.fill_bytes(&mut ft_addr);
+
+            acc.ft_map
+                .insert(ft_addr, Uint256::from_str(&n128.to_string()).unwrap());
+            acc.nft_map.insert(nft_addr, n8);
+        }
 
         let buf = acc.to_bytes();
         let res = Account::from_bytes(buf.into()).unwrap();
