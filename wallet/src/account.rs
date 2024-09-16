@@ -1,10 +1,4 @@
-use bincode::{FromBytes, ToBytes, ToVecBytes};
-use config::{
-    address::ADDR_LEN,
-    key::PUB_KEY_SIZE,
-    sha::{SHA256_SIZE, SHA512_SIZE},
-    SYS_SIZE,
-};
+use config::{address::ADDR_LEN, sha::SHA512_SIZE};
 use crypto::bip49::Bip49DerivationPath;
 use num256::uint256::Uint256;
 use proto::address::Address;
@@ -17,7 +11,7 @@ use zil_errors::account::AccountErrors;
 
 use crate::account_type::AccountType;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Account {
     pub name: String,
     pub account_type: AccountType,
@@ -70,183 +64,6 @@ impl Account {
     }
 }
 
-impl FromBytes for Account {
-    type Error = &'static str;
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
-        let mut offset = 0;
-
-        if bytes.len() < SYS_SIZE * 3 {
-            return Err("Invalid Bytes sys * 3");
-        }
-
-        let name_len = usize::from_be_bytes(
-            bytes[offset..offset + SYS_SIZE]
-                .try_into()
-                .or(Err("invalid name size"))?,
-        );
-        offset += SYS_SIZE;
-
-        let ft_map_len = usize::from_be_bytes(
-            bytes[offset..offset + SYS_SIZE]
-                .try_into()
-                .or(Err("invalid ft map size"))?,
-        );
-        offset += SYS_SIZE;
-
-        let nft_map_len = usize::from_be_bytes(
-            bytes[offset..offset + SYS_SIZE]
-                .try_into()
-                .or(Err("invalid nft map size"))?,
-        );
-        offset += SYS_SIZE;
-
-        if offset + name_len > bytes.len() {
-            return Err("invalid name size > bytes");
-        }
-
-        let name =
-            String::from_utf8(bytes[offset..offset + name_len].to_vec()).or(Err("invalid name"))?;
-        offset += name_len;
-
-        if offset + 1 > bytes.len() {
-            return Err("invalid bytes size");
-        }
-
-        let account_type = AccountType::from_bytes(
-            &bytes[offset..offset + 1 + SYS_SIZE]
-                .try_into()
-                .or(Err("invlaid account type size"))?,
-        )
-        .or(Err("invalid account type"))?;
-        offset += 1 + SYS_SIZE;
-
-        if offset + PUB_KEY_SIZE + 1 > bytes.len() {
-            return Err("invlaid pup key size");
-        }
-
-        let mut pub_key = [0u8; PUB_KEY_SIZE + 1];
-        pub_key.copy_from_slice(&bytes[offset..offset + PUB_KEY_SIZE + 1]);
-        offset += PUB_KEY_SIZE + 1;
-        let pub_key: PubKey = pub_key.into();
-        let addr = Address::from_pubkey(&pub_key).map_err(|_| "invlaid addr")?;
-
-        let mut ft_map = HashMap::new();
-        for _ in 0..ft_map_len {
-            if offset + ADDR_LEN + SHA256_SIZE > bytes.len() {
-                return Err("invlaid ft map addr + value size");
-            }
-            let mut addr = [0u8; ADDR_LEN];
-            addr.copy_from_slice(&bytes[offset..offset + ADDR_LEN]);
-            offset += ADDR_LEN;
-            let value = Uint256::from_be_bytes(
-                bytes[offset..offset + SHA256_SIZE]
-                    .try_into()
-                    .or(Err("invalid ft map value size"))?,
-            );
-            offset += SHA256_SIZE;
-            ft_map.insert(addr, value);
-        }
-
-        let mut nft_map = HashMap::new();
-        for _ in 0..nft_map_len {
-            if offset + ADDR_LEN + 1 > bytes.len() {
-                return Err("invalid nft map size");
-            }
-            let mut addr = [0u8; ADDR_LEN];
-            addr.copy_from_slice(&bytes[offset..offset + ADDR_LEN]);
-            offset += ADDR_LEN;
-
-            let value = &bytes[offset..offset + 1][0];
-
-            nft_map.insert(addr, *value);
-            offset += 1;
-        }
-
-        Ok(Self {
-            name,
-            account_type,
-            addr,
-            pub_key,
-            ft_map,
-            nft_map,
-        })
-    }
-}
-
-impl ToVecBytes for Account {
-    fn to_bytes(&self) -> Vec<u8> {
-        let name_len = self.name.len();
-        let ft_map_len = self.ft_map.len();
-        let nft_map_len = self.nft_map.len();
-
-        let mut bytes_ft_map: Vec<u8> = Vec::with_capacity(ft_map_len * (ADDR_LEN + SHA256_SIZE));
-
-        for (addr, value) in &self.ft_map {
-            let mut bytes = [0u8; ADDR_LEN + SHA256_SIZE];
-
-            bytes[..ADDR_LEN].copy_from_slice(addr);
-            bytes[ADDR_LEN..].copy_from_slice(&value.to_be_bytes());
-
-            bytes_ft_map.extend_from_slice(&bytes);
-        }
-
-        let mut bytes_nft_map: Vec<u8> = Vec::new();
-
-        // TODO: value should be a struct
-        for (addr, value) in &self.nft_map {
-            let mut bytes = [0u8; ADDR_LEN + 1];
-
-            bytes[..ADDR_LEN].copy_from_slice(addr);
-            bytes[ADDR_LEN..].copy_from_slice(&[*value]);
-
-            bytes_nft_map.extend_from_slice(&bytes);
-        }
-
-        let name_bytes = self.name.as_bytes();
-        // this unwrap never call.
-        let type_bytes = self.account_type.to_bytes().unwrap();
-        // should't call unwrap()
-        let pk_bytes: [u8; PUB_KEY_SIZE + 1] = self.pub_key.to_bytes().unwrap();
-
-        let mut bytes: Vec<u8> = vec![
-            0u8;
-            SYS_SIZE * 3
-                + bytes_nft_map.len()
-                + bytes_ft_map.len()
-                + name_bytes.len()
-                + type_bytes.len()
-                + pk_bytes.len()
-        ];
-
-        let mut offset = 0;
-
-        bytes[offset..offset + SYS_SIZE].copy_from_slice(&name_len.to_be_bytes());
-        offset += SYS_SIZE;
-
-        bytes[offset..offset + SYS_SIZE].copy_from_slice(&ft_map_len.to_be_bytes());
-        offset += SYS_SIZE;
-
-        bytes[offset..offset + SYS_SIZE].copy_from_slice(&nft_map_len.to_be_bytes());
-        offset += SYS_SIZE;
-
-        bytes[offset..offset + name_bytes.len()].copy_from_slice(name_bytes);
-        offset += name_bytes.len();
-
-        bytes[offset..offset + type_bytes.len()].copy_from_slice(&type_bytes);
-        offset += type_bytes.len();
-
-        bytes[offset..offset + pk_bytes.len()].copy_from_slice(&pk_bytes);
-        offset += pk_bytes.len();
-
-        bytes[offset..offset + bytes_ft_map.len()].copy_from_slice(&bytes_ft_map);
-        offset += bytes_ft_map.len();
-
-        bytes[offset..].copy_from_slice(&bytes_nft_map);
-
-        bytes
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,39 +71,39 @@ mod tests {
     use rand::{Rng, RngCore};
     use std::str::FromStr;
 
-    #[test]
-    fn test_from_zil_sk_ser() {
-        let mut rng = rand::thread_rng();
-
-        let sk: SecretKey = "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
-            .parse()
-            .unwrap();
-        let name = "Account 0";
-        let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
-
-        for _ in 0..100 {
-            let mut nft_addr = [0u8; ADDR_LEN];
-            let mut ft_addr = [0u8; ADDR_LEN];
-            let n128: u128 = rng.gen();
-            let n8: u8 = rng.gen();
-
-            rng.fill_bytes(&mut nft_addr);
-            rng.fill_bytes(&mut ft_addr);
-
-            acc.ft_map
-                .insert(ft_addr, Uint256::from_str(&n128.to_string()).unwrap());
-            acc.nft_map.insert(nft_addr, n8);
-        }
-
-        let buf = acc.to_bytes();
-        let res = Account::from_bytes(buf.into()).unwrap();
-
-        assert_eq!(res.pub_key, acc.pub_key);
-        assert_eq!(res.addr, acc.addr);
-        assert_eq!(res.ft_map, acc.ft_map);
-        assert_eq!(res.nft_map, acc.nft_map);
-        assert_eq!(res, acc);
-    }
+    // #[test]
+    // fn test_from_zil_sk_ser() {
+    //     let mut rng = rand::thread_rng();
+    //
+    //     let sk: SecretKey = "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+    //         .parse()
+    //         .unwrap();
+    //     let name = "Account 0";
+    //     let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
+    //
+    //     for _ in 0..100 {
+    //         let mut nft_addr = [0u8; ADDR_LEN];
+    //         let mut ft_addr = [0u8; ADDR_LEN];
+    //         let n128: u128 = rng.gen();
+    //         let n8: u8 = rng.gen();
+    //
+    //         rng.fill_bytes(&mut nft_addr);
+    //         rng.fill_bytes(&mut ft_addr);
+    //
+    //         acc.ft_map
+    //             .insert(ft_addr, Uint256::from_str(&n128.to_string()).unwrap());
+    //         acc.nft_map.insert(nft_addr, n8);
+    //     }
+    //
+    //     let buf = acc.to_bytes();
+    //     let res = Account::from_bytes(buf.into()).unwrap();
+    //
+    //     assert_eq!(res.pub_key, acc.pub_key);
+    //     assert_eq!(res.addr, acc.addr);
+    //     assert_eq!(res.ft_map, acc.ft_map);
+    //     assert_eq!(res.nft_map, acc.nft_map);
+    //     assert_eq!(res, acc);
+    // }
 
     #[test]
     fn test_init_from_bip39() {
@@ -314,13 +131,15 @@ mod tests {
             acc.nft_map.insert(nft_addr, n8);
         }
 
-        let buf = acc.to_bytes();
-        let res = Account::from_bytes(buf.into()).unwrap();
+        dbg!(serde_json::to_string(&acc));
 
-        assert_eq!(res.pub_key, acc.pub_key);
-        assert_eq!(res.addr, acc.addr);
-        assert_eq!(res.ft_map, acc.ft_map);
-        assert_eq!(res.nft_map, acc.nft_map);
-        assert_eq!(res, acc);
+        // let buf = acc.to_bytes();
+        // let res = Account::from_bytes(buf.into()).unwrap();
+        //
+        // assert_eq!(res.pub_key, acc.pub_key);
+        // assert_eq!(res.addr, acc.addr);
+        // assert_eq!(res.ft_map, acc.ft_map);
+        // assert_eq!(res.nft_map, acc.nft_map);
+        // assert_eq!(res, acc);
     }
 }

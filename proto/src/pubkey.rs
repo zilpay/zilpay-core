@@ -4,6 +4,7 @@ use config::key::PUB_KEY_SIZE;
 use ethers::core::k256::ecdsa::VerifyingKey;
 use ethers::utils::public_key_to_address;
 use k256::PublicKey as K256PublicKey;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 use zil_errors::keypair::PubKeyError;
 
@@ -87,6 +88,25 @@ impl ToBytes<{ PUB_KEY_SIZE + 1 }> for PubKey {
 impl std::fmt::Display for PubKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", hex::encode(self.to_bytes().unwrap()))
+    }
+}
+
+impl Serialize for PubKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for PubKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        PubKey::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
