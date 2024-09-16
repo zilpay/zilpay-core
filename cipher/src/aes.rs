@@ -2,7 +2,7 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
-use zil_errors::AesGCMErrors;
+use zil_errors::cipher::AesGCMErrors;
 
 pub const AES_GCM_KEY_SIZE: usize = 32;
 pub const AES_GCM_NONCE_SIZE: usize = 12;

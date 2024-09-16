@@ -5,7 +5,7 @@ use ethers::core::k256::ecdsa::VerifyingKey;
 use ethers::utils::public_key_to_address;
 use k256::PublicKey as K256PublicKey;
 use std::str::FromStr;
-use zil_errors::PubKeyError;
+use zil_errors::keypair::PubKeyError;
 
 use crate::address::Address;
 use crate::zil_address::from_zil_pub_key;

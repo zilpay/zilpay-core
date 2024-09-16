@@ -12,7 +12,7 @@ use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use tiny_hderive::bip32::ExtendedPrivKey;
-use zil_errors::KeyPairError;
+use zil_errors::keypair::KeyPairError;
 
 // One byte for enum type
 pub const KEYPAIR_BYTES_SIZE: usize = PUB_KEY_SIZE + SECRET_KEY_SIZE + 1;

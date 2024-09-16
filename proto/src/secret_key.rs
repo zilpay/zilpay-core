@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use bincode::{FromBytes, ToBytes};
 use config::key::SECRET_KEY_SIZE;
-use zil_errors::SecretKeyError;
+use zil_errors::keypair::SecretKeyError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKey {

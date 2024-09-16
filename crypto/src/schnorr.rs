@@ -6,7 +6,7 @@ use k256::{
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sha2::{Digest, Sha256};
-use zil_errors::SchorrError;
+use zil_errors::crypto::SchorrError;
 
 pub const MAX_TRY_SIGN: usize = 100_000_000;
 

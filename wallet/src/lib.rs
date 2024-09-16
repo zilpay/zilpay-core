@@ -18,7 +18,7 @@ use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
-use zil_errors::WalletErrors;
+use zil_errors::wallet::WalletErrors;
 
 #[derive(Debug)]
 pub enum WalletTypes {
@@ -252,7 +252,7 @@ mod tests {
     use proto::keypair::KeyPair;
     use session::Session;
     use storage::LocalStorage;
-    use zil_errors::{AesGCMErrors, WalletErrors};
+    use zil_errors::{cipher::AesGCMErrors, session::SessionErrors, wallet::WalletErrors};
 
     use crate::{Wallet, WalletConfig};
 
@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(
             wallet.reveal_mnemonic(&key),
             Err(WalletErrors::SessionDecryptKeychainError(
-                zil_errors::SessionErrors::DecryptSessionError(AesGCMErrors::DecryptError(
+                SessionErrors::DecryptSessionError(AesGCMErrors::DecryptError(
                     "aead::Error".to_string()
                 ))
             ))

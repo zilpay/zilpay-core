@@ -1,6 +1,8 @@
 use bincode::ToBytes;
 use config::SYS_SIZE;
-use zil_errors::AccountErrors;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::str::FromStr;
+use zil_errors::account::AccountErrors;
 
 pub const ACCOUNT_TYPE_SIZE: usize = SYS_SIZE + 1;
 
@@ -42,6 +44,28 @@ impl AccountType {
     }
 }
 
+impl std::fmt::Display for AccountType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: unwrap should call
+        let hex_str = hex::encode(self.to_bytes().unwrap());
+
+        write!(f, "{}", hex_str)
+    }
+}
+
+impl FromStr for AccountType {
+    type Err = AccountErrors;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = hex::decode(s).map_err(|_| AccountErrors::InvalidAccountTypeCode)?;
+        let bytes: [u8; ACCOUNT_TYPE_SIZE] = bytes
+            .try_into()
+            .or(Err(AccountErrors::InvalidAccountTypeCode))?;
+
+        AccountType::from_bytes(&bytes)
+    }
+}
+
 impl TryFrom<[u8; ACCOUNT_TYPE_SIZE]> for AccountType {
     type Error = AccountErrors;
     fn try_from(value: [u8; ACCOUNT_TYPE_SIZE]) -> Result<Self, Self::Error> {
@@ -67,8 +91,26 @@ impl ToBytes<{ ACCOUNT_TYPE_SIZE }> for AccountType {
 
         res[0] = code;
         res[1..].copy_from_slice(&value_bytes);
-
         Ok(res)
+    }
+}
+
+impl Serialize for AccountType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for AccountType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        AccountType::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -95,5 +137,14 @@ mod tests_account_type {
         let acc = AccountType::from_bytes(&bytes);
 
         assert_eq!(acc, Err(AccountErrors::InvalidAccountTypeCode));
+    }
+
+    #[test]
+    fn test_from_to_str() {
+        let origin_acc_type = AccountType::Ledger(42);
+        let hex_str = origin_acc_type.to_string();
+        let restored: AccountType = hex_str.parse().unwrap();
+
+        assert_eq!(origin_acc_type, restored);
     }
 }

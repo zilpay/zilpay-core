@@ -5,7 +5,7 @@ use cipher::{
 use config::argon::KEY_SIZE;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use zil_errors::SessionErrors;
+use zil_errors::session::SessionErrors;
 
 pub const CIPHER_KEYCHAIN_SIZE: usize = 92;
 

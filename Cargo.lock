@@ -4116,6 +4116,7 @@ dependencies = [
  "proto",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "serde",
  "session",
  "settings",
  "sha2 0.10.8",
@@ -4491,6 +4492,7 @@ name = "zil_errors"
 version = "0.1.0"
 dependencies = [
  "ntrulp",
+ "thiserror",
 ]
 
 [[package]]
@@ -4536,6 +4538,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.8",
+ "thiserror",
  "tokio",
  "zil_errors",
  "zilpay",

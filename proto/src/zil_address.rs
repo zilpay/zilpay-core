@@ -1,7 +1,7 @@
 use bech32::{Bech32, Hrp};
 use config::address::{ADDR_LEN, HRP};
 use sha2::{Digest, Sha256};
-use zil_errors::AddressError;
+use zil_errors::address::AddressError;
 
 pub fn from_zil_base16(addr: &str) -> Option<[u8; ADDR_LEN]> {
     let mb_bytes = hex::decode(addr).ok()?;

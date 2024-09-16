@@ -6,7 +6,7 @@ use data_warp::DataWarp;
 use directories::ProjectDirs;
 use sled::{Db, IVec};
 use std::path::Path;
-use zil_errors::LocalStorageError;
+use zil_errors::storage::LocalStorageError;
 
 pub struct LocalStorage {
     tree: Db,

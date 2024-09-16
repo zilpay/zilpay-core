@@ -11,8 +11,9 @@ use proto::address::Address;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use zil_errors::AccountErrors;
+use zil_errors::account::AccountErrors;
 
 use crate::account_type::AccountType;
 

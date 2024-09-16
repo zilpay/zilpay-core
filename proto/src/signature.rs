@@ -5,7 +5,7 @@ use ethers::types::H160;
 use ethers::utils::hash_message;
 use k256::ecdsa::Signature as SchnorrSignature;
 use k256::PublicKey as K256PublicKey;
-use zil_errors::SignatureError;
+use zil_errors::crypto::SignatureError;
 
 use crate::pubkey::PubKey;
 

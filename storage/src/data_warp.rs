@@ -1,7 +1,7 @@
 use bincode::{FromBytes, ToVecBytes};
 use std::borrow::Cow;
 use std::mem::size_of;
-use zil_errors::LocalStorageError;
+use zil_errors::storage::LocalStorageError;
 
 #[derive(Debug)]
 pub struct DataWarp {
