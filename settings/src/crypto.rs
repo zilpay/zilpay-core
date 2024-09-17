@@ -1,4 +1,4 @@
-use cipher::keychain::CipherOrders;
+use cipher::options::CipherOrders;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
