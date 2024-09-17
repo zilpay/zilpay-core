@@ -282,7 +282,7 @@ mod tests {
     use proto::keypair::KeyPair;
     use session::Session;
     use storage::LocalStorage;
-    use zil_errors::{cipher::AesGCMErrors, session::SessionErrors, wallet::WalletErrors};
+    use zil_errors::wallet::WalletErrors;
 
     use crate::{Wallet, WalletConfig};
 
