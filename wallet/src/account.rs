@@ -1,3 +1,4 @@
+use bincode::{FromBytes, ToOptionVecBytes};
 use config::sha::SHA512_SIZE;
 use crypto::bip49::Bip49DerivationPath;
 use num256::uint256::Uint256;
@@ -64,6 +65,23 @@ impl Account {
     }
 }
 
+impl ToOptionVecBytes for Account {
+    type Error = AccountErrors;
+    fn to_bytes(&self) -> Result<Vec<u8>, Self::Error> {
+        let json_file = serde_json::to_string(&self).or(Err(AccountErrors::FailToSerialize))?;
+
+        Ok(json_file.as_bytes().to_vec())
+    }
+}
+
+impl FromBytes for Account {
+    type Error = AccountErrors;
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
+        let json_str = String::from_utf8_lossy(&bytes);
+        serde_json::from_str(&json_str).or(Err(AccountErrors::FailToDeserialize))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,39 +90,46 @@ mod tests {
     use rand::{Rng, RngCore};
     use std::str::FromStr;
 
-    // #[test]
-    // fn test_from_zil_sk_ser() {
-    //     let mut rng = rand::thread_rng();
-    //
-    //     let sk: SecretKey = "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
-    //         .parse()
-    //         .unwrap();
-    //     let name = "Account 0";
-    //     let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
-    //
-    //     for _ in 0..100 {
-    //         let mut nft_addr = [0u8; ADDR_LEN];
-    //         let mut ft_addr = [0u8; ADDR_LEN];
-    //         let n128: u128 = rng.gen();
-    //         let n8: u8 = rng.gen();
-    //
-    //         rng.fill_bytes(&mut nft_addr);
-    //         rng.fill_bytes(&mut ft_addr);
-    //
-    //         acc.ft_map
-    //             .insert(ft_addr, Uint256::from_str(&n128.to_string()).unwrap());
-    //         acc.nft_map.insert(nft_addr, n8);
-    //     }
-    //
-    //     let buf = acc.to_bytes();
-    //     let res = Account::from_bytes(buf.into()).unwrap();
-    //
-    //     assert_eq!(res.pub_key, acc.pub_key);
-    //     assert_eq!(res.addr, acc.addr);
-    //     assert_eq!(res.ft_map, acc.ft_map);
-    //     assert_eq!(res.nft_map, acc.nft_map);
-    //     assert_eq!(res, acc);
-    // }
+    #[test]
+    fn test_from_zil_sk_ser() {
+        let mut rng = rand::thread_rng();
+
+        let sk: SecretKey = "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+            .parse()
+            .unwrap();
+        let name = "Account 0";
+        let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
+
+        for _ in 0..100 {
+            let mut nft_addr = [0u8; ADDR_LEN];
+            let mut ft_addr = [0u8; ADDR_LEN];
+            let n128: u128 = rng.gen();
+            let n8: u8 = rng.gen();
+
+            rng.fill_bytes(&mut nft_addr);
+            rng.fill_bytes(&mut ft_addr);
+
+            acc.ft_map.insert(
+                hex::encode(ft_addr),
+                Uint256::from_str(&n128.to_string()).unwrap(),
+            );
+            acc.nft_map.insert(hex::encode(nft_addr), n8);
+        }
+
+        let json_file = serde_json::to_string(&acc).unwrap();
+        let res_acc: Account = serde_json::from_str(&json_file).unwrap();
+
+        assert_eq!(res_acc, acc);
+
+        let buf = acc.to_bytes().unwrap();
+        let res = Account::from_bytes(buf.into()).unwrap();
+
+        assert_eq!(res.pub_key, acc.pub_key);
+        assert_eq!(res.addr, acc.addr);
+        assert_eq!(res.ft_map, acc.ft_map);
+        assert_eq!(res.nft_map, acc.nft_map);
+        assert_eq!(res, acc);
+    }
 
     #[test]
     fn test_init_from_bip39() {
@@ -137,15 +162,15 @@ mod tests {
         let json_file = serde_json::to_string(&acc).unwrap();
         let res_acc: Account = serde_json::from_str(&json_file).unwrap();
 
-        dbg!(res_acc);
+        assert_eq!(res_acc, acc);
 
-        // let buf = acc.to_bytes();
-        // let res = Account::from_bytes(buf.into()).unwrap();
-        //
-        // assert_eq!(res.pub_key, acc.pub_key);
-        // assert_eq!(res.addr, acc.addr);
-        // assert_eq!(res.ft_map, acc.ft_map);
-        // assert_eq!(res.nft_map, acc.nft_map);
-        // assert_eq!(res, acc);
+        let buf = acc.to_bytes().unwrap();
+        let res = Account::from_bytes(buf.into()).unwrap();
+
+        assert_eq!(res.pub_key, acc.pub_key);
+        assert_eq!(res.addr, acc.addr);
+        assert_eq!(res.ft_map, acc.ft_map);
+        assert_eq!(res.nft_map, acc.nft_map);
+        assert_eq!(res, acc);
     }
 }

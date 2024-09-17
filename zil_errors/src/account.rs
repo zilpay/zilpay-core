@@ -3,6 +3,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AccountErrors {
+    #[error("Fail to deserialize json")]
+    FailToDeserialize,
+    #[error("Fail to serialize json")]
+    FailToSerialize,
     #[error("Invalid secret key bytes: {0}")]
     InvalidSecretKeyBytes(KeyPairError),
     #[error("Invalid secret key: {0}")]
