@@ -1,4 +1,4 @@
-use config::{address::ADDR_LEN, sha::SHA512_SIZE};
+use config::sha::SHA512_SIZE;
 use crypto::bip49::Bip49DerivationPath;
 use num256::uint256::Uint256;
 use proto::address::Address;
@@ -17,8 +17,8 @@ pub struct Account {
     pub account_type: AccountType,
     pub addr: Address,
     pub pub_key: PubKey,
-    pub ft_map: HashMap<[u8; ADDR_LEN], Uint256>, // map with ft token address > balance
-    pub nft_map: HashMap<[u8; ADDR_LEN], u8>,     // TODO: add struct for NFT tokens
+    pub ft_map: HashMap<String, Uint256>, // map with ft token address > balance
+    pub nft_map: HashMap<String, u8>,     // TODO: add struct for NFT tokens
 }
 
 impl Account {
@@ -68,6 +68,7 @@ impl Account {
 mod tests {
     use super::*;
     use bip39::Mnemonic;
+    use config::address::ADDR_LEN;
     use rand::{Rng, RngCore};
     use std::str::FromStr;
 
@@ -126,12 +127,17 @@ mod tests {
             rng.fill_bytes(&mut nft_addr);
             rng.fill_bytes(&mut ft_addr);
 
-            acc.ft_map
-                .insert(ft_addr, Uint256::from_str(&n128.to_string()).unwrap());
-            acc.nft_map.insert(nft_addr, n8);
+            acc.ft_map.insert(
+                hex::encode(ft_addr),
+                Uint256::from_str(&n128.to_string()).unwrap(),
+            );
+            acc.nft_map.insert(hex::encode(nft_addr), n8);
         }
 
-        dbg!(serde_json::to_string(&acc));
+        let json_file = serde_json::to_string(&acc).unwrap();
+        let res_acc: Account = serde_json::from_str(&json_file).unwrap();
+
+        dbg!(res_acc);
 
         // let buf = acc.to_bytes();
         // let res = Account::from_bytes(buf.into()).unwrap();

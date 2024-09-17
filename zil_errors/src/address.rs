@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AddressError {
+    #[error("Invalid hex Address")]
+    InvalidHex,
     #[error("Invalid address length")]
     InvalidLength,
     #[error("Invalid key type")]

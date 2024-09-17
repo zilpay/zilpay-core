@@ -3,13 +3,14 @@ use crate::{
     zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32},
 };
 use ethers::{core::k256::ecdsa::VerifyingKey, types::H160, utils::to_checksum};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::str::FromStr;
 
 use config::address::ADDR_LEN;
 use ethers::utils::public_key_to_address;
-use serde::{Deserialize, Serialize};
 use zil_errors::address::AddressError;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Address {
     Secp256k1Sha256Zilliqa([u8; ADDR_LEN]),     // ZILLIQA
     Secp256k1Keccak256Ethereum([u8; ADDR_LEN]), // Ethereum
@@ -81,6 +82,44 @@ impl std::fmt::Display for Address {
     }
 }
 
+impl Serialize for Address {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let bytes = self.to_bytes();
+        serializer.serialize_str(&hex::encode(bytes))
+    }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        Address::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl FromStr for Address {
+    type Err = AddressError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let data = hex::decode(s).map_err(|_| AddressError::InvalidHex)?;
+        let bytes: [u8; ADDR_LEN] = data[1..]
+            .try_into()
+            .map_err(|_| AddressError::InvalidLength)?;
+        let prefix = data[0];
+
+        match prefix {
+            0 => Ok(Address::Secp256k1Sha256Zilliqa(bytes)),
+            1 => Ok(Address::Secp256k1Keccak256Ethereum(bytes)),
+            _ => Err(AddressError::InvalidKeyType),
+        }
+    }
+}
+
 impl From<[u8; ADDR_LEN + 1]> for Address {
     fn from(bytes: [u8; ADDR_LEN + 1]) -> Self {
         let key_type = bytes[0];
@@ -123,6 +162,7 @@ impl AsRef<[u8]> for Address {
         }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
