@@ -1,5 +1,6 @@
 pub mod account;
 pub mod account_type;
+pub mod wallet_types;
 
 use cipher::aes::AES_GCM_KEY_SIZE;
 use cipher::argon2::derive_key;
@@ -18,15 +19,8 @@ use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
+use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
-
-#[derive(Debug)]
-pub enum WalletTypes {
-    Ledger(usize), // Ledger product_id
-    // Cipher for entropy secret words storage_key / passphrase
-    SecretPhrase((usize, bool)),
-    SecretKey,
-}
 
 pub struct WalletConfig<'a> {
     pub storage: &'a LocalStorage,

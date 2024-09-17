@@ -27,4 +27,6 @@ pub enum AccountErrors {
     InvalidAccountTypeCode,
     #[error("Not enough bytes to create from bytes")]
     FromBytesErrorNotEnoughBytes,
+    #[error("Invalide account type value")]
+    InvalidAccountTypeValue,
 }

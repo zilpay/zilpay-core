@@ -16,7 +16,9 @@ pub enum AccountType {
 impl AccountType {
     pub fn from_bytes(bytes: &[u8; ACCOUNT_TYPE_SIZE]) -> Result<Self, AccountErrors> {
         let code = bytes[0];
-        let bytes_value: [u8; SYS_SIZE] = bytes[1..].try_into().unwrap();
+        let bytes_value: [u8; SYS_SIZE] = bytes[1..]
+            .try_into()
+            .or(Err(AccountErrors::InvalidAccountTypeValue))?;
         let value: usize = usize::from_ne_bytes(bytes_value);
 
         match code {

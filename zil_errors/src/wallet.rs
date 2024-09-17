@@ -6,6 +6,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("Invalid Wallet type value")]
+    InvalidWalletTypeValue,
+    #[error("Unknown type: {0}")]
+    UnknownWalletType(u8),
     #[error("Session decrypt keychain error: {0}")]
     SessionDecryptKeychainError(#[from] SessionErrors),
     #[error("BIP39 not valid: {0}")]
