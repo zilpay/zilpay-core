@@ -15,7 +15,7 @@ use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use config::wallet::{N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
@@ -30,7 +30,7 @@ pub struct WalletConfig<'a> {
     pub settings: WalletSettings,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize)]
 pub struct Wallet<'a> {
     #[serde(skip)]
     session: Session,
@@ -39,7 +39,7 @@ pub struct Wallet<'a> {
     proof_key: usize,
     pub wallet_type: WalletTypes,
     pub settings: WalletSettings,
-    pub wallet_address: [u8; SHA256_SIZE],
+    pub wallet_address: String,
     pub accounts: Vec<account::Account>,
     pub selected_account: usize,
 }
@@ -98,6 +98,7 @@ impl<'a> Wallet<'a> {
         hasher.update(combined);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
+        let wallet_address = hex::encode(wallet_address);
         // SecretKey may stores only one account.
         let account = account::Account::from_secret_key(sk, name, cipher_entropy_key)
             .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
@@ -143,6 +144,7 @@ impl<'a> Wallet<'a> {
         hasher.update(combined);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
+        let wallet_address = hex::encode(wallet_address);
         let mut accounts: Vec<account::Account> = Vec::with_capacity(indexes.len());
 
         for index in indexes {

@@ -5,21 +5,34 @@ use config::storage::STORAGE_VERSION;
 use data_warp::DataWarp;
 use directories::ProjectDirs;
 use sled::{Db, IVec};
-use std::path::Path;
 use zil_errors::storage::LocalStorageError;
 
 pub struct LocalStorage {
     tree: Db,
     version: u16,
+    path: String,
+}
+
+impl std::fmt::Display for LocalStorage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let size = self.get_db_size().to_string();
+        let path = self.get_path();
+
+        write!(f, "size: {}, path: {:?}", size, path)
+    }
 }
 
 impl LocalStorage {
-    pub fn from<P: AsRef<Path>>(path: P) -> Result<Self, LocalStorageError> {
+    pub fn from(path: &str) -> Result<Self, LocalStorageError> {
         let tree =
             sled::open(path).map_err(|e| LocalStorageError::StorageAccessError(e.to_string()))?;
         let version = STORAGE_VERSION;
 
-        Ok(LocalStorage { tree, version })
+        Ok(LocalStorage {
+            tree,
+            version,
+            path: path.to_owned(),
+        })
     }
 
     pub fn new(
@@ -33,7 +46,15 @@ impl LocalStorage {
             .map_err(|e| LocalStorageError::StorageAccessError(e.to_string()))?;
         let version = STORAGE_VERSION;
 
-        Ok(LocalStorage { tree, version })
+        Ok(LocalStorage {
+            tree,
+            version,
+            path: path.data_dir().to_str().unwrap_or("").to_string(),
+        })
+    }
+
+    pub fn get_path(&self) -> String {
+        self.path.clone()
     }
 
     pub fn get_db_size(&self) -> u64 {
