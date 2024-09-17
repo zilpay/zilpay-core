@@ -6,6 +6,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("invalid hex wallet type")]
+    InvalidHexToWalletType,
     #[error("Invalid Wallet type value")]
     InvalidWalletTypeValue,
     #[error("Unknown type: {0}")]

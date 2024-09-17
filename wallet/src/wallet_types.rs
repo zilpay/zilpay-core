@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use bincode::{FromBytes, ToVecBytes};
 use config::SYS_SIZE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -25,6 +27,16 @@ impl std::fmt::Display for WalletTypes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hex_str = hex::encode(self.to_bytes());
         write!(f, "{}", hex_str)
+    }
+}
+
+impl FromStr for WalletTypes {
+    type Err = WalletErrors;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = hex::decode(s).map_err(|_| WalletErrors::InvalidHexToWalletType)?;
+
+        WalletTypes::from_bytes(bytes.into())
     }
 }
 
@@ -102,7 +114,7 @@ mod tests_wallet_type {
     use super::*;
 
     #[test]
-    fn tests_wallet_type_bytes() {
+    fn tests_wallet_type_convert() {
         let ledger_type = WalletTypes::Ledger(42);
         let secret_phrase_type = WalletTypes::SecretPhrase((69, true));
         let secret_key_type = WalletTypes::SecretKey;
@@ -115,6 +127,18 @@ mod tests_wallet_type {
         let res_secret_phrase_type =
             WalletTypes::from_bytes(secret_phrase_type_bytes.into()).unwrap();
         let res_secret_key_type = WalletTypes::from_bytes(secret_key_type_bytes.into()).unwrap();
+
+        assert_eq!(res_ledger_type, ledger_type);
+        assert_eq!(res_secret_phrase_type, secret_phrase_type);
+        assert_eq!(res_secret_key_type, res_secret_key_type);
+
+        let ledger_type_hex = ledger_type.to_string();
+        let secret_phrase_type_hex = secret_phrase_type.to_string();
+        let secret_key_type_hex = secret_key_type.to_string();
+
+        let res_ledger_type = WalletTypes::from_str(&ledger_type_hex).unwrap();
+        let res_secret_phrase_type = WalletTypes::from_str(&secret_phrase_type_hex).unwrap();
+        let res_secret_key_type = WalletTypes::from_str(&secret_key_type_hex).unwrap();
 
         assert_eq!(res_ledger_type, ledger_type);
         assert_eq!(res_secret_phrase_type, secret_phrase_type);
