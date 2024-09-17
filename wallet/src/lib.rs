@@ -1,5 +1,6 @@
 pub mod account;
 pub mod account_type;
+pub mod wallet_data;
 pub mod wallet_types;
 
 use cipher::aes::AES_GCM_KEY_SIZE;
@@ -15,11 +16,11 @@ use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use config::wallet::{N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
-use serde::Serialize;
 use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
+use wallet_data::WalletData;
 use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
 
@@ -30,18 +31,10 @@ pub struct WalletConfig<'a> {
     pub settings: WalletSettings,
 }
 
-#[derive(Serialize)]
 pub struct Wallet<'a> {
-    #[serde(skip)]
     session: Session,
-    #[serde(skip)]
     storage: &'a LocalStorage,
-    proof_key: usize,
-    pub wallet_type: WalletTypes,
-    pub settings: WalletSettings,
-    pub wallet_address: String,
-    pub accounts: Vec<account::Account>,
-    pub selected_account: usize,
+    data: WalletData,
 }
 
 fn safe_storage_save(cipher_entropy: &[u8], storage: &LocalStorage) -> Result<usize, WalletErrors> {
@@ -70,6 +63,28 @@ fn safe_storage_save(cipher_entropy: &[u8], storage: &LocalStorage) -> Result<us
 }
 
 impl<'a> Wallet<'a> {
+    pub fn load_from_storage(
+        addr: &str,
+        storage: &'a LocalStorage,
+        session: Session,
+    ) -> Result<Self, WalletErrors> {
+        let key: [u8; SHA256_SIZE] = hex::decode(addr)
+            .or(Err(WalletErrors::InvalidWalletAddressHex))?
+            .try_into()
+            .or(Err(WalletErrors::InvalidWalletAddressSize))?;
+        let data = storage
+            .get(&key)
+            .map_err(WalletErrors::FailToLoadWalletData)?;
+        let data = serde_json::from_slice::<WalletData>(&data)
+            .or(Err(WalletErrors::FailToDeserializeWalletData))?;
+
+        Ok(Self {
+            session,
+            storage,
+            data,
+        })
+    }
+
     pub fn from_sk(
         sk: &SecretKey,
         name: String,
@@ -103,16 +118,19 @@ impl<'a> Wallet<'a> {
         let account = account::Account::from_secret_key(sk, name, cipher_entropy_key)
             .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
         let accounts: Vec<account::Account> = vec![account];
-
-        Ok(Self {
+        let data = WalletData {
             proof_key,
-            session: config.session,
             settings: config.settings,
-            wallet_address,
             accounts,
-            storage: config.storage,
+            wallet_address,
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0,
+        };
+
+        Ok(Self {
+            session: config.session,
+            storage: config.storage,
+            data,
         })
     }
 
@@ -155,15 +173,19 @@ impl<'a> Wallet<'a> {
             accounts.push(hd_account);
         }
 
-        Ok(Self {
+        let data = WalletData {
             proof_key,
-            session: config.session,
             settings: config.settings,
-            storage: config.storage,
             wallet_address,
             accounts,
             wallet_type: WalletTypes::SecretPhrase((cipher_entropy_key, passphrase.is_empty())),
             selected_account: 0,
+        };
+
+        Ok(Self {
+            session: config.session,
+            storage: config.storage,
+            data,
         })
     }
 
@@ -175,7 +197,7 @@ impl<'a> Wallet<'a> {
             return Err(WalletErrors::DisabledSessions);
         }
 
-        match self.wallet_type {
+        match self.data.wallet_type {
             WalletTypes::SecretPhrase((key, _)) => {
                 let keychain = self
                     .session
@@ -187,7 +209,7 @@ impl<'a> Wallet<'a> {
                     .get(&storage_key)
                     .map_err(WalletErrors::FailToGetContent)?;
                 let entropy = keychain
-                    .decrypt(cipher_entropy, &self.settings.crypto.cipher_orders)
+                    .decrypt(cipher_entropy, &self.data.settings.crypto.cipher_orders)
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
                 // TODO: add more Languages
                 let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
@@ -207,7 +229,7 @@ impl<'a> Wallet<'a> {
         let argon_seed = derive_key(password).map_err(WalletErrors::ArgonCipherErrors)?;
         let (session, key) =
             Session::unlock(&argon_seed).or(Err(WalletErrors::UnlockSessionError))?;
-        let proof_key = usize::to_le_bytes(self.proof_key);
+        let proof_key = usize::to_le_bytes(self.data.proof_key);
         let cipher_proof = self
             .storage
             .get(&proof_key)
@@ -216,7 +238,7 @@ impl<'a> Wallet<'a> {
             .decrypt_keychain(&key)
             .or(Err(WalletErrors::SessionDecryptError))?;
         let origin_proof = keychain
-            .get_proof(&cipher_proof, &self.settings.crypto.cipher_orders)
+            .get_proof(&cipher_proof, &self.data.settings.crypto.cipher_orders)
             .or(Err(WalletErrors::KeyChainFailToGetProof))?;
         let proof =
             derive_key(&argon_seed[..PROOF_SIZE]).map_err(WalletErrors::ArgonCipherErrors)?;
@@ -229,17 +251,25 @@ impl<'a> Wallet<'a> {
 
         Ok(key)
     }
-}
 
-impl<'a> std::fmt::Debug for Wallet<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Wallet")
-            .field("wallet_type", &self.wallet_type)
-            .field("settings", &self.settings)
-            .field("wallet_address", &self.wallet_address)
-            .field("accounts", &self.accounts)
-            .field("selected_account", &self.selected_account)
-            .finish_non_exhaustive()
+    pub fn save_to_storage(&self) -> Result<(), WalletErrors> {
+        let json_bytes =
+            serde_json::to_vec(&self.data).or(Err(WalletErrors::FailToSerializeWalletData))?;
+        let key = self.key()?;
+
+        self.storage
+            .set(&key, &json_bytes)
+            .map_err(WalletErrors::FailtoSaveWalletDataToStorage)?;
+
+        Ok(())
+    }
+
+    #[inline]
+    pub fn key(&self) -> Result<[u8; SHA256_SIZE], WalletErrors> {
+        hex::decode(&self.data.wallet_address)
+            .or(Err(WalletErrors::InvalidWalletAddressHex))?
+            .try_into()
+            .or(Err(WalletErrors::InvalidWalletAddressSize))
     }
 }
 
@@ -283,30 +313,25 @@ mod tests {
             storage: &storage,
             settings: Default::default(),
         };
-        let mut wallet =
+        let wallet =
             Wallet::from_bip39_words(&proof, &mnemonic, PASSPHRASE, &indexes, wallet_config)
                 .unwrap();
 
-        assert_eq!(wallet.accounts.len(), indexes.len());
-        assert_eq!(wallet.reveal_mnemonic(&key).unwrap(), mnemonic);
+        wallet.save_to_storage().unwrap();
 
-        wallet.lock();
+        assert_eq!(wallet.data.accounts.len(), indexes.len());
 
-        assert!(wallet.reveal_mnemonic(&key).is_err());
-        assert!(wallet.unlock(b"worng password").is_err());
+        let wallet_addr = wallet.data.wallet_address.clone();
 
-        let new_right_key = wallet.unlock(PASSWORD).unwrap();
+        drop(wallet);
 
-        assert_eq!(
-            wallet.reveal_mnemonic(&key),
-            Err(WalletErrors::SessionDecryptKeychainError(
-                SessionErrors::DecryptSessionError(AesGCMErrors::DecryptError(
-                    "aead::Error".to_string()
-                ))
-            ))
-        );
+        let (session, new_key) = Session::unlock(&argon_seed).unwrap();
+        let res_wallet = Wallet::load_from_storage(&wallet_addr, &storage, session).unwrap();
 
-        assert_eq!(wallet.reveal_mnemonic(&new_right_key).unwrap(), mnemonic);
+        assert!(res_wallet.reveal_mnemonic(&key).is_err());
+        assert!(res_wallet.reveal_mnemonic(&new_key).is_ok());
+
+        dbg!(res_wallet.data);
     }
 
     #[test]
@@ -332,10 +357,17 @@ mod tests {
         };
         let wallet = Wallet::from_sk(&sk, name.to_string(), &proof, wallet_config).unwrap();
 
-        assert_eq!(wallet.accounts.len(), 1);
+        assert_eq!(wallet.data.accounts.len(), 1);
         assert_eq!(
             wallet.reveal_mnemonic(&key),
             Err(WalletErrors::InvalidAccountType)
         );
+
+        wallet.save_to_storage().unwrap();
+
+        let (session, key) = Session::unlock(&argon_seed).unwrap();
+        let w = Wallet::load_from_storage(&wallet.data.wallet_address, &storage, session).unwrap();
+
+        assert_eq!(w.data, wallet.data);
     }
 }

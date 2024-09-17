@@ -6,6 +6,18 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("Fail to deserialize wallet data")]
+    FailToDeserializeWalletData,
+    #[error("Fail to serialize wallet data")]
+    FailToSerializeWalletData,
+    #[error("Fail to save wallet data to storage: {0}")]
+    FailtoSaveWalletDataToStorage(LocalStorageError),
+    #[error("Fail to load data from storage: {0}")]
+    FailToLoadWalletData(LocalStorageError),
+    #[error("Invalid size str of wallet address")]
+    InvalidWalletAddressSize,
+    #[error("Invalid hex str of wallet address")]
+    InvalidWalletAddressHex,
     #[error("invalid hex wallet type")]
     InvalidHexToWalletType,
     #[error("Invalid Wallet type value")]

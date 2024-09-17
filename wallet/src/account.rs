@@ -68,17 +68,14 @@ impl Account {
 impl ToOptionVecBytes for Account {
     type Error = AccountErrors;
     fn to_bytes(&self) -> Result<Vec<u8>, Self::Error> {
-        let json_file = serde_json::to_string(&self).or(Err(AccountErrors::FailToSerialize))?;
-
-        Ok(json_file.as_bytes().to_vec())
+        serde_json::to_vec(&self).or(Err(AccountErrors::FailToSerialize))
     }
 }
 
 impl FromBytes for Account {
     type Error = AccountErrors;
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
-        let json_str = String::from_utf8_lossy(&bytes);
-        serde_json::from_str(&json_str).or(Err(AccountErrors::FailToDeserialize))
+        serde_json::from_slice(&bytes).or(Err(AccountErrors::FailToDeserialize))
     }
 }
 
