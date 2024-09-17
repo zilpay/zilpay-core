@@ -2,6 +2,7 @@ use crate::{
     aes::{aes_gcm_decrypt, aes_gcm_encrypt, AES_GCM_KEY_SIZE},
     argon2::derive_key,
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
+    options::CipherOrders,
 };
 use config::argon::KEY_SIZE;
 use config::sha::SHA256_SIZE;
@@ -12,12 +13,6 @@ use ntrulp::{
 use zil_errors::keychain::KeyChainErrors;
 
 pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
-
-#[derive(Debug)]
-pub enum CipherOrders {
-    AESGCM256,
-    NTRUP1277,
-}
 
 pub struct KeyChain {
     pub ntrup_keys: (PubKey, PrivKey),

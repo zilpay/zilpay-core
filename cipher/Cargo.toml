@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 zil_errors = { path = "../zil_errors" }
+bincode = { path = "../bincode" }
 config = { path = "../config" }
 ntrulp = { version = "0.2.3", features = ["ntrup761", "std"] }
 tokio = { version = "1.39.2", features = ["full", "test-util"] }
@@ -12,3 +13,5 @@ aes-gcm = "0.10.3"
 argon2 = "0.5.3"
 rand_chacha = "0.3.1"
 rand = "0.8.5"
+hex = "0.4.3"
+serde = { version = "1.0.204", features = ["derive"] }

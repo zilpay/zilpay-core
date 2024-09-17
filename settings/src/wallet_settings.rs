@@ -1,6 +1,7 @@
 use crate::{crypto::CryptoSettings, currency::Currency, network::Network, security::Security};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct WalletSettings {
     pub crypto: CryptoSettings,
     pub currency: Currency,

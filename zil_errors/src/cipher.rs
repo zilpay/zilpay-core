@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum CipherErrors {
     #[error("Argon key derivation error: {0}")]
     ArgonKeyDerivingError(String),
+    #[error("Invalid enum code")]
+    InvalidTypeCode,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]

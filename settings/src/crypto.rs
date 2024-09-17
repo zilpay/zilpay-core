@@ -1,6 +1,7 @@
 use cipher::keychain::CipherOrders;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CryptoSettings {
     pub cipher_orders: Vec<CipherOrders>,
 }
