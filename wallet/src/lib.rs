@@ -15,6 +15,7 @@ use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use config::wallet::{N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
+use serde::{Deserialize, Serialize};
 use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
@@ -29,8 +30,11 @@ pub struct WalletConfig<'a> {
     pub settings: WalletSettings,
 }
 
+#[derive(Deserialize, Serialize)]
 pub struct Wallet<'a> {
+    #[serde(skip)]
     session: Session,
+    #[serde(skip)]
     storage: &'a LocalStorage,
     proof_key: usize,
     pub wallet_type: WalletTypes,
