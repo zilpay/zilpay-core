@@ -13,6 +13,8 @@ pub enum BackgroundError {
     FailToWriteIndicatorsWallet(LocalStorageError),
     #[error("Fail to laod wallet from storage: {0}")]
     TryLoadWalletError(WalletErrors),
+    #[error("Fail to write selected wallet: {0}")]
+    FailWriteSelectedWallet(LocalStorageError),
     #[error("Argon hashing password error: {0}")]
     ArgonPasswordHashError(CipherErrors),
     #[error("Argon create proof error: {0}")]

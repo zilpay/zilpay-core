@@ -18,7 +18,7 @@ use zil_errors::background::BackgroundError;
 pub struct Background {
     storage: Rc<LocalStorage>,
     pub wallets: Vec<Wallet>,
-    pub selected: usize,
+    pub selected: [u8; SHA256_SIZE],
     pub indicators: Vec<[u8; SHA256_SIZE]>,
     pub is_old_storage: bool,
     pub settings: CommonSettings,
@@ -41,12 +41,11 @@ impl Background {
                 array
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
-        let selected: [u8; SYS_SIZE] = storage
+        let selected: [u8; SHA256_SIZE] = storage
             .get(SELECTED_WALLET_DB_KEY)
             .unwrap_or_default()
             .try_into()
             .unwrap_or_default();
-        let selected = usize::from_ne_bytes(selected);
         let mut wallets = Vec::new();
 
         for addr in indicators {
@@ -106,7 +105,10 @@ impl Background {
             .map_err(BackgroundError::FailToSaveWallet)?;
         self.indicators.push(indicator);
         self.wallets.push(wallet);
+        self.selected = indicator;
+
         self.save_indicators()?;
+        self.save_selected()?;
 
         Ok(key)
     }
@@ -124,6 +126,14 @@ impl Background {
 
         Ok(())
     }
+
+    fn save_selected(&self) -> Result<(), BackgroundError> {
+        self.storage
+            .set(SELECTED_WALLET_DB_KEY, &self.selected)
+            .map_err(BackgroundError::FailWriteSelectedWallet)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -132,8 +142,8 @@ mod tests_background {
 
     #[test]
     fn test_from_path() {
-        let bg = Background::from_storage_path("/home/").unwrap();
+        let bg = Background::from_storage_path("/tmp").unwrap();
         assert_eq!(bg.wallets.len(), 0);
-        assert_eq!(bg.selected, 0);
+        assert_eq!(bg.selected, [0u8; SHA256_SIZE]);
     }
 }
