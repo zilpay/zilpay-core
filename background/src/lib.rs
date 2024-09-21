@@ -137,10 +137,8 @@ impl Background {
 
 #[cfg(test)]
 mod tests_background {
-    use config::wallet;
-    use rand::Rng;
-
     use super::*;
+    use rand::Rng;
 
     #[test]
     fn test_from_bip39() {
@@ -163,9 +161,22 @@ mod tests_background {
 
         assert_eq!(bg.wallets.len(), 1);
 
+        drop(bg);
+
+        let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
 
-        let res_words = wallet.reveal_mnemonic(&key).unwrap().to_string();
+        assert_eq!(
+            wallet.reveal_mnemonic(&key),
+            Err(zil_errors::wallet::WalletErrors::DisabledSessions)
+        );
+        assert_eq!(
+            wallet.unlock("wrong_passwordf".as_bytes()),
+            Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
+        );
+
+        let new_key = wallet.unlock(password.as_bytes()).unwrap();
+        let res_words = wallet.reveal_mnemonic(&new_key).unwrap().to_string();
 
         assert_eq!(res_words, words);
 
