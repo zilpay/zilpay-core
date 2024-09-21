@@ -36,7 +36,7 @@ pub struct WalletConfig {
 pub struct Wallet {
     session: Session,
     storage: Rc<LocalStorage>,
-    data: WalletData,
+    pub data: WalletData,
 }
 
 fn safe_storage_save(

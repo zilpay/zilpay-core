@@ -30,9 +30,10 @@ impl Background {
             LocalStorage::from(path).map_err(BackgroundError::TryInitLocalStorageError)?;
         let storage = Rc::new(storage);
         let is_old_storage = false; // TODO: check old storage from first ZilPay version
+
         let indicators = storage
             .get(INDICATORS_DB_KEY)
-            .map_err(BackgroundError::FailTogetIndicators)?
+            .unwrap_or_default()
             .chunks(SHA256_SIZE)
             .map(|chunk| {
                 let mut array = [0u8; SHA256_SIZE];
@@ -42,9 +43,9 @@ impl Background {
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let selected: [u8; SYS_SIZE] = storage
             .get(SELECTED_WALLET_DB_KEY)
-            .map_err(BackgroundError::FailToLoadSelectedIndicators)?
+            .unwrap_or_default()
             .try_into()
-            .or(Err(BackgroundError::FailTosliceSelectedIndicators))?;
+            .unwrap_or_default();
         let selected = usize::from_ne_bytes(selected);
         let mut wallets = Vec::new();
 
@@ -66,34 +67,73 @@ impl Background {
         })
     }
 
-    pub fn wallet_from_bip39(
+    pub fn add_bip39_wallet<F>(
         &mut self,
         password: &str,
         mnemonic_str: &str,
         indexes: &[usize],
-    ) -> String {
-        let argon_seed = argon2::derive_key(password.as_bytes()).unwrap();
-        let (session, key) = Session::unlock(&argon_seed).unwrap();
-        let keychain = KeyChain::from_seed(&argon_seed).unwrap();
-        let mnemonic =
-            Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str).unwrap();
+        derive_fn: F,
+    ) -> Result<[u8; SHA256_SIZE], BackgroundError>
+    where
+        F: Fn(usize) -> Bip49DerivationPath,
+    {
+        let argon_seed = argon2::derive_key(password.as_bytes())
+            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let (session, key) =
+            Session::unlock(&argon_seed).map_err(BackgroundError::CreateSessionError)?;
+        let keychain =
+            KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
+        let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str)
+            .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?;
         let indexes: Vec<(Bip49DerivationPath, String)> = indexes
             .iter()
-            .map(|i| (Bip49DerivationPath::Ethereum(*i), format!("account {i}")))
+            .map(|i| (derive_fn(*i), format!("account {i}")))
             .collect();
-        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE]).unwrap();
+        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE])
+            .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
             session,
             keychain,
             storage: Rc::clone(&self.storage),
-            settings: Default::default(),
+            settings: Default::default(), // TODO: setup settings
         };
-        let wallet =
-            Wallet::from_bip39_words(&proof, &mnemonic, "", &indexes, wallet_config).unwrap();
+        let wallet = Wallet::from_bip39_words(&proof, &mnemonic, "", &indexes, wallet_config)
+            .map_err(BackgroundError::FailToInitWallet)?;
+        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
-        wallet.save_to_storage().unwrap();
+        wallet
+            .save_to_storage()
+            .map_err(BackgroundError::FailToSaveWallet)?;
+        self.indicators.push(indicator);
         self.wallets.push(wallet);
+        self.save_indicators()?;
 
-        hex::encode(key)
+        Ok(key)
+    }
+
+    fn save_indicators(&self) -> Result<(), BackgroundError> {
+        let bytes: Vec<u8> = self
+            .indicators
+            .iter()
+            .flat_map(|array| array.iter().cloned())
+            .collect();
+
+        self.storage
+            .set(SELECTED_WALLET_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests_background {
+    use super::*;
+
+    #[test]
+    fn test_from_path() {
+        let bg = Background::from_storage_path("/home/").unwrap();
+        assert_eq!(bg.wallets.len(), 0);
+        assert_eq!(bg.selected, 0);
     }
 }
