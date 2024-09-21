@@ -1,3 +1,4 @@
+use crate::account_type::AccountType;
 use bincode::{FromBytes, ToOptionVecBytes};
 use config::sha::SHA512_SIZE;
 use crypto::bip49::Bip49DerivationPath;
@@ -9,8 +10,6 @@ use proto::secret_key::SecretKey;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use zil_errors::account::AccountErrors;
-
-use crate::account_type::AccountType;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Account {

@@ -64,16 +64,12 @@ fn safe_storage_save(cipher_entropy: &[u8], storage: &LocalStorage) -> Result<us
 
 impl<'a> Wallet<'a> {
     pub fn load_from_storage(
-        addr: &str,
+        key: &[u8; SHA256_SIZE],
         storage: &'a LocalStorage,
         session: Session,
     ) -> Result<Self, WalletErrors> {
-        let key: [u8; SHA256_SIZE] = hex::decode(addr)
-            .or(Err(WalletErrors::InvalidWalletAddressHex))?
-            .try_into()
-            .or(Err(WalletErrors::InvalidWalletAddressSize))?;
         let data = storage
-            .get(&key)
+            .get(key)
             .map_err(WalletErrors::FailToLoadWalletData)?;
         let data = serde_json::from_slice::<WalletData>(&data)
             .or(Err(WalletErrors::FailToDeserializeWalletData))?;
@@ -277,7 +273,7 @@ impl<'a> Wallet<'a> {
 mod tests {
     use bip39::Mnemonic;
     use cipher::{argon2::derive_key, keychain::KeyChain};
-    use config::cipher::PROOF_SIZE;
+    use config::{cipher::PROOF_SIZE, sha::SHA256_SIZE};
     use crypto::bip49::Bip49DerivationPath;
     use proto::keypair::KeyPair;
     use session::Session;
@@ -321,7 +317,10 @@ mod tests {
 
         assert_eq!(wallet.data.accounts.len(), indexes.len());
 
-        let wallet_addr = wallet.data.wallet_address.clone();
+        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address.clone())
+            .unwrap()
+            .try_into()
+            .unwrap();
 
         drop(wallet);
 
@@ -363,10 +362,14 @@ mod tests {
             Err(WalletErrors::InvalidAccountType)
         );
 
+        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address.clone())
+            .unwrap()
+            .try_into()
+            .unwrap();
         wallet.save_to_storage().unwrap();
 
         let (session, key) = Session::unlock(&argon_seed).unwrap();
-        let w = Wallet::load_from_storage(&wallet.data.wallet_address, &storage, session).unwrap();
+        let w = Wallet::load_from_storage(&wallet_addr, &storage, session).unwrap();
 
         assert_eq!(w.data, wallet.data);
     }
