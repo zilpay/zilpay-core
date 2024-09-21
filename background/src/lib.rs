@@ -1,15 +1,17 @@
+use std::rc::Rc;
+
 use bip39::Mnemonic;
 use cipher::{argon2, keychain::KeyChain};
-use config::{cipher::PROOF_SIZE, sha::SHA256_SIZE};
+use config::{cipher::PROOF_SIZE, sha::SHA256_SIZE, storage::INDICATORS_DB_KEY};
 use crypto::bip49::Bip49DerivationPath;
 use session::Session;
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use wallet::{Wallet, WalletConfig};
-use zil_errors::ZilliqaErrors;
+use zil_errors::background::BackgroundError;
 
 pub struct Background<'a> {
-    storage: LocalStorage,
+    storage: Rc<LocalStorage>,
     pub wallets: Vec<Wallet<'a>>,
     pub selected: usize,
     pub indicators: Vec<[u8; SHA256_SIZE]>,
@@ -18,13 +20,34 @@ pub struct Background<'a> {
 }
 
 impl<'a> Background<'a> {
-    pub fn from_storage_path<'b>(path: &str) -> Result<Self, ZilliqaErrors<'b>> {
-        let storage = LocalStorage::from(path).map_err(ZilliqaErrors::TryInitLocalStorageError)?;
+    pub fn from_storage_path(path: &str) -> Result<Self, BackgroundError> {
+        let storage =
+            LocalStorage::from(path).map_err(BackgroundError::TryInitLocalStorageError)?;
+        let storage = Rc::new(storage);
         let is_old_storage = false; // TODO: check old storage from first ZilPay version
+        let indicators = storage
+            .get(INDICATORS_DB_KEY)
+            .map_err(BackgroundError::FailTogetIndicators)?
+            .chunks(SHA256_SIZE)
+            .map(|chunk| {
+                let mut array = [0u8; SHA256_SIZE];
+                array.copy_from_slice(chunk);
+                array
+            })
+            .collect::<Vec<[u8; SHA256_SIZE]>>();
+        let mut wallets = Vec::new();
+
+        for addr in indicators {
+            let session = Session::default();
+            let w = Wallet::load_from_storage(&addr, Rc::clone(storage), session)
+                .map_err(BackgroundError::TryLoadWalletError)?;
+
+            wallets.push(w);
+        }
 
         Ok(Self {
             storage,
-            wallets: Vec::new(),
+            wallets,
             selected: 0,
             indicators: Vec::new(),
             is_old_storage,
@@ -57,6 +80,7 @@ impl<'a> Background<'a> {
         let wallet =
             Wallet::from_bip39_words(&proof, &mnemonic, "", &indexes, wallet_config).unwrap();
 
+        wallet.save_to_storage().unwrap();
         self.wallets.push(wallet);
 
         hex::encode(key)
