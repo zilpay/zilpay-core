@@ -6,7 +6,6 @@ use config::{
     cipher::PROOF_SIZE,
     sha::SHA256_SIZE,
     storage::{INDICATORS_DB_KEY, SELECTED_WALLET_DB_KEY},
-    SYS_SIZE,
 };
 use crypto::bip49::Bip49DerivationPath;
 use session::Session;
@@ -121,7 +120,7 @@ impl Background {
             .collect();
 
         self.storage
-            .set(SELECTED_WALLET_DB_KEY, &bytes)
+            .set(INDICATORS_DB_KEY, &bytes)
             .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
 
         Ok(())
@@ -138,12 +137,40 @@ impl Background {
 
 #[cfg(test)]
 mod tests_background {
+    use config::wallet;
+    use rand::Rng;
+
     use super::*;
 
     #[test]
-    fn test_from_path() {
-        let bg = Background::from_storage_path("/tmp").unwrap();
+    fn test_from_bip39() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+
         assert_eq!(bg.wallets.len(), 0);
         assert_eq!(bg.selected, [0u8; SHA256_SIZE]);
+
+        let password = "test_password";
+        let words: &str =
+            "green process gate doctor slide whip priority shrug diamond crumble average help";
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7];
+        let derive = Bip49DerivationPath::Zilliqa;
+
+        let key = bg
+            .add_bip39_wallet(password, words, &indexes, derive)
+            .unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+
+        let wallet = bg.wallets.first_mut().unwrap();
+
+        let res_words = wallet.reveal_mnemonic(&key).unwrap().to_string();
+
+        assert_eq!(res_words, words);
+
+        wallet.lock();
+
+        assert!(wallet.reveal_mnemonic(&key).is_err());
     }
 }

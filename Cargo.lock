@@ -175,6 +175,7 @@ dependencies = [
  "crypto",
  "hex",
  "proto",
+ "rand 0.8.5",
  "session",
  "settings",
  "storage",
