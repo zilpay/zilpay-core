@@ -67,7 +67,7 @@ fn safe_storage_save(
     Ok(cipher_entropy_key)
 }
 
-impl<'a> Wallet {
+impl Wallet {
     pub fn load_from_storage(
         key: &[u8; SHA256_SIZE],
         storage: Rc<LocalStorage>,
