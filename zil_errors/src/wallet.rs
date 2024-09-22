@@ -1,11 +1,17 @@
 use crate::{
-    cipher::CipherErrors, keychain::KeyChainErrors, session::SessionErrors,
-    storage::LocalStorageError,
+    cipher::CipherErrors, keychain::KeyChainErrors, keypair::SecretKeyError,
+    session::SessionErrors, storage::LocalStorageError,
 };
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("Fail convert bytes to sk: {0}")]
+    FailParseSKBytes(SecretKeyError),
+    #[error("Fail to get SK bytes: {0}")]
+    FailToGetSKBytes(SecretKeyError),
+    #[error("Fail to get account by index: {0}")]
+    FailToGetAccount(usize),
     #[error("Fail to deserialize wallet data")]
     FailToDeserializeWalletData,
     #[error("Fail to serialize wallet data")]

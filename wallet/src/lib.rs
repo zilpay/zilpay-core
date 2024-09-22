@@ -13,6 +13,7 @@ use proto::secret_key::SecretKey;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
+use bincode::{FromBytes, ToBytes};
 use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
@@ -92,15 +93,15 @@ impl Wallet {
         proof: &[u8; KEY_SIZE],
         config: WalletConfig,
     ) -> Result<Self, WalletErrors> {
-        let sk_as_vec = sk.to_vec();
+        let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
 
-        combined[..N_BYTES_HASH].copy_from_slice(&sk_as_vec[..N_BYTES_HASH]);
+        combined[..N_BYTES_HASH].copy_from_slice(&sk_as_bytes[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
 
         let cipher_sk = config
             .keychain
-            .encrypt(sk_as_vec, &config.settings.crypto.cipher_orders)
+            .encrypt(sk_as_bytes.to_vec(), &config.settings.crypto.cipher_orders)
             .or(Err(WalletErrors::TryEncryptSecretKeyError))?;
         let cipher_proof = config
             .keychain
@@ -188,6 +189,44 @@ impl Wallet {
             storage: config.storage,
             data,
         })
+    }
+
+    pub fn reveal_sk(
+        &self,
+        account_index: usize,
+        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+    ) -> Result<SecretKey, WalletErrors> {
+        if !self.session.is_enabdle {
+            return Err(WalletErrors::DisabledSessions);
+        }
+
+        let keychain = self
+            .session
+            .decrypt_keychain(cipher_key)
+            .map_err(WalletErrors::SessionDecryptKeychainError)?;
+
+        match self.data.wallet_type {
+            WalletTypes::SecretKey => {
+                let account = self
+                    .data
+                    .accounts
+                    .get(account_index)
+                    .ok_or(WalletErrors::FailToGetAccount(account_index))?;
+                let storage_key = usize::to_le_bytes(account.account_type.value());
+                let cipher_sk = self
+                    .storage
+                    .get(&storage_key)
+                    .map_err(WalletErrors::FailToGetContent)?;
+                let sk_bytes = keychain
+                    .decrypt(cipher_sk, &self.data.settings.crypto.cipher_orders)
+                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
+                let sk = SecretKey::from_bytes(sk_bytes.into())
+                    .map_err(WalletErrors::FailParseSKBytes)?;
+
+                Ok(sk)
+            }
+            _ => Err(WalletErrors::InvalidAccountType),
+        }
     }
 
     pub fn reveal_mnemonic(
@@ -338,8 +377,6 @@ mod tests {
 
         assert!(res_wallet.reveal_mnemonic(&key).is_err());
         assert!(res_wallet.reveal_mnemonic(&new_key).is_ok());
-
-        dbg!(res_wallet.data);
     }
 
     #[test]

@@ -117,7 +117,7 @@ impl Background {
         &mut self,
         password: &str,
         secret_key: &SecretKey,
-        acctoun_name: String,
+        account_name: String,
     ) -> Result<[u8; SHA256_SIZE], BackgroundError> {
         let argon_seed = argon2::derive_key(password.as_bytes())
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -133,7 +133,7 @@ impl Background {
             storage: Rc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let wallet = Wallet::from_sk(secret_key, acctoun_name, &proof, wallet_config)
+        let wallet = Wallet::from_sk(secret_key, account_name, &proof, wallet_config)
             .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
@@ -176,6 +176,7 @@ impl Background {
 #[cfg(test)]
 mod tests_background {
     use super::*;
+    use proto::keypair::KeyPair;
     use rand::Rng;
 
     #[test]
@@ -221,5 +222,48 @@ mod tests_background {
         wallet.lock();
 
         assert!(wallet.reveal_mnemonic(&key).is_err());
+    }
+
+    #[test]
+    fn test_from_sk() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+
+        assert_eq!(bg.wallets.len(), 0);
+        assert_eq!(bg.selected, [0u8; SHA256_SIZE]);
+
+        let password = "pass";
+        let keypair = KeyPair::gen_sha256().unwrap();
+        let sk = keypair.get_secretkey().unwrap();
+        let name = "SK Account 0".to_string();
+        let key = bg.add_sk_wallet(password, &sk, name).unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+
+        drop(bg);
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let wallet = bg.wallets.first_mut().unwrap();
+
+        assert_eq!(
+            wallet.reveal_mnemonic(&key),
+            Err(zil_errors::wallet::WalletErrors::DisabledSessions)
+        );
+        assert_eq!(
+            wallet.unlock("wrong_passwordf".as_bytes()),
+            Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
+        );
+
+        let new_key = wallet.unlock(password.as_bytes()).unwrap();
+
+        assert_eq!(
+            wallet.reveal_mnemonic(&key),
+            Err(zil_errors::wallet::WalletErrors::InvalidAccountType)
+        );
+
+        let res_sk = wallet.reveal_sk(0, &new_key).unwrap();
+
+        assert_eq!(res_sk, sk);
+        wallet.lock();
     }
 }
