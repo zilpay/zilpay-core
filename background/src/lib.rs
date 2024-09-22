@@ -8,6 +8,7 @@ use config::{
     storage::{INDICATORS_DB_KEY, SELECTED_WALLET_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
+use proto::secret_key::SecretKey;
 use session::Session;
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
@@ -96,6 +97,43 @@ impl Background {
             settings: Default::default(), // TODO: setup settings
         };
         let wallet = Wallet::from_bip39_words(&proof, &mnemonic, "", &indexes, wallet_config)
+            .map_err(BackgroundError::FailToInitWallet)?;
+        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
+
+        wallet
+            .save_to_storage()
+            .map_err(BackgroundError::FailToSaveWallet)?;
+        self.indicators.push(indicator);
+        self.wallets.push(wallet);
+        self.selected = indicator;
+
+        self.save_indicators()?;
+        self.save_selected()?;
+
+        Ok(key)
+    }
+
+    pub fn add_sk_wallet(
+        &mut self,
+        password: &str,
+        secret_key: &SecretKey,
+        acctoun_name: String,
+    ) -> Result<[u8; SHA256_SIZE], BackgroundError> {
+        let argon_seed = argon2::derive_key(password.as_bytes())
+            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let (session, key) =
+            Session::unlock(&argon_seed).map_err(BackgroundError::CreateSessionError)?;
+        let keychain =
+            KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
+        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE])
+            .map_err(BackgroundError::ArgonCreateProofError)?;
+        let wallet_config = WalletConfig {
+            session,
+            keychain,
+            storage: Rc::clone(&self.storage),
+            settings: Default::default(), // TODO: setup settings
+        };
+        let wallet = Wallet::from_sk(secret_key, acctoun_name, &proof, wallet_config)
             .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
