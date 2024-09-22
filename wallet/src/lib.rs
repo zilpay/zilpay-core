@@ -180,7 +180,7 @@ impl Wallet {
             settings: config.settings,
             wallet_address,
             accounts,
-            wallet_type: WalletTypes::SecretPhrase((cipher_entropy_key, passphrase.is_empty())),
+            wallet_type: WalletTypes::SecretPhrase((cipher_entropy_key, !passphrase.is_empty())),
             selected_account: 0,
         };
 
@@ -315,6 +315,7 @@ impl Wallet {
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
     use std::rc::Rc;
 
     use bip39::Mnemonic;
@@ -326,7 +327,7 @@ mod tests {
     use storage::LocalStorage;
     use zil_errors::wallet::WalletErrors;
 
-    use crate::{Wallet, WalletConfig};
+    use crate::{wallet_types::WalletTypes, Wallet, WalletConfig};
 
     const MNEMONIC_STR: &str =
         "green process gate doctor slide whip priority shrug diamond crumble average help";
@@ -361,6 +362,13 @@ mod tests {
                 .unwrap();
 
         wallet.save_to_storage().unwrap();
+
+        match wallet.data.wallet_type {
+            WalletTypes::SecretPhrase((_, is_phr)) => {
+                assert!(!is_phr);
+            }
+            _ => panic!("invalid type"),
+        }
 
         assert_eq!(wallet.data.accounts.len(), indexes.len());
 
@@ -415,7 +423,7 @@ mod tests {
             .unwrap();
         wallet.save_to_storage().unwrap();
 
-        let (session, key) = Session::unlock(&argon_seed).unwrap();
+        let (session, _key) = Session::unlock(&argon_seed).unwrap();
         let w = Wallet::load_from_storage(&wallet_addr, Rc::clone(&storage), session).unwrap();
 
         assert_eq!(w.data, wallet.data);
