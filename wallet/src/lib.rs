@@ -9,6 +9,7 @@ use cipher::aes::AES_GCM_KEY_SIZE;
 use cipher::argon2::derive_key;
 use config::argon::KEY_SIZE;
 use config::cipher::PROOF_SIZE;
+use proto::keypair::KeyPair;
 use proto::secret_key::SecretKey;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -195,6 +196,7 @@ impl Wallet {
         &self,
         account_index: usize,
         cipher_key: &[u8; AES_GCM_KEY_SIZE],
+        passphrase: Option<&str>,
     ) -> Result<SecretKey, WalletErrors> {
         if !self.session.is_enabdle {
             return Err(WalletErrors::DisabledSessions);
@@ -222,6 +224,36 @@ impl Wallet {
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
                 let sk = SecretKey::from_bytes(sk_bytes.into())
                     .map_err(WalletErrors::FailParseSKBytes)?;
+
+                Ok(sk)
+            }
+            WalletTypes::SecretPhrase((key, is_phr)) => {
+                if is_phr && passphrase.is_none() {
+                    return Err(WalletErrors::PassphraseIsNone);
+                }
+
+                let account = self
+                    .data
+                    .accounts
+                    .get(account_index)
+                    .ok_or(WalletErrors::FailToGetAccount(account_index))?;
+                let storage_key = usize::to_le_bytes(key);
+                let cipher_entropy = self
+                    .storage
+                    .get(&storage_key)
+                    .map_err(WalletErrors::FailToGetContent)?;
+                let entropy_bytes = keychain
+                    .decrypt(cipher_entropy, &self.data.settings.crypto.cipher_orders)
+                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
+                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy_bytes)
+                    .map_err(|e| WalletErrors::FailLoadMnemonicFromEntropy(e.to_string()))?;
+                let seed = m.to_seed(passphrase.unwrap_or(""));
+                let bip49 = account.get_bip49().map_err(WalletErrors::InvalidBip49)?;
+                let keypair = KeyPair::from_bip39_seed(&seed, &bip49)
+                    .map_err(WalletErrors::FailToCreateKeyPair)?;
+                let sk = keypair
+                    .get_secretkey()
+                    .map_err(WalletErrors::FailToCreateKeyPair)?;
 
                 Ok(sk)
             }

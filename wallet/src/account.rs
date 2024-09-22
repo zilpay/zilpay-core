@@ -62,6 +62,20 @@ impl Account {
             nft_map: HashMap::new(),
         })
     }
+
+    pub fn get_bip49(&self) -> Result<Bip49DerivationPath, AccountErrors> {
+        match &self.account_type {
+            AccountType::Bip39HD(v) => match &self.pub_key {
+                PubKey::Secp256k1Sha256Zilliqa(_) => Ok(Bip49DerivationPath::Zilliqa(*v)),
+                PubKey::Secp256k1Keccak256Ethereum(_) => Ok(Bip49DerivationPath::Ethereum(*v)),
+                _ => Err(AccountErrors::InvalidPubKeyType),
+            },
+            _ => Err(AccountErrors::InvalidAccountType(
+                self.account_type.to_string(),
+            )),
+        }
+        // Ok(Bip49DerivationPath::Zilliqa(0))
+    }
 }
 
 impl ToOptionVecBytes for Account {

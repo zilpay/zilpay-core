@@ -219,6 +219,13 @@ mod tests_background {
 
         assert_eq!(res_words, words);
 
+        let sk = wallet.reveal_sk(1, &new_key, None).unwrap();
+
+        assert_eq!(
+            sk.to_string(),
+            "00fe8b8ee252f3d1348ca68c8537cb4d26a44826abe12a227df3b5db47bf6e0fe3"
+        );
+
         wallet.lock();
 
         assert!(wallet.reveal_mnemonic(&key).is_err());
@@ -261,7 +268,7 @@ mod tests_background {
             Err(zil_errors::wallet::WalletErrors::InvalidAccountType)
         );
 
-        let res_sk = wallet.reveal_sk(0, &new_key).unwrap();
+        let res_sk = wallet.reveal_sk(0, &new_key, None).unwrap();
 
         assert_eq!(res_sk, sk);
         wallet.lock();

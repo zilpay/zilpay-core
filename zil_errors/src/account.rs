@@ -3,6 +3,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AccountErrors {
+    #[error("Invalid PubKey type")]
+    InvalidPubKeyType,
+    #[error("Invalid Account type: {0}")]
+    InvalidAccountType(String),
     #[error("Fail to deserialize json")]
     FailToDeserialize,
     #[error("Fail to serialize json")]

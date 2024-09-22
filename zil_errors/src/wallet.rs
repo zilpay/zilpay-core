@@ -1,13 +1,25 @@
 use crate::{
-    cipher::CipherErrors, keychain::KeyChainErrors, keypair::SecretKeyError,
-    session::SessionErrors, storage::LocalStorageError,
+    account::AccountErrors,
+    cipher::CipherErrors,
+    keychain::KeyChainErrors,
+    keypair::{KeyPairError, SecretKeyError},
+    session::SessionErrors,
+    storage::LocalStorageError,
 };
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("passphrase is None")]
+    PassphraseIsNone,
+    #[error("Fail to load key pair form seed: {0}")]
+    FailToCreateKeyPair(KeyPairError),
+    #[error("Invalid bip49: {0}")]
+    InvalidBip49(AccountErrors),
     #[error("Fail convert bytes to sk: {0}")]
     FailParseSKBytes(SecretKeyError),
+    #[error("fail to load mnemonic from entropy: {0}")]
+    FailLoadMnemonicFromEntropy(String),
     #[error("Fail to get SK bytes: {0}")]
     FailToGetSKBytes(SecretKeyError),
     #[error("Fail to get account by index: {0}")]
