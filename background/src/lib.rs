@@ -219,7 +219,8 @@ mod tests_background {
 
         assert_eq!(res_words, words);
 
-        let sk = wallet.reveal_sk(1, &new_key, None).unwrap();
+        let keypair = wallet.reveal_keypair(1, &new_key, None).unwrap();
+        let sk = keypair.get_secretkey().unwrap();
 
         assert_eq!(
             sk.to_string(),
@@ -268,9 +269,9 @@ mod tests_background {
             Err(zil_errors::wallet::WalletErrors::InvalidAccountType)
         );
 
-        let res_sk = wallet.reveal_sk(0, &new_key, None).unwrap();
+        let res_keypair = wallet.reveal_keypair(0, &new_key, None).unwrap();
 
-        assert_eq!(res_sk, sk);
+        assert_eq!(res_keypair, keypair);
         wallet.lock();
     }
 }

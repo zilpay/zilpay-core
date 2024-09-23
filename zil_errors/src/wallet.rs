@@ -10,6 +10,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("Invalid signature verify")]
+    InvalidVerifySig,
+    #[error("Fail to verify sig error: {0}")]
+    FailVerifySig(KeyPairError),
+    #[error("Fail to sign mesage: {0}")]
+    FailSignMessage(KeyPairError),
     #[error("passphrase is None")]
     PassphraseIsNone,
     #[error("Fail to load key pair form seed: {0}")]

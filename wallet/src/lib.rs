@@ -11,6 +11,7 @@ use config::argon::KEY_SIZE;
 use config::cipher::PROOF_SIZE;
 use proto::keypair::KeyPair;
 use proto::secret_key::SecretKey;
+use proto::signature::Signature;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -192,12 +193,12 @@ impl Wallet {
         })
     }
 
-    pub fn reveal_sk(
+    pub fn reveal_keypair(
         &self,
         account_index: usize,
         cipher_key: &[u8; AES_GCM_KEY_SIZE],
         passphrase: Option<&str>,
-    ) -> Result<SecretKey, WalletErrors> {
+    ) -> Result<KeyPair, WalletErrors> {
         if !self.session.is_enabdle {
             return Err(WalletErrors::DisabledSessions);
         }
@@ -224,8 +225,10 @@ impl Wallet {
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
                 let sk = SecretKey::from_bytes(sk_bytes.into())
                     .map_err(WalletErrors::FailParseSKBytes)?;
+                let keypair =
+                    KeyPair::from_secret_key(&sk).map_err(WalletErrors::FailToCreateKeyPair)?;
 
-                Ok(sk)
+                Ok(keypair)
             }
             WalletTypes::SecretPhrase((key, is_phr)) => {
                 if is_phr && passphrase.is_none() {
@@ -237,25 +240,13 @@ impl Wallet {
                     .accounts
                     .get(account_index)
                     .ok_or(WalletErrors::FailToGetAccount(account_index))?;
-                let storage_key = usize::to_le_bytes(key);
-                let cipher_entropy = self
-                    .storage
-                    .get(&storage_key)
-                    .map_err(WalletErrors::FailToGetContent)?;
-                let entropy_bytes = keychain
-                    .decrypt(cipher_entropy, &self.data.settings.crypto.cipher_orders)
-                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
-                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy_bytes)
-                    .map_err(|e| WalletErrors::FailLoadMnemonicFromEntropy(e.to_string()))?;
+                let m = self.reveal_mnemonic(cipher_key)?;
                 let seed = m.to_seed(passphrase.unwrap_or(""));
                 let bip49 = account.get_bip49().map_err(WalletErrors::InvalidBip49)?;
                 let keypair = KeyPair::from_bip39_seed(&seed, &bip49)
                     .map_err(WalletErrors::FailToCreateKeyPair)?;
-                let sk = keypair
-                    .get_secretkey()
-                    .map_err(WalletErrors::FailToCreateKeyPair)?;
 
-                Ok(sk)
+                Ok(keypair)
             }
             _ => Err(WalletErrors::InvalidAccountType),
         }
@@ -291,6 +282,32 @@ impl Wallet {
             }
             _ => Err(WalletErrors::InvalidAccountType),
         }
+    }
+
+    pub fn sign_message(
+        &self,
+        msg: &[u8],
+        account_index: usize,
+        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+        passphrase: Option<&str>,
+    ) -> Result<Signature, WalletErrors> {
+        let keypair = self.reveal_keypair(account_index, cipher_key, passphrase)?;
+        let sig = keypair
+            .sign_message(msg)
+            .map_err(WalletErrors::FailSignMessage)?;
+        let vrify = keypair
+            .verify_sig(msg, &sig)
+            .map_err(WalletErrors::FailVerifySig)?;
+
+        if !vrify {
+            return Err(WalletErrors::InvalidVerifySig);
+        }
+
+        Ok(sig)
+    }
+
+    pub fn sign_transaction(&self, account_index: usize) -> Result<(), WalletErrors> {
+        Ok(())
     }
 
     pub fn lock(&mut self) {
