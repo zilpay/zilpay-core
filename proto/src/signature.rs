@@ -9,6 +9,7 @@ use zil_errors::crypto::SignatureError;
 
 use crate::pubkey::PubKey;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Signature {
     SchnorrSecp256k1Sha256([u8; SHA512_SIZE]), // Zilliqa
     ECDSASecp256k1Keccak256([u8; ECDSAS_ECP256K1_KECCAK256_SIZE]), // Ethereum

@@ -95,9 +95,22 @@ pub struct ZILTransactionRequest {
     pub data: String,
 }
 
-pub fn encode_zilliqa_transaction(txn: ZILTransactionRequest, pub_key: PubKey) -> Vec<u8> {
-    let oneof8 = (!txn.code.is_empty()).then_some(Code::Code(txn.code.into_bytes()));
-    let oneof9 = (!txn.data.is_empty()).then_some(Data::Data(txn.data.into_bytes()));
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ZILTransactionReceipt {
+    pub chain_id: u16,
+    pub nonce: u64,
+    pub gas_price: ZilAmount,
+    pub gas_limit: ScillaGas,
+    pub to_addr: Address,
+    pub amount: ZilAmount,
+    pub code: String,
+    pub data: String,
+    pub signature: String,
+}
+
+pub fn encode_zilliqa_transaction(txn: &ZILTransactionRequest, pub_key: PubKey) -> Vec<u8> {
+    let oneof8 = (!txn.code.is_empty()).then_some(Code::Code(txn.code.clone().into_bytes()));
+    let oneof9 = (!txn.data.is_empty()).then_some(Data::Data(txn.data.clone().into_bytes()));
     let proto = ProtoTransactionCoreInfo {
         version: (((txn.chain_id) as u32) << 16) | 0x0001,
         toaddr: txn.to_addr.addr_bytes().to_vec(),
