@@ -164,6 +164,10 @@ impl KeyPair {
 
         Ok(is_verify)
     }
+
+    pub fn sign_tx(&self) -> Result<(), KeyPairError> {
+        Ok(())
+    }
 }
 
 impl ToBytes<{ KEYPAIR_BYTES_SIZE }> for KeyPair {

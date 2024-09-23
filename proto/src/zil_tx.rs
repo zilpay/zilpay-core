@@ -84,7 +84,7 @@ impl ZilAmount {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TxZilliqa {
+pub struct ZILTransactionRequest {
     pub chain_id: u16,
     pub nonce: u64,
     pub gas_price: ZilAmount,
@@ -95,7 +95,7 @@ pub struct TxZilliqa {
     pub data: String,
 }
 
-pub fn encode_zilliqa_transaction(txn: TxZilliqa, pub_key: PubKey) -> Vec<u8> {
+pub fn encode_zilliqa_transaction(txn: ZILTransactionRequest, pub_key: PubKey) -> Vec<u8> {
     let oneof8 = (!txn.code.is_empty()).then_some(Code::Code(txn.code.into_bytes()));
     let oneof9 = (!txn.data.is_empty()).then_some(Data::Data(txn.data.into_bytes()));
     let proto = ProtoTransactionCoreInfo {

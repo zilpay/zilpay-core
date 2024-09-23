@@ -306,7 +306,8 @@ impl Wallet {
         Ok(sig)
     }
 
-    pub fn sign_transaction(&self, account_index: usize) -> Result<(), WalletErrors> {
+    pub fn sign_transaction(&self, _account_index: usize) -> Result<(), WalletErrors> {
+        // TODO: tx is not impl yet
         Ok(())
     }
 
