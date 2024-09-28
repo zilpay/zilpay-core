@@ -1,6 +1,9 @@
 use crate::{
     pubkey::PubKey,
-    zil_address::{from_zil_base16, from_zil_pub_key, to_zil_bech32},
+    zil_address::{
+        from_zil_base16, from_zil_bech32_address, from_zil_pub_key, to_checksum_address,
+        to_zil_bech32,
+    },
 };
 use ethers::{core::k256::ecdsa::VerifyingKey, types::H160, utils::to_checksum};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -21,6 +24,18 @@ impl Address {
         let addr = from_zil_base16(addr).ok_or(AddressError::InvalidBase16Address)?;
 
         Ok(Self::Secp256k1Sha256Zilliqa(addr))
+    }
+
+    pub fn from_zil_bech32(addr: &str) -> Result<Self, AddressError> {
+        let addr = from_zil_bech32_address(addr)?;
+        Ok(Self::Secp256k1Sha256Zilliqa(addr))
+    }
+
+    pub fn to_eth_checksummed(&self) -> Result<String, AddressError> {
+        let summed = H160::from_slice(self.as_ref());
+
+        // TODO: check chain id;
+        Ok(to_checksum(&summed, None))
     }
 
     pub fn from_pubkey(pk: &PubKey) -> Result<Self, AddressError> {
@@ -62,6 +77,17 @@ impl Address {
     pub fn get_bech32(&self) -> Result<String, AddressError> {
         match self {
             Address::Secp256k1Sha256Zilliqa(v) => to_zil_bech32(v),
+            _ => Err(AddressError::InvalidSecp256k1Sha256Type),
+        }
+    }
+
+    pub fn get_zil_check_sum_addr(&self) -> Result<String, AddressError> {
+        match self {
+            Address::Secp256k1Sha256Zilliqa(v) => {
+                let addr = hex::encode(v);
+
+                to_checksum_address(&addr)
+            }
             _ => Err(AddressError::InvalidSecp256k1Sha256Type),
         }
     }

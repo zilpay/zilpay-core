@@ -1,5 +1,7 @@
 use crate::keypair::KeyPair;
-use crate::zil_tx::{encode_zilliqa_transaction, ZILTransactionReceipt, ZILTransactionRequest};
+use crate::zil_tx::{
+    encode_zilliqa_transaction, version_from_chainid, ZILTransactionReceipt, ZILTransactionRequest,
+};
 use crypto::schnorr::sign as zil_sign;
 use ethers::types::TransactionRequest as ETHTransactionRequest;
 use k256::SecretKey as K256SecretKey;
@@ -22,37 +24,33 @@ impl TransactionRequest {
         match self {
             TransactionRequest::Zilliqa(tx) => {
                 let pub_key = keypair.get_pubkey()?;
-                let bytes = encode_zilliqa_transaction(tx, pub_key);
+                let bytes = encode_zilliqa_transaction(tx, &pub_key);
+                dbg!(hex::encode(&bytes));
                 let secret_key = keypair.get_secretkey()?.to_vec();
                 let secret_key = K256SecretKey::from_slice(&secret_key)
                     .or(Err(KeyPairError::InvalidSecretKey))?;
                 let signature = zil_sign(&bytes, &secret_key)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
                 let signature = hex::encode(signature.to_bytes());
+                let to_addr = tx.to_addr.to_eth_checksummed()?;
 
                 Ok(TransactionReceipt::Zilliqa(ZILTransactionReceipt {
                     signature,
-                    chain_id: tx.chain_id,
+                    to_addr,
+                    pub_key: hex::encode(pub_key.as_bytes()),
+                    version: version_from_chainid(tx.chain_id),
                     nonce: tx.nonce,
                     gas_price: tx.gas_price,
                     gas_limit: tx.gas_limit,
-                    to_addr: tx.to_addr.clone(),
                     amount: tx.amount,
                     code: tx.code.clone(),
                     data: tx.data.clone(),
+                    priority: false, // TODO: no more use in ZILLiqa chain
                 }))
             }
-            TransactionRequest::Ethereum(tx) => {
+            TransactionRequest::Ethereum(_tx) => {
                 unimplemented!()
             }
         }
     }
-}
-
-#[cfg(test)]
-mod tests_transaction_request {
-    use super::*;
-
-    #[test]
-    fn test_sign_zil() {}
 }

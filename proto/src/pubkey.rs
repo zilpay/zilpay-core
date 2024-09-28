@@ -37,6 +37,15 @@ impl PubKey {
         }
     }
 
+    pub fn as_bytes(&self) -> [u8; PUB_KEY_SIZE] {
+        match self {
+            PubKey::Secp256k1Keccak256Ethereum(v) => *v,
+            PubKey::Secp256k1Sha256Zilliqa(v) => *v,
+            PubKey::Secp256k1Bitcoin(v) => *v,
+            PubKey::Ed25519Solana(v) => *v,
+        }
+    }
+
     pub fn get_addr(&self) -> Result<Address, PubKeyError> {
         let buf = self.get_bytes_addr()?;
 

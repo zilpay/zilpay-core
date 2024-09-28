@@ -1,7 +1,35 @@
 use bech32::{Bech32, Hrp};
 use config::address::{ADDR_LEN, HRP};
+use ethers::types::U256;
 use sha2::{Digest, Sha256};
 use zil_errors::address::AddressError;
+
+pub fn to_checksum_address(address: &str) -> Result<String, AddressError> {
+    let address = address.trim_start_matches("0x").to_lowercase();
+    let address_bytes = hex::decode(&address).or(Err(AddressError::InvalidHex))?;
+
+    let mut hasher = Sha256::new();
+    hasher.update(&address_bytes);
+
+    let hash = hasher.finalize();
+    let v = U256::from_big_endian(&hash);
+    let mut ret = String::from("0x");
+
+    for (i, ch) in address.chars().enumerate() {
+        if ch.is_digit(10) {
+            ret.push(ch);
+        } else {
+            let mask = U256::from(2).pow(U256::from(255 - 6 * i));
+            if v & mask >= U256::from(1) {
+                ret.push(ch.to_ascii_uppercase());
+            } else {
+                ret.push(ch.to_ascii_lowercase());
+            }
+        }
+    }
+
+    Ok(ret)
+}
 
 pub fn from_zil_base16(addr: &str) -> Option<[u8; ADDR_LEN]> {
     let mb_bytes = hex::decode(addr).ok()?;
@@ -73,5 +101,13 @@ mod tests {
             to_zil_bech32(&addr).unwrap(),
             "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
         );
+    }
+
+    #[test]
+    fn test_to_checksum_address() {
+        let addr = "8617b72e22090f0c13167865147ec48a6db788ff";
+        let check_sum_addr = to_checksum_address(addr).unwrap();
+
+        assert_eq!(check_sum_addr, "0x8617B72E22090f0c13167865147eC48a6dB788ff");
     }
 }

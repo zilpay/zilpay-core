@@ -6,8 +6,9 @@ edition = "2021"
 [dependencies]
 zil_errors = { path = "../zil_errors" }
 crypto = { path = "../crypto" }
-proto = { path = "../proto" }
 config = { path = "../config" }
+proto = { path = "../proto" }
+
 hex = "0.4.3"
 serde_json = "1.0.124"
 serde = { version = "1.0.204", features = ["derive", "rc"] }
