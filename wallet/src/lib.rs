@@ -12,6 +12,7 @@ use config::cipher::PROOF_SIZE;
 use proto::keypair::KeyPair;
 use proto::secret_key::SecretKey;
 use proto::signature::Signature;
+use proto::tx::TransactionRequest;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -306,7 +307,11 @@ impl Wallet {
         Ok(sig)
     }
 
-    pub fn sign_transaction(&self, _account_index: usize) -> Result<(), WalletErrors> {
+    pub fn sign_transaction(
+        &self,
+        _account_index: usize,
+        tx: &TransactionRequest,
+    ) -> Result<(), WalletErrors> {
         // TODO: tx is not impl yet
         Ok(())
     }

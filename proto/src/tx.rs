@@ -25,7 +25,6 @@ impl TransactionRequest {
             TransactionRequest::Zilliqa(tx) => {
                 let pub_key = keypair.get_pubkey()?;
                 let bytes = encode_zilliqa_transaction(tx, &pub_key);
-                dbg!(hex::encode(&bytes));
                 let secret_key = keypair.get_secretkey()?.to_vec();
                 let secret_key = K256SecretKey::from_slice(&secret_key)
                     .or(Err(KeyPairError::InvalidSecretKey))?;
@@ -51,6 +50,13 @@ impl TransactionRequest {
             TransactionRequest::Ethereum(_tx) => {
                 unimplemented!()
             }
+        }
+    }
+
+    pub fn json(&self) -> Result<String, serde_json::Error> {
+        match self {
+            Self::Zilliqa(tx) => serde_json::to_string(tx),
+            Self::Ethereum(tx) => serde_json::to_string(tx),
         }
     }
 }
