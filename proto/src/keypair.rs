@@ -1,3 +1,7 @@
+use alloy::{
+    network::EthereumWallet,
+    signers::{local::PrivateKeySigner, SignerSync},
+};
 use bincode::{FromBytes, ToBytes};
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use crypto::bip49::Bip49DerivationPath;
@@ -5,8 +9,6 @@ use crypto::schnorr;
 use k256::SecretKey as K256SecretKey;
 
 use crate::{address::Address, pubkey::PubKey, signature::Signature};
-
-use ethers::{core::k256::ecdsa::SigningKey, signers::LocalWallet, utils::hash_message};
 
 use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
@@ -127,16 +129,33 @@ impl KeyPair {
         }
     }
 
+    pub fn get_sk_bytes(&self) -> [u8; PUB_KEY_SIZE] {
+        match self {
+            KeyPair::Secp256k1Sha256Zilliqa((pk, _)) => *pk,
+            KeyPair::Secp256k1Keccak256Ethereum((pk, _)) => *pk,
+        }
+    }
+
+    pub fn get_local_eth_siger(&self) -> Result<PrivateKeySigner, KeyPairError> {
+        let bytes = self.get_sk_bytes();
+
+        PrivateKeySigner::from_slice(&bytes)
+            .map_err(|e| KeyPairError::EthersInvalidSecretKey(e.to_string()))
+    }
+
+    pub fn get_local_eth_wallet(&self) -> Result<EthereumWallet, KeyPairError> {
+        let signer: PrivateKeySigner = self.get_local_eth_siger()?;
+        let wallet = EthereumWallet::from(signer);
+
+        Ok(wallet)
+    }
+
     pub fn sign_message(&self, msg: &[u8]) -> Result<Signature, KeyPairError> {
         match self {
             KeyPair::Secp256k1Keccak256Ethereum((_, sk)) => {
-                let hash_msg = hash_message(msg);
-                let signing_key = SigningKey::from_slice(sk)
-                    .map_err(|e| KeyPairError::EthersInvalidSecretKey(e.to_string()))?;
-                let wallet = LocalWallet::from(signing_key);
-
-                let sig: Signature = wallet
-                    .sign_hash(hash_msg)
+                let signer = self.get_local_eth_siger()?;
+                let sig = signer
+                    .sign_message_sync(&msg)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?
                     .try_into()
                     .map_err(KeyPairError::InvalidSignature)?;

@@ -5,12 +5,10 @@ use crate::{
         to_zil_bech32,
     },
 };
-use ethers::{core::k256::ecdsa::VerifyingKey, types::H160, utils::to_checksum};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 
 use config::address::ADDR_LEN;
-use ethers::utils::public_key_to_address;
 use zil_errors::address::AddressError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,10 +30,10 @@ impl Address {
     }
 
     pub fn to_eth_checksummed(&self) -> Result<String, AddressError> {
-        let summed = H160::from_slice(self.as_ref());
+        let addr = alloy::primitives::Address::from_slice(self.as_ref());
 
         // TODO: check chain id;
-        Ok(to_checksum(&summed, None))
+        Ok(addr.to_checksum(None))
     }
 
     pub fn from_pubkey(pk: &PubKey) -> Result<Self, AddressError> {
@@ -46,11 +44,9 @@ impl Address {
                 Ok(Self::Secp256k1Sha256Zilliqa(addr))
             }
             PubKey::Secp256k1Keccak256Ethereum(pk) => {
-                let public_key =
-                    VerifyingKey::from_sec1_bytes(pk).or(Err(AddressError::InvalidVerifyingKey))?;
-                let addr: [u8; ADDR_LEN] = public_key_to_address(&public_key).into();
+                let addr = alloy::primitives::Address::from_raw_public_key(pk);
 
-                Ok(Self::Secp256k1Keccak256Ethereum(addr))
+                Ok(Self::Secp256k1Keccak256Ethereum(addr.into()))
             }
             PubKey::Secp256k1Bitcoin(_) => Err(AddressError::NotImpl),
             PubKey::Ed25519Solana(_) => Err(AddressError::NotImpl),
@@ -101,8 +97,9 @@ impl std::fmt::Display for Address {
                 write!(f, "{}", to_zil_bech32(bytes).unwrap())
             }
             Self::Secp256k1Keccak256Ethereum(bytes) => {
-                let h = H160::from_slice(bytes);
-                write!(f, "{}", to_checksum(&h, None))
+                let h = alloy::primitives::Address::from_slice(bytes);
+                // TODO: chain id.
+                write!(f, "{}", h.to_checksum(None))
             }
         }
     }

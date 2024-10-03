@@ -1,8 +1,6 @@
 use bincode::ToBytes;
 use config::address::ADDR_LEN;
 use config::key::PUB_KEY_SIZE;
-use ethers::core::k256::ecdsa::VerifyingKey;
-use ethers::utils::public_key_to_address;
 use k256::PublicKey as K256PublicKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
@@ -23,9 +21,7 @@ impl PubKey {
     pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN], PubKeyError> {
         match self {
             PubKey::Secp256k1Keccak256Ethereum(pk) => {
-                let public_key =
-                    VerifyingKey::from_sec1_bytes(pk).or(Err(PubKeyError::InvalidVerifyingKey))?;
-                let addr = public_key_to_address(&public_key);
+                let addr = alloy::primitives::Address::from_raw_public_key(pk);
 
                 Ok(addr.into())
             }

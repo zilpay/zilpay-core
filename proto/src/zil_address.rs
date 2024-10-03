@@ -1,6 +1,6 @@
+use alloy::primitives::U256;
 use bech32::{Bech32, Hrp};
 use config::address::{ADDR_LEN, HRP};
-use ethers::types::U256;
 use sha2::{Digest, Sha256};
 use zil_errors::address::AddressError;
 
@@ -12,7 +12,7 @@ pub fn to_checksum_address(address: &str) -> Result<String, AddressError> {
     hasher.update(&address_bytes);
 
     let hash = hasher.finalize();
-    let v = U256::from_big_endian(&hash);
+    let v = U256::from_be_slice(&hash);
     let mut ret = String::from("0x");
 
     for (i, ch) in address.chars().enumerate() {

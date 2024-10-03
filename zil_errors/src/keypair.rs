@@ -51,8 +51,6 @@ pub enum PubKeyError {
     #[error("Invalid hex")]
     InvalidHex,
     #[error("Invalid verifying key")]
-    InvalidVerifyingKey,
-    #[error("Invalid public key")]
     InvalidPubKey,
     #[error("Failed to convert into public key")]
     FailIntoPubKey,

@@ -2,8 +2,8 @@ use crate::keypair::KeyPair;
 use crate::zil_tx::{
     encode_zilliqa_transaction, version_from_chainid, ZILTransactionReceipt, ZILTransactionRequest,
 };
+use alloy::rpc::types::TransactionRequest as ETHTransactionRequest;
 use crypto::schnorr::sign as zil_sign;
-use ethers::types::TransactionRequest as ETHTransactionRequest;
 use k256::SecretKey as K256SecretKey;
 use zil_errors::keypair::KeyPairError;
 
@@ -47,7 +47,8 @@ impl TransactionRequest {
                     priority: false, // TODO: no more use in ZILLiqa chain
                 }))
             }
-            TransactionRequest::Ethereum(_tx) => {
+            TransactionRequest::Ethereum(tx) => {
+                let wallet = keypair.get_local_eth_wallet()?;
                 unimplemented!()
             }
         }
