@@ -6,6 +6,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum KeyPairError {
+    #[error("Fail to sign transaction: {0}")]
+    FailToSignTx(String),
     #[error("Extended private key derivation error")]
     ExtendedPrivKeyDeriveError,
     #[error("Schorr error: {0}")]

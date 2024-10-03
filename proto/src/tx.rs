@@ -2,6 +2,8 @@ use crate::keypair::KeyPair;
 use crate::zil_tx::{
     encode_zilliqa_transaction, version_from_chainid, ZILTransactionReceipt, ZILTransactionRequest,
 };
+use alloy::consensus::TxEnvelope;
+use alloy::network::TransactionBuilder;
 use alloy::rpc::types::TransactionRequest as ETHTransactionRequest;
 use crypto::schnorr::sign as zil_sign;
 use k256::SecretKey as K256SecretKey;
@@ -9,8 +11,8 @@ use zil_errors::keypair::KeyPairError;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TransactionReceipt {
-    Zilliqa(ZILTransactionReceipt),  // ZILLIQA
-    Ethereum(ETHTransactionRequest), // Ethereum
+    Zilliqa(ZILTransactionReceipt), // ZILLIQA
+    Ethereum(TxEnvelope),           // Ethereum
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -20,7 +22,7 @@ pub enum TransactionRequest {
 }
 
 impl TransactionRequest {
-    pub fn sign(&self, keypair: &KeyPair) -> Result<TransactionReceipt, KeyPairError> {
+    pub async fn sign(&self, keypair: &KeyPair) -> Result<TransactionReceipt, KeyPairError> {
         match self {
             TransactionRequest::Zilliqa(tx) => {
                 let pub_key = keypair.get_pubkey()?;
@@ -49,7 +51,13 @@ impl TransactionRequest {
             }
             TransactionRequest::Ethereum(tx) => {
                 let wallet = keypair.get_local_eth_wallet()?;
-                unimplemented!()
+                let tx_envelope = tx
+                    .clone()
+                    .build(&wallet)
+                    .await
+                    .map_err(|e| KeyPairError::FailToSignTx(e.to_string()))?;
+
+                Ok(TransactionReceipt::Ethereum(tx_envelope))
             }
         }
     }
