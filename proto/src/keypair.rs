@@ -129,16 +129,15 @@ impl KeyPair {
         }
     }
 
-    pub fn get_sk_bytes(&self) -> [u8; PUB_KEY_SIZE] {
+    pub fn get_sk_bytes(&self) -> [u8; SECRET_KEY_SIZE] {
         match self {
-            KeyPair::Secp256k1Sha256Zilliqa((pk, _)) => *pk,
-            KeyPair::Secp256k1Keccak256Ethereum((pk, _)) => *pk,
+            KeyPair::Secp256k1Sha256Zilliqa((_, sk)) => *sk,
+            KeyPair::Secp256k1Keccak256Ethereum((_, sk)) => *sk,
         }
     }
 
     pub fn get_local_eth_siger(&self) -> Result<PrivateKeySigner, KeyPairError> {
         let bytes = self.get_sk_bytes();
-
         PrivateKeySigner::from_slice(&bytes)
             .map_err(|e| KeyPairError::EthersInvalidSecretKey(e.to_string()))
     }
@@ -146,16 +145,15 @@ impl KeyPair {
     pub fn get_local_eth_wallet(&self) -> Result<EthereumWallet, KeyPairError> {
         let signer: PrivateKeySigner = self.get_local_eth_siger()?;
         let wallet = EthereumWallet::from(signer);
-
         Ok(wallet)
     }
 
     pub fn sign_message(&self, msg: &[u8]) -> Result<Signature, KeyPairError> {
         match self {
-            KeyPair::Secp256k1Keccak256Ethereum((_, sk)) => {
+            KeyPair::Secp256k1Keccak256Ethereum((_, _sk)) => {
                 let signer = self.get_local_eth_siger()?;
                 let sig = signer
-                    .sign_message_sync(&msg)
+                    .sign_message_sync(msg)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?
                     .try_into()
                     .map_err(KeyPairError::InvalidSignature)?;

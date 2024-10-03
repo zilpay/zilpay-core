@@ -27,7 +27,7 @@ pub enum KeyPairError {
     #[error("Ethers invalid sign: {0}")]
     EthersInvalidSign(String),
     #[error("Invalid signature: {0}")]
-    InvalidSignature(#[from] SignatureError),
+    InvalidSignature(SignatureError),
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -44,6 +44,8 @@ pub enum SecretKeyError {
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum PubKeyError {
+    #[error("Invalid VerifyingKey {0}")]
+    InvalidVerifyingKey(String),
     #[error("Invalid length")]
     InvalidLength,
     #[error("Invalid key type")]

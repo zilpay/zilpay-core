@@ -44,7 +44,9 @@ impl Address {
                 Ok(Self::Secp256k1Sha256Zilliqa(addr))
             }
             PubKey::Secp256k1Keccak256Ethereum(pk) => {
-                let addr = alloy::primitives::Address::from_raw_public_key(pk);
+                let k256_pubkey = alloy::signers::k256::ecdsa::VerifyingKey::from_sec1_bytes(pk)
+                    .map_err(|e| AddressError::InvalidVerifyingKey(e.to_string()))?;
+                let addr = alloy::primitives::Address::from_public_key(&k256_pubkey);
 
                 Ok(Self::Secp256k1Keccak256Ethereum(addr.into()))
             }

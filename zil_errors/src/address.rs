@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AddressError {
+    #[error("Invalid VerifyingKey {0}")]
+    InvalidVerifyingKey(String),
     #[error("Invalid hex Address")]
     InvalidHex,
     #[error("Invalid address length")]
@@ -16,8 +18,6 @@ pub enum AddressError {
     InvalidAddressBytesForBech32,
     #[error("Invalid Base16 address")]
     InvalidBase16Address,
-    #[error("Invalid verifying key")]
-    InvalidVerifyingKey,
     #[error("Invalid address size")]
     InvalidAddressSize,
     #[error("Invalid HRP (Human-Readable Part)")]
