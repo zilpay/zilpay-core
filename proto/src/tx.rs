@@ -1,4 +1,5 @@
 use crate::keypair::KeyPair;
+use crate::pubkey::PubKey;
 use crate::zil_tx::{
     encode_zilliqa_transaction, version_from_chainid, ZILTransactionReceipt, ZILTransactionRequest,
 };

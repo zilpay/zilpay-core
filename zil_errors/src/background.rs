@@ -7,6 +7,10 @@ use crate::{
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BackgroundError {
+    #[error("Invalid bip39 count size: {0}")]
+    InvalidWordCount(u8),
+    #[error("Fail to generate bip39 words from entropy: {0}")]
+    FailtToGenBip39FromEntropy(String),
     #[error("Failt to init  storage: {0}")]
     TryInitLocalStorageError(LocalStorageError),
     #[error("Fail to write db indicators: {0}")]

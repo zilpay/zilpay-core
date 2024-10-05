@@ -8,7 +8,10 @@ use crypto::bip49::Bip49DerivationPath;
 use crypto::schnorr;
 use k256::SecretKey as K256SecretKey;
 
-use crate::{address::Address, pubkey::PubKey, signature::Signature};
+use crate::{
+    address::Address, pubkey::PubKey, signature::Signature, tx::TransactionReceipt,
+    tx::TransactionRequest,
+};
 
 use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
@@ -182,8 +185,11 @@ impl KeyPair {
         Ok(is_verify)
     }
 
-    pub fn sign_tx(&self) -> Result<(), KeyPairError> {
-        Ok(())
+    pub async fn sign_tx(
+        &self,
+        tx: &TransactionRequest,
+    ) -> Result<TransactionReceipt, KeyPairError> {
+        tx.sign(&self).await
     }
 }
 

@@ -12,7 +12,7 @@ use config::cipher::PROOF_SIZE;
 use proto::keypair::KeyPair;
 use proto::secret_key::SecretKey;
 use proto::signature::Signature;
-use proto::tx::TransactionRequest;
+use proto::tx::{TransactionReceipt, TransactionRequest};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -307,13 +307,19 @@ impl Wallet {
         Ok(sig)
     }
 
-    pub fn sign_transaction(
+    pub async fn sign_transaction(
         &self,
-        _account_index: usize,
         tx: &TransactionRequest,
-    ) -> Result<(), WalletErrors> {
-        // TODO: tx is not impl yet
-        Ok(())
+        account_index: usize,
+        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+        passphrase: Option<&str>,
+    ) -> Result<TransactionReceipt, WalletErrors> {
+        let keypair = self.reveal_keypair(account_index, cipher_key, passphrase)?;
+
+        keypair
+            .sign_tx(tx)
+            .await
+            .map_err(WalletErrors::FailToSignTransaction)
     }
 
     pub fn lock(&mut self) {

@@ -14,6 +14,8 @@ pub enum WalletErrors {
     InvalidVerifySig,
     #[error("Fail to verify sig error: {0}")]
     FailVerifySig(KeyPairError),
+    #[error("Failt to sign transaction: {0}")]
+    FailToSignTransaction(KeyPairError),
     #[error("Fail to sign mesage: {0}")]
     FailSignMessage(KeyPairError),
     #[error("passphrase is None")]

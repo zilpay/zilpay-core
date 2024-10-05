@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use bip39::Mnemonic;
+use bip39::{Language, Mnemonic};
 use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::PROOF_SIZE,
@@ -15,6 +15,9 @@ use storage::LocalStorage;
 use wallet::{Wallet, WalletConfig};
 use zil_errors::background::BackgroundError;
 
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+
 pub struct Background {
     storage: Rc<LocalStorage>,
     pub wallets: Vec<Wallet>,
@@ -22,6 +25,27 @@ pub struct Background {
     pub indicators: Vec<[u8; SHA256_SIZE]>,
     pub is_old_storage: bool,
     pub settings: CommonSettings,
+}
+
+impl Background {
+    pub fn gen_bip39(count: u8) -> Result<String, BackgroundError> {
+        // count: 12, 15, 18, 21, 24
+        if ![12, 15, 18, 21, 24].contains(&count) {
+            return Err(BackgroundError::InvalidWordCount(count));
+        }
+
+        let entropy_bits = (count as usize * 11) - (count as usize / 3);
+        let entropy_bytes = (entropy_bits + 7) / 8;
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mut entropy = vec![0u8; entropy_bytes];
+
+        rng.fill_bytes(&mut entropy);
+
+        let m = Mnemonic::from_entropy_in(Language::English, &entropy)
+            .map_err(|e| BackgroundError::FailtToGenBip39FromEntropy(e.to_string()))?;
+
+        Ok(m.to_string())
+    }
 }
 
 impl Background {
@@ -273,5 +297,28 @@ mod tests_background {
 
         assert_eq!(res_keypair, keypair);
         wallet.lock();
+    }
+
+    #[test]
+    fn test_bip39_gen() {
+        let words = Background::gen_bip39(12).unwrap();
+        assert_eq!(words.split(" ").collect::<Vec<&str>>().len(), 12);
+
+        let words = Background::gen_bip39(15).unwrap();
+        assert_eq!(words.split(" ").collect::<Vec<&str>>().len(), 15);
+
+        let words = Background::gen_bip39(18).unwrap();
+        assert_eq!(words.split(" ").collect::<Vec<&str>>().len(), 18);
+
+        let words = Background::gen_bip39(21).unwrap();
+        assert_eq!(words.split(" ").collect::<Vec<&str>>().len(), 21);
+
+        let words = Background::gen_bip39(24).unwrap();
+        assert_eq!(words.split(" ").collect::<Vec<&str>>().len(), 24);
+
+        assert_eq!(
+            Background::gen_bip39(33 /* wrong number */),
+            Err(BackgroundError::InvalidWordCount(33))
+        );
     }
 }
