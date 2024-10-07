@@ -8,7 +8,7 @@ use config::{
     storage::{INDICATORS_DB_KEY, SELECTED_WALLET_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
-use proto::secret_key::SecretKey;
+use proto::{keypair::KeyPair, secret_key::SecretKey};
 use session::Session;
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
@@ -29,7 +29,6 @@ pub struct Background {
 
 impl Background {
     pub fn gen_bip39(count: u8) -> Result<String, BackgroundError> {
-        // count: 12, 15, 18, 21, 24
         if ![12, 15, 18, 21, 24].contains(&count) {
             return Err(BackgroundError::InvalidWordCount(count));
         }
@@ -45,6 +44,13 @@ impl Background {
             .map_err(|e| BackgroundError::FailtToGenBip39FromEntropy(e.to_string()))?;
 
         Ok(m.to_string())
+    }
+
+    pub fn gen_sk() -> Result<(String, String), BackgroundError> {
+        let (pub_key, secret_key) =
+            KeyPair::gen_keys_bytes().map_err(BackgroundError::FailToGenKeyPair)?;
+
+        Ok((hex::encode(secret_key), hex::encode(pub_key)))
     }
 }
 

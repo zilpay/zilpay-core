@@ -1,12 +1,14 @@
 use thiserror::Error;
 
 use crate::{
-    cipher::CipherErrors, keychain::KeyChainErrors, session::SessionErrors,
+    cipher::CipherErrors, keychain::KeyChainErrors, keypair::KeyPairError, session::SessionErrors,
     storage::LocalStorageError, wallet::WalletErrors,
 };
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BackgroundError {
+    #[error("fail gen key pair: {0}")]
+    FailToGenKeyPair(KeyPairError),
     #[error("Invalid bip39 count size: {0}")]
     InvalidWordCount(u8),
     #[error("Fail to generate bip39 words from entropy: {0}")]
