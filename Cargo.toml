@@ -48,7 +48,7 @@ bip39 = "2.0.0"
 num256 = "0.5.2"
 ripemd = "0.1.3"
 thiserror = "1.0.63"
-alloy = { version = "0.4.2", features = ["full"] }
+alloy = { version = "0.4.2", features = ["signer-local", "network", "consensus", "rpc", "rpc-types"] }
 
 [dev-dependencies]
 mockito = "1.5.0"

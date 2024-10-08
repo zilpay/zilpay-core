@@ -46,7 +46,7 @@ impl Background {
         Ok(m.to_string())
     }
 
-    pub fn gen_sk() -> Result<(String, String), BackgroundError> {
+    pub fn gen_keypair() -> Result<(String, String), BackgroundError> {
         let (pub_key, secret_key) =
             KeyPair::gen_keys_bytes().map_err(BackgroundError::FailToGenKeyPair)?;
 
@@ -206,6 +206,7 @@ impl Background {
 #[cfg(test)]
 mod tests_background {
     use super::*;
+    use config::key::{PUB_KEY_SIZE, SECRET_KEY_SIZE};
     use proto::keypair::KeyPair;
     use rand::Rng;
 
@@ -326,5 +327,12 @@ mod tests_background {
             Background::gen_bip39(33 /* wrong number */),
             Err(BackgroundError::InvalidWordCount(33))
         );
+    }
+    #[test]
+    fn test_keypair_gen() {
+        let (sk, pk) = Background::gen_keypair().unwrap();
+
+        assert_eq!(hex::decode(sk).unwrap().len(), SECRET_KEY_SIZE);
+        assert_eq!(hex::decode(pk).unwrap().len(), PUB_KEY_SIZE);
     }
 }
