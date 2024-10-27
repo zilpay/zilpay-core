@@ -255,7 +255,7 @@ impl Wallet {
 
     pub fn reveal_mnemonic(
         &self,
-        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+        session_key: &[u8; AES_GCM_KEY_SIZE],
     ) -> Result<Mnemonic, WalletErrors> {
         if !self.session.is_enabdle {
             return Err(WalletErrors::DisabledSessions);
@@ -265,7 +265,7 @@ impl Wallet {
             WalletTypes::SecretPhrase((key, _)) => {
                 let keychain = self
                     .session
-                    .decrypt_keychain(cipher_key)
+                    .decrypt_keychain(session_key)
                     .map_err(WalletErrors::SessionDecryptKeychainError)?;
                 let storage_key = usize::to_le_bytes(key);
                 let cipher_entropy = self
@@ -289,10 +289,10 @@ impl Wallet {
         &self,
         msg: &[u8],
         account_index: usize,
-        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+        session_key: &[u8; AES_GCM_KEY_SIZE],
         passphrase: Option<&str>,
     ) -> Result<Signature, WalletErrors> {
-        let keypair = self.reveal_keypair(account_index, cipher_key, passphrase)?;
+        let keypair = self.reveal_keypair(account_index, session_key, passphrase)?;
         let sig = keypair
             .sign_message(msg)
             .map_err(WalletErrors::FailSignMessage)?;
@@ -311,10 +311,10 @@ impl Wallet {
         &self,
         tx: &TransactionRequest,
         account_index: usize,
-        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+        session_key: &[u8; AES_GCM_KEY_SIZE],
         passphrase: Option<&str>,
     ) -> Result<TransactionReceipt, WalletErrors> {
-        let keypair = self.reveal_keypair(account_index, cipher_key, passphrase)?;
+        let keypair = self.reveal_keypair(account_index, session_key, passphrase)?;
 
         keypair
             .sign_tx(tx)
