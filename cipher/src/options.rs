@@ -3,7 +3,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 use zil_errors::cipher::CipherErrors;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CipherOrders {
     AESGCM256,
     NTRUP1277,

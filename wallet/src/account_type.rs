@@ -6,7 +6,7 @@ use zil_errors::account::AccountErrors;
 
 pub const ACCOUNT_TYPE_SIZE: usize = SYS_SIZE + 1;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AccountType {
     Ledger(usize),     // Ledger index
     Bip39HD(usize),    // HD key bip39 index

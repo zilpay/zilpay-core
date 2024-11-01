@@ -9,7 +9,7 @@ use zil_errors::keypair::PubKeyError;
 use crate::address::Address;
 use crate::zil_address::from_zil_pub_key;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PubKey {
     Secp256k1Sha256Zilliqa([u8; PUB_KEY_SIZE]),     // ZILLIQA
     Secp256k1Keccak256Ethereum([u8; PUB_KEY_SIZE]), // Ethereum
