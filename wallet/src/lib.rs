@@ -72,6 +72,10 @@ fn safe_storage_save(
 }
 
 impl Wallet {
+    pub fn is_enabled(&self) -> bool {
+        self.session.is_enabdle
+    }
+
     pub fn load_from_storage(
         key: &[u8; SHA256_SIZE],
         storage: Arc<LocalStorage>,
