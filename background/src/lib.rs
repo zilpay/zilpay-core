@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use bip39::{Language, Mnemonic};
 use cipher::{argon2, keychain::KeyChain};
 use config::{
@@ -11,6 +9,7 @@ use crypto::bip49::Bip49DerivationPath;
 use proto::{keypair::KeyPair, secret_key::SecretKey};
 use session::Session;
 use settings::common_settings::CommonSettings;
+use std::sync::Arc;
 use storage::LocalStorage;
 use wallet::{Wallet, WalletConfig};
 use zil_errors::background::BackgroundError;
@@ -19,7 +18,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 pub struct Background {
-    storage: Rc<LocalStorage>,
+    storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
     pub selected: [u8; SHA256_SIZE],
     pub indicators: Vec<[u8; SHA256_SIZE]>,
@@ -58,7 +57,7 @@ impl Background {
     pub fn from_storage_path(path: &str) -> Result<Self, BackgroundError> {
         let storage =
             LocalStorage::from(path).map_err(BackgroundError::TryInitLocalStorageError)?;
-        let storage = Rc::new(storage);
+        let storage = Arc::new(storage);
         let is_old_storage = false; // TODO: check old storage from first ZilPay version
 
         let indicators = storage
@@ -80,7 +79,7 @@ impl Background {
 
         for addr in indicators {
             let session = Session::default();
-            let w = Wallet::load_from_storage(&addr, Rc::clone(&storage), session)
+            let w = Wallet::load_from_storage(&addr, Arc::clone(&storage), session)
                 .map_err(BackgroundError::TryLoadWalletError)?;
 
             wallets.push(w);

@@ -3,7 +3,7 @@ pub mod account_type;
 pub mod wallet_data;
 pub mod wallet_types;
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use cipher::aes::AES_GCM_KEY_SIZE;
 use cipher::argon2::derive_key;
@@ -31,7 +31,7 @@ use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
 
 pub struct WalletConfig {
-    pub storage: Rc<LocalStorage>,
+    pub storage: Arc<LocalStorage>,
     pub session: Session,
     pub keychain: KeyChain,
     pub settings: WalletSettings,
@@ -39,13 +39,13 @@ pub struct WalletConfig {
 
 pub struct Wallet {
     session: Session,
-    storage: Rc<LocalStorage>,
+    storage: Arc<LocalStorage>,
     pub data: WalletData,
 }
 
 fn safe_storage_save(
     cipher_entropy: &[u8],
-    storage: Rc<LocalStorage>,
+    storage: Arc<LocalStorage>,
 ) -> Result<usize, WalletErrors> {
     let mut rng = ChaCha20Rng::from_entropy();
     let mut cipher_entropy_key: usize;
@@ -74,7 +74,7 @@ fn safe_storage_save(
 impl Wallet {
     pub fn load_from_storage(
         key: &[u8; SHA256_SIZE],
-        storage: Rc<LocalStorage>,
+        storage: Arc<LocalStorage>,
         session: Session,
     ) -> Result<Self, WalletErrors> {
         let data = storage
@@ -110,9 +110,9 @@ impl Wallet {
             .keychain
             .make_proof(proof, &config.settings.crypto.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Rc::clone(&config.storage))?;
+        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
-        let cipher_entropy_key = safe_storage_save(&cipher_sk, Rc::clone(&config.storage))?;
+        let cipher_entropy_key = safe_storage_save(&cipher_sk, Arc::clone(&config.storage))?;
 
         let mut hasher = Sha256::new();
         hasher.update(combined);
@@ -156,9 +156,9 @@ impl Wallet {
             .keychain
             .make_proof(proof, &config.settings.crypto.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Rc::clone(&config.storage))?;
+        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
-        let cipher_entropy_key = safe_storage_save(&cipher_entropy, Rc::clone(&config.storage))?;
+        let cipher_entropy_key = safe_storage_save(&cipher_entropy, Arc::clone(&config.storage))?;
 
         combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
@@ -231,7 +231,7 @@ impl Wallet {
 
                 Ok(keypair)
             }
-            WalletTypes::SecretPhrase((key, is_phr)) => {
+            WalletTypes::SecretPhrase((_key, is_phr)) => {
                 if is_phr && passphrase.is_none() {
                     return Err(WalletErrors::PassphraseIsNone);
                 }
@@ -377,7 +377,7 @@ impl Wallet {
 #[cfg(test)]
 mod tests {
     use core::panic;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     use bip39::Mnemonic;
     use cipher::{argon2::derive_key, keychain::KeyChain};
@@ -405,7 +405,7 @@ mod tests {
             "WalletWriteTest App",
         )
         .unwrap();
-        let storage = Rc::new(storage);
+        let storage = Arc::new(storage);
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
@@ -415,7 +415,7 @@ mod tests {
         let wallet_config = WalletConfig {
             session,
             keychain,
-            storage: Rc::clone(&storage),
+            storage: Arc::clone(&storage),
             settings: Default::default(),
         };
         let wallet =
@@ -442,7 +442,7 @@ mod tests {
 
         let (session, new_key) = Session::unlock(&argon_seed).unwrap();
         let res_wallet =
-            Wallet::load_from_storage(&wallet_addr, Rc::clone(&storage), session).unwrap();
+            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage), session).unwrap();
 
         assert!(res_wallet.reveal_mnemonic(&key).is_err());
         assert!(res_wallet.reveal_mnemonic(&new_key).is_ok());
@@ -459,7 +459,7 @@ mod tests {
             "WalletWriteTest App_sk",
         )
         .unwrap();
-        let storage = Rc::new(storage);
+        let storage = Arc::new(storage);
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let keypair = KeyPair::gen_keccak256().unwrap();
         let sk = keypair.get_secretkey().unwrap();
@@ -467,7 +467,7 @@ mod tests {
         let wallet_config = WalletConfig {
             session,
             keychain,
-            storage: Rc::clone(&storage),
+            storage: Arc::clone(&storage),
             settings: Default::default(),
         };
         let wallet = Wallet::from_sk(&sk, name.to_string(), &proof, wallet_config).unwrap();
@@ -485,7 +485,7 @@ mod tests {
         wallet.save_to_storage().unwrap();
 
         let (session, _key) = Session::unlock(&argon_seed).unwrap();
-        let w = Wallet::load_from_storage(&wallet_addr, Rc::clone(&storage), session).unwrap();
+        let w = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage), session).unwrap();
 
         assert_eq!(w.data, wallet.data);
     }
