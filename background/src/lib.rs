@@ -327,6 +327,7 @@ mod tests_background {
             Err(BackgroundError::InvalidWordCount(33))
         );
     }
+
     #[test]
     fn test_keypair_gen() {
         let (sk, pk) = Background::gen_keypair().unwrap();

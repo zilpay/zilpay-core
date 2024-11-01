@@ -5,7 +5,7 @@ use config::SYS_SIZE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zil_errors::wallet::WalletErrors;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum WalletTypes {
     Ledger(usize), // Ledger product_id
     // Cipher for entropy secret words storage_key / passphrase
