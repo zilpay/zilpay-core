@@ -41,10 +41,10 @@ impl ZilliqaJsonRPC {
             .json(&payload)
             .send()
             .await
-            .or(Err(ZilliqaErrors::BadRequest))?
+            .map_err(|_| ZilliqaErrors::BadRequest)?
             .json()
             .await
-            .or(Err(ZilliqaErrors::FailToParseResponse))?;
+            .map_err(|_| ZilliqaErrors::FailToParseResponse)?;
         let result = response
             .get("result")
             .ok_or(ZilliqaErrors::FailToParseResponse)?
@@ -213,7 +213,7 @@ mod tests {
             data: String::new(),
         });
 
-        let signed = txn.sign(&keypairs[0]).unwrap();
+        let signed = txn.sign(&keypairs[0]).await.unwrap();
 
         match signed {
             TransactionReceipt::Zilliqa(tx) => {

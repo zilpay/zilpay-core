@@ -122,7 +122,7 @@ impl Background {
         let wallet_config = WalletConfig {
             session,
             keychain,
-            storage: Rc::clone(&self.storage),
+            storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
         let wallet = Wallet::from_bip39_words(&proof, &mnemonic, "", &indexes, wallet_config)
@@ -159,7 +159,7 @@ impl Background {
         let wallet_config = WalletConfig {
             session,
             keychain,
-            storage: Rc::clone(&self.storage),
+            storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
         let wallet = Wallet::from_sk(secret_key, account_name, &proof, wallet_config)
