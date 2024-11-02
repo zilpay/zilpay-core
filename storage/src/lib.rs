@@ -89,7 +89,11 @@ impl LocalStorage {
 
         self.tree
             .insert(key, vec)
-            .or(Err(LocalStorageError::StorageWriteError))?;
+            .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;
+
+        self.tree
+            .flush()
+            .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;
 
         Ok(())
     }

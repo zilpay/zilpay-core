@@ -14,8 +14,8 @@ pub enum LocalStorageError {
     FailToWriteFile,
     #[error("Storage data not found")]
     StorageDataNotFound,
-    #[error("Storage write error")]
-    StorageWriteError,
+    #[error("Storage write error: {0}")]
+    StorageWriteError(String),
     #[error("Storage time went backwards")]
     StorageTimeWentBackwards,
     #[error("Payload version parse error")]
