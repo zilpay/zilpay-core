@@ -1,6 +1,6 @@
 use crate::{language::Language, notificcations::Notificcations, storage::Storage, theme::Theme};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommonSettings {
     pub language: Language,
     pub notificcations: Notificcations,
