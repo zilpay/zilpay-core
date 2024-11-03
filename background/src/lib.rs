@@ -240,6 +240,12 @@ mod tests_background {
             .unwrap();
 
         assert_eq!(bg.wallets.len(), 2);
+
+        drop(bg);
+
+        let bg = Background::from_storage_path(&dir).unwrap();
+
+        assert_eq!(bg.wallets.len(), 2);
     }
 
     #[test]
