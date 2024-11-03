@@ -210,6 +210,39 @@ mod tests_background {
     use rand::Rng;
 
     #[test]
+    fn test_add_more_wallets_bip39() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+
+        assert_eq!(bg.wallets.len(), 0);
+
+        let password = "test_password";
+        let words: &str =
+            "area scale vital sell radio pattern poverty mean similar picnic grain gain";
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7];
+        let derive = Bip49DerivationPath::Zilliqa;
+
+        let _key = bg
+            .add_bip39_wallet(password, words, &indexes, derive)
+            .unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+
+        let password = "test_password";
+        let words: &str =
+            "clap chair edit noise sugar box raccoon play another hobby soccer fringe";
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7];
+        let derive = Bip49DerivationPath::Zilliqa;
+
+        let _key = bg
+            .add_bip39_wallet(password, words, &indexes, derive)
+            .unwrap();
+
+        assert_eq!(bg.wallets.len(), 2);
+    }
+
+    #[test]
     fn test_from_bip39() {
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
