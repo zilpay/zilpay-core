@@ -13,6 +13,15 @@ use zil_errors::background::BackgroundError;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
+pub struct Bip39Params<'a> {
+    password: &'a str,
+    mnemonic_str: &'a str,
+    indexes: &'a [usize],
+    passphrase: &'a str,
+    wallet_name: String,
+    biometric_type: AuthMethod,
+}
+
 pub struct Background {
     storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
@@ -83,28 +92,24 @@ impl Background {
         })
     }
 
-    pub fn add_bip39_wallet<F>(
+    pub fn add_bip39_wallet<'a, F>(
         &mut self,
-        password: &str,
-        mnemonic_str: &str,
-        indexes: &[usize],
-        passphrase: &str,
-        wallet_name: String,
-        biometric_type: AuthMethod,
+        params: Bip39Params<'a>,
         derive_fn: F,
     ) -> Result<[u8; SHA256_SIZE], BackgroundError>
     where
         F: Fn(usize) -> Bip49DerivationPath,
     {
-        let argon_seed = argon2::derive_key(password.as_bytes())
+        let argon_seed = argon2::derive_key(params.password.as_bytes())
             .map_err(BackgroundError::ArgonPasswordHashError)?;
         let (session, key) =
             Session::unlock(&argon_seed).map_err(BackgroundError::CreateSessionError)?;
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
-        let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, mnemonic_str)
+        let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
             .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?;
-        let indexes: Vec<(Bip49DerivationPath, String)> = indexes
+        let indexes: Vec<(Bip49DerivationPath, String)> = params
+            .indexes
             .iter()
             .map(|i| (derive_fn(*i), format!("account {i}")))
             .collect();
@@ -119,11 +124,11 @@ impl Background {
         let wallet = Wallet::from_bip39_words(
             &proof,
             &mnemonic,
-            passphrase,
+            params.passphrase,
             &indexes,
             wallet_config,
-            wallet_name,
-            biometric_type,
+            params.wallet_name,
+            params.biometric_type,
         )
         .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
@@ -227,17 +232,19 @@ mod tests_background {
         let password = "test_password";
         let words: &str =
             "area scale vital sell radio pattern poverty mean similar picnic grain gain";
-        let indexes = [0];
+        let indexes = [0usize];
         let derive = Bip49DerivationPath::Zilliqa;
 
         let _key = bg
             .add_bip39_wallet(
-                password,
-                words,
-                &indexes,
-                "",
-                "test Name".to_string(),
-                AuthMethod::None,
+                Bip39Params {
+                    password,
+                    mnemonic_str: words,
+                    indexes: &indexes,
+                    passphrase: "",
+                    wallet_name: String::new(),
+                    biometric_type: Default::default(),
+                },
                 derive,
             )
             .unwrap();
@@ -250,12 +257,14 @@ mod tests_background {
 
         let _key = bg
             .add_bip39_wallet(
-                password,
-                words,
-                &indexes,
-                "",
-                "test Name".to_string(),
-                AuthMethod::None,
+                Bip39Params {
+                    password,
+                    mnemonic_str: words,
+                    indexes: &indexes,
+                    passphrase: "",
+                    wallet_name: String::new(),
+                    biometric_type: Default::default(),
+                },
                 derive,
             )
             .unwrap();
@@ -268,12 +277,14 @@ mod tests_background {
 
         let _key = bg
             .add_bip39_wallet(
-                password,
-                words,
-                &indexes,
-                "",
-                "test Name".to_string(),
-                AuthMethod::None,
+                Bip39Params {
+                    password,
+                    mnemonic_str: words,
+                    indexes: &indexes,
+                    passphrase: "",
+                    wallet_name: String::new(),
+                    biometric_type: Default::default(),
+                },
                 derive,
             )
             .unwrap();
@@ -301,12 +312,14 @@ mod tests_background {
 
         let key = bg
             .add_bip39_wallet(
-                password,
-                words,
-                &indexes,
-                "",
-                "test Name".to_string(),
-                AuthMethod::None,
+                Bip39Params {
+                    password,
+                    mnemonic_str: words,
+                    indexes: &indexes,
+                    passphrase: "",
+                    wallet_name: String::new(),
+                    biometric_type: Default::default(),
+                },
                 derive,
             )
             .unwrap();
