@@ -26,7 +26,7 @@ use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
-use wallet_data::WalletData;
+use wallet_data::{AuthMethod, WalletData};
 use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
 
@@ -99,6 +99,8 @@ impl Wallet {
         name: String,
         proof: &[u8; KEY_SIZE],
         config: WalletConfig,
+        wallet_name: String,
+        biometric_type: AuthMethod,
     ) -> Result<Self, WalletErrors> {
         let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
@@ -128,6 +130,8 @@ impl Wallet {
             .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
+            wallet_name,
+            biometric_type,
             proof_key,
             settings: config.settings,
             accounts,
@@ -149,6 +153,8 @@ impl Wallet {
         passphrase: &str,
         indexes: &[(Bip49DerivationPath, String)],
         config: WalletConfig,
+        wallet_name: String,
+        biometric_type: AuthMethod,
     ) -> Result<Self, WalletErrors> {
         let cipher_entropy = config
             .keychain
@@ -183,6 +189,8 @@ impl Wallet {
         }
 
         let data = WalletData {
+            wallet_name,
+            biometric_type,
             proof_key,
             settings: config.settings,
             wallet_address,
@@ -422,9 +430,16 @@ mod tests {
             storage: Arc::clone(&storage),
             settings: Default::default(),
         };
-        let wallet =
-            Wallet::from_bip39_words(&proof, &mnemonic, PASSPHRASE, &indexes, wallet_config)
-                .unwrap();
+        let wallet = Wallet::from_bip39_words(
+            &proof,
+            &mnemonic,
+            PASSPHRASE,
+            &indexes,
+            wallet_config,
+            "test Name".to_string(),
+            Default::default(),
+        )
+        .unwrap();
 
         wallet.save_to_storage().unwrap();
 
@@ -474,7 +489,15 @@ mod tests {
             storage: Arc::clone(&storage),
             settings: Default::default(),
         };
-        let wallet = Wallet::from_sk(&sk, name.to_string(), &proof, wallet_config).unwrap();
+        let wallet = Wallet::from_sk(
+            &sk,
+            name.to_string(),
+            &proof,
+            wallet_config,
+            "test Name".to_string(),
+            Default::default(),
+        )
+        .unwrap();
 
         assert_eq!(wallet.data.accounts.len(), 1);
         assert_eq!(

@@ -7,7 +7,7 @@ use session::Session;
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
-use wallet::{Wallet, WalletConfig};
+use wallet::{wallet_data::AuthMethod, Wallet, WalletConfig};
 use zil_errors::background::BackgroundError;
 
 use rand::{RngCore, SeedableRng};
@@ -88,6 +88,9 @@ impl Background {
         password: &str,
         mnemonic_str: &str,
         indexes: &[usize],
+        passphrase: &str,
+        wallet_name: String,
+        biometric_type: AuthMethod,
         derive_fn: F,
     ) -> Result<[u8; SHA256_SIZE], BackgroundError>
     where
@@ -113,8 +116,16 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let wallet = Wallet::from_bip39_words(&proof, &mnemonic, "", &indexes, wallet_config)
-            .map_err(BackgroundError::FailToInitWallet)?;
+        let wallet = Wallet::from_bip39_words(
+            &proof,
+            &mnemonic,
+            passphrase,
+            &indexes,
+            wallet_config,
+            wallet_name,
+            biometric_type,
+        )
+        .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
         wallet
@@ -140,6 +151,8 @@ impl Background {
         password: &str,
         secret_key: &SecretKey,
         account_name: String,
+        wallet_name: String,
+        biometric_type: AuthMethod,
     ) -> Result<[u8; SHA256_SIZE], BackgroundError> {
         let argon_seed = argon2::derive_key(password.as_bytes())
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -155,8 +168,15 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let wallet = Wallet::from_sk(secret_key, account_name, &proof, wallet_config)
-            .map_err(BackgroundError::FailToInitWallet)?;
+        let wallet = Wallet::from_sk(
+            secret_key,
+            account_name,
+            &proof,
+            wallet_config,
+            wallet_name,
+            biometric_type,
+        )
+        .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
         wallet
@@ -211,7 +231,15 @@ mod tests_background {
         let derive = Bip49DerivationPath::Zilliqa;
 
         let _key = bg
-            .add_bip39_wallet(password, words, &indexes, derive)
+            .add_bip39_wallet(
+                password,
+                words,
+                &indexes,
+                "",
+                "test Name".to_string(),
+                AuthMethod::None,
+                derive,
+            )
             .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
@@ -221,7 +249,15 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
 
         let _key = bg
-            .add_bip39_wallet(password, words, &indexes, derive)
+            .add_bip39_wallet(
+                password,
+                words,
+                &indexes,
+                "",
+                "test Name".to_string(),
+                AuthMethod::None,
+                derive,
+            )
             .unwrap();
 
         let password = "test_password";
@@ -231,7 +267,15 @@ mod tests_background {
         let derive = Bip49DerivationPath::Zilliqa;
 
         let _key = bg
-            .add_bip39_wallet(password, words, &indexes, derive)
+            .add_bip39_wallet(
+                password,
+                words,
+                &indexes,
+                "",
+                "test Name".to_string(),
+                AuthMethod::None,
+                derive,
+            )
             .unwrap();
 
         drop(bg);
@@ -256,7 +300,15 @@ mod tests_background {
         let derive = Bip49DerivationPath::Zilliqa;
 
         let key = bg
-            .add_bip39_wallet(password, words, &indexes, derive)
+            .add_bip39_wallet(
+                password,
+                words,
+                &indexes,
+                "",
+                "test Name".to_string(),
+                AuthMethod::None,
+                derive,
+            )
             .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
@@ -305,7 +357,15 @@ mod tests_background {
         let keypair = KeyPair::gen_sha256().unwrap();
         let sk = keypair.get_secretkey().unwrap();
         let name = "SK Account 0".to_string();
-        let key = bg.add_sk_wallet(password, &sk, name).unwrap();
+        let key = bg
+            .add_sk_wallet(
+                password,
+                &sk,
+                name,
+                "test account name".to_string(),
+                AuthMethod::None,
+            )
+            .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
 
