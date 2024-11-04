@@ -91,6 +91,10 @@ impl LocalStorage {
             .insert(key, vec)
             .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;
 
+        Ok(())
+    }
+
+    pub fn flush(&self) -> Result<(), LocalStorageError> {
         self.tree
             .flush()
             .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;

@@ -7,6 +7,8 @@ use crate::{
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BackgroundError {
+    #[error("Fail flush Error: {0}")]
+    LocalStorageFlushError(LocalStorageError),
     #[error("fail gen key pair: {0}")]
     FailToGenKeyPair(KeyPairError),
     #[error("Invalid bip39 count size: {0}")]

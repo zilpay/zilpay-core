@@ -1,10 +1,6 @@
 use bip39::{Language, Mnemonic};
 use cipher::{argon2, keychain::KeyChain};
-use config::{
-    cipher::PROOF_SIZE,
-    sha::SHA256_SIZE,
-    storage::{INDICATORS_DB_KEY, SELECTED_WALLET_DB_KEY},
-};
+use config::{cipher::PROOF_SIZE, sha::SHA256_SIZE, storage::INDICATORS_DB_KEY};
 use crypto::bip49::Bip49DerivationPath;
 use proto::{keypair::KeyPair, secret_key::SecretKey};
 use session::Session;
@@ -20,7 +16,6 @@ use rand_chacha::ChaCha20Rng;
 pub struct Background {
     storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
-    pub selected: [u8; SHA256_SIZE],
     pub indicators: Vec<[u8; SHA256_SIZE]>,
     pub is_old_storage: bool,
     pub settings: CommonSettings,
@@ -59,7 +54,6 @@ impl Background {
             LocalStorage::from(path).map_err(BackgroundError::TryInitLocalStorageError)?;
         let storage = Arc::new(storage);
         let is_old_storage = false; // TODO: check old storage from first ZilPay version
-
         let indicators = storage
             .get(INDICATORS_DB_KEY)
             .unwrap_or_default()
@@ -70,16 +64,11 @@ impl Background {
                 array
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
-        let selected: [u8; SHA256_SIZE] = storage
-            .get(SELECTED_WALLET_DB_KEY)
-            .unwrap_or_default()
-            .try_into()
-            .unwrap_or_default();
         let mut wallets = Vec::new();
 
-        for addr in indicators {
+        for addr in &indicators {
             let session = Session::default();
-            let w = Wallet::load_from_storage(&addr, Arc::clone(&storage), session)
+            let w = Wallet::load_from_storage(addr, Arc::clone(&storage), session)
                 .map_err(BackgroundError::TryLoadWalletError)?;
 
             wallets.push(w);
@@ -88,8 +77,7 @@ impl Background {
         Ok(Self {
             storage,
             wallets,
-            selected,
-            indicators: Vec::new(),
+            indicators,
             is_old_storage,
             settings: Default::default(),
         })
@@ -132,12 +120,17 @@ impl Background {
         wallet
             .save_to_storage()
             .map_err(BackgroundError::FailToSaveWallet)?;
+
+        println!("self.indicators {:?}", self.indicators);
         self.indicators.push(indicator);
+
         self.wallets.push(wallet);
-        self.selected = indicator;
 
         self.save_indicators()?;
-        self.save_selected()?;
+
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
 
         Ok(key)
     }
@@ -171,10 +164,12 @@ impl Background {
             .map_err(BackgroundError::FailToSaveWallet)?;
         self.indicators.push(indicator);
         self.wallets.push(wallet);
-        self.selected = indicator;
 
         self.save_indicators()?;
-        self.save_selected()?;
+
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
 
         Ok(key)
     }
@@ -189,14 +184,6 @@ impl Background {
         self.storage
             .set(INDICATORS_DB_KEY, &bytes)
             .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
-
-        Ok(())
-    }
-
-    fn save_selected(&self) -> Result<(), BackgroundError> {
-        self.storage
-            .set(SELECTED_WALLET_DB_KEY, &self.selected)
-            .map_err(BackgroundError::FailWriteSelectedWallet)?;
 
         Ok(())
     }
@@ -220,7 +207,7 @@ mod tests_background {
         let password = "test_password";
         let words: &str =
             "area scale vital sell radio pattern poverty mean similar picnic grain gain";
-        let indexes = [0, 1, 2, 3, 4, 5, 6, 7];
+        let indexes = [0];
         let derive = Bip49DerivationPath::Zilliqa;
 
         let _key = bg
@@ -229,23 +216,29 @@ mod tests_background {
 
         assert_eq!(bg.wallets.len(), 1);
 
+        drop(bg);
+
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+
+        let _key = bg
+            .add_bip39_wallet(password, words, &indexes, derive)
+            .unwrap();
+
         let password = "test_password";
         let words: &str =
             "clap chair edit noise sugar box raccoon play another hobby soccer fringe";
-        let indexes = [0, 1, 2, 3, 4, 5, 6, 7];
+        let indexes = [0, 1];
         let derive = Bip49DerivationPath::Zilliqa;
 
         let _key = bg
             .add_bip39_wallet(password, words, &indexes, derive)
             .unwrap();
 
-        assert_eq!(bg.wallets.len(), 2);
-
         drop(bg);
 
         let bg = Background::from_storage_path(&dir).unwrap();
 
-        assert_eq!(bg.wallets.len(), 2);
+        assert_eq!(bg.wallets.len(), 3);
     }
 
     #[test]
@@ -255,7 +248,6 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
 
         assert_eq!(bg.wallets.len(), 0);
-        assert_eq!(bg.selected, [0u8; SHA256_SIZE]);
 
         let password = "test_password";
         let words: &str =
@@ -308,7 +300,6 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
 
         assert_eq!(bg.wallets.len(), 0);
-        assert_eq!(bg.selected, [0u8; SHA256_SIZE]);
 
         let password = "pass";
         let keypair = KeyPair::gen_sha256().unwrap();
