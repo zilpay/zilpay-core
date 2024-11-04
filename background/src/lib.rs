@@ -14,12 +14,12 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 pub struct Bip39Params<'a> {
-    password: &'a str,
-    mnemonic_str: &'a str,
-    indexes: &'a [usize],
-    passphrase: &'a str,
-    wallet_name: String,
-    biometric_type: AuthMethod,
+    pub password: &'a str,
+    pub mnemonic_str: &'a str,
+    pub indexes: &'a [usize],
+    pub passphrase: &'a str,
+    pub wallet_name: String,
+    pub biometric_type: AuthMethod,
 }
 
 pub struct Background {
