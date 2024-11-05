@@ -55,8 +55,9 @@ impl KeyChain {
         })
     }
 
-    pub fn from_pass(password: &[u8]) -> Result<Self, KeyChainErrors> {
-        let seed_bytes = derive_key(password).map_err(KeyChainErrors::Argon2CipherErrors)?;
+    pub fn from_pass(password: &[u8], fingerprint: &str) -> Result<Self, KeyChainErrors> {
+        let seed_bytes =
+            derive_key(password, fingerprint).map_err(KeyChainErrors::Argon2CipherErrors)?;
 
         Self::from_seed(&seed_bytes)
     }
@@ -160,7 +161,7 @@ mod tests {
 
         rng.fill_bytes(&mut password);
 
-        let keychain = KeyChain::from_pass(&password);
+        let keychain = KeyChain::from_pass(&password, "");
 
         assert!(keychain.is_ok());
     }
@@ -174,7 +175,7 @@ mod tests {
         rng.fill_bytes(&mut password);
         rng.fill_bytes(&mut plaintext);
 
-        let keychain = KeyChain::from_pass(&password).unwrap();
+        let keychain = KeyChain::from_pass(&password, "").unwrap();
         let bytes = keychain.to_bytes();
         let restore_keychain = KeyChain::from_bytes(&bytes).unwrap();
 
@@ -198,7 +199,7 @@ mod tests {
         rng.fill_bytes(&mut password);
         rng.fill_bytes(&mut plaintext);
 
-        let keychain = KeyChain::from_pass(&password).unwrap();
+        let keychain = KeyChain::from_pass(&password, "").unwrap();
         let options = [CipherOrders::AESGCM256, CipherOrders::NTRUP1277];
         let ciphertext = keychain.encrypt(plaintext.to_vec(), &options).unwrap();
         let res_plaintext = keychain.decrypt(ciphertext.clone(), &options).unwrap();
@@ -226,9 +227,9 @@ mod tests {
         rng.fill_bytes(&mut password);
 
         let options = [CipherOrders::NTRUP1277, CipherOrders::AESGCM256];
-        let seed_bytes = derive_key(&password).unwrap();
+        let seed_bytes = derive_key(&password, "").unwrap();
         let keychain = KeyChain::from_seed(&seed_bytes).unwrap();
-        let origin_proof = derive_key(&seed_bytes[..PROOF_SIZE]).unwrap();
+        let origin_proof = derive_key(&seed_bytes[..PROOF_SIZE], "").unwrap();
         let proof_cipher = keychain.make_proof(&origin_proof, &options).unwrap();
         let proof = keychain.get_proof(&proof_cipher, &options).unwrap();
 

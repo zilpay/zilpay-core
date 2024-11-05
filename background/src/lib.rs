@@ -20,6 +20,7 @@ pub struct Bip39Params<'a> {
     pub passphrase: &'a str,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
+    pub device_indicators: &'a [String],
 }
 
 pub struct Background {

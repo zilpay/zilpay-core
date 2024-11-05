@@ -2,12 +2,15 @@ use argon2::Argon2;
 use config::argon::{KEY_SIZE, WALLET_SALT};
 use zil_errors::cipher::CipherErrors;
 
-pub fn derive_key(password: &[u8]) -> Result<[u8; KEY_SIZE], CipherErrors> {
+pub fn derive_key(password: &[u8], salt: &str) -> Result<[u8; KEY_SIZE], CipherErrors> {
     let mut output_key_material = [0u8; KEY_SIZE];
     let argon2 = Argon2::default();
+    let mut salt = salt.as_bytes().to_vec();
+
+    salt.extend_from_slice(WALLET_SALT);
 
     argon2
-        .hash_password_into(password, WALLET_SALT, &mut output_key_material)
+        .hash_password_into(password, &salt, &mut output_key_material)
         .map_err(|e| CipherErrors::ArgonKeyDerivingError(e.to_string()))?;
 
     Ok(output_key_material)
@@ -20,7 +23,7 @@ mod tests {
     #[test]
     fn test_derive_key() {
         let password = b"test_password";
-        let key = derive_key(password).unwrap();
+        let key = derive_key(password, "").unwrap();
 
         assert_eq!(
             key,
