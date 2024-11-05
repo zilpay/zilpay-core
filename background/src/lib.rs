@@ -92,9 +92,9 @@ impl Background {
         })
     }
 
-    pub fn add_bip39_wallet<'a, F>(
+    pub fn add_bip39_wallet<F>(
         &mut self,
-        params: Bip39Params<'a>,
+        params: Bip39Params,
         derive_fn: F,
     ) -> Result<[u8; SHA256_SIZE], BackgroundError>
     where
