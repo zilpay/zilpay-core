@@ -1,9 +1,13 @@
 use bip39::{Language, Mnemonic};
 use cipher::{argon2, keychain::KeyChain};
-use config::{cipher::PROOF_SIZE, sha::SHA256_SIZE, storage::INDICATORS_DB_KEY};
+use config::{
+    cipher::{PROOF_SALT, PROOF_SIZE},
+    sha::SHA256_SIZE,
+    storage::INDICATORS_DB_KEY,
+};
 use crypto::bip49::Bip49DerivationPath;
 use proto::{keypair::KeyPair, secret_key::SecretKey};
-use session::Session;
+use session::encrypt_session;
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
@@ -18,6 +22,15 @@ pub struct Bip39Params<'a> {
     pub mnemonic_str: &'a str,
     pub indexes: &'a [usize],
     pub passphrase: &'a str,
+    pub wallet_name: String,
+    pub biometric_type: AuthMethod,
+    pub device_indicators: &'a [String],
+}
+
+pub struct SKParams<'a> {
+    pub password: &'a str,
+    pub secret_key: &'a SecretKey,
+    pub account_name: String,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
@@ -77,8 +90,7 @@ impl Background {
         let mut wallets = Vec::new();
 
         for addr in &indicators {
-            let session = Session::default();
-            let w = Wallet::load_from_storage(addr, Arc::clone(&storage), session)
+            let w = Wallet::load_from_storage(addr, Arc::clone(&storage))
                 .map_err(BackgroundError::TryLoadWalletError)?;
 
             wallets.push(w);
@@ -97,16 +109,13 @@ impl Background {
         &mut self,
         params: Bip39Params,
         derive_fn: F,
-    ) -> Result<[u8; SHA256_SIZE], BackgroundError>
+    ) -> Result<Vec<u8>, BackgroundError>
     where
         F: Fn(usize) -> Bip49DerivationPath,
     {
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
-        let (session, key) =
-            Session::unlock(&argon_seed).map_err(BackgroundError::CreateSessionError)?;
-
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
         let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
@@ -116,13 +125,22 @@ impl Background {
             .iter()
             .map(|i| (derive_fn(*i), format!("account {i}")))
             .collect();
-        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE])
+        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT)
             .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
-            session,
             keychain,
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
+        };
+        let session = if params.biometric_type == AuthMethod::None {
+            Vec::new()
+        } else {
+            encrypt_session(
+                &device_indicator,
+                &argon_seed,
+                &wallet_config.settings.crypto.cipher_orders,
+            )
+            .map_err(BackgroundError::CreateSessionError)?
         };
         let wallet = Wallet::from_bip39_words(
             &proof,
@@ -140,7 +158,6 @@ impl Background {
             .save_to_storage()
             .map_err(BackgroundError::FailToSaveWallet)?;
 
-        println!("self.indicators {:?}", self.indicators);
         self.indicators.push(indicator);
 
         self.wallets.push(wallet);
@@ -151,38 +168,39 @@ impl Background {
             .flush()
             .map_err(BackgroundError::LocalStorageFlushError)?;
 
-        Ok(key)
+        Ok(session)
     }
 
-    pub fn add_sk_wallet(
-        &mut self,
-        password: &str,
-        secret_key: &SecretKey,
-        account_name: String,
-        wallet_name: String,
-        biometric_type: AuthMethod,
-    ) -> Result<[u8; SHA256_SIZE], BackgroundError> {
-        let argon_seed = argon2::derive_key(password.as_bytes())
+    pub fn add_sk_wallet(&mut self, params: SKParams) -> Result<Vec<u8>, BackgroundError> {
+        let device_indicator = params.device_indicators.join(":");
+        let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
-        let (session, key) =
-            Session::unlock(&argon_seed).map_err(BackgroundError::CreateSessionError)?;
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
-        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE])
+        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT)
             .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
-            session,
             keychain,
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
+        let session = if params.biometric_type == AuthMethod::None {
+            Vec::new()
+        } else {
+            encrypt_session(
+                &device_indicator,
+                &argon_seed,
+                &wallet_config.settings.crypto.cipher_orders,
+            )
+            .map_err(BackgroundError::CreateSessionError)?
+        };
         let wallet = Wallet::from_sk(
-            secret_key,
-            account_name,
+            params.secret_key,
+            params.account_name,
             &proof,
             wallet_config,
-            wallet_name,
-            biometric_type,
+            params.wallet_name,
+            params.biometric_type,
         )
         .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
@@ -199,7 +217,7 @@ impl Background {
             .flush()
             .map_err(BackgroundError::LocalStorageFlushError)?;
 
-        Ok(key)
+        Ok(session)
     }
 
     fn save_indicators(&self) -> Result<(), BackgroundError> {
@@ -220,9 +238,13 @@ impl Background {
 #[cfg(test)]
 mod tests_background {
     use super::*;
-    use config::key::{PUB_KEY_SIZE, SECRET_KEY_SIZE};
+    use config::{
+        argon::KEY_SIZE,
+        key::{PUB_KEY_SIZE, SECRET_KEY_SIZE},
+    };
     use proto::keypair::KeyPair;
     use rand::Rng;
+    use session::decrypt_session;
 
     #[test]
     fn test_add_more_wallets_bip39() {
@@ -247,6 +269,7 @@ mod tests_background {
                     passphrase: "",
                     wallet_name: String::new(),
                     biometric_type: Default::default(),
+                    device_indicators: &[String::from("apple"), String::from("0000")],
                 },
                 derive,
             )
@@ -267,6 +290,7 @@ mod tests_background {
                     passphrase: "",
                     wallet_name: String::new(),
                     biometric_type: Default::default(),
+                    device_indicators: &[String::from("apple"), String::from("1102")],
                 },
                 derive,
             )
@@ -286,6 +310,7 @@ mod tests_background {
                     indexes: &indexes,
                     passphrase: "",
                     wallet_name: String::new(),
+                    device_indicators: &[String::from("apple"), String::from("43498")],
                     biometric_type: Default::default(),
                 },
                 derive,
@@ -312,16 +337,18 @@ mod tests_background {
             "green process gate doctor slide whip priority shrug diamond crumble average help";
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7];
         let derive = Bip49DerivationPath::Zilliqa;
+        let device_indicators = [String::from("apple"), String::from("4354")];
 
-        let key = bg
+        let session = bg
             .add_bip39_wallet(
                 Bip39Params {
+                    device_indicators: &device_indicators,
                     password,
                     mnemonic_str: words,
                     indexes: &indexes,
                     passphrase: "",
                     wallet_name: String::new(),
-                    biometric_type: Default::default(),
+                    biometric_type: AuthMethod::FaceId,
                 },
                 derive,
             )
@@ -334,31 +361,31 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
 
+        let seed_bytes = decrypt_session(
+            &device_indicators.join(":"),
+            session,
+            &wallet.data.settings.crypto.cipher_orders,
+        )
+        .unwrap();
+
         assert_eq!(
-            wallet.reveal_mnemonic(&key),
-            Err(zil_errors::wallet::WalletErrors::DisabledSessions)
-        );
-        assert_eq!(
-            wallet.unlock("wrong_passwordf".as_bytes()),
+            wallet.unlock(&[42u8; KEY_SIZE]),
             Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
         );
 
-        let new_key = wallet.unlock(password.as_bytes()).unwrap();
-        let res_words = wallet.reveal_mnemonic(&new_key).unwrap().to_string();
+        wallet.unlock(&seed_bytes).unwrap();
+
+        let res_words = wallet.reveal_mnemonic(&seed_bytes).unwrap().to_string();
 
         assert_eq!(res_words, words);
 
-        let keypair = wallet.reveal_keypair(1, &new_key, None).unwrap();
+        let keypair = wallet.reveal_keypair(1, &seed_bytes, None).unwrap();
         let sk = keypair.get_secretkey().unwrap();
 
         assert_eq!(
             sk.to_string(),
             "00fe8b8ee252f3d1348ca68c8537cb4d26a44826abe12a227df3b5db47bf6e0fe3"
         );
-
-        wallet.lock();
-
-        assert!(wallet.reveal_mnemonic(&key).is_err());
     }
 
     #[test]
@@ -373,14 +400,16 @@ mod tests_background {
         let keypair = KeyPair::gen_sha256().unwrap();
         let sk = keypair.get_secretkey().unwrap();
         let name = "SK Account 0".to_string();
-        let key = bg
-            .add_sk_wallet(
+        let device_indicators = vec![String::from("test"), String::from("0543543")];
+        let session = bg
+            .add_sk_wallet(SKParams {
                 password,
-                &sk,
-                name,
-                "test account name".to_string(),
-                AuthMethod::None,
-            )
+                secret_key: &sk,
+                account_name: name,
+                wallet_name: "test_wallet name".to_string(),
+                biometric_type: AuthMethod::Fingerprint,
+                device_indicators: &device_indicators,
+            })
             .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
@@ -388,27 +417,27 @@ mod tests_background {
         drop(bg);
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
+        let seed_bytes = decrypt_session(
+            &device_indicators.join(":"),
+            session,
+            &wallet.data.settings.crypto.cipher_orders,
+        )
+        .unwrap();
 
         assert_eq!(
-            wallet.reveal_mnemonic(&key),
-            Err(zil_errors::wallet::WalletErrors::DisabledSessions)
+            wallet.reveal_mnemonic(&seed_bytes),
+            Err(zil_errors::wallet::WalletErrors::InvalidAccountType)
         );
         assert_eq!(
-            wallet.unlock("wrong_passwordf".as_bytes()),
+            wallet.unlock(&[42u8; KEY_SIZE]),
             Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
         );
 
-        let new_key = wallet.unlock(password.as_bytes()).unwrap();
+        wallet.unlock(&seed_bytes).unwrap();
 
-        assert_eq!(
-            wallet.reveal_mnemonic(&key),
-            Err(zil_errors::wallet::WalletErrors::InvalidAccountType)
-        );
-
-        let res_keypair = wallet.reveal_keypair(0, &new_key, None).unwrap();
+        let res_keypair = wallet.reveal_keypair(0, &seed_bytes, None).unwrap();
 
         assert_eq!(res_keypair, keypair);
-        wallet.lock();
     }
 
     #[test]

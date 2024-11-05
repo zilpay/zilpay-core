@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use cipher::argon2::derive_key;
 use config::argon::KEY_SIZE;
-use config::cipher::PROOF_SIZE;
+use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use proto::keypair::KeyPair;
 use proto::secret_key::SecretKey;
 use proto::signature::Signature;
@@ -316,8 +316,8 @@ impl Wallet {
             .get_proof(&cipher_proof, &self.data.settings.crypto.cipher_orders)
             .or(Err(WalletErrors::KeyChainFailToGetProof))?;
 
-        let proof =
-            derive_key(&seed_bytes[..PROOF_SIZE], "").map_err(WalletErrors::ArgonCipherErrors)?;
+        let proof = derive_key(&seed_bytes[..PROOF_SIZE], PROOF_SALT)
+            .map_err(WalletErrors::ArgonCipherErrors)?;
 
         if proof != origin_proof {
             return Err(WalletErrors::ProofNotMatch);
