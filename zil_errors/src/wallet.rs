@@ -3,13 +3,16 @@ use crate::{
     cipher::CipherErrors,
     keychain::KeyChainErrors,
     keypair::{KeyPairError, SecretKeyError},
-    session::SessionErrors,
     storage::LocalStorageError,
 };
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("fail create argon2: {0}")]
+    ArgonCipherErrors(CipherErrors),
+    #[error("fail create keychain: {0}")]
+    KeyChainError(KeyChainErrors),
     #[error("Invalid signature verify")]
     InvalidVerifySig,
     #[error("Fail to verify sig error: {0}")]
@@ -50,8 +53,6 @@ pub enum WalletErrors {
     InvalidWalletTypeValue,
     #[error("Unknown type: {0}")]
     UnknownWalletType(u8),
-    #[error("Session decrypt keychain error: {0}")]
-    SessionDecryptKeychainError(#[from] SessionErrors),
     #[error("BIP39 not valid: {0}")]
     Bip39NotValid(String),
     #[error("Decrypt keychain error: {0}")]
@@ -60,8 +61,6 @@ pub enum WalletErrors {
     EncryptKeyChainErrors(KeyChainErrors),
     #[error("Mnemonic error: {0}")]
     MnemonicError(String),
-    #[error("Argon cipher error: {0}")]
-    ArgonCipherErrors(CipherErrors),
     #[error("Invalid BIP39 account")]
     InvalidBip39Account,
     #[error("Invalid secret key account")]
@@ -74,16 +73,10 @@ pub enum WalletErrors {
     TryEncryptSecretKeyError,
     #[error("Invalid account type")]
     InvalidAccountType,
-    #[error("Disabled sessions")]
-    DisabledSessions,
-    #[error("Unlock session error")]
-    UnlockSessionError,
     #[error("Keychain make cipher proof error: {0}")]
     KeyChainMakeCipherProofError(KeyChainErrors),
     #[error("Failed to get proof from storage: {0}")]
     FailToGetProofFromStorage(LocalStorageError),
-    #[error("Session decrypt error")]
-    SessionDecryptError,
     #[error("Keychain failed to get proof")]
     KeyChainFailToGetProof,
     #[error("Proof does not match")]

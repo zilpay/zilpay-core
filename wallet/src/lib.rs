@@ -5,7 +5,6 @@ pub mod wallet_types;
 
 use std::sync::Arc;
 
-use cipher::aes::AES_GCM_KEY_SIZE;
 use cipher::argon2::derive_key;
 use config::argon::KEY_SIZE;
 use config::cipher::PROOF_SIZE;
@@ -22,7 +21,6 @@ use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use config::wallet::{N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
-use session::Session;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
@@ -32,13 +30,11 @@ use zil_errors::wallet::WalletErrors;
 
 pub struct WalletConfig {
     pub storage: Arc<LocalStorage>,
-    pub session: Session,
     pub keychain: KeyChain,
     pub settings: WalletSettings,
 }
 
 pub struct Wallet {
-    session: Session,
     storage: Arc<LocalStorage>,
     pub data: WalletData,
 }
@@ -72,14 +68,9 @@ fn safe_storage_save(
 }
 
 impl Wallet {
-    pub fn is_enabled(&self) -> bool {
-        self.session.is_enabdle
-    }
-
     pub fn load_from_storage(
         key: &[u8; SHA256_SIZE],
         storage: Arc<LocalStorage>,
-        session: Session,
     ) -> Result<Self, WalletErrors> {
         let data = storage
             .get(key)
@@ -87,11 +78,7 @@ impl Wallet {
         let data = serde_json::from_slice::<WalletData>(&data)
             .or(Err(WalletErrors::FailToDeserializeWalletData))?;
 
-        Ok(Self {
-            session,
-            storage,
-            data,
-        })
+        Ok(Self { storage, data })
     }
 
     pub fn from_sk(
@@ -141,7 +128,6 @@ impl Wallet {
         };
 
         Ok(Self {
-            session: config.session,
             storage: config.storage,
             data,
         })
@@ -200,7 +186,6 @@ impl Wallet {
         };
 
         Ok(Self {
-            session: config.session,
             storage: config.storage,
             data,
         })
@@ -209,17 +194,10 @@ impl Wallet {
     pub fn reveal_keypair(
         &self,
         account_index: usize,
-        cipher_key: &[u8; AES_GCM_KEY_SIZE],
+        seed_bytes: &[u8; KEY_SIZE],
         passphrase: Option<&str>,
     ) -> Result<KeyPair, WalletErrors> {
-        if !self.session.is_enabdle {
-            return Err(WalletErrors::DisabledSessions);
-        }
-
-        let keychain = self
-            .session
-            .decrypt_keychain(cipher_key)
-            .map_err(WalletErrors::SessionDecryptKeychainError)?;
+        let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
         match self.data.wallet_type {
             WalletTypes::SecretKey => {
@@ -253,7 +231,7 @@ impl Wallet {
                     .accounts
                     .get(account_index)
                     .ok_or(WalletErrors::FailToGetAccount(account_index))?;
-                let m = self.reveal_mnemonic(cipher_key)?;
+                let m = self.reveal_mnemonic(seed_bytes)?;
                 let seed = m.to_seed(passphrase.unwrap_or(""));
                 let bip49 = account.get_bip49().map_err(WalletErrors::InvalidBip49)?;
                 let keypair = KeyPair::from_bip39_seed(&seed, &bip49)
@@ -265,20 +243,11 @@ impl Wallet {
         }
     }
 
-    pub fn reveal_mnemonic(
-        &self,
-        session_key: &[u8; AES_GCM_KEY_SIZE],
-    ) -> Result<Mnemonic, WalletErrors> {
-        if !self.session.is_enabdle {
-            return Err(WalletErrors::DisabledSessions);
-        }
-
+    pub fn reveal_mnemonic(&self, seed_bytes: &[u8; KEY_SIZE]) -> Result<Mnemonic, WalletErrors> {
         match self.data.wallet_type {
             WalletTypes::SecretPhrase((key, _)) => {
-                let keychain = self
-                    .session
-                    .decrypt_keychain(session_key)
-                    .map_err(WalletErrors::SessionDecryptKeychainError)?;
+                let keychain =
+                    KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
                 let storage_key = usize::to_le_bytes(key);
                 let cipher_entropy = self
                     .storage
@@ -301,10 +270,10 @@ impl Wallet {
         &self,
         msg: &[u8],
         account_index: usize,
-        session_key: &[u8; AES_GCM_KEY_SIZE],
+        seed_bytes: &[u8; KEY_SIZE],
         passphrase: Option<&str>,
     ) -> Result<Signature, WalletErrors> {
-        let keypair = self.reveal_keypair(account_index, session_key, passphrase)?;
+        let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let sig = keypair
             .sign_message(msg)
             .map_err(WalletErrors::FailSignMessage)?;
@@ -323,10 +292,10 @@ impl Wallet {
         &self,
         tx: &TransactionRequest,
         account_index: usize,
-        session_key: &[u8; AES_GCM_KEY_SIZE],
+        seed_bytes: &[u8; KEY_SIZE],
         passphrase: Option<&str>,
     ) -> Result<TransactionReceipt, WalletErrors> {
-        let keypair = self.reveal_keypair(account_index, session_key, passphrase)?;
+        let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
         keypair
             .sign_tx(tx)
@@ -334,35 +303,27 @@ impl Wallet {
             .map_err(WalletErrors::FailToSignTransaction)
     }
 
-    pub fn lock(&mut self) {
-        self.session.logout();
-    }
+    pub fn unlock(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<(), WalletErrors> {
+        let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
-    pub fn unlock(&mut self, password: &[u8]) -> Result<[u8; AES_GCM_KEY_SIZE], WalletErrors> {
-        let argon_seed = derive_key(password).map_err(WalletErrors::ArgonCipherErrors)?;
-        let (session, key) =
-            Session::unlock(&argon_seed).or(Err(WalletErrors::UnlockSessionError))?;
         let proof_key = usize::to_le_bytes(self.data.proof_key);
         let cipher_proof = self
             .storage
             .get(&proof_key)
             .map_err(WalletErrors::FailToGetProofFromStorage)?;
-        let keychain = session
-            .decrypt_keychain(&key)
-            .or(Err(WalletErrors::SessionDecryptError))?;
+
         let origin_proof = keychain
             .get_proof(&cipher_proof, &self.data.settings.crypto.cipher_orders)
             .or(Err(WalletErrors::KeyChainFailToGetProof))?;
+
         let proof =
-            derive_key(&argon_seed[..PROOF_SIZE]).map_err(WalletErrors::ArgonCipherErrors)?;
+            derive_key(&seed_bytes[..PROOF_SIZE], "").map_err(WalletErrors::ArgonCipherErrors)?;
 
         if proof != origin_proof {
             return Err(WalletErrors::ProofNotMatch);
         }
 
-        self.session = session;
-
-        Ok(key)
+        Ok(())
     }
 
     pub fn save_to_storage(&self) -> Result<(), WalletErrors> {
@@ -393,10 +354,9 @@ mod tests {
 
     use bip39::Mnemonic;
     use cipher::{argon2::derive_key, keychain::KeyChain};
-    use config::{cipher::PROOF_SIZE, sha::SHA256_SIZE};
+    use config::{argon::KEY_SIZE, cipher::PROOF_SIZE, sha::SHA256_SIZE};
     use crypto::bip49::Bip49DerivationPath;
     use proto::keypair::KeyPair;
-    use session::Session;
     use storage::LocalStorage;
     use zil_errors::wallet::WalletErrors;
 
@@ -409,8 +369,7 @@ mod tests {
 
     #[test]
     fn test_init_from_bip39_zil() {
-        let argon_seed = derive_key(PASSWORD).unwrap();
-        let (session, key) = Session::unlock(&argon_seed).unwrap();
+        let argon_seed = derive_key(PASSWORD, "").unwrap();
         let storage = LocalStorage::new(
             "com.test_write_wallet",
             "WriteTest Wallet Corp",
@@ -423,9 +382,8 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             .map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
-        let proof = derive_key(&argon_seed[..PROOF_SIZE]).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "").unwrap();
         let wallet_config = WalletConfig {
-            session,
             keychain,
             storage: Arc::clone(&storage),
             settings: Default::default(),
@@ -459,19 +417,16 @@ mod tests {
 
         drop(wallet);
 
-        let (session, new_key) = Session::unlock(&argon_seed).unwrap();
-        let res_wallet =
-            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage), session).unwrap();
+        let res_wallet = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
 
-        assert!(res_wallet.reveal_mnemonic(&key).is_err());
-        assert!(res_wallet.reveal_mnemonic(&new_key).is_ok());
+        assert!(res_wallet.reveal_mnemonic(&[0u8; KEY_SIZE]).is_err());
+        assert!(res_wallet.reveal_mnemonic(&argon_seed).is_ok());
     }
 
     #[test]
     fn test_init_from_sk() {
-        let argon_seed = derive_key(PASSWORD).unwrap();
-        let proof = derive_key(&argon_seed[..PROOF_SIZE]).unwrap();
-        let (session, key) = Session::unlock(&argon_seed).unwrap();
+        let argon_seed = derive_key(PASSWORD, "").unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "").unwrap();
         let storage = LocalStorage::new(
             "com.test_write_wallet_sk",
             "WriteTest Wallet_sk Corp",
@@ -484,7 +439,6 @@ mod tests {
         let sk = keypair.get_secretkey().unwrap();
         let name = "SK Account 0";
         let wallet_config = WalletConfig {
-            session,
             keychain,
             storage: Arc::clone(&storage),
             settings: Default::default(),
@@ -501,7 +455,7 @@ mod tests {
 
         assert_eq!(wallet.data.accounts.len(), 1);
         assert_eq!(
-            wallet.reveal_mnemonic(&key),
+            wallet.reveal_mnemonic(&argon_seed),
             Err(WalletErrors::InvalidAccountType)
         );
 
@@ -511,8 +465,7 @@ mod tests {
             .unwrap();
         wallet.save_to_storage().unwrap();
 
-        let (session, _key) = Session::unlock(&argon_seed).unwrap();
-        let w = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage), session).unwrap();
+        let w = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
 
         assert_eq!(w.data, wallet.data);
     }
