@@ -101,10 +101,12 @@ impl Background {
     where
         F: Fn(usize) -> Bip49DerivationPath,
     {
-        let argon_seed = argon2::derive_key(params.password.as_bytes())
+        let device_indicator = params.device_indicators.join(":");
+        let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
         let (session, key) =
             Session::unlock(&argon_seed).map_err(BackgroundError::CreateSessionError)?;
+
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
         let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
