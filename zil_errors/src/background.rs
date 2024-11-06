@@ -7,6 +7,12 @@ use crate::{
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BackgroundError {
+    #[error("Fail to decrypt session: {0}")]
+    DecryptSessionError(SessionErrors),
+    #[error("Fail unlock wallet, error: {0}")]
+    FailUnlockWallet(WalletErrors),
+    #[error("No wallet with index: {0}")]
+    WalletNotExists(usize),
     #[error("Fail flush Error: {0}")]
     LocalStorageFlushError(LocalStorageError),
     #[error("fail gen key pair: {0}")]

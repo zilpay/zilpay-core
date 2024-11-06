@@ -7,7 +7,7 @@ use config::{
 };
 use crypto::bip49::Bip49DerivationPath;
 use proto::{keypair::KeyPair, secret_key::SecretKey};
-use session::encrypt_session;
+use session::{decrypt_session, encrypt_session};
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
@@ -103,6 +103,56 @@ impl Background {
             is_old_storage,
             settings: Default::default(),
         })
+    }
+
+    pub fn unlock_wallet_with_password(
+        &mut self,
+        password: &str,
+        device_indicators: &[String],
+        wallet_index: usize,
+    ) -> Result<(), BackgroundError> {
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(password.as_bytes(), &device_indicator)
+            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let wallet = self
+            .wallets
+            .get_mut(wallet_index)
+            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+
+        wallet
+            .unlock(&argon_seed)
+            .map_err(BackgroundError::FailUnlockWallet)?;
+
+        Ok(())
+    }
+
+    pub fn unlock_wallet_with_session(
+        &mut self,
+        session_cipher: Vec<u8>,
+        device_indicators: &[String],
+        wallet_index: usize,
+    ) -> Result<(), BackgroundError> {
+        let wallet = self
+            .wallets
+            .get_mut(wallet_index)
+            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
+            .chain(device_indicators.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(":");
+
+        let seed_bytes = decrypt_session(
+            &wallet_device_indicators,
+            session_cipher,
+            &wallet.data.settings.crypto.cipher_orders,
+        )
+        .map_err(BackgroundError::DecryptSessionError)?;
+
+        wallet
+            .unlock(&seed_bytes)
+            .map_err(BackgroundError::FailUnlockWallet)?;
+
+        Ok(())
     }
 
     pub fn add_bip39_wallet<F>(
