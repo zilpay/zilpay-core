@@ -132,16 +132,7 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let session = if params.biometric_type == AuthMethod::None {
-            Vec::new()
-        } else {
-            encrypt_session(
-                &device_indicator,
-                &argon_seed,
-                &wallet_config.settings.crypto.cipher_orders,
-            )
-            .map_err(BackgroundError::CreateSessionError)?
-        };
+        let options = &wallet_config.settings.crypto.cipher_orders.clone();
         let wallet = Wallet::from_bip39_words(
             &proof,
             &mnemonic,
@@ -153,6 +144,17 @@ impl Background {
         )
         .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
+        let device_indicator = std::iter::once(hex::encode(indicator))
+            .chain(params.device_indicators.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(":");
+
+        let session = if params.biometric_type == AuthMethod::None {
+            Vec::new()
+        } else {
+            encrypt_session(&device_indicator, &argon_seed, options)
+                .map_err(BackgroundError::CreateSessionError)?
+        };
 
         wallet
             .save_to_storage()
@@ -184,16 +186,7 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let session = if params.biometric_type == AuthMethod::None {
-            Vec::new()
-        } else {
-            encrypt_session(
-                &device_indicator,
-                &argon_seed,
-                &wallet_config.settings.crypto.cipher_orders,
-            )
-            .map_err(BackgroundError::CreateSessionError)?
-        };
+        let options = &wallet_config.settings.crypto.cipher_orders.clone();
         let wallet = Wallet::from_sk(
             params.secret_key,
             params.account_name,
@@ -203,7 +196,19 @@ impl Background {
             params.biometric_type,
         )
         .map_err(BackgroundError::FailToInitWallet)?;
+
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
+        let device_indicator = std::iter::once(hex::encode(indicator))
+            .chain(params.device_indicators.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(":");
+
+        let session = if params.biometric_type == AuthMethod::None {
+            Vec::new()
+        } else {
+            encrypt_session(&device_indicator, &argon_seed, options)
+                .map_err(BackgroundError::CreateSessionError)?
+        };
 
         wallet
             .save_to_storage()
@@ -361,8 +366,13 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
 
+        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
+            .chain(device_indicators)
+            .collect::<Vec<_>>()
+            .join(":");
+
         let seed_bytes = decrypt_session(
-            &device_indicators.join(":"),
+            &wallet_device_indicators,
             session,
             &wallet.data.settings.crypto.cipher_orders,
         )
@@ -417,8 +427,13 @@ mod tests_background {
         drop(bg);
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
+        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
+            .chain(device_indicators)
+            .collect::<Vec<_>>()
+            .join(":");
+
         let seed_bytes = decrypt_session(
-            &device_indicators.join(":"),
+            &wallet_device_indicators,
             session,
             &wallet.data.settings.crypto.cipher_orders,
         )
