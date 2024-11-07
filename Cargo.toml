@@ -19,7 +19,7 @@ members = [
   "bincode",
   "cipher",
   "config",
-  "crypto",
+  "crypto", "ledger",
   "proto",
   "session",
   "settings",
