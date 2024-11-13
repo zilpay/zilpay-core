@@ -9,4 +9,5 @@ background = { path = "../background" }
 crypto = { path = "../crypto" }
 wallet = { path = "../wallet" }
 settings = { path = "../settings" }
+config = { path = "../config" }
 proto = { path = "../proto" }

@@ -4275,6 +4275,7 @@ name = "zilpay"
 version = "0.1.0"
 dependencies = [
  "background",
+ "config",
  "crypto",
  "proto",
  "settings",
@@ -4289,6 +4290,7 @@ dependencies = [
  "alloy",
  "background",
  "bip39",
+ "config",
  "crypto",
  "hex",
  "mockito",
