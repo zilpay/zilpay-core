@@ -22,6 +22,24 @@ pub struct Account {
 }
 
 impl Account {
+    pub fn from_ledger(
+        pub_key: &PubKey,
+        name: String,
+        index: usize,
+    ) -> Result<Self, AccountErrors> {
+        let addr = pub_key.get_addr().map_err(AccountErrors::PubKeyError)?;
+        let account_type = AccountType::Ledger(index);
+
+        Ok(Self {
+            account_type,
+            addr,
+            name,
+            pub_key: pub_key.to_owned(),
+            ft_map: HashMap::new(),
+            nft_map: HashMap::new(),
+        })
+    }
+
     pub fn from_secret_key(
         sk: &SecretKey,
         name: String,

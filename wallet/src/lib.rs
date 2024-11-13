@@ -9,6 +9,7 @@ use cipher::argon2::derive_key;
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use proto::keypair::KeyPair;
+use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
 use proto::signature::Signature;
 use proto::tx::{TransactionReceipt, TransactionRequest};
@@ -79,6 +80,48 @@ impl Wallet {
             .or(Err(WalletErrors::FailToDeserializeWalletData))?;
 
         Ok(Self { storage, data })
+    }
+
+    pub fn from_ledger(
+        pub_key: &PubKey,
+        name: String,
+        wallet_index: usize,
+        proof: &[u8; KEY_SIZE],
+        config: WalletConfig,
+        wallet_name: String,
+        biometric_type: AuthMethod,
+    ) -> Result<Self, WalletErrors> {
+        let cipher_proof = config
+            .keychain
+            .make_proof(proof, &config.settings.crypto.cipher_orders)
+            .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
+        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
+        drop(cipher_proof);
+
+        let mut hasher = Sha256::new();
+        hasher.update(pub_key.as_bytes());
+
+        let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
+        let wallet_address = hex::encode(wallet_address);
+        let account = account::Account::from_ledger(pub_key, name, wallet_index)
+            .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
+
+        let accounts: Vec<account::Account> = vec![account];
+        let data = WalletData {
+            wallet_name,
+            biometric_type,
+            proof_key,
+            settings: config.settings,
+            accounts,
+            wallet_address,
+            wallet_type: WalletTypes::SecretKey,
+            selected_account: 0,
+        };
+
+        Ok(Self {
+            storage: config.storage,
+            data,
+        })
     }
 
     pub fn from_sk(

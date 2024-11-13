@@ -6,7 +6,7 @@ use config::{
     storage::INDICATORS_DB_KEY,
 };
 use crypto::bip49::Bip49DerivationPath;
-use proto::{keypair::KeyPair, secret_key::SecretKey};
+use proto::{keypair::KeyPair, pubkey::PubKey, secret_key::SecretKey};
 use session::{decrypt_session, encrypt_session};
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
@@ -216,6 +216,57 @@ impl Background {
 
         self.save_indicators()?;
 
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(session)
+    }
+
+    pub fn add_ledger_wallet(
+        &mut self,
+        wallet_index: usize,
+        pub_key: &PubKey,
+        wallet_name: String,
+        account_name: String,
+        device_indicators: &[String],
+        biometric_type: AuthMethod,
+    ) -> Result<Vec<u8>, BackgroundError> {
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(device_indicator.as_bytes(), "ledger")
+            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let keychain =
+            KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
+        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT)
+            .map_err(BackgroundError::ArgonCreateProofError)?;
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&self.storage),
+            settings: Default::default(), // TODO: setup settings
+        };
+        let options = &wallet_config.settings.crypto.cipher_orders.clone();
+        let session = if biometric_type == AuthMethod::None {
+            Vec::new()
+        } else {
+            encrypt_session(&device_indicator, &argon_seed, options)
+                .map_err(BackgroundError::CreateSessionError)?
+        };
+
+        let wallet = Wallet::from_ledger(
+            pub_key,
+            account_name,
+            wallet_index,
+            &proof,
+            wallet_config,
+            wallet_name,
+            biometric_type,
+        )
+        .map_err(BackgroundError::FailToInitWallet)?;
+        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
+
+        self.indicators.push(indicator);
+        self.wallets.push(wallet);
+        self.save_indicators()?;
         self.storage
             .flush()
             .map_err(BackgroundError::LocalStorageFlushError)?;

@@ -1,8 +1,14 @@
-use crate::{address::AddressError, keypair::KeyPairError, LocalStorageError};
+use crate::{
+    address::AddressError,
+    keypair::{KeyPairError, PubKeyError},
+    LocalStorageError,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AccountErrors {
+    #[error("Fail to get address form pub_key: {0}")]
+    PubKeyError(PubKeyError),
     #[error("Invalid PubKey type")]
     InvalidPubKeyType,
     #[error("Invalid Account type: {0}")]
