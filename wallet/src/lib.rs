@@ -91,6 +91,7 @@ impl Wallet {
         wallet_name: String,
         biometric_type: AuthMethod,
     ) -> Result<Self, WalletErrors> {
+        // TODO: add cipher for encrypt account index.
         let cipher_proof = config
             .keychain
             .make_proof(proof, &config.settings.crypto.cipher_orders)

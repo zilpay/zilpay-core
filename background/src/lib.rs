@@ -264,6 +264,9 @@ impl Background {
         .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
+        wallet
+            .save_to_storage()
+            .map_err(BackgroundError::FailToSaveWallet)?;
         self.indicators.push(indicator);
         self.wallets.push(wallet);
         self.save_indicators()?;
@@ -497,6 +500,56 @@ mod tests_background {
             sk.to_string(),
             "00fe8b8ee252f3d1348ca68c8537cb4d26a44826abe12a227df3b5db47bf6e0fe3"
         );
+    }
+
+    #[test]
+    fn test_from_ledger() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+
+        assert_eq!(bg.wallets.len(), 0);
+
+        let device_indicators = [String::from("android"), String::from("4354")];
+        let keypair = KeyPair::gen_sha256().unwrap();
+        let pub_key = keypair.get_pubkey().unwrap();
+
+        let session = bg
+            .add_ledger_wallet(
+                0,
+                &pub_key,
+                String::from("Ledger wallet"),
+                String::from("ledger 0"),
+                &device_indicators,
+                AuthMethod::FaceId,
+            )
+            .unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+
+        drop(bg);
+
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let wallet = bg.wallets.first_mut().unwrap();
+
+        // let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
+        //     .chain(device_indicators)
+        //     .collect::<Vec<_>>()
+        //     .join(":");
+
+        // let seed_bytes = decrypt_session(
+        //     &wallet_device_indicators,
+        //     session,
+        //     &wallet.data.settings.crypto.cipher_orders,
+        // )
+        // .unwrap();
+
+        // assert_eq!(
+        //     wallet.unlock(&[42u8; KEY_SIZE]),
+        //     Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
+        // );
+
+        // wallet.unlock(&seed_bytes).unwrap();
     }
 
     #[test]
