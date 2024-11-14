@@ -25,10 +25,10 @@ impl Account {
     pub fn from_ledger(
         pub_key: &PubKey,
         name: String,
-        index: usize,
+        cipher_index: usize,
     ) -> Result<Self, AccountErrors> {
         let addr = pub_key.get_addr().map_err(AccountErrors::PubKeyError)?;
-        let account_type = AccountType::Ledger(index);
+        let account_type = AccountType::Ledger(cipher_index);
 
         Ok(Self {
             account_type,
@@ -92,7 +92,6 @@ impl Account {
                 self.account_type.to_string(),
             )),
         }
-        // Ok(Bip49DerivationPath::Zilliqa(0))
     }
 }
 

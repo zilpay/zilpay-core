@@ -8,7 +8,7 @@ pub const ACCOUNT_TYPE_SIZE: usize = SYS_SIZE + 1;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum AccountType {
-    Ledger(usize),     // Ledger index
+    Ledger(usize),     // Ledger cipher index
     Bip39HD(usize),    // HD key bip39 index
     PrivateKey(usize), // A storage key for cipher secret key
 }

@@ -5,9 +5,9 @@ use config::SYS_SIZE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zil_errors::wallet::WalletErrors;
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum WalletTypes {
-    Ledger(usize), // Ledger product_id
+    Ledger(Vec<u8>), // Ledger product_id or uuid
     // Cipher for entropy secret words storage_key / passphrase
     SecretPhrase((usize, bool)),
     SecretKey,
@@ -46,10 +46,10 @@ impl ToVecBytes for WalletTypes {
 
         match self {
             Self::Ledger(value) => {
-                let mut bytes = vec![0u8; SYS_SIZE + 1];
+                let mut bytes = vec![];
 
-                bytes[0] = code;
-                bytes[1..].copy_from_slice(&value.to_ne_bytes());
+                bytes.push(code);
+                bytes.extend_from_slice(value);
 
                 bytes
             }
@@ -99,14 +99,7 @@ impl FromBytes for WalletTypes {
 
     fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
         match bytes[0] {
-            0 => {
-                let bytes_value: [u8; SYS_SIZE] = bytes[1..]
-                    .try_into()
-                    .or(Err(WalletErrors::InvalidWalletTypeValue))?;
-                let value: usize = usize::from_ne_bytes(bytes_value);
-
-                Ok(Self::Ledger(value))
-            }
+            0 => Ok(Self::Ledger(bytes[1..].to_vec())),
             1 => {
                 let passphrase = if bytes[1] == 1 {
                     true
@@ -130,11 +123,18 @@ impl FromBytes for WalletTypes {
 
 #[cfg(test)]
 mod tests_wallet_type {
+    use rand::RngCore;
+
     use super::*;
 
     #[test]
     fn tests_wallet_type_convert() {
-        let ledger_type = WalletTypes::Ledger(42);
+        let mut rng = rand::thread_rng();
+        let mut ledger_uuid = vec![0u8; 128];
+
+        rng.fill_bytes(&mut ledger_uuid);
+
+        let ledger_type = WalletTypes::Ledger(ledger_uuid);
         let secret_phrase_type = WalletTypes::SecretPhrase((69, true));
         let secret_key_type = WalletTypes::SecretKey;
 
