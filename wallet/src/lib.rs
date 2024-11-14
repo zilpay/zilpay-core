@@ -35,6 +35,17 @@ pub struct WalletConfig {
     pub settings: WalletSettings,
 }
 
+pub struct LedgerParams<'a> {
+    pub pub_key: &'a PubKey,
+    pub ledger_id: Vec<u8>,
+    pub name: String,
+    pub wallet_index: usize,
+    pub proof: &'a [u8; KEY_SIZE],
+    pub config: WalletConfig,
+    pub wallet_name: String,
+    pub biometric_type: AuthMethod,
+}
+
 pub struct Wallet {
     storage: Arc<LocalStorage>,
     pub data: WalletData,
@@ -82,45 +93,41 @@ impl Wallet {
         Ok(Self { storage, data })
     }
 
-    pub fn from_ledger(
-        pub_key: &PubKey,
-        name: String,
-        wallet_index: usize,
-        proof: &[u8; KEY_SIZE],
-        config: WalletConfig,
-        wallet_name: String,
-        biometric_type: AuthMethod,
-    ) -> Result<Self, WalletErrors> {
+    pub fn from_ledger(params: LedgerParams) -> Result<Self, WalletErrors> {
         // TODO: add cipher for encrypt account index.
-        let cipher_proof = config
+        let cipher_proof = params
+            .config
             .keychain
-            .make_proof(proof, &config.settings.crypto.cipher_orders)
+            .make_proof(params.proof, &params.config.settings.crypto.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
+        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&params.config.storage))?;
         drop(cipher_proof);
 
         let mut hasher = Sha256::new();
-        hasher.update(pub_key.as_bytes());
+
+        hasher.update(params.pub_key.as_bytes());
+        hasher.update(&params.ledger_id);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
         let wallet_address = hex::encode(wallet_address);
-        let account = account::Account::from_ledger(pub_key, name, wallet_index)
-            .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
+        let account =
+            account::Account::from_ledger(params.pub_key, params.name, params.wallet_index)
+                .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
 
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
-            wallet_name,
-            biometric_type,
+            wallet_name: params.wallet_name,
+            biometric_type: params.biometric_type,
             proof_key,
-            settings: config.settings,
+            settings: params.config.settings,
             accounts,
             wallet_address,
-            wallet_type: WalletTypes::SecretKey,
+            wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
         };
 
         Ok(Self {
-            storage: config.storage,
+            storage: params.config.storage,
             data,
         })
     }
