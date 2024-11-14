@@ -16,7 +16,7 @@ pub fn to_checksum_address(address: &str) -> Result<String, AddressError> {
     let mut ret = String::from("0x");
 
     for (i, ch) in address.chars().enumerate() {
-        if ch.is_digit(10) {
+        if ch.is_ascii_digit() {
             ret.push(ch);
         } else {
             let mask = U256::from(2).pow(U256::from(255 - 6 * i));

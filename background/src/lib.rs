@@ -6,7 +6,7 @@ use config::{
     storage::INDICATORS_DB_KEY,
 };
 use crypto::bip49::Bip49DerivationPath;
-use proto::{keypair::KeyPair, pubkey::PubKey, secret_key::SecretKey};
+use proto::{keypair::KeyPair, secret_key::SecretKey};
 use session::{decrypt_session, encrypt_session};
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
@@ -248,8 +248,8 @@ impl Background {
                 .map_err(BackgroundError::CreateSessionError)?
         };
 
-        let wallet =
-            Wallet::from_ledger(params, &proof).map_err(BackgroundError::FailToInitWallet)?;
+        let wallet = Wallet::from_ledger(params, &proof, wallet_config)
+            .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
         wallet
@@ -495,6 +495,9 @@ mod tests_background {
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let mut bg = Background::from_storage_path(&dir).unwrap();
+        let mut ledger_id = vec![0u8; 32];
+
+        rng.fill_bytes(&mut ledger_id);
 
         assert_eq!(bg.wallets.len(), 0);
 
@@ -504,12 +507,15 @@ mod tests_background {
 
         let session = bg
             .add_ledger_wallet(
-                0,
-                &pub_key,
-                String::from("Ledger wallet"),
-                String::from("ledger 0"),
+                LedgerParams {
+                    pub_key: &pub_key,
+                    name: String::from("account 0"),
+                    ledger_id,
+                    wallet_index: 0,
+                    wallet_name: String::from("Ledger nano x"),
+                    biometric_type: AuthMethod::FaceId,
+                },
                 &device_indicators,
-                AuthMethod::FaceId,
             )
             .unwrap();
 
@@ -520,24 +526,21 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
 
-        // let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
-        //     .chain(device_indicators)
-        //     .collect::<Vec<_>>()
-        //     .join(":");
+        let wallet_device_indicators = device_indicators.join(":");
 
-        // let seed_bytes = decrypt_session(
-        //     &wallet_device_indicators,
-        //     session,
-        //     &wallet.data.settings.crypto.cipher_orders,
-        // )
-        // .unwrap();
+        let seed_bytes = decrypt_session(
+            &wallet_device_indicators,
+            session,
+            &wallet.data.settings.crypto.cipher_orders,
+        )
+        .unwrap();
 
-        // assert_eq!(
-        //     wallet.unlock(&[42u8; KEY_SIZE]),
-        //     Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
-        // );
+        assert_eq!(
+            wallet.unlock(&[42u8; KEY_SIZE]),
+            Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
+        );
 
-        // wallet.unlock(&seed_bytes).unwrap();
+        wallet.unlock(&seed_bytes).unwrap();
     }
 
     #[test]

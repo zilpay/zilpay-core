@@ -40,7 +40,6 @@ pub struct LedgerParams<'a> {
     pub ledger_id: Vec<u8>,
     pub name: String,
     pub wallet_index: usize,
-    pub config: WalletConfig,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
 }
@@ -92,14 +91,17 @@ impl Wallet {
         Ok(Self { storage, data })
     }
 
-    pub fn from_ledger(params: LedgerParams, proof: &[u8; KEY_SIZE]) -> Result<Self, WalletErrors> {
+    pub fn from_ledger(
+        params: LedgerParams,
+        proof: &[u8; KEY_SIZE],
+        config: WalletConfig,
+    ) -> Result<Self, WalletErrors> {
         // TODO: add cipher for encrypt account index.
-        let cipher_proof = params
-            .config
+        let cipher_proof = config
             .keychain
-            .make_proof(proof, &params.config.settings.crypto.cipher_orders)
+            .make_proof(proof, &config.settings.crypto.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&params.config.storage))?;
+        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
 
         let mut hasher = Sha256::new();
@@ -118,7 +120,7 @@ impl Wallet {
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
             proof_key,
-            settings: params.config.settings,
+            settings: config.settings,
             accounts,
             wallet_address,
             wallet_type: WalletTypes::Ledger(params.ledger_id),
@@ -126,7 +128,7 @@ impl Wallet {
         };
 
         Ok(Self {
-            storage: params.config.storage,
+            storage: config.storage,
             data,
         })
     }
