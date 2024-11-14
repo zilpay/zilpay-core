@@ -11,7 +11,7 @@ use session::{decrypt_session, encrypt_session};
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
-use wallet::{wallet_data::AuthMethod, Wallet, WalletConfig};
+use wallet::{wallet_data::AuthMethod, LedgerParams, Wallet, WalletConfig};
 use zil_errors::background::BackgroundError;
 
 use rand::{RngCore, SeedableRng};
@@ -225,12 +225,8 @@ impl Background {
 
     pub fn add_ledger_wallet(
         &mut self,
-        wallet_index: usize,
-        pub_key: &PubKey,
-        wallet_name: String,
-        account_name: String,
+        params: LedgerParams,
         device_indicators: &[String],
-        biometric_type: AuthMethod,
     ) -> Result<Vec<u8>, BackgroundError> {
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(device_indicator.as_bytes(), "ledger")
@@ -245,23 +241,15 @@ impl Background {
             settings: Default::default(), // TODO: setup settings
         };
         let options = &wallet_config.settings.crypto.cipher_orders.clone();
-        let session = if biometric_type == AuthMethod::None {
+        let session = if params.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
             encrypt_session(&device_indicator, &argon_seed, options)
                 .map_err(BackgroundError::CreateSessionError)?
         };
 
-        let wallet = Wallet::from_ledger(
-            pub_key,
-            account_name,
-            wallet_index,
-            &proof,
-            wallet_config,
-            wallet_name,
-            biometric_type,
-        )
-        .map_err(BackgroundError::FailToInitWallet)?;
+        let wallet =
+            Wallet::from_ledger(params, &proof).map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
         wallet
