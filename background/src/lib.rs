@@ -247,17 +247,21 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
+        let biometric_type = params.biometric_type;
         let options = &wallet_config.settings.crypto.cipher_orders.clone();
-        let session = if params.biometric_type == AuthMethod::None {
+        let wallet = Wallet::from_ledger(params, &proof, wallet_config)
+            .map_err(BackgroundError::FailToInitWallet)?;
+        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
+        let device_indicator = std::iter::once(hex::encode(indicator))
+            .chain(device_indicators.iter().cloned())
+            .collect::<Vec<_>>()
+            .join(":");
+        let session = if biometric_type == AuthMethod::None {
             Vec::new()
         } else {
             encrypt_session(&device_indicator, &argon_seed, options)
                 .map_err(BackgroundError::CreateSessionError)?
         };
-
-        let wallet = Wallet::from_ledger(params, &proof, wallet_config)
-            .map_err(BackgroundError::FailToInitWallet)?;
-        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
 
         wallet
             .save_to_storage()
@@ -533,7 +537,10 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
 
-        let wallet_device_indicators = device_indicators.join(":");
+        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
+            .chain(device_indicators)
+            .collect::<Vec<_>>()
+            .join(":");
 
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
