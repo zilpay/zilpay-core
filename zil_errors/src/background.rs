@@ -7,6 +7,8 @@ use crate::{
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BackgroundError {
+    #[error("such Ledger id already exists.")]
+    LedgerIdExists,
     #[error("Fail to decrypt session: {0}")]
     DecryptSessionError(SessionErrors),
     #[error("Fail unlock wallet, error: {0}")]

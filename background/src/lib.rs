@@ -11,7 +11,9 @@ use session::{decrypt_session, encrypt_session};
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
-use wallet::{wallet_data::AuthMethod, LedgerParams, Wallet, WalletConfig};
+use wallet::{
+    wallet_data::AuthMethod, wallet_types::WalletTypes, LedgerParams, Wallet, WalletConfig,
+};
 use zil_errors::background::BackgroundError;
 
 use rand::{RngCore, SeedableRng};
@@ -211,11 +213,8 @@ impl Background {
             .map_err(BackgroundError::FailToSaveWallet)?;
 
         self.indicators.push(indicator);
-
         self.wallets.push(wallet);
-
         self.save_indicators()?;
-
         self.storage
             .flush()
             .map_err(BackgroundError::LocalStorageFlushError)?;
@@ -228,6 +227,14 @@ impl Background {
         params: LedgerParams,
         device_indicators: &[String],
     ) -> Result<Vec<u8>, BackgroundError> {
+        if self
+            .wallets
+            .iter()
+            .any(|w| w.data.wallet_type == WalletTypes::Ledger(params.ledger_id.clone()))
+        {
+            return Err(BackgroundError::LedgerIdExists);
+        }
+
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(device_indicator.as_bytes(), "ledger")
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -541,6 +548,50 @@ mod tests_background {
         );
 
         wallet.unlock(&seed_bytes).unwrap();
+    }
+
+    #[test]
+    fn test_2_same_ledger() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let mut ledger_id = vec![0u8; 32];
+
+        rng.fill_bytes(&mut ledger_id);
+
+        assert_eq!(bg.wallets.len(), 0);
+
+        let device_indicators = [String::from("android"), String::from("4354")];
+        let keypair = KeyPair::gen_sha256().unwrap();
+        let pub_key = keypair.get_pubkey().unwrap();
+
+        bg.add_ledger_wallet(
+            LedgerParams {
+                pub_key: &pub_key,
+                name: String::from("account 0"),
+                ledger_id: ledger_id.clone(),
+                wallet_index: 0,
+                wallet_name: String::from("Ledger nano x"),
+                biometric_type: AuthMethod::FaceId,
+            },
+            &device_indicators,
+        )
+        .unwrap();
+
+        assert_eq!(
+            bg.add_ledger_wallet(
+                LedgerParams {
+                    pub_key: &pub_key,
+                    name: String::from("account 0"),
+                    ledger_id,
+                    wallet_index: 0,
+                    wallet_name: String::from("Ledger nano x"),
+                    biometric_type: AuthMethod::FaceId,
+                },
+                &device_indicators,
+            ),
+            Err(BackgroundError::LedgerIdExists)
+        )
     }
 
     #[test]
