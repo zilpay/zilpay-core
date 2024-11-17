@@ -318,9 +318,7 @@ impl Background {
             .map_err(BackgroundError::FailToSaveWallet)?;
         self.indicators.push(indicator);
         self.wallets.push(wallet);
-
         self.save_indicators()?;
-
         self.storage
             .flush()
             .map_err(BackgroundError::LocalStorageFlushError)?;
