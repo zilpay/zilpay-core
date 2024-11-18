@@ -42,6 +42,18 @@ pub struct LedgerParams<'a> {
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
+    pub networks: Vec<usize>,
+}
+
+pub struct Bip39Params<'a> {
+    pub proof: &'a [u8; KEY_SIZE],
+    pub mnemonic: &'a Mnemonic,
+    pub passphrase: &'a str,
+    pub indexes: &'a [(Bip49DerivationPath, String)],
+    pub config: WalletConfig,
+    pub wallet_name: String,
+    pub biometric_type: AuthMethod,
+    pub network: Vec<usize>,
 }
 
 pub struct Wallet {
@@ -117,6 +129,7 @@ impl Wallet {
 
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
+            network: params.networks,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
             proof_key,
@@ -140,6 +153,7 @@ impl Wallet {
         config: WalletConfig,
         wallet_name: String,
         biometric_type: AuthMethod,
+        network: Vec<usize>,
     ) -> Result<Self, WalletErrors> {
         let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
@@ -169,6 +183,7 @@ impl Wallet {
             .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
+            network,
             wallet_name,
             biometric_type,
             proof_key,
@@ -185,28 +200,26 @@ impl Wallet {
         })
     }
 
-    pub fn from_bip39_words(
-        proof: &[u8; KEY_SIZE],
-        mnemonic: &Mnemonic,
-        passphrase: &str,
-        indexes: &[(Bip49DerivationPath, String)],
-        config: WalletConfig,
-        wallet_name: String,
-        biometric_type: AuthMethod,
-    ) -> Result<Self, WalletErrors> {
-        let cipher_entropy = config
+    pub fn from_bip39_words(params: Bip39Params) -> Result<Self, WalletErrors> {
+        let cipher_entropy = params
+            .config
             .keychain
-            .encrypt(mnemonic.to_entropy(), &config.settings.crypto.cipher_orders)
+            .encrypt(
+                params.mnemonic.to_entropy(),
+                &params.config.settings.crypto.cipher_orders,
+            )
             .map_err(WalletErrors::EncryptKeyChainErrors)?;
         let mut combined = [0u8; SHA256_SIZE];
-        let mnemonic_seed = mnemonic.to_seed_normalized(passphrase);
-        let cipher_proof = config
+        let mnemonic_seed = params.mnemonic.to_seed_normalized(params.passphrase);
+        let cipher_proof = params
+            .config
             .keychain
-            .make_proof(proof, &config.settings.crypto.cipher_orders)
+            .make_proof(params.proof, &params.config.settings.crypto.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
+        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&params.config.storage))?;
         drop(cipher_proof);
-        let cipher_entropy_key = safe_storage_save(&cipher_entropy, Arc::clone(&config.storage))?;
+        let cipher_entropy_key =
+            safe_storage_save(&cipher_entropy, Arc::clone(&params.config.storage))?;
 
         combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
@@ -216,9 +229,9 @@ impl Wallet {
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
         let wallet_address = hex::encode(wallet_address);
-        let mut accounts: Vec<account::Account> = Vec::with_capacity(indexes.len());
+        let mut accounts: Vec<account::Account> = Vec::with_capacity(params.indexes.len());
 
-        for index in indexes {
+        for index in params.indexes {
             let (bip49, name) = index;
             let hd_account = account::Account::from_hd(&mnemonic_seed, name.to_owned(), bip49)
                 .or(Err(WalletErrors::InvalidBip39Account))?;
@@ -227,18 +240,22 @@ impl Wallet {
         }
 
         let data = WalletData {
-            wallet_name,
-            biometric_type,
+            network: params.network,
+            wallet_name: params.wallet_name,
+            biometric_type: params.biometric_type,
             proof_key,
-            settings: config.settings,
+            settings: params.config.settings,
             wallet_address,
             accounts,
-            wallet_type: WalletTypes::SecretPhrase((cipher_entropy_key, !passphrase.is_empty())),
+            wallet_type: WalletTypes::SecretPhrase((
+                cipher_entropy_key,
+                !params.passphrase.is_empty(),
+            )),
             selected_account: 0,
         };
 
         Ok(Self {
-            storage: config.storage,
+            storage: params.config.storage,
             data,
         })
     }
@@ -412,7 +429,9 @@ mod tests {
     use storage::LocalStorage;
     use zil_errors::wallet::WalletErrors;
 
-    use crate::{wallet_types::WalletTypes, Wallet, WalletConfig};
+    use crate::{
+        wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, Wallet, WalletConfig,
+    };
 
     const MNEMONIC_STR: &str =
         "green process gate doctor slide whip priority shrug diamond crumble average help";
@@ -440,15 +459,16 @@ mod tests {
             storage: Arc::clone(&storage),
             settings: Default::default(),
         };
-        let wallet = Wallet::from_bip39_words(
-            &proof,
-            &mnemonic,
-            PASSPHRASE,
-            &indexes,
-            wallet_config,
-            "test Name".to_string(),
-            Default::default(),
-        )
+        let wallet = Wallet::from_bip39_words(Bip39Params {
+            proof: &proof,
+            mnemonic: &mnemonic,
+            passphrase: PASSPHRASE,
+            indexes: &indexes,
+            config: wallet_config,
+            wallet_name: "Wllaet name".to_string(),
+            biometric_type: AuthMethod::Biometric,
+            network: vec![0],
+        })
         .unwrap();
 
         wallet.save_to_storage().unwrap();
@@ -502,6 +522,7 @@ mod tests {
             wallet_config,
             "test Name".to_string(),
             Default::default(),
+            vec![0],
         )
         .unwrap();
 

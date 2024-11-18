@@ -13,6 +13,7 @@ settings = { path = "../settings" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }
 cipher = { path = "../cipher" }
+network = { path = "../network" }
 bip39 = "2.0.0"
 rand_chacha = "0.3.1"
 rand = "0.8.5"

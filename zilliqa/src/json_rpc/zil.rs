@@ -69,7 +69,7 @@ impl ZilliqaJsonRPC {
         Ok(Self { nodes })
     }
 
-    pub async fn reqwest<'a, SR>(&self, payloads: Vec<Value>) -> Result<SR, ZilliqaErrors<'a>>
+    pub async fn req<'a, SR>(&self, payloads: Vec<Value>) -> Result<SR, ZilliqaErrors<'a>>
     where
         SR: DeserializeOwned + std::fmt::Debug,
     {
@@ -198,7 +198,7 @@ mod tests {
                 json!([bal_addr]),
                 ZilMethods::GetBalance,
             )];
-            let resvec: Vec<ResultRes<GetBalanceRes>> = zil.reqwest(bal_payload).await.unwrap();
+            let resvec: Vec<ResultRes<GetBalanceRes>> = zil.req(bal_payload).await.unwrap();
             println!("Bal {0:?}", resvec[0]);
             resvec[0].result.as_ref().map_or(0, |v| v.nonce)
         };
@@ -222,8 +222,7 @@ mod tests {
                     json!([tx]),
                     ZilMethods::CreateTransaction,
                 )];
-                let res: Vec<ResultRes<CreateTransactionRes>> =
-                    zil.reqwest(payloads).await.unwrap();
+                let res: Vec<ResultRes<CreateTransactionRes>> = zil.req(payloads).await.unwrap();
                 println!("{res:?}");
             }
             _ => panic!("fail test"),
@@ -239,7 +238,7 @@ mod tests {
             ZilMethods::GetBalance,
         )];
 
-        let res: Vec<ResultRes<GetBalanceRes>> = zil.reqwest(payloads).await.unwrap();
+        let res: Vec<ResultRes<GetBalanceRes>> = zil.req(payloads).await.unwrap();
 
         assert!(res.len() == 1);
         assert!(res[0].result.is_some());
