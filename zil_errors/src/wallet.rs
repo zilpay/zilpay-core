@@ -12,6 +12,9 @@ pub enum WalletErrors {
     #[error("fail create argon2: {0}")]
     ArgonCipherErrors(CipherErrors),
 
+    #[error("Token doesn't extistsL {0}")]
+    TokenNotExists(usize),
+
     #[error("Fail to flush and save data, error: {0}")]
     StorageFailFlush(LocalStorageError),
 

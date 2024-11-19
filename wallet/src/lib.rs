@@ -475,6 +475,10 @@ impl Wallet {
     }
 
     pub fn remove_ftoken(&mut self, index: usize) -> Result<(), WalletErrors> {
+        if self.ftokens.get(index).is_none() {
+            return Err(WalletErrors::TokenNotExists(index));
+        }
+
         self.ftokens.remove(index);
 
         let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
