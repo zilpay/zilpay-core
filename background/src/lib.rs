@@ -3,7 +3,7 @@ use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::SHA256_SIZE,
-    storage::INDICATORS_DB_KEY,
+    storage::{FTOKENS_DB_KEY, INDICATORS_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
@@ -13,8 +13,8 @@ use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
 use wallet::{
-    wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams, Wallet,
-    WalletConfig,
+    ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams,
+    Wallet, WalletConfig,
 };
 use zil_errors::background::BackgroundError;
 
@@ -49,6 +49,7 @@ pub struct Background {
     pub is_old_storage: bool,
     pub settings: CommonSettings,
     pub netowrk: Vec<NetworkProvider>,
+    pub ftokens: Vec<FToken>,
 }
 
 impl Background {
@@ -96,6 +97,9 @@ impl Background {
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::new();
         let netowrk = NetworkProvider::new_vec();
+        let mut ftokens = vec![FToken::zil(), FToken::eth()]; // init default tokens
+
+        // ftokens.copy_from_slice();
 
         for addr in &indicators {
             let w = Wallet::load_from_storage(addr, Arc::clone(&storage))
@@ -105,6 +109,7 @@ impl Background {
         }
 
         Ok(Self {
+            ftokens,
             netowrk,
             storage,
             wallets,
@@ -195,7 +200,7 @@ impl Background {
         let wallet = Wallet::from_bip39_words(Bip39Params {
             proof: &proof,
             mnemonic: &mnemonic,
-            passphrase: &params.passphrase,
+            passphrase: params.passphrase,
             indexes: &indexes,
             config: wallet_config,
             wallet_name: params.wallet_name,
@@ -336,6 +341,29 @@ impl Background {
             .map_err(BackgroundError::LocalStorageFlushError)?;
 
         Ok(session)
+    }
+
+    fn load_ftokens(&self) -> Result<Vec<FToken>, BackgroundError> {
+        let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
+
+        if bytes.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ftokens: Vec<FToken> = serde_json::from_slice(&bytes).unwrap_or_default();
+
+        Ok(ftokens)
+    }
+
+    fn save_ftokens(&self) -> Result<(), BackgroundError> {
+        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
+        let bytes = serde_json::to_vec(&ftokens).or(Err(BackgroundError::FailToSerializeToken))?;
+
+        self.storage
+            .set(FTOKENS_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+
+        Ok(())
     }
 
     fn save_indicators(&self) -> Result<(), BackgroundError> {
