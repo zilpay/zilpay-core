@@ -3,7 +3,7 @@ use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::SHA256_SIZE,
-    storage::{FTOKENS_DB_KEY, INDICATORS_DB_KEY},
+    storage::{FTOKENS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
@@ -50,6 +50,16 @@ pub struct Background {
     pub settings: CommonSettings,
     pub netowrk: Vec<NetworkProvider>,
     pub ftokens: Vec<FToken>,
+}
+
+fn load_network(storage: Arc<LocalStorage>) -> Vec<NetworkProvider> {
+    let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
+
+    if bytes.is_empty() {
+        return NetworkProvider::new_vec();
+    }
+
+    serde_json::from_slice(&bytes).unwrap_or(NetworkProvider::new_vec())
 }
 
 fn load_ftokens(storage: Arc<LocalStorage>) -> Vec<FToken> {
@@ -106,7 +116,7 @@ impl Background {
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::new();
-        let netowrk = NetworkProvider::new_vec();
+        let netowrk = load_network(Arc::clone(&storage));
         let mut ftokens = vec![FToken::zil(), FToken::eth()]; // init default tokens
 
         ftokens.extend(load_ftokens(Arc::clone(&storage)));
@@ -353,6 +363,22 @@ impl Background {
         Ok(session)
     }
 
+    pub fn update_nodes(&mut self, id: usize) -> Result<(), BackgroundError> {
+        let net_pointer = self
+            .netowrk
+            .get_mut(id)
+            .ok_or(BackgroundError::NetworkProviderNotExists(id))?;
+
+        &net_pointer.update_nodes();
+
+        self.save_network()?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(())
+    }
+
     pub fn add_ftoken(&mut self, token: FToken) -> Result<(), BackgroundError> {
         if self.ftokens.iter().any(|t| t.addr == token.addr) {
             return Err(BackgroundError::TokenAlreadyExists);
@@ -397,6 +423,17 @@ impl Background {
 
         self.storage
             .set(FTOKENS_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+
+        Ok(())
+    }
+
+    fn save_network(&self) -> Result<(), BackgroundError> {
+        let bytes =
+            serde_json::to_vec(&self.netowrk).or(Err(BackgroundError::FailToSerializeToken))?;
+
+        self.storage
+            .set(NETWORK_DB_KEY, &bytes)
             .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
 
         Ok(())

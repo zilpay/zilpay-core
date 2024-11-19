@@ -7,10 +7,14 @@ use crate::{
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BackgroundError {
+    #[error("Network provider is not exists with id: {0}")]
+    NetworkProviderNotExists(usize),
     #[error("Token is not valid")]
     InvalidToken,
     #[error("Such token already exists")]
     TokenAlreadyExists,
+    #[error("Fail to serialize networks")]
+    FailToSerializeNetworks,
     #[error("Fail to serialize token")]
     FailToSerializeToken,
     #[error("such Ledger id already exists.")]

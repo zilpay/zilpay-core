@@ -13,15 +13,13 @@ pub mod storage;
 pub mod wallet;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum ZilliqaErrors<'a> {
-    Schnorr(&'a str),
+pub enum ZilliqaNetErrors {
     BadRequest,
     FailToParseResponse,
     NetowrkIsDown,
     InvalidPayload,
     InvalidRPCReq(String),
     InvalidJson(String),
-    TryInitLocalStorageError(LocalStorageError),
 }
 
 #[derive(Debug, PartialEq, Eq)]
