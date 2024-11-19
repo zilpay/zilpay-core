@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use zil_errors::network::NetworkErrors;
 use zilliqa::json_rpc::zil::ZilliqaJsonRPC;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -14,16 +15,21 @@ impl NetworkProvider {
         vec![NetworkProvider::Zilliqa(zil_rpc), NetworkProvider::Ethereum]
     }
 
-    pub async fn update_nodes(&mut self) {
+    pub async fn update_nodes(&mut self) -> Result<(), NetworkErrors> {
         match self {
             NetworkProvider::Zilliqa(zil) => {
-                // TODO: add Error hanlder
-                zil.update_scilla_nodes().await;
-                zil.update_evm_nodes().await;
+                zil.update_scilla_nodes()
+                    .await
+                    .map_err(NetworkErrors::FailToFetchNodes)?;
+                zil.update_evm_nodes()
+                    .await
+                    .map_err(NetworkErrors::FailToFetchNodes)?;
             }
             NetworkProvider::Ethereum => {
                 unreachable!()
             }
-        }
+        };
+
+        Ok(())
     }
 }

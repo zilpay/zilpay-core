@@ -3,7 +3,7 @@ use config::{contracts::STAKEING, ZIL_MAIN_EVM_URL, ZIL_MAIN_SCILLA_URL};
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
-use zil_errors::ZilliqaNetErrors;
+use zil_errors::zilliqa::ZilliqaNetErrors;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZilliqaJsonRPC {

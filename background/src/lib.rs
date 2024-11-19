@@ -86,7 +86,7 @@ impl Background {
         rng.fill_bytes(&mut entropy);
 
         let m = Mnemonic::from_entropy_in(Language::English, &entropy)
-            .map_err(|e| BackgroundError::FailtToGenBip39FromEntropy(e.to_string()))?;
+            .map_err(|e| BackgroundError::FailToGenBip39FromEntropy(e.to_string()))?;
 
         Ok(m.to_string())
     }
@@ -363,13 +363,16 @@ impl Background {
         Ok(session)
     }
 
-    pub fn update_nodes(&mut self, id: usize) -> Result<(), BackgroundError> {
+    pub async fn update_nodes(&mut self, id: usize) -> Result<(), BackgroundError> {
         let net_pointer = self
             .netowrk
             .get_mut(id)
             .ok_or(BackgroundError::NetworkProviderNotExists(id))?;
 
-        &net_pointer.update_nodes();
+        &net_pointer
+            .update_nodes()
+            .await
+            .map_err(BackgroundError::NetworkErrors)?;
 
         self.save_network()?;
         self.storage
