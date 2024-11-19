@@ -265,7 +265,9 @@ impl Background {
             .iter()
             .any(|w| w.data.wallet_type == WalletTypes::Ledger(params.ledger_id.clone()))
         {
-            return Err(BackgroundError::LedgerIdExists);
+            return Err(BackgroundError::LedgerIdExists(
+                String::from_utf8(params.ledger_id.clone()).unwrap_or_default(),
+            ));
         }
 
         let device_indicator = device_indicators.join(":");
@@ -378,6 +380,30 @@ impl Background {
         self.storage
             .flush()
             .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(())
+    }
+
+    pub async fn sync_ftokens_balances(
+        &mut self,
+        wallet_index: usize,
+    ) -> Result<(), BackgroundError> {
+        let w = self
+            .wallets
+            .get(wallet_index)
+            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+
+        for net_id in &w.data.network {
+            let provider = self
+                .netowrk
+                .get(*net_id)
+                .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?;
+
+            provider
+                .get_tokens_balances(&mut self.ftokens, &w.data.accounts)
+                .await
+                .map_err(BackgroundError::NetworkErrors)?;
+        }
 
         Ok(())
     }
@@ -687,9 +713,7 @@ mod tests_background {
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let mut bg = Background::from_storage_path(&dir).unwrap();
-        let mut ledger_id = vec![0u8; 32];
-
-        rng.fill_bytes(&mut ledger_id);
+        let ledger_id = "ledger_id".as_bytes().to_vec();
 
         assert_eq!(bg.wallets.len(), 0);
 
@@ -718,14 +742,16 @@ mod tests_background {
                     networks,
                     pub_key: &pub_key,
                     name: String::from("account 0"),
-                    ledger_id,
+                    ledger_id: ledger_id.clone(),
                     wallet_index: 0,
                     wallet_name: String::from("Ledger nano x"),
                     biometric_type: AuthMethod::FaceId,
                 },
                 &device_indicators,
             ),
-            Err(BackgroundError::LedgerIdExists)
+            Err(BackgroundError::LedgerIdExists(
+                String::from_utf8(ledger_id).unwrap()
+            ))
         )
     }
 

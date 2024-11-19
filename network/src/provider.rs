@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use wallet::{account::Account, ft::FToken};
 use zil_errors::network::NetworkErrors;
 use zilliqa::json_rpc::zil::ZilliqaJsonRPC;
 
@@ -28,6 +29,21 @@ impl NetworkProvider {
             NetworkProvider::Ethereum => {
                 unreachable!()
             }
+        };
+
+        Ok(())
+    }
+
+    pub async fn get_tokens_balances(
+        &self,
+        tokens: &mut [FToken],
+        accounts: &[Account],
+    ) -> Result<(), NetworkErrors> {
+        match self {
+            NetworkProvider::Ethereum => {
+                unreachable!()
+            }
+            NetworkProvider::Zilliqa(zil) => {}
         };
 
         Ok(())

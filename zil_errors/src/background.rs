@@ -26,7 +26,7 @@ pub enum BackgroundError {
     FailToSerializeToken,
 
     #[error("Ledger ID already exists")]
-    LedgerIdExists,
+    LedgerIdExists(String),
 
     #[error("Failed to decrypt session: {0}")]
     DecryptSessionError(SessionErrors),

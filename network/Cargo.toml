@@ -6,5 +6,6 @@ edition = "2021"
 [dependencies]
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
+wallet = { path = "../wallet" }
 zilliqa = { path = "../zilliqa" }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
