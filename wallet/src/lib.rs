@@ -467,6 +467,25 @@ impl Wallet {
         self.storage
             .set(FTOKENS_DB_KEY, &bytes)
             .map_err(WalletErrors::FailtoSaveFTokensToStorage)?;
+        self.storage
+            .flush()
+            .map_err(WalletErrors::StorageFailFlush)?;
+
+        Ok(())
+    }
+
+    pub fn remove_ftoken(&mut self, index: usize) -> Result<(), WalletErrors> {
+        self.ftokens.remove(index);
+
+        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
+        let bytes = serde_json::to_vec(&ftokens).or(Err(WalletErrors::FailToSerializeToken))?;
+
+        self.storage
+            .set(FTOKENS_DB_KEY, &bytes)
+            .map_err(WalletErrors::FailtoSaveFTokensToStorage)?;
+        self.storage
+            .flush()
+            .map_err(WalletErrors::StorageFailFlush)?;
 
         Ok(())
     }
@@ -479,6 +498,9 @@ impl Wallet {
         self.storage
             .set(&key, &json_bytes)
             .map_err(WalletErrors::FailtoSaveWalletDataToStorage)?;
+        self.storage
+            .flush()
+            .map_err(WalletErrors::StorageFailFlush)?;
 
         Ok(())
     }
@@ -800,5 +822,121 @@ mod tests {
             assert_eq!(loaded_wallet.ftokens[i + 1].addr, token.addr);
             assert!(!loaded_wallet.ftokens[i + 1].default);
         }
+    }
+
+    #[test]
+    fn test_remove_tokens() {
+        // Setup wallet
+        let argon_seed = derive_key(PASSWORD, PROOF_SALT).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT).unwrap();
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let storage = LocalStorage::from(&dir).unwrap();
+        let storage = Arc::new(storage);
+        let keychain = KeyChain::from_seed(&argon_seed).unwrap();
+        let keypair = KeyPair::gen_keccak256().unwrap();
+        let sk = keypair.get_secretkey().unwrap();
+
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&storage),
+            settings: Default::default(),
+        };
+
+        let mut wallet = Wallet::from_sk(
+            &sk,
+            "Remove Token Test Account".to_string(),
+            &proof,
+            wallet_config,
+            "Remove Token Test Wallet".to_string(),
+            Default::default(),
+            vec![0],
+        )
+        .unwrap();
+
+        // Add multiple custom tokens
+        let tokens = vec![
+            FToken {
+                name: "Token 1".to_string(),
+                symbol: "TK1".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_base16("1111111111111111111111111111111111111111").unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+            FToken {
+                name: "Token 2".to_string(),
+                symbol: "TK2".to_string(),
+                decimals: 6,
+                addr: Address::from_zil_base16("2222222222222222222222222222222222222222").unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+            FToken {
+                name: "Token 3".to_string(),
+                symbol: "TK3".to_string(),
+                decimals: 8,
+                addr: Address::from_zil_base16("3333333333333333333333333333333333333333").unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+        ];
+
+        // Add all tokens
+        for token in tokens.iter() {
+            wallet.add_ftoken(token.clone()).unwrap();
+        }
+
+        // Initial state should have 4 tokens (1 default + 3 custom)
+        assert_eq!(wallet.ftokens.len(), 4);
+        assert!(wallet.ftokens[0].default); // Default ETH token
+        assert_eq!(wallet.ftokens[1].symbol, "TK1");
+        assert_eq!(wallet.ftokens[2].symbol, "TK2");
+        assert_eq!(wallet.ftokens[3].symbol, "TK3");
+
+        // Try to remove a custom token (Token 2)
+        wallet.remove_ftoken(2).unwrap();
+
+        // Should now have 3 tokens (1 default + 2 custom)
+        assert_eq!(wallet.ftokens.len(), 3);
+        assert!(wallet.ftokens[0].default); // Default ETH token should still be first
+        assert_eq!(wallet.ftokens[1].symbol, "TK1");
+        assert_eq!(wallet.ftokens[2].symbol, "TK3"); // TK2 should be gone
+
+        // Save and reload wallet to verify persistence
+        let wallet_addr = wallet.key().unwrap();
+        wallet.save_to_storage().unwrap();
+
+        let mut loaded_wallet =
+            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        loaded_wallet.unlock(&argon_seed).unwrap();
+
+        // Verify state after reload
+        assert_eq!(loaded_wallet.ftokens.len(), 3);
+        assert!(loaded_wallet.ftokens[0].default);
+        assert_eq!(loaded_wallet.ftokens[1].symbol, "TK1");
+        assert_eq!(loaded_wallet.ftokens[2].symbol, "TK3");
+
+        // Try to remove default token (should still work but token will be restored on reload)
+        wallet.remove_ftoken(0).unwrap();
+        assert_eq!(wallet.ftokens.len(), 2);
+        assert_eq!(wallet.ftokens[0].symbol, "TK1");
+        assert_eq!(wallet.ftokens[1].symbol, "TK3");
+
+        // Save and reload again
+        wallet.save_to_storage().unwrap();
+        let mut loaded_wallet2 =
+            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        loaded_wallet2.unlock(&argon_seed).unwrap();
+
+        // Default token should be restored
+        assert_eq!(loaded_wallet2.ftokens.len(), 3);
+        assert!(loaded_wallet2.ftokens[0].default);
+        assert_eq!(loaded_wallet2.ftokens[0].symbol, "ETH");
+        assert_eq!(loaded_wallet2.ftokens[1].symbol, "TK1");
+        assert_eq!(loaded_wallet2.ftokens[2].symbol, "TK3");
     }
 }
