@@ -52,6 +52,16 @@ pub struct Background {
     pub ftokens: Vec<FToken>,
 }
 
+fn load_ftokens(storage: Arc<LocalStorage>) -> Vec<FToken> {
+    let bytes = storage.get(FTOKENS_DB_KEY).unwrap_or_default();
+
+    if bytes.is_empty() {
+        return Vec::new();
+    }
+
+    serde_json::from_slice(&bytes).unwrap_or_default()
+}
+
 impl Background {
     pub fn gen_bip39(count: u8) -> Result<String, BackgroundError> {
         if ![12, 15, 18, 21, 24].contains(&count) {
@@ -99,7 +109,7 @@ impl Background {
         let netowrk = NetworkProvider::new_vec();
         let mut ftokens = vec![FToken::zil(), FToken::eth()]; // init default tokens
 
-        // ftokens.copy_from_slice();
+        ftokens.extend(load_ftokens(Arc::clone(&storage)));
 
         for addr in &indicators {
             let w = Wallet::load_from_storage(addr, Arc::clone(&storage))
@@ -343,16 +353,42 @@ impl Background {
         Ok(session)
     }
 
-    fn load_ftokens(&self) -> Result<Vec<FToken>, BackgroundError> {
-        let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
-
-        if bytes.is_empty() {
-            return Ok(Vec::new());
+    pub fn add_ftoken(&mut self, token: FToken) -> Result<(), BackgroundError> {
+        if self.ftokens.iter().any(|t| t.addr == token.addr) {
+            return Err(BackgroundError::TokenAlreadyExists);
         }
 
-        let ftokens: Vec<FToken> = serde_json::from_slice(&bytes).unwrap_or_default();
+        if self
+            .ftokens
+            .iter()
+            .any(|t| t.symbol.to_lowercase() == token.symbol.to_lowercase())
+        {
+            return Err(BackgroundError::TokenAlreadyExists);
+        }
 
-        Ok(ftokens)
+        if self
+            .ftokens
+            .iter()
+            .any(|t| t.name.to_lowercase() == token.name.to_lowercase())
+        {
+            return Err(BackgroundError::TokenAlreadyExists);
+        }
+
+        if token.name.trim().is_empty() {
+            return Err(BackgroundError::InvalidToken);
+        }
+
+        if token.symbol.trim().is_empty() {
+            return Err(BackgroundError::InvalidToken);
+        }
+
+        self.ftokens.push(token);
+        self.save_ftokens()?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(())
     }
 
     fn save_ftokens(&self) -> Result<(), BackgroundError> {
@@ -383,8 +419,11 @@ impl Background {
 
 #[cfg(test)]
 mod tests_background {
+    use std::collections::HashMap;
+
     use super::*;
     use config::{
+        address::ADDR_LEN,
         argon::KEY_SIZE,
         key::{PUB_KEY_SIZE, SECRET_KEY_SIZE},
     };
@@ -738,5 +777,45 @@ mod tests_background {
 
         assert_eq!(hex::decode(sk).unwrap().len(), SECRET_KEY_SIZE);
         assert_eq!(hex::decode(pk).unwrap().len(), PUB_KEY_SIZE);
+    }
+
+    #[test]
+    fn test_load_save_ftokens() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let token0 = FToken {
+            name: "My Test Token".to_string(),
+            symbol: "MTT".to_string(),
+            decimals: 18,
+            addr: proto::address::Address::Secp256k1Sha256Zilliqa([42u8; ADDR_LEN]),
+            logo: None,
+            balances: HashMap::new(),
+            default: false,
+        };
+        let token1 = FToken {
+            name: "TEST Token".to_string(),
+            symbol: "FFT".to_string(),
+            decimals: 12,
+            addr: proto::address::Address::Secp256k1Sha256Zilliqa([1u8; ADDR_LEN]),
+            logo: None,
+            balances: HashMap::new(),
+            default: false,
+        };
+
+        bg.add_ftoken(token0).unwrap();
+        bg.add_ftoken(token1.clone()).unwrap();
+
+        assert_eq!(bg.ftokens.len(), 4);
+        assert_eq!(
+            bg.add_ftoken(token1),
+            Err(BackgroundError::TokenAlreadyExists)
+        );
+
+        drop(bg);
+
+        let bg = Background::from_storage_path(&dir).unwrap();
+
+        assert_eq!(bg.ftokens.len(), 4);
     }
 }

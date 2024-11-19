@@ -7,6 +7,10 @@ use crate::{
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum BackgroundError {
+    #[error("Token is not valid")]
+    InvalidToken,
+    #[error("Such token already exists")]
+    TokenAlreadyExists,
     #[error("Fail to serialize token")]
     FailToSerializeToken,
     #[error("such Ledger id already exists.")]
