@@ -9,6 +9,8 @@ use std::sync::Arc;
 use cipher::argon2::derive_key;
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
+use config::storage::FTOKENS_DB_KEY;
+use ft::FToken;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
@@ -60,6 +62,7 @@ pub struct Bip39Params<'a> {
 pub struct Wallet {
     storage: Arc<LocalStorage>,
     pub data: WalletData,
+    pub ftokens: Vec<FToken>,
 }
 
 fn safe_storage_save(
@@ -91,6 +94,9 @@ fn safe_storage_save(
 }
 
 impl Wallet {
+    pub const ZIL_DEFAULT_TOKENS: usize = 1;
+    pub const ETH_DEFAULT_TOKENS: usize = 1;
+
     pub fn load_from_storage(
         key: &[u8; SHA256_SIZE],
         storage: Arc<LocalStorage>,
@@ -100,8 +106,13 @@ impl Wallet {
             .map_err(WalletErrors::FailToLoadWalletData)?;
         let data = serde_json::from_slice::<WalletData>(&data)
             .or(Err(WalletErrors::FailToDeserializeWalletData))?;
+        let ftokens = Vec::new();
 
-        Ok(Self { storage, data })
+        Ok(Self {
+            storage,
+            data,
+            ftokens,
+        })
     }
 
     pub fn from_ledger(
@@ -140,10 +151,20 @@ impl Wallet {
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
         };
+        let ftokens = match params.pub_key {
+            PubKey::Secp256k1Sha256Zilliqa(_) => {
+                vec![FToken::zil()]
+            }
+            PubKey::Secp256k1Keccak256Ethereum(_) => {
+                vec![FToken::eth()]
+            }
+            _ => unreachable!(),
+        };
 
         Ok(Self {
             storage: config.storage,
             data,
+            ftokens,
         })
     }
 
@@ -194,10 +215,19 @@ impl Wallet {
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0,
         };
+        let ftokens = match sk {
+            SecretKey::Secp256k1Sha256Zilliqa(_) => {
+                vec![FToken::zil()]
+            }
+            SecretKey::Secp256k1Keccak256Ethereum(_) => {
+                vec![FToken::eth()]
+            }
+        };
 
         Ok(Self {
             storage: config.storage,
             data,
+            ftokens,
         })
     }
 
@@ -240,6 +270,15 @@ impl Wallet {
             accounts.push(hd_account);
         }
 
+        let ftokens = match accounts[0].pub_key {
+            PubKey::Secp256k1Sha256Zilliqa(_) => {
+                vec![FToken::zil()]
+            }
+            PubKey::Secp256k1Keccak256Ethereum(_) => {
+                vec![FToken::eth()]
+            }
+            _ => unreachable!(),
+        };
         let data = WalletData {
             network: params.network,
             wallet_name: params.wallet_name,
@@ -258,6 +297,7 @@ impl Wallet {
         Ok(Self {
             storage: params.config.storage,
             data,
+            ftokens,
         })
     }
 
@@ -374,6 +414,28 @@ impl Wallet {
     }
 
     pub fn unlock(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<(), WalletErrors> {
+        self.unlock_iternel(seed_bytes)?;
+
+        let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
+        let ftokens: Vec<FToken> = serde_json::from_slice(&bytes).unwrap_or_default();
+        let selected = self
+            .data
+            .accounts
+            .get(self.data.selected_account)
+            .ok_or(WalletErrors::FailToGetAccount(self.data.selected_account))?;
+
+        match selected.pub_key {
+            PubKey::Secp256k1Sha256Zilliqa(_) => self.ftokens = vec![FToken::zil()],
+            PubKey::Secp256k1Keccak256Ethereum(_) => self.ftokens = vec![FToken::eth()],
+            _ => unreachable!(),
+        }
+
+        self.ftokens.extend_from_slice(&ftokens);
+
+        Ok(())
+    }
+
+    fn unlock_iternel(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<KeyChain, WalletErrors> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
         let proof_key = usize::to_le_bytes(self.data.proof_key);
@@ -392,6 +454,19 @@ impl Wallet {
         if proof != origin_proof {
             return Err(WalletErrors::ProofNotMatch);
         }
+
+        Ok(keychain)
+    }
+
+    pub fn add_ftoken(&mut self, token: FToken) -> Result<(), WalletErrors> {
+        self.ftokens.push(token);
+
+        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
+        let bytes = serde_json::to_vec(&ftokens).or(Err(WalletErrors::FailToSerializeToken))?;
+
+        self.storage
+            .set(FTOKENS_DB_KEY, &bytes)
+            .map_err(WalletErrors::FailtoSaveFTokensToStorage)?;
 
         Ok(())
     }
