@@ -13,17 +13,8 @@ pub enum BackgroundError {
     #[error("Network provider does not exist with ID: {0}")]
     NetworkProviderNotExists(usize),
 
-    #[error("Token is not valid")]
-    InvalidToken,
-
-    #[error("Token already exists")]
-    TokenAlreadyExists,
-
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,
-
-    #[error("Failed to serialize token")]
-    FailToSerializeToken,
 
     #[error("Ledger ID already exists")]
     LedgerIdExists(String),

@@ -3,7 +3,7 @@ use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::SHA256_SIZE,
-    storage::{FTOKENS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY},
+    storage::{INDICATORS_DB_KEY, NETWORK_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
@@ -13,8 +13,8 @@ use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
 use wallet::{
-    ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams,
-    Wallet, WalletConfig,
+    wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams, Wallet,
+    WalletConfig,
 };
 use zil_errors::background::BackgroundError;
 
@@ -49,7 +49,6 @@ pub struct Background {
     pub is_old_storage: bool,
     pub settings: CommonSettings,
     pub netowrk: Vec<NetworkProvider>,
-    pub ftokens: Vec<FToken>,
 }
 
 fn load_network(storage: Arc<LocalStorage>) -> Vec<NetworkProvider> {
@@ -60,16 +59,6 @@ fn load_network(storage: Arc<LocalStorage>) -> Vec<NetworkProvider> {
     }
 
     serde_json::from_slice(&bytes).unwrap_or(NetworkProvider::new_vec())
-}
-
-fn load_ftokens(storage: Arc<LocalStorage>) -> Vec<FToken> {
-    let bytes = storage.get(FTOKENS_DB_KEY).unwrap_or_default();
-
-    if bytes.is_empty() {
-        return Vec::new();
-    }
-
-    serde_json::from_slice(&bytes).unwrap_or_default()
 }
 
 impl Background {
@@ -117,9 +106,6 @@ impl Background {
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::new();
         let netowrk = load_network(Arc::clone(&storage));
-        let mut ftokens = vec![FToken::zil(), FToken::eth()]; // init default tokens
-
-        ftokens.extend(load_ftokens(Arc::clone(&storage)));
 
         for addr in &indicators {
             let w = Wallet::load_from_storage(addr, Arc::clone(&storage))
@@ -129,7 +115,6 @@ impl Background {
         }
 
         Ok(Self {
-            ftokens,
             netowrk,
             storage,
             wallets,
@@ -399,67 +384,18 @@ impl Background {
                 .get(*net_id)
                 .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?;
 
-            provider
-                .get_tokens_balances(&mut self.ftokens, &w.data.accounts)
-                .await
-                .map_err(BackgroundError::NetworkErrors)?;
+            // provider
+            //     .get_tokens_balances(&mut self.ftokens, &w.data.accounts)
+            //     .await
+            //     .map_err(BackgroundError::NetworkErrors)?;
         }
-
-        Ok(())
-    }
-
-    pub fn add_ftoken(&mut self, token: FToken) -> Result<(), BackgroundError> {
-        if self.ftokens.iter().any(|t| t.addr == token.addr) {
-            return Err(BackgroundError::TokenAlreadyExists);
-        }
-
-        if self
-            .ftokens
-            .iter()
-            .any(|t| t.symbol.to_lowercase() == token.symbol.to_lowercase())
-        {
-            return Err(BackgroundError::TokenAlreadyExists);
-        }
-
-        if self
-            .ftokens
-            .iter()
-            .any(|t| t.name.to_lowercase() == token.name.to_lowercase())
-        {
-            return Err(BackgroundError::TokenAlreadyExists);
-        }
-
-        if token.name.trim().is_empty() {
-            return Err(BackgroundError::InvalidToken);
-        }
-
-        if token.symbol.trim().is_empty() {
-            return Err(BackgroundError::InvalidToken);
-        }
-
-        self.ftokens.push(token);
-        self.save_ftokens()?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
-
-        Ok(())
-    }
-
-    fn save_ftokens(&self) -> Result<(), BackgroundError> {
-        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
-        let bytes = serde_json::to_vec(&ftokens).or(Err(BackgroundError::FailToSerializeToken))?;
-
-        self.storage
-            .set(FTOKENS_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
 
         Ok(())
     }
 
     fn save_network(&self) -> Result<(), BackgroundError> {
         let bytes =
-            serde_json::to_vec(&self.netowrk).or(Err(BackgroundError::FailToSerializeToken))?;
+            serde_json::to_vec(&self.netowrk).or(Err(BackgroundError::FailToSerializeNetworks))?;
 
         self.storage
             .set(NETWORK_DB_KEY, &bytes)
@@ -485,11 +421,8 @@ impl Background {
 
 #[cfg(test)]
 mod tests_background {
-    use std::collections::HashMap;
-
     use super::*;
     use config::{
-        address::ADDR_LEN,
         argon::KEY_SIZE,
         key::{PUB_KEY_SIZE, SECRET_KEY_SIZE},
     };
@@ -843,45 +776,5 @@ mod tests_background {
 
         assert_eq!(hex::decode(sk).unwrap().len(), SECRET_KEY_SIZE);
         assert_eq!(hex::decode(pk).unwrap().len(), PUB_KEY_SIZE);
-    }
-
-    #[test]
-    fn test_load_save_ftokens() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let mut bg = Background::from_storage_path(&dir).unwrap();
-        let token0 = FToken {
-            name: "My Test Token".to_string(),
-            symbol: "MTT".to_string(),
-            decimals: 18,
-            addr: proto::address::Address::Secp256k1Sha256Zilliqa([42u8; ADDR_LEN]),
-            logo: None,
-            balances: HashMap::new(),
-            default: false,
-        };
-        let token1 = FToken {
-            name: "TEST Token".to_string(),
-            symbol: "FFT".to_string(),
-            decimals: 12,
-            addr: proto::address::Address::Secp256k1Sha256Zilliqa([1u8; ADDR_LEN]),
-            logo: None,
-            balances: HashMap::new(),
-            default: false,
-        };
-
-        bg.add_ftoken(token0).unwrap();
-        bg.add_ftoken(token1.clone()).unwrap();
-
-        assert_eq!(bg.ftokens.len(), 4);
-        assert_eq!(
-            bg.add_ftoken(token1),
-            Err(BackgroundError::TokenAlreadyExists)
-        );
-
-        drop(bg);
-
-        let bg = Background::from_storage_path(&dir).unwrap();
-
-        assert_eq!(bg.ftokens.len(), 4);
     }
 }
