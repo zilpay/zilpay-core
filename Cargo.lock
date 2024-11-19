@@ -3845,6 +3845,7 @@ dependencies = [
 name = "wallet"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "bincode",
  "bip39",
  "cipher 0.1.0",

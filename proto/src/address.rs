@@ -6,6 +6,7 @@ use crate::{
     },
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
 use config::address::ADDR_LEN;
@@ -104,6 +105,17 @@ impl std::fmt::Display for Address {
                 write!(f, "{}", h.to_checksum(None))
             }
         }
+    }
+}
+
+impl Hash for Address {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            Address::Secp256k1Sha256Zilliqa(_) => 0u8.hash(state),
+            Address::Secp256k1Keccak256Ethereum(_) => 1u8.hash(state),
+        }
+
+        self.as_ref().hash(state);
     }
 }
 
