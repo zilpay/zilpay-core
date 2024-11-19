@@ -369,7 +369,7 @@ impl Background {
             .get_mut(id)
             .ok_or(BackgroundError::NetworkProviderNotExists(id))?;
 
-        &net_pointer
+        net_pointer
             .update_nodes()
             .await
             .map_err(BackgroundError::NetworkErrors)?;

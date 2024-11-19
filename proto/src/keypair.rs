@@ -189,7 +189,7 @@ impl KeyPair {
         &self,
         tx: &TransactionRequest,
     ) -> Result<TransactionReceipt, KeyPairError> {
-        tx.sign(&self).await
+        tx.sign(self).await
     }
 }
 
