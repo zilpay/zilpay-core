@@ -36,7 +36,7 @@ impl NetworkProvider {
 
     pub async fn get_tokens_balances(
         &self,
-        tokens: &mut [FToken],
+        tokens: &[FToken],
         accounts: &[Account],
     ) -> Result<(), NetworkErrors> {
         match self {

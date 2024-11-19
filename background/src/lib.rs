@@ -379,15 +379,12 @@ impl Background {
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
 
         for net_id in &w.data.network {
-            let provider = self
-                .netowrk
-                .get(*net_id)
-                .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?;
-
-            // provider
-            //     .get_tokens_balances(&mut self.ftokens, &w.data.accounts)
-            //     .await
-            //     .map_err(BackgroundError::NetworkErrors)?;
+            self.netowrk
+                .get_mut(*net_id)
+                .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
+                .get_tokens_balances(&w.ftokens, &w.data.accounts)
+                .await
+                .map_err(BackgroundError::NetworkErrors)?;
         }
 
         Ok(())
