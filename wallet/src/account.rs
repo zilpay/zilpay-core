@@ -1,5 +1,4 @@
 use crate::account_type::AccountType;
-use alloy::primitives::U256;
 use bincode::{FromBytes, ToOptionVecBytes};
 use config::sha::SHA512_SIZE;
 use crypto::bip49::Bip49DerivationPath;
@@ -8,7 +7,6 @@ use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use zil_errors::account::AccountErrors;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
@@ -17,8 +15,6 @@ pub struct Account {
     pub account_type: AccountType,
     pub addr: Address,
     pub pub_key: PubKey,
-    pub ft_map: HashMap<String, U256>, // map with ft token address > balance
-    pub nft_map: HashMap<String, u8>,  // TODO: add struct for NFT tokens
 }
 
 impl Account {
@@ -35,8 +31,6 @@ impl Account {
             addr,
             name,
             pub_key: pub_key.to_owned(),
-            ft_map: HashMap::new(),
-            nft_map: HashMap::new(),
         })
     }
 
@@ -55,8 +49,6 @@ impl Account {
             addr,
             pub_key,
             name,
-            ft_map: HashMap::new(),
-            nft_map: HashMap::new(),
         })
     }
 
@@ -76,8 +68,6 @@ impl Account {
             addr,
             pub_key,
             name,
-            ft_map: HashMap::new(),
-            nft_map: HashMap::new(),
         })
     }
 
@@ -95,6 +85,7 @@ impl Account {
     }
 }
 
+// TODO: maybe remake it bytes encode.
 impl ToOptionVecBytes for Account {
     type Error = AccountErrors;
     fn to_bytes(&self) -> Result<Vec<u8>, Self::Error> {
@@ -112,11 +103,9 @@ impl FromBytes for Account {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy::primitives::U256;
     use bip39::Mnemonic;
     use config::address::ADDR_LEN;
-    use rand::{Rng, RngCore};
-    use std::str::FromStr;
+    use rand::RngCore;
 
     #[test]
     fn test_from_zil_sk_ser() {
@@ -126,22 +115,14 @@ mod tests {
             .parse()
             .unwrap();
         let name = "Account 0";
-        let mut acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
+        let acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
             let mut ft_addr = [0u8; ADDR_LEN];
-            let n128: u128 = rng.gen();
-            let n8: u8 = rng.gen();
 
             rng.fill_bytes(&mut nft_addr);
             rng.fill_bytes(&mut ft_addr);
-
-            acc.ft_map.insert(
-                hex::encode(ft_addr),
-                U256::from_str(&n128.to_string()).unwrap(),
-            );
-            acc.nft_map.insert(hex::encode(nft_addr), n8);
         }
 
         let json_file = serde_json::to_string(&acc).unwrap();
@@ -154,8 +135,6 @@ mod tests {
 
         assert_eq!(res.pub_key, acc.pub_key);
         assert_eq!(res.addr, acc.addr);
-        assert_eq!(res.ft_map, acc.ft_map);
-        assert_eq!(res.nft_map, acc.nft_map);
         assert_eq!(res, acc);
     }
 
@@ -169,22 +148,14 @@ mod tests {
         let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
         let bip49 = Bip49DerivationPath::Zilliqa(0);
         let seed = m.to_seed("");
-        let mut acc = Account::from_hd(&seed, name.to_owned(), &bip49).unwrap();
+        let acc = Account::from_hd(&seed, name.to_owned(), &bip49).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
             let mut ft_addr = [0u8; ADDR_LEN];
-            let n128: u128 = rng.gen();
-            let n8: u8 = rng.gen();
 
             rng.fill_bytes(&mut nft_addr);
             rng.fill_bytes(&mut ft_addr);
-
-            acc.ft_map.insert(
-                hex::encode(ft_addr),
-                U256::from_str(&n128.to_string()).unwrap(),
-            );
-            acc.nft_map.insert(hex::encode(nft_addr), n8);
         }
 
         let json_file = serde_json::to_string(&acc).unwrap();
@@ -197,8 +168,6 @@ mod tests {
 
         assert_eq!(res.pub_key, acc.pub_key);
         assert_eq!(res.addr, acc.addr);
-        assert_eq!(res.ft_map, acc.ft_map);
-        assert_eq!(res.nft_map, acc.nft_map);
         assert_eq!(res, acc);
     }
 }

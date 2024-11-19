@@ -14,7 +14,6 @@ storage = { path = "../storage" }
 settings = { path = "../settings" }
 bincode = { path = "../bincode" }
 serde = { version = "1.0.204", features = ["derive"] }
-alloy = { version = "0.4.2", features = ["signer-local", "network", "consensus", "rpc", "rpc-types"] }
 bip39 = "2.0.0"
 sha2 = "0.10.8"
 hex = "0.4.3"
