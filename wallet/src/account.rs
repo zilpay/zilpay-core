@@ -1,8 +1,8 @@
 use crate::account_type::AccountType;
+use alloy::primitives::U256;
 use bincode::{FromBytes, ToOptionVecBytes};
 use config::sha::SHA512_SIZE;
 use crypto::bip49::Bip49DerivationPath;
-use num256::uint256::Uint256;
 use proto::address::Address;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
@@ -17,8 +17,8 @@ pub struct Account {
     pub account_type: AccountType,
     pub addr: Address,
     pub pub_key: PubKey,
-    pub ft_map: HashMap<String, Uint256>, // map with ft token address > balance
-    pub nft_map: HashMap<String, u8>,     // TODO: add struct for NFT tokens
+    pub ft_map: HashMap<String, U256>, // map with ft token address > balance
+    pub nft_map: HashMap<String, u8>,  // TODO: add struct for NFT tokens
 }
 
 impl Account {
@@ -112,6 +112,7 @@ impl FromBytes for Account {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::primitives::U256;
     use bip39::Mnemonic;
     use config::address::ADDR_LEN;
     use rand::{Rng, RngCore};
@@ -138,7 +139,7 @@ mod tests {
 
             acc.ft_map.insert(
                 hex::encode(ft_addr),
-                Uint256::from_str(&n128.to_string()).unwrap(),
+                U256::from_str(&n128.to_string()).unwrap(),
             );
             acc.nft_map.insert(hex::encode(nft_addr), n8);
         }
@@ -181,7 +182,7 @@ mod tests {
 
             acc.ft_map.insert(
                 hex::encode(ft_addr),
-                Uint256::from_str(&n128.to_string()).unwrap(),
+                U256::from_str(&n128.to_string()).unwrap(),
             );
             acc.nft_map.insert(hex::encode(nft_addr), n8);
         }
