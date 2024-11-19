@@ -495,18 +495,24 @@ impl Wallet {
 #[cfg(test)]
 mod tests {
     use core::panic;
-    use std::sync::Arc;
+    use std::{collections::HashMap, sync::Arc};
 
     use bip39::Mnemonic;
     use cipher::{argon2::derive_key, keychain::KeyChain};
-    use config::{argon::KEY_SIZE, cipher::PROOF_SIZE, sha::SHA256_SIZE};
+    use config::{
+        argon::KEY_SIZE,
+        cipher::{PROOF_SALT, PROOF_SIZE},
+        sha::SHA256_SIZE,
+    };
     use crypto::bip49::Bip49DerivationPath;
-    use proto::keypair::KeyPair;
+    use proto::{address::Address, keypair::KeyPair};
+    use rand::Rng;
     use storage::LocalStorage;
     use zil_errors::wallet::WalletErrors;
 
     use crate::{
-        wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, Wallet, WalletConfig,
+        ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, Wallet,
+        WalletConfig,
     };
 
     const MNEMONIC_STR: &str =
@@ -575,12 +581,10 @@ mod tests {
     fn test_init_from_sk() {
         let argon_seed = derive_key(PASSWORD, "").unwrap();
         let proof = derive_key(&argon_seed[..PROOF_SIZE], "").unwrap();
-        let storage = LocalStorage::new(
-            "com.test_write_wallet_sk",
-            "WriteTest Wallet_sk Corp",
-            "WalletWriteTest App_sk",
-        )
-        .unwrap();
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let storage = LocalStorage::from(&dir).unwrap();
+
         let storage = Arc::new(storage);
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let keypair = KeyPair::gen_keccak256().unwrap();
@@ -617,5 +621,184 @@ mod tests {
         let w = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
 
         assert_eq!(w.data, wallet.data);
+    }
+
+    #[test]
+    fn test_add_and_load_tokens() {
+        // Setup initial wallet with secret key
+        let argon_seed = derive_key(PASSWORD, PROOF_SALT).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT).unwrap();
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let storage = LocalStorage::from(&dir).unwrap();
+        let storage = Arc::new(storage);
+        let keychain = KeyChain::from_seed(&argon_seed).unwrap();
+
+        // Generate ETH keypair for test wallet
+        let keypair = KeyPair::gen_keccak256().unwrap();
+        let sk = keypair.get_secretkey().unwrap();
+
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&storage),
+            settings: Default::default(),
+        };
+
+        // Create wallet
+        let mut wallet = Wallet::from_sk(
+            &sk,
+            "Test Token Account".to_string(),
+            &proof,
+            wallet_config,
+            "Token Test Wallet".to_string(),
+            Default::default(),
+            vec![0],
+        )
+        .unwrap();
+
+        // Verify initial state - should only have default ETH token
+        assert_eq!(wallet.ftokens.len(), 1);
+        assert!(wallet.ftokens[0].default);
+        assert_eq!(wallet.ftokens[0].symbol, "ETH");
+
+        // Create custom token
+        let custom_token = FToken {
+            name: "Test Token".to_string(),
+            symbol: "TST".to_string(),
+            decimals: 18,
+            addr: Address::from_zil_base16("e876b112a62f945484ede1f3ccdd6b0ac6f39382").unwrap(),
+            logo: None,
+            default: false,
+            balances: HashMap::new(),
+        };
+
+        // Add custom token
+        wallet.add_ftoken(custom_token.clone()).unwrap();
+
+        // Verify token was added
+        assert_eq!(wallet.ftokens.len(), 2);
+        assert_eq!(wallet.ftokens[1].symbol, "TST");
+        assert!(!wallet.ftokens[1].default);
+
+        // Save wallet state
+        let wallet_addr = wallet.key().unwrap();
+        wallet.save_to_storage().unwrap();
+
+        // Create new wallet instance from storage
+        let mut loaded_wallet =
+            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+
+        // Before unlock - should have empty token list
+        assert_eq!(loaded_wallet.ftokens.len(), 0);
+
+        // Unlock wallet - should restore tokens
+        loaded_wallet.unlock(&argon_seed).unwrap();
+
+        // Verify tokens were restored correctly
+        assert_eq!(loaded_wallet.ftokens.len(), 2);
+
+        // Verify default token
+        assert!(loaded_wallet.ftokens[0].default);
+        assert_eq!(loaded_wallet.ftokens[0].symbol, "ETH");
+
+        // Verify custom token
+        assert!(!loaded_wallet.ftokens[1].default);
+        assert_eq!(loaded_wallet.ftokens[1].symbol, "TST");
+        assert_eq!(loaded_wallet.ftokens[1].addr, custom_token.addr);
+        assert_eq!(loaded_wallet.ftokens[1].decimals, custom_token.decimals);
+    }
+
+    #[test]
+    fn test_multiple_custom_tokens() {
+        // Setup wallet similar to previous test
+        let argon_seed = derive_key(PASSWORD, PROOF_SALT).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT).unwrap();
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let storage = LocalStorage::from(&dir).unwrap();
+        let storage = Arc::new(storage);
+        let keychain = KeyChain::from_seed(&argon_seed).unwrap();
+        let keypair = KeyPair::gen_keccak256().unwrap();
+        let sk = keypair.get_secretkey().unwrap();
+
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&storage),
+            settings: Default::default(),
+        };
+
+        let mut wallet = Wallet::from_sk(
+            &sk,
+            "Multi Token Account".to_string(),
+            &proof,
+            wallet_config,
+            "Multi Token Test Wallet".to_string(),
+            Default::default(),
+            vec![0],
+        )
+        .unwrap();
+
+        // Add multiple custom tokens
+        let tokens = vec![
+            FToken {
+                name: "Token 1".to_string(),
+                symbol: "TK1".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_base16("1111111111111111111111111111111111111111").unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+            FToken {
+                name: "Token 2".to_string(),
+                symbol: "TK2".to_string(),
+                decimals: 6,
+                addr: Address::from_zil_base16("2222222222222222222222222222222222222222").unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+            FToken {
+                name: "Token 3".to_string(),
+                symbol: "TK3".to_string(),
+                decimals: 8,
+                addr: Address::from_zil_base16("3333333333333333333333333333333333333333").unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+        ];
+
+        // Add all tokens
+        for token in tokens.iter() {
+            wallet.add_ftoken(token.clone()).unwrap();
+        }
+
+        // Verify all tokens were added (1 default + 3 custom)
+        assert_eq!(wallet.ftokens.len(), 4);
+
+        // Save and reload wallet
+        let wallet_addr = wallet.key().unwrap();
+        wallet.save_to_storage().unwrap();
+
+        let mut loaded_wallet =
+            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        loaded_wallet.unlock(&argon_seed).unwrap();
+
+        // Verify all tokens were restored
+        assert_eq!(loaded_wallet.ftokens.len(), 4);
+
+        // Verify default token
+        assert!(loaded_wallet.ftokens[0].default);
+        assert_eq!(loaded_wallet.ftokens[0].symbol, "ETH");
+
+        // Verify custom tokens
+        for (i, token) in tokens.iter().enumerate() {
+            assert_eq!(loaded_wallet.ftokens[i + 1].name, token.name);
+            assert_eq!(loaded_wallet.ftokens[i + 1].symbol, token.symbol);
+            assert_eq!(loaded_wallet.ftokens[i + 1].decimals, token.decimals);
+            assert_eq!(loaded_wallet.ftokens[i + 1].addr, token.addr);
+            assert!(!loaded_wallet.ftokens[i + 1].default);
+        }
     }
 }
