@@ -7,7 +7,7 @@ use config::{
 };
 use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
-use proto::{keypair::KeyPair, secret_key::SecretKey};
+use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
 use session::{decrypt_session, encrypt_session};
 use settings::common_settings::CommonSettings;
 use std::sync::Arc;
@@ -365,6 +365,28 @@ impl Background {
         self.storage
             .flush()
             .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(())
+    }
+
+    pub async fn get_ftoken_meta(
+        &self,
+        wallet_index: usize,
+        addr: Address,
+    ) -> Result<(), BackgroundError> {
+        let w = self
+            .wallets
+            .get(wallet_index)
+            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+
+        for net_id in &w.data.network {
+            self.netowrk
+                .get(*net_id)
+                .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
+                .get_ftoken_meta(&addr)
+                .await
+                .map_err(BackgroundError::NetworkErrors)?;
+        }
 
         Ok(())
     }

@@ -2229,8 +2229,13 @@ dependencies = [
 name = "network"
 version = "0.1.0"
 dependencies = [
+ "alloy",
  "config",
+ "mockito",
+ "proto",
  "serde",
+ "serde_json",
+ "tokio",
  "wallet",
  "zil_errors",
  "zilliqa",

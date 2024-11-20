@@ -80,6 +80,17 @@ impl Address {
         }
     }
 
+    pub fn get_zil_base16(&self) -> Result<String, AddressError> {
+        match self {
+            Address::Secp256k1Sha256Zilliqa(v) => {
+                let addr = hex::encode(v);
+
+                Ok(addr)
+            }
+            _ => Err(AddressError::InvalidSecp256k1Sha256Type),
+        }
+    }
+
     pub fn get_zil_check_sum_addr(&self) -> Result<String, AddressError> {
         match self {
             Address::Secp256k1Sha256Zilliqa(v) => {

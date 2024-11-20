@@ -11,5 +11,6 @@ pub mod network;
 pub mod ntru;
 pub mod session;
 pub mod storage;
+pub mod token;
 pub mod wallet;
 pub mod zilliqa;
