@@ -14,6 +14,7 @@ pub struct FToken {
     pub logo: Option<String>,
     pub balances: HashMap<Address, U256>,
     pub default: bool,
+    pub native: bool,
 }
 
 impl FToken {
@@ -26,6 +27,7 @@ impl FToken {
             addr: Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
             logo: None, // TODO: add logo
             balances: HashMap::new(),
+            native: true,
         }
     }
 
@@ -38,6 +40,7 @@ impl FToken {
             addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
             logo: None, // TODO: add logo
             balances: HashMap::new(),
+            native: true,
         }
     }
 }

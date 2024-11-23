@@ -372,18 +372,24 @@ impl Background {
     pub async fn get_ftoken_meta(
         &self,
         wallet_index: usize,
-        addr: Address,
+        contract: Address,
     ) -> Result<(), BackgroundError> {
         let w = self
             .wallets
             .get(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let accounts = w
+            .data
+            .accounts
+            .iter()
+            .map(|a| a.addr.clone())
+            .collect::<Vec<Address>>();
 
         for net_id in &w.data.network {
             self.netowrk
                 .get(*net_id)
                 .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
-                .get_ftoken_meta(&addr)
+                .get_ftoken_meta(&contract, &accounts)
                 .await
                 .map_err(BackgroundError::NetworkErrors)?;
         }

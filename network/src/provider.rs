@@ -159,6 +159,7 @@ impl NetworkProvider {
                         addr: contract.clone(),
                         logo: None,
                         default: false,
+                        native: false,
                     };
 
                     Ok(ftoken)
@@ -179,7 +180,22 @@ impl NetworkProvider {
             NetworkProvider::Ethereum => {
                 unreachable!()
             }
-            NetworkProvider::Zilliqa(zil) => {}
+            NetworkProvider::Zilliqa(zil) => {
+                let evm_ftokens = tokens
+                    .iter()
+                    .filter(|t| match t.addr {
+                        Address::Secp256k1Sha256Zilliqa(_) => false,
+                        Address::Secp256k1Keccak256Ethereum(_) => !t.default,
+                    })
+                    .collect::<Vec<&FToken>>();
+                let scilla_ftokens = tokens
+                    .iter()
+                    .filter(|t| match t.addr {
+                        Address::Secp256k1Sha256Zilliqa(_) => !t.default,
+                        Address::Secp256k1Keccak256Ethereum(_) => false,
+                    })
+                    .collect::<Vec<&FToken>>();
+            }
         };
 
         Ok(())

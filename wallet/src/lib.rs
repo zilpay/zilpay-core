@@ -695,6 +695,7 @@ mod tests {
             addr: Address::from_zil_base16("e876b112a62f945484ede1f3ccdd6b0ac6f39382").unwrap(),
             logo: None,
             default: false,
+            native: false,
             balances: HashMap::new(),
         };
 
@@ -771,6 +772,7 @@ mod tests {
                 symbol: "TK1".to_string(),
                 decimals: 18,
                 addr: Address::from_zil_base16("1111111111111111111111111111111111111111").unwrap(),
+                native: true,
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
@@ -780,6 +782,7 @@ mod tests {
                 symbol: "TK2".to_string(),
                 decimals: 6,
                 addr: Address::from_zil_base16("2222222222222222222222222222222222222222").unwrap(),
+                native: true,
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
@@ -788,6 +791,7 @@ mod tests {
                 name: "Token 3".to_string(),
                 symbol: "TK3".to_string(),
                 decimals: 8,
+                native: true,
                 addr: Address::from_zil_base16("3333333333333333333333333333333333333333").unwrap(),
                 logo: None,
                 default: false,
@@ -867,6 +871,7 @@ mod tests {
                 addr: Address::from_zil_base16("1111111111111111111111111111111111111111").unwrap(),
                 logo: None,
                 default: false,
+                native: true,
                 balances: HashMap::new(),
             },
             FToken {
@@ -876,6 +881,7 @@ mod tests {
                 addr: Address::from_zil_base16("2222222222222222222222222222222222222222").unwrap(),
                 logo: None,
                 default: false,
+                native: true,
                 balances: HashMap::new(),
             },
             FToken {
@@ -884,6 +890,7 @@ mod tests {
                 decimals: 8,
                 addr: Address::from_zil_base16("3333333333333333333333333333333333333333").unwrap(),
                 logo: None,
+                native: true,
                 default: false,
                 balances: HashMap::new(),
             },
