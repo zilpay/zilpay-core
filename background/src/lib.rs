@@ -405,12 +405,18 @@ impl Background {
             .wallets
             .get(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let addresses = w
+            .data
+            .accounts
+            .iter()
+            .map(|a| a.addr.clone())
+            .collect::<Vec<Address>>();
 
         for net_id in &w.data.network {
             self.netowrk
                 .get_mut(*net_id)
                 .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
-                .get_tokens_balances(&w.ftokens, &w.data.accounts)
+                .get_tokens_balances(&w.ftokens, &addresses)
                 .await
                 .map_err(BackgroundError::NetworkErrors)?;
         }

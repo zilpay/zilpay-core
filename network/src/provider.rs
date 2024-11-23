@@ -174,7 +174,7 @@ impl NetworkProvider {
     pub async fn get_tokens_balances(
         &self,
         tokens: &[FToken],
-        accounts: &[Account],
+        accounts: &[Address],
     ) -> Result<(), NetworkErrors> {
         match self {
             NetworkProvider::Ethereum => {
@@ -185,16 +185,19 @@ impl NetworkProvider {
                     .iter()
                     .filter(|t| match t.addr {
                         Address::Secp256k1Sha256Zilliqa(_) => false,
-                        Address::Secp256k1Keccak256Ethereum(_) => !t.default,
+                        Address::Secp256k1Keccak256Ethereum(_) => true,
                     })
                     .collect::<Vec<&FToken>>();
                 let scilla_ftokens = tokens
                     .iter()
                     .filter(|t| match t.addr {
-                        Address::Secp256k1Sha256Zilliqa(_) => !t.default,
+                        Address::Secp256k1Sha256Zilliqa(_) => true,
                         Address::Secp256k1Keccak256Ethereum(_) => false,
                     })
                     .collect::<Vec<&FToken>>();
+
+                dbg!(&evm_ftokens);
+                dbg!(&scilla_ftokens);
             }
         };
 
@@ -228,5 +231,57 @@ mod tests {
         assert_eq!(&ftoken.name, "ZilPay wallet");
         assert_eq!(&ftoken.symbol, "ZLP");
         assert_eq!(ftoken.decimals, 18u8);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_accounts_tokens_balances() {
+        let zil = ZilliqaJsonRPC::new();
+        let net = NetworkProvider::Zilliqa(zil);
+        let tokens =
+            [Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap()];
+        // Add multiple custom tokens
+        let tokens = vec![
+            FToken::zil(),
+            FToken {
+                name: "ZilPay token".to_string(),
+                symbol: "ZLP".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+            FToken {
+                name: "DMZ".to_string(),
+                symbol: "DMZ".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_bech32("zil19lr3vlpm4lufu2q94mmjvdkvmx8wdwajuntzx2")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+            FToken {
+                name: "RedChillies".to_string(),
+                symbol: "REDC".to_string(),
+                decimals: 9,
+                native: false,
+                addr: Address::from_zil_bech32("zil14jmjrkvfcz2uvj3y69kl6gas34ecuf2j5ggmye")
+                    .unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+        ];
+        let accounts = [
+            Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
+            Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
+            Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
+        ];
+
+        let ftoken = net.get_tokens_balances(&tokens, &accounts).await.unwrap();
     }
 }
