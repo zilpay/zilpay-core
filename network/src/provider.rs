@@ -135,18 +135,14 @@ impl NetworkProvider {
                         .zip(base16_accounts.iter())
                         .zip(res_vec.iter().skip(1))
                     {
-                        let balance: U256 = response
+                        let balance = response
                             .result
                             .as_ref()
-                            .ok_or(NetworkErrors::ResponseParseError)?
-                            .get("balances")
-                            .ok_or(NetworkErrors::ResponseParseError)?
-                            .get(base16_account)
-                            .ok_or(NetworkErrors::ResponseParseError)?
-                            .as_str()
-                            .ok_or(NetworkErrors::ResponseParseError)?
-                            .parse()
-                            .or(Err(NetworkErrors::ResponseParseError))?;
+                            .and_then(|v| v.get("balances"))
+                            .and_then(|v| v.get(base16_account))
+                            .and_then(|v| v.as_str())
+                            .and_then(|v| v.parse::<U256>().ok())
+                            .unwrap_or_default();
 
                         balances.insert(account.clone(), balance);
                     }
@@ -173,7 +169,7 @@ impl NetworkProvider {
 
     pub async fn get_tokens_balances(
         &self,
-        tokens: &[FToken],
+        tokens: &mut [FToken],
         accounts: &[Address],
     ) -> Result<(), NetworkErrors> {
         match self {
@@ -181,33 +177,73 @@ impl NetworkProvider {
                 unreachable!()
             }
             NetworkProvider::Zilliqa(zil) => {
-                let evm_ftokens = tokens
-                    .iter()
-                    .filter(|t| match t.addr {
-                        Address::Secp256k1Sha256Zilliqa(_) => false,
-                        Address::Secp256k1Keccak256Ethereum(_) => true,
-                    })
-                    .collect::<Vec<&FToken>>();
-                let scilla_ftokens = tokens
-                    .iter()
-                    .filter(|t| match t.addr {
-                        Address::Secp256k1Sha256Zilliqa(_) => true,
-                        Address::Secp256k1Keccak256Ethereum(_) => false,
-                    })
-                    .collect::<Vec<&FToken>>();
+                let mut scilla_token_reqs = Vec::new();
+                let mut scilla_token_map = Vec::new();
 
-                dbg!(&evm_ftokens);
-                dbg!(&scilla_ftokens);
+                // Gather Scilla token requests
+                for (token_idx, token) in tokens.iter().enumerate() {
+                    if let Address::Secp256k1Sha256Zilliqa(_) = token.addr {
+                        let base16_contract = token
+                            .addr
+                            .get_zil_base16()
+                            .map_err(NetworkErrors::InvalidAddress)?;
+
+                        for account in accounts {
+                            let base16_account = account
+                                .get_zil_check_sum_addr()
+                                .map_err(NetworkErrors::InvalidAddress)?
+                                .to_lowercase();
+
+                            let balance_req = ZilliqaJsonRPC::build_payload(
+                            json!([base16_contract, "balances", [base16_account.clone()]]),
+                            zilliqa::json_rpc::zil_methods::ZilMethods::GetSmartContractSubState,
+                        );
+
+                            scilla_token_map.push((token_idx, account.clone(), base16_account));
+                            scilla_token_reqs.push(balance_req);
+                        }
+                    }
+                }
+
+                // Make all Scilla requests in one batch
+                if !scilla_token_reqs.is_empty() {
+                    let responses = zil
+                        .req::<Vec<ResultRes<Value>>>(&scilla_token_reqs)
+                        .await
+                        .map_err(NetworkErrors::Request)?;
+
+                    dbg!(&responses);
+
+                    // Process responses and update balances
+                    for ((token_idx, account_addr, base16_account), response) in
+                        scilla_token_map.iter().zip(responses.iter())
+                    {
+                        if let Some(balance_value) = response
+                            .result
+                            .as_ref()
+                            .and_then(|r| r.get("balances"))
+                            .and_then(|b| b.get(base16_account))
+                            .and_then(|v| v.as_str())
+                        {
+                            if let Ok(balance) = balance_value.parse::<U256>() {
+                                tokens[*token_idx]
+                                    .balances
+                                    .insert(account_addr.clone(), balance);
+                            }
+                        }
+                    }
+                }
+
+                Ok(())
             }
-        };
-
-        Ok(())
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use config::address::ADDR_LEN;
     use tokio;
 
     #[tokio::test]
@@ -220,6 +256,7 @@ mod tests {
             Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
             Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
             Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
+            Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
         ];
 
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
@@ -227,6 +264,7 @@ mod tests {
         assert!(*ftoken.balances.get(&account[0]).unwrap() > U256::from(0));
         assert!(*ftoken.balances.get(&account[1]).unwrap() > U256::from(0));
         assert!(*ftoken.balances.get(&account[2]).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&account[3]).unwrap() == U256::from(0));
 
         assert_eq!(&ftoken.name, "ZilPay wallet");
         assert_eq!(&ftoken.symbol, "ZLP");
@@ -240,7 +278,7 @@ mod tests {
         let tokens =
             [Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap()];
         // Add multiple custom tokens
-        let tokens = vec![
+        let mut tokens = vec![
             FToken::zil(),
             FToken {
                 name: "ZilPay token".to_string(),
@@ -282,6 +320,8 @@ mod tests {
             Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
         ];
 
-        let ftoken = net.get_tokens_balances(&tokens, &accounts).await.unwrap();
+        net.get_tokens_balances(&mut tokens, &accounts)
+            .await
+            .unwrap();
     }
 }
