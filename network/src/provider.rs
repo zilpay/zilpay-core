@@ -194,10 +194,17 @@ impl NetworkProvider {
                                 .map_err(NetworkErrors::InvalidAddress)?
                                 .to_lowercase();
 
-                            let balance_req = ZilliqaJsonRPC::build_payload(
-                            json!([base16_contract, "balances", [base16_account.clone()]]),
-                            zilliqa::json_rpc::zil_methods::ZilMethods::GetSmartContractSubState,
-                        );
+                            let balance_req = if token.native {
+                                ZilliqaJsonRPC::build_payload(
+                                    json!([base16_account.clone()]),
+                                    zilliqa::json_rpc::zil_methods::ZilMethods::GetBalance,
+                                )
+                            } else {
+                                ZilliqaJsonRPC::build_payload(
+                                json!([base16_contract, "balances", [base16_account.clone()]]),
+                                zilliqa::json_rpc::zil_methods::ZilMethods::GetSmartContractSubState,
+                                )
+                            };
 
                             scilla_token_map.push((token_idx, account.clone(), base16_account));
                             scilla_token_reqs.push(balance_req);
@@ -212,25 +219,32 @@ impl NetworkProvider {
                         .await
                         .map_err(NetworkErrors::Request)?;
 
-                    dbg!(&responses);
-
                     // Process responses and update balances
                     for ((token_idx, account_addr, base16_account), response) in
                         scilla_token_map.iter().zip(responses.iter())
                     {
-                        if let Some(balance_value) = response
-                            .result
-                            .as_ref()
-                            .and_then(|r| r.get("balances"))
-                            .and_then(|b| b.get(base16_account))
-                            .and_then(|v| v.as_str())
-                        {
-                            if let Ok(balance) = balance_value.parse::<U256>() {
-                                tokens[*token_idx]
-                                    .balances
-                                    .insert(account_addr.clone(), balance);
-                            }
-                        }
+                        let balance = if tokens[*token_idx].native {
+                            response
+                                .result
+                                .as_ref()
+                                .and_then(|v| v.get("balance"))
+                                .and_then(|v| v.as_str())
+                                .and_then(|v| v.parse::<U256>().ok())
+                                .unwrap_or_default()
+                        } else {
+                            response
+                                .result
+                                .as_ref()
+                                .and_then(|v| v.get("balances"))
+                                .and_then(|v| v.get(base16_account))
+                                .and_then(|v| v.as_str())
+                                .and_then(|v| v.parse::<U256>().ok())
+                                .unwrap_or_default()
+                        };
+
+                        tokens[*token_idx]
+                            .balances
+                            .insert(account_addr.clone(), balance);
                     }
                 }
 
@@ -323,5 +337,7 @@ mod tests {
         net.get_tokens_balances(&mut tokens, &accounts)
             .await
             .unwrap();
+
+        dbg!(&tokens);
     }
 }

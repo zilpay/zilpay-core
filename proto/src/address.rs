@@ -12,7 +12,7 @@ use std::str::FromStr;
 use config::address::ADDR_LEN;
 use zil_errors::address::AddressError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Address {
     Secp256k1Sha256Zilliqa([u8; ADDR_LEN]),     // ZILLIQA
     Secp256k1Keccak256Ethereum([u8; ADDR_LEN]), // Ethereum
@@ -104,6 +104,22 @@ impl Address {
 }
 
 impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Secp256k1Sha256Zilliqa(bytes) => {
+                // unwrap shouldn't execpt
+                write!(f, "{}", to_zil_bech32(bytes).unwrap())
+            }
+            Self::Secp256k1Keccak256Ethereum(bytes) => {
+                let h = alloy::primitives::Address::from_slice(bytes);
+                // TODO: chain id.
+                write!(f, "{}", h.to_checksum(None))
+            }
+        }
+    }
+}
+
+impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Secp256k1Sha256Zilliqa(bytes) => {
