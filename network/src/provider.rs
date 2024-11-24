@@ -223,25 +223,22 @@ impl NetworkProvider {
                                 erc20.function("balanceOf").unwrap().first().unwrap();
 
                             for account in accounts {
-                                // TODO: this method drop!!!
-                                let alloy_addr = &account
-                                    .clone()
-                                    .to_alloy_addr()
-                                    .map_err(NetworkErrors::InvalidETHAddress)?;
-                                let input = DynSolValue::Address(*alloy_addr);
-                                let call_data = balance_call
-                                    .abi_encode_input(&[input])
-                                    .map_err(|e| NetworkErrors::ABIError(e.to_string()))?;
-
-                                let owner = account
-                                    .to_eth_checksummed()
-                                    .map_err(NetworkErrors::InvalidETHAddress)?;
                                 let balance_req = if token.native {
+                                    let owner = account
+                                        .to_eth_checksummed()
+                                        .map_err(NetworkErrors::InvalidETHAddress)?;
+
                                     ZilliqaJsonRPC::build_payload(
-                                        json!([owner]),
+                                        json!([owner, "latest"]),
                                         zilliqa::json_rpc::zil_methods::ZilMethods::ETHgetBalance,
                                     )
                                 } else {
+                                    let alloy_addr = &account.clone().to_alloy_addr();
+                                    let input = DynSolValue::Address(*alloy_addr);
+                                    let call_data = balance_call
+                                        .abi_encode_input(&[input])
+                                        .map_err(|e| NetworkErrors::ABIError(e.to_string()))?;
+
                                     ZilliqaJsonRPC::build_payload(
                                         json!([{
                                         "to": contract,
@@ -264,39 +261,53 @@ impl NetworkProvider {
                         .await
                         .map_err(NetworkErrors::Request)?;
 
-                    dbg!(&responses);
-
                     // Process responses and update balances
                     for ((token_idx, account_addr, account), response) in
                         token_map.iter().zip(responses.iter())
                     {
-                        let balance = if tokens[*token_idx].native {
-                            response
-                                .result
-                                .as_ref()
-                                .and_then(|v| v.get("balance"))
-                                .and_then(|v| v.as_str())
-                                .and_then(|v| v.parse::<U256>().ok())
-                                .unwrap_or_default()
-                        } else {
-                            let base16_account = account
-                                .get_zil_check_sum_addr()
-                                .map_err(NetworkErrors::InvalidZilAddress)?
-                                .to_lowercase();
+                        match tokens[*token_idx].addr {
+                            Address::Secp256k1Sha256Zilliqa(_) => {
+                                let balance = if tokens[*token_idx].native {
+                                    response
+                                        .result
+                                        .as_ref()
+                                        .and_then(|v| v.get("balance"))
+                                        .and_then(|v| v.as_str())
+                                        .and_then(|v| v.parse::<U256>().ok())
+                                        .unwrap_or_default()
+                                } else {
+                                    let base16_account = account
+                                        .get_zil_check_sum_addr()
+                                        .map_err(NetworkErrors::InvalidZilAddress)?
+                                        .to_lowercase();
 
-                            response
-                                .result
-                                .as_ref()
-                                .and_then(|v| v.get("balances"))
-                                .and_then(|v| v.get(base16_account))
-                                .and_then(|v| v.as_str())
-                                .and_then(|v| v.parse::<U256>().ok())
-                                .unwrap_or_default()
-                        };
+                                    response
+                                        .result
+                                        .as_ref()
+                                        .and_then(|v| v.get("balances"))
+                                        .and_then(|v| v.get(base16_account))
+                                        .and_then(|v| v.as_str())
+                                        .and_then(|v| v.parse::<U256>().ok())
+                                        .unwrap_or_default()
+                                };
 
-                        tokens[*token_idx]
-                            .balances
-                            .insert(account_addr.clone(), balance);
+                                tokens[*token_idx]
+                                    .balances
+                                    .insert(account_addr.clone(), balance);
+                            }
+                            Address::Secp256k1Keccak256Ethereum(_) => {
+                                let balance = response
+                                    .result
+                                    .as_ref()
+                                    .and_then(|v| v.as_str())
+                                    .and_then(|v| v.parse::<U256>().ok())
+                                    .unwrap_or_default();
+
+                                tokens[*token_idx]
+                                    .balances
+                                    .insert(account_addr.clone(), balance);
+                            }
+                        }
                     }
                 }
 
@@ -403,7 +414,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_eth_tokens() {
-        let zil = ZilliqaJsonRPC::new();
+        let mut zil = ZilliqaJsonRPC::new();
+
+        zil.selected = 1; // testnet
+
         let net = NetworkProvider::Zilliqa(zil);
         // Add multiple custom tokens
         let mut tokens = vec![
@@ -420,11 +434,19 @@ mod tests {
                 balances: HashMap::new(),
             },
         ];
-        let accounts =
-            [Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap()];
+        let accounts = [
+            Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
+            Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
+        ];
 
         net.get_tokens_balances(&mut tokens, &accounts)
             .await
             .unwrap();
+
+        assert!(&tokens[0].balances.contains_key(&accounts[0]));
+        assert!(&tokens[0].balances.contains_key(&accounts[1]));
+
+        assert!(&tokens[1].balances.contains_key(&accounts[0]));
+        assert!(&tokens[1].balances.contains_key(&accounts[1]));
     }
 }
