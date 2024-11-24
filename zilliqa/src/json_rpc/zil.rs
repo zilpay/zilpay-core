@@ -1,5 +1,5 @@
 use crate::json_rpc::zil_methods::ZilMethods;
-use config::{contracts::STAKEING, ZIL_MAIN_EVM_URL, ZIL_MAIN_SCILLA_URL};
+use config::{contracts::STAKEING, PROTO_TESTNET, ZIL_MAIN_SCILLA_URL};
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -7,9 +7,8 @@ use zil_errors::zilliqa::ZilliqaNetErrors;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZilliqaJsonRPC {
-    // TODO: in ZIlliqa 2.0 it will remove.
-    pub scilla_nodes: Vec<String>,
-    pub evm_nodes: Vec<String>,
+    pub nodes: [Vec<String>; 3], // mainnet, testnet, custom
+    pub selected: usize,
 }
 
 impl Default for ZilliqaJsonRPC {
@@ -20,29 +19,40 @@ impl Default for ZilliqaJsonRPC {
 
 impl ZilliqaJsonRPC {
     pub fn new() -> Self {
-        let scilla_nodes = vec![ZIL_MAIN_SCILLA_URL.to_string()];
-        let evm_nodes = vec![ZIL_MAIN_EVM_URL.to_string()];
+        let nodes = [
+            vec![ZIL_MAIN_SCILLA_URL.to_string()],
+            vec![PROTO_TESTNET.to_string()],
+            vec![],
+        ];
+        let selected = 0;
+
+        ZilliqaJsonRPC { nodes, selected }
+    }
+
+    pub fn from_vec(nodes: Vec<String>, id: usize) -> Self {
+        let mainnet = vec![ZIL_MAIN_SCILLA_URL.to_string()];
+        let testnet = vec![PROTO_TESTNET.to_string()];
+        let mut node_list = [mainnet, testnet, vec![]];
+
+        if let Some(list) = node_list.get_mut(id) {
+            list.extend_from_slice(&nodes);
+        };
 
         ZilliqaJsonRPC {
-            scilla_nodes,
-            evm_nodes,
+            nodes: node_list,
+            selected: id,
         }
     }
 
-    pub fn from_vec(scilla_nodes: Vec<String>, evm_nodes: Vec<String>) -> Self {
-        ZilliqaJsonRPC {
-            scilla_nodes,
-            evm_nodes,
-        }
-    }
-
-    pub async fn update_evm_nodes(&mut self) -> Result<(), ZilliqaNetErrors> {
-        Ok(())
+    pub fn get_node(&self) -> String {
+        self.nodes
+            .get(self.selected)
+            .and_then(|nodes| nodes.first().cloned())
+            .unwrap_or(ZIL_MAIN_SCILLA_URL.to_string())
     }
 
     pub async fn update_scilla_nodes(&mut self) -> Result<(), ZilliqaNetErrors> {
-        let default_url = ZIL_MAIN_SCILLA_URL.to_string();
-        let node_url = self.scilla_nodes.first().unwrap_or(&default_url);
+        let node_url = self.get_node();
         let client = reqwest::Client::new();
         let payload = json!({
             "id": "1",
@@ -80,7 +90,9 @@ impl ZilliqaJsonRPC {
             })
             .collect();
 
-        self.scilla_nodes.extend_from_slice(&nodes);
+        if let Some(self_nodes) = self.nodes.get_mut(self.selected) {
+            self_nodes.extend_from_slice(&nodes);
+        }
 
         Ok(())
     }
@@ -108,29 +120,33 @@ impl ZilliqaJsonRPC {
             }
         };
 
-        for url in self.scilla_nodes.iter() {
-            let res = match client.post::<&str>(url).json(&payloads).send().await {
-                Ok(response) => response,
-                Err(e) => {
-                    if handle_error(e.to_string(), ZilliqaNetErrors::InvalidRPCReq) {
-                        break;
+        if let Some(nodes) = self.nodes.get(self.selected) {
+            for url in nodes.iter() {
+                let res = match client.post::<&str>(url).json(&payloads).send().await {
+                    Ok(response) => response,
+                    Err(e) => {
+                        if handle_error(e.to_string(), ZilliqaNetErrors::InvalidRPCReq) {
+                            break;
+                        }
+
+                        continue;
                     }
+                };
+                let res: SR = match res.json().await {
+                    Ok(json) => json,
+                    Err(e) => {
+                        if handle_error(e.to_string(), ZilliqaNetErrors::InvalidJson) {
+                            break;
+                        }
 
-                    continue;
-                }
-            };
-            let res: SR = match res.json().await {
-                Ok(json) => json,
-                Err(e) => {
-                    if handle_error(e.to_string(), ZilliqaNetErrors::InvalidJson) {
-                        break;
+                        continue;
                     }
+                };
 
-                    continue;
-                }
-            };
-
-            return Ok(res);
+                return Ok(res);
+            }
+        } else {
+            return Err(ZilliqaNetErrors::NetIndexWrong(self.selected));
         }
 
         Err(error)
@@ -155,6 +171,7 @@ mod tests {
         zil_interfaces::{CreateTransactionRes, GetBalanceRes, ResultRes},
         zil_methods::ZilMethods,
     };
+    use config::PROTO_TESTNET;
     use proto::{
         keypair::KeyPair,
         secret_key::SecretKey,
@@ -174,17 +191,14 @@ mod tests {
 
         zil.update_scilla_nodes().await.unwrap();
 
-        assert!(zil.scilla_nodes.len() > 1);
+        assert!(zil.nodes.len() > 1);
     }
 
     #[tokio::test]
     async fn test_transaction() {
         const CHAIN_ID: u16 = 333;
 
-        let zil = ZilliqaJsonRPC::from_vec(
-            vec![TEST_SCILLA_NET.to_string()],
-            vec![ZIL_MAIN_EVM_URL.to_string()],
-        );
+        let zil = ZilliqaJsonRPC::from_vec(vec![PROTO_TESTNET.to_string()], 1);
         let secret_key_1_bytes: [u8; 32] = [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 1,

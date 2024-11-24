@@ -23,6 +23,9 @@ pub enum ZilliqaNetErrors {
     #[error("Fail to fetch nodes")]
     FetchNodesError,
 
+    #[error("invalid network index: {0}")]
+    NetIndexWrong(usize),
+
     #[error("Connection error: {0}")]
     ConnectionError(String),
 

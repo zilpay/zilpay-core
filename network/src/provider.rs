@@ -30,9 +30,6 @@ impl NetworkProvider {
                 zil.update_scilla_nodes()
                     .await
                     .map_err(NetworkErrors::FetchNodes)?;
-                zil.update_evm_nodes()
-                    .await
-                    .map_err(NetworkErrors::FetchNodes)?;
             }
             NetworkProvider::Ethereum => {
                 unreachable!()
@@ -257,12 +254,12 @@ impl NetworkProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::address::ADDR_LEN;
+    use config::{address::ADDR_LEN, ZIL_MAIN_SCILLA_URL};
     use tokio;
 
     #[tokio::test]
     async fn test_get_ftoken_meta() {
-        let zil = ZilliqaJsonRPC::new();
+        let zil = ZilliqaJsonRPC::from_vec(vec![ZIL_MAIN_SCILLA_URL.to_string()], 0);
         let net = NetworkProvider::Zilliqa(zil);
         let token_addr =
             Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap();
@@ -287,10 +284,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_accounts_tokens_balances() {
-        let zil = ZilliqaJsonRPC::new();
+        let zil = ZilliqaJsonRPC::from_vec(vec![ZIL_MAIN_SCILLA_URL.to_string()], 0);
         let net = NetworkProvider::Zilliqa(zil);
-        let tokens =
-            [Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap()];
         // Add multiple custom tokens
         let mut tokens = vec![
             FToken::zil(),
