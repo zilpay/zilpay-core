@@ -3,6 +3,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum NetworkErrors {
+    #[error("Fail to crate function from ABI, Error: {0}")]
+    ABIError(String),
+
     #[error("Failed to fetch nodes: {0}")]
     FetchNodes(ZilliqaNetErrors),
 
@@ -21,6 +24,9 @@ pub enum NetworkErrors {
     #[error("Parse response error")]
     ResponseParseError,
 
-    #[error("Invalid address: {0}")]
-    InvalidAddress(AddressError),
+    #[error("Invalid EVM address: {0}")]
+    InvalidETHAddress(AddressError),
+
+    #[error("Invalid Zilliqa address: {0}")]
+    InvalidZilAddress(AddressError),
 }

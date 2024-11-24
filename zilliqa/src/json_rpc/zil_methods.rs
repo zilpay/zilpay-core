@@ -10,6 +10,10 @@ pub enum ZilMethods {
     GetLatestTxBlock,
     GetRecentTransactions,
     GetMinimumGasPrice,
+
+    // EMV methods>>
+    ETHgetBalance,
+    ETHCall,
 }
 
 impl std::fmt::Display for ZilMethods {
@@ -26,6 +30,8 @@ impl std::fmt::Display for ZilMethods {
             ZilMethods::GetLatestTxBlock => write!(f, "GetLatestTxBlock"),
             ZilMethods::GetRecentTransactions => write!(f, "GetRecentTransactions"),
             ZilMethods::GetMinimumGasPrice => write!(f, "GetMinimumGasPrice"),
+            ZilMethods::ETHgetBalance => write!(f, "eth_getBalance"),
+            ZilMethods::ETHCall => write!(f, "eth_call"),
         }
     }
 }

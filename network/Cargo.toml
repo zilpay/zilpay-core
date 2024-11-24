@@ -10,9 +10,10 @@ wallet = { path = "../wallet" }
 proto = { path = "../proto" }
 zilliqa = { path = "../zilliqa" }
 serde = { version = "1.0.204", features = ["derive", "rc"] }
+hex = "0.4.3"
 serde_json = "1.0.124"
 tokio = { version = "1.39.2", features = ["full", "test-util"] }
-alloy = { version = "0.4.2", features = ["signer-local", "network", "consensus", "rpc", "rpc-types"] }
+alloy = { version = "0.4.2", features = ["full"] }
 
 [dev-dependencies]
 mockito = "1.5.0"
