@@ -257,7 +257,7 @@ impl NetworkProvider {
                         .and_then(|str| hex::decode(str.replace("0x", "")).ok())
                         .and_then(|bytes| symbol_call.abi_decode_output(&bytes, false).ok())
                         .and_then(|v| v.first().cloned())
-                        .ok_or(NetworkErrors::ABIError("Fail to parse name".to_string()))?;
+                        .ok_or(NetworkErrors::ABIError("Fail to parse symbol".to_string()))?;
                     let decimals = res_vec
                         .get(2)
                         .and_then(|r| r.result.as_ref())
@@ -265,7 +265,9 @@ impl NetworkProvider {
                         .and_then(|str| hex::decode(str.replace("0x", "")).ok())
                         .and_then(|bytes| decimals_call.abi_decode_output(&bytes, false).ok())
                         .and_then(|v| v.first().cloned())
-                        .ok_or(NetworkErrors::ABIError("Fail to parse name".to_string()))?;
+                        .ok_or(NetworkErrors::ABIError(
+                            "Fail to parse decimals".to_string(),
+                        ))?;
 
                     let mut balances = HashMap::new();
 
