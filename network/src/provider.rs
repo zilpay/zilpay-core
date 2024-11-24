@@ -1,5 +1,5 @@
 use alloy::{
-    dyn_abi::{DynSolValue, JsonAbiExt},
+    dyn_abi::{DynSolValue, FunctionExt, JsonAbiExt},
     json_abi::JsonAbi,
     primitives::U256,
 };
@@ -162,7 +162,101 @@ impl NetworkProvider {
                     Ok(ftoken)
                 }
                 Address::Secp256k1Keccak256Ethereum(_) => {
-                    unreachable!()
+                    let token_addr = contract
+                        .to_eth_checksummed()
+                        .map_err(NetworkErrors::InvalidETHAddress)?;
+
+                    // TODO: should't panic unwrap.
+                    let erc20: JsonAbi = serde_json::from_str(ERC20_ABI).unwrap();
+                    // let balance_call = erc20.function("balanceOf").and_then(|ff| ff.first()).and_then(|f| f.abi_encode_input());
+
+                    let name_call = erc20.function("name").and_then(|v| v.first()).unwrap();
+                    let symbol_call = erc20.function("symbol").and_then(|v| v.first()).unwrap();
+                    let decimals_call = erc20.function("decimals").and_then(|v| v.first()).unwrap();
+
+                    let name_payload = {
+                        let data = format!(
+                            "0x{}",
+                            hex::encode(
+                                &name_call
+                                    .abi_encode_input(&[])
+                                    .map_err(|e| NetworkErrors::ABIError(e.to_string()))?
+                            )
+                        );
+                        let params = json!([{
+                            "to": token_addr,
+                            "data": data
+                        },
+                            "latest"
+                        ]);
+                        ZilliqaJsonRPC::build_payload(
+                            params,
+                            zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
+                        )
+                    };
+                    let symbol_payload = ZilliqaJsonRPC::build_payload(
+                        json!([{
+                                        "to": token_addr,
+                                        "data": format!("0x{}", hex::encode(&symbol_call.abi_encode_input(&[]).map_err(|e| NetworkErrors::ABIError(e.to_string()))?))
+                                    }, "latest"]),
+                        zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
+                    );
+                    let decimals_payload = ZilliqaJsonRPC::build_payload(
+                        json!([{
+                                        "to": token_addr,
+                                        "data": format!("0x{}", hex::encode(&decimals_call.abi_encode_input(&[])
+                        .map_err(|e| NetworkErrors::ABIError(e.to_string()))?))
+                                    }, "latest"]),
+                        zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
+                    );
+
+                    let all_requests = vec![name_payload, symbol_payload, decimals_payload];
+
+                    // Make all requests
+                    let res_vec = zil
+                        .req::<Vec<ResultRes<Value>>>(&all_requests)
+                        .await
+                        .map_err(NetworkErrors::Request)?;
+
+                    let name = res_vec
+                        .first()
+                        .and_then(|r| r.result.as_ref())
+                        .and_then(|result| result.as_str())
+                        .and_then(|str| hex::decode(str.replace("0x", "")).ok())
+                        .and_then(|bytes| name_call.abi_decode_output(&bytes, false).ok())
+                        .and_then(|v| v.first().cloned())
+                        .ok_or(NetworkErrors::ABIError("Fail to parse name".to_string()))?;
+                    let symbol = res_vec
+                        .get(1)
+                        .and_then(|r| r.result.as_ref())
+                        .and_then(|result| result.as_str())
+                        .and_then(|str| hex::decode(str.replace("0x", "")).ok())
+                        .and_then(|bytes| symbol_call.abi_decode_output(&bytes, false).ok())
+                        .and_then(|v| v.first().cloned())
+                        .ok_or(NetworkErrors::ABIError("Fail to parse name".to_string()))?;
+                    let decimals = res_vec
+                        .get(2)
+                        .and_then(|r| r.result.as_ref())
+                        .and_then(|result| result.as_str())
+                        .and_then(|str| hex::decode(str.replace("0x", "")).ok())
+                        .and_then(|bytes| decimals_call.abi_decode_output(&bytes, false).ok())
+                        .and_then(|v| v.first().cloned())
+                        .ok_or(NetworkErrors::ABIError("Fail to parse name".to_string()))?;
+
+                    let mut balances = HashMap::new();
+
+                    let ftoken = FToken {
+                        balances,
+                        name: name.as_str().unwrap().to_string(),
+                        symbol: symbol.as_str().unwrap().to_string(),
+                        decimals: decimals.as_uint().unwrap().0.to(),
+                        addr: contract.clone(),
+                        logo: None,
+                        default: false,
+                        native: false,
+                    };
+
+                    Ok(ftoken)
                 }
             },
         }
@@ -448,5 +542,24 @@ mod tests {
 
         assert!(&tokens[1].balances.contains_key(&accounts[0]));
         assert!(&tokens[1].balances.contains_key(&accounts[1]));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_eth_meta_data() {
+        let mut zil = ZilliqaJsonRPC::new();
+
+        zil.selected = 1; // testnet
+
+        let net = NetworkProvider::Zilliqa(zil);
+        let token_addr =
+            Address::from_eth_address("0x98767212b8D275905f7F8EB65D6355D0Fc67bf6f").unwrap();
+        let account = [
+            Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
+            Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
+        ];
+
+        let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
+
+        dbg!(&ftoken);
     }
 }
