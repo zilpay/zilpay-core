@@ -30,6 +30,17 @@ impl Address {
         Ok(Self::Secp256k1Sha256Zilliqa(addr))
     }
 
+    pub fn from_eth_address(addr: &str) -> Result<Self, AddressError> {
+        let addr = alloy::primitives::Address::from_str(addr)
+            .map_err(|e| AddressError::InvalidETHAddress(e.to_string()))?;
+        let bytes: [u8; ADDR_LEN] = addr
+            .as_slice()
+            .try_into()
+            .map_err(|_| AddressError::InvalidETHAddress(String::new()))?;
+
+        Ok(Self::Secp256k1Keccak256Ethereum(bytes))
+    }
+
     pub fn to_eth_checksummed(&self) -> Result<String, AddressError> {
         let addr = alloy::primitives::Address::from_slice(self.as_ref());
 
@@ -340,5 +351,16 @@ mod tests {
             addr_zil.to_string(),
             "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
         );
+    }
+
+    #[test]
+    fn test_from_eth_address() {
+        // Test with 0x prefix
+        let hex_eth_adr = "0xf06686B5Eb5cAe38c09f12412B729045647E74e3";
+        let addr = Address::from_eth_address(&hex_eth_adr).unwrap();
+
+        assert!(matches!(addr, Address::Secp256k1Keccak256Ethereum(_)));
+        assert_eq!(addr.to_eth_checksummed().unwrap(), hex_eth_adr);
+        assert!(Address::from_eth_address("0x1234").is_err());
     }
 }

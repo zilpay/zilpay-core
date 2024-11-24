@@ -322,6 +322,17 @@ mod tests {
                 default: false,
                 balances: HashMap::new(),
             },
+            FToken {
+                name: "MyToken".to_string(),
+                symbol: "MTK".to_string(),
+                decimals: 18,
+                native: false,
+                addr: Address::from_zil_base16("0xf06686B5Eb5cAe38c09f12412B729045647E74e3")
+                    .unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
         ];
         let accounts = [
             Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),

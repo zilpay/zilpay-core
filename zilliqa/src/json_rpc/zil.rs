@@ -181,10 +181,6 @@ mod tests {
     use serde_json::json;
     use tokio;
 
-    const TEST_SCILLA_NET: &str = "https://dev-api.zilliqa.com/";
-
-    pub const ZIL_MAIN_EVM_URL: &str = "https://api.zq2-prototestnet.zilliqa.com";
-
     #[tokio::test]
     async fn test_bootstrap() {
         let mut zil = ZilliqaJsonRPC::new();
