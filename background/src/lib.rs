@@ -403,7 +403,7 @@ impl Background {
     ) -> Result<(), BackgroundError> {
         let w = self
             .wallets
-            .get(wallet_index)
+            .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
         let addresses = w
             .data
@@ -416,7 +416,7 @@ impl Background {
             self.netowrk
                 .get_mut(*net_id)
                 .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
-                .get_tokens_balances(&w.ftokens, &addresses)
+                .get_tokens_balances(&mut w.ftokens, &addresses)
                 .await
                 .map_err(BackgroundError::NetworkErrors)?;
         }

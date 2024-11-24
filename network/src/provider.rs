@@ -4,7 +4,7 @@ use alloy::primitives::U256;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use wallet::{account::Account, ft::FToken};
+use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
 use zilliqa::json_rpc::{
     zil::ZilliqaJsonRPC,
@@ -338,6 +338,16 @@ mod tests {
             .await
             .unwrap();
 
-        dbg!(&tokens);
+        assert!(&tokens[0].balances.contains_key(&accounts[0]));
+        assert!(&tokens[0].balances.contains_key(&accounts[1]));
+        assert!(&tokens[0].balances.contains_key(&accounts[2]));
+
+        assert!(&tokens[1].balances.contains_key(&accounts[0]));
+        assert!(&tokens[1].balances.contains_key(&accounts[1]));
+        assert!(&tokens[1].balances.contains_key(&accounts[2]));
+
+        assert!(&tokens[2].balances.contains_key(&accounts[0]));
+        assert!(&tokens[2].balances.contains_key(&accounts[1]));
+        assert!(&tokens[2].balances.contains_key(&accounts[2]));
     }
 }

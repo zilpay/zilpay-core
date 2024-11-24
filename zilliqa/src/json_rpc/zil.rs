@@ -7,6 +7,7 @@ use zil_errors::zilliqa::ZilliqaNetErrors;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZilliqaJsonRPC {
+    // TODO: in ZIlliqa 2.0 it will remove.
     pub scilla_nodes: Vec<String>,
     pub evm_nodes: Vec<String>,
 }
