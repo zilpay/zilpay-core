@@ -405,6 +405,13 @@ impl Background {
             .wallets
             .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+
+        if w.ftokens.is_empty() {
+            return Err(BackgroundError::FailUnlockWallet(
+                zil_errors::wallet::WalletErrors::KeyChainFailToGetProof,
+            ));
+        }
+
         let addresses = w
             .data
             .accounts
@@ -420,6 +427,12 @@ impl Background {
                 .await
                 .map_err(BackgroundError::NetworkErrors)?;
         }
+
+        w.save_to_storage()
+            .map_err(BackgroundError::FailToSaveWallet)?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
 
         Ok(())
     }
