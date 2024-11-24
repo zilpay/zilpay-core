@@ -168,7 +168,10 @@ impl NetworkProvider {
 
                     // TODO: should't panic unwrap.
                     let erc20: JsonAbi = serde_json::from_str(ERC20_ABI).unwrap();
-                    // let balance_call = erc20.function("balanceOf").and_then(|ff| ff.first()).and_then(|f| f.abi_encode_input());
+                    let balance_call = erc20
+                        .function("balanceOf")
+                        .and_then(|ff| ff.first())
+                        .unwrap();
 
                     let name_call = erc20.function("name").and_then(|v| v.first()).unwrap();
                     let symbol_call = erc20.function("symbol").and_then(|v| v.first()).unwrap();
@@ -210,7 +213,28 @@ impl NetworkProvider {
                         zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
                     );
 
-                    let all_requests = vec![name_payload, symbol_payload, decimals_payload];
+                    // Store base16 addresses to use when processing responses
+                    let mut eth_accounts = Vec::with_capacity(accounts.len());
+                    let mut all_requests = vec![name_payload, symbol_payload, decimals_payload];
+
+                    for account in accounts {
+                        let alloy_addr = &account.clone().to_alloy_addr();
+                        let input = DynSolValue::Address(*alloy_addr);
+                        let call_data = balance_call
+                            .abi_encode_input(&[input])
+                            .map_err(|e| NetworkErrors::ABIError(e.to_string()))?;
+
+                        let balance_req = ZilliqaJsonRPC::build_payload(
+                            json!([{
+                                        "to": token_addr,
+                                        "data": format!("0x{}", hex::encode(&call_data))
+                                    }, "latest"]),
+                            zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
+                        );
+
+                        eth_accounts.push(*alloy_addr);
+                        all_requests.push(balance_req);
+                    }
 
                     // Make all requests
                     let res_vec = zil
@@ -244,6 +268,17 @@ impl NetworkProvider {
                         .ok_or(NetworkErrors::ABIError("Fail to parse name".to_string()))?;
 
                     let mut balances = HashMap::new();
+
+                    for (account, response) in accounts.iter().zip(res_vec.iter().skip(3)) {
+                        let balance = response
+                            .result
+                            .as_ref()
+                            .and_then(|v| v.as_str())
+                            .and_then(|v| v.parse::<U256>().ok())
+                            .unwrap_or_default();
+
+                        balances.insert(account.clone(), balance);
+                    }
 
                     let ftoken = FToken {
                         balances,
@@ -560,6 +595,11 @@ mod tests {
 
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
 
-        dbg!(&ftoken);
+        assert_eq!(&ftoken.name, "MyToken");
+        assert_eq!(&ftoken.symbol, "MTK");
+        assert_eq!(ftoken.decimals, 18u8);
+
+        assert!(*ftoken.balances.get(&account[0]).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(&account[1]).unwrap() == U256::from(0));
     }
 }
