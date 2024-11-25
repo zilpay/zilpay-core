@@ -335,3 +335,275 @@ pub fn process_zil_balance_response(
             .map_err(|_| NetworkErrors::ABIError("Invalid token balance value".to_string()))
     }
 }
+
+#[cfg(test)]
+mod ftoken_tests {
+    use super::*;
+    use config::address::ADDR_LEN;
+    use serde_json::json;
+    use zilliqa::json_rpc::zil_interfaces::ErrorRes;
+
+    fn create_mock_eth_address() -> Address {
+        Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN])
+    }
+
+    fn create_mock_zil_address() -> Address {
+        Address::from_zil_bech32("zil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq9yf6pz").unwrap()
+    }
+
+    fn create_mock_error_response<T>(code: i16, message: &str) -> ResultRes<T> {
+        ResultRes {
+            id: 1,
+            jsonrpc: "2.0".to_string(),
+            result: None,
+            error: Some(ErrorRes {
+                code,
+                message: message.to_string(),
+                data: None,
+            }),
+        }
+    }
+
+    mod response_validator_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_success() {
+            let response: ResultRes<Value> = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!("0x123")),
+                error: None,
+            };
+            assert!(response.validate().is_ok());
+        }
+
+        #[test]
+        fn test_validate_error() {
+            let response = create_mock_error_response::<Value>(1, "Test error");
+            let err = response.validate().unwrap_err();
+            match err {
+                NetworkErrors::RPCError(msg) => {
+                    assert!(msg.contains("Test error"));
+                    assert!(msg.contains("code: 1"));
+                }
+                _ => panic!("Expected RPCError"),
+            }
+        }
+    }
+
+    mod build_token_requests_tests {
+        use super::*;
+
+        #[test]
+        fn test_build_eth_token_requests() {
+            let contract = create_mock_eth_address();
+            let accounts = vec![create_mock_eth_address()];
+            let requests = build_token_requests(&contract, &accounts, false).unwrap();
+
+            // Should have 4 requests: name, symbol, decimals, and balance
+            assert_eq!(requests.len(), 4);
+
+            // Verify metadata requests
+            let metadata_requests: Vec<_> = requests
+                .iter()
+                .filter_map(|(_, req_type)| match req_type {
+                    RequestType::Metadata(field) => Some(field),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(metadata_requests.len(), 3);
+
+            // Verify balance request
+            let balance_requests: Vec<_> = requests
+                .iter()
+                .filter_map(|(_, req_type)| match req_type {
+                    RequestType::Balance(_) => Some(true),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(balance_requests.len(), 1);
+        }
+
+        #[test]
+        fn test_build_zil_token_requests() {
+            let contract = create_mock_zil_address();
+            let accounts = vec![create_mock_zil_address()];
+            let requests = build_token_requests(&contract, &accounts, false).unwrap();
+
+            // Should have 2 requests: init (metadata) and balance
+            assert_eq!(requests.len(), 2);
+        }
+    }
+
+    mod process_eth_metadata_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_process_name_success() {
+            let hex_string = "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000047465737400000000000000000000000000000000000000000000000000000000";
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!(hex_string)),
+                error: None,
+            };
+
+            let result = process_eth_metadata_response(
+                &response,
+                &MetadataField::Name,
+                &MetadataField::Name.to_string(),
+            )
+            .unwrap();
+            assert_eq!(result, "test");
+        }
+
+        #[test]
+        fn test_process_decimals_success() {
+            let hex_string = "0x0000000000000000000000000000000000000000000000000000000000000012"; // 18 in hex
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!(hex_string)),
+                error: None,
+            };
+
+            let result = process_eth_metadata_response(
+                &response,
+                &MetadataField::Decimals,
+                &MetadataField::Decimals.to_string(),
+            )
+            .unwrap();
+            assert_eq!(result, "18");
+        }
+
+        #[test]
+        fn test_process_rpc_error() {
+            let response = create_mock_error_response::<Value>(1, "Test error");
+            let result = process_eth_metadata_response(
+                &response,
+                &MetadataField::Name,
+                &MetadataField::Name.to_string(),
+            );
+            assert!(matches!(result, Err(NetworkErrors::RPCError(_))));
+        }
+    }
+
+    mod process_eth_balance_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_process_balance_success() {
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!(
+                    "0x0000000000000000000000000000000000000000000000000000000000000064"
+                )), // 100 in hex
+                error: None,
+            };
+
+            let balance = process_eth_balance_response(&response).unwrap();
+            assert_eq!(balance, U256::from(100));
+        }
+
+        #[test]
+        fn test_process_balance_invalid_format() {
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!("invalid_hex")),
+                error: None,
+            };
+
+            let result = process_eth_balance_response(&response);
+            assert!(matches!(result, Err(NetworkErrors::ABIError(_))));
+        }
+    }
+
+    mod process_zil_balance_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_process_native_balance_success() {
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!({
+                    "balance": "100"
+                })),
+                error: None,
+            };
+
+            let balance =
+                process_zil_balance_response(&response, &create_mock_zil_address(), true).unwrap();
+            assert_eq!(balance, U256::from(100));
+        }
+
+        #[test]
+        fn test_process_token_balance_success() {
+            let account = create_mock_zil_address();
+            let base16_account = account.get_zil_check_sum_addr().unwrap().to_lowercase();
+
+            let mut balances = serde_json::Map::new();
+            balances.insert(base16_account, json!("200"));
+
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!({
+                    "balances": balances
+                })),
+                error: None,
+            };
+
+            let balance = process_zil_balance_response(&response, &account, false).unwrap();
+            assert_eq!(balance, U256::from(200));
+        }
+    }
+
+    mod process_zil_metadata_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_process_metadata_success() {
+            let init_data = json!([
+                {
+                    "vname": "name",
+                    "type": "String",
+                    "value": "Test Token"
+                },
+                {
+                    "vname": "symbol",
+                    "type": "String",
+                    "value": "TEST"
+                },
+                {
+                    "vname": "decimals",
+                    "value": "18",
+                    "type": "Uint32",
+                }
+            ]);
+
+            let (name, symbol, decimals) = process_zil_metadata_response(&init_data).unwrap();
+            assert_eq!(name, "Test Token");
+            assert_eq!(symbol, "TEST");
+            assert_eq!(decimals, 18);
+        }
+
+        #[test]
+        fn test_process_metadata_missing_field() {
+            let init_data = json!([
+                {
+                    "type": "String",
+                    "vname": "name",
+                    "value": "Test Token"
+                }
+            ]);
+
+            let result = process_zil_metadata_response(&init_data);
+
+            assert!(matches!(result, Err(NetworkErrors::InvalidContractInit)));
+        }
+    }
+}
