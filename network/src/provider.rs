@@ -1,19 +1,10 @@
-use alloy::{
-    dyn_abi::{DynSolValue, FunctionExt, JsonAbiExt},
-    json_abi::JsonAbi,
-    primitives::U256,
-};
-use config::abi::ERC20_ABI;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
-use zilliqa::json_rpc::{
-    zil::ZilliqaJsonRPC,
-    zil_interfaces::{GetTokenInitItem, ResultRes},
-};
+use zilliqa::json_rpc::{zil::ZilliqaJsonRPC, zil_interfaces::ResultRes};
 
 use crate::token::{
     build_token_requests, process_eth_balance_response, process_eth_metadata_response,
@@ -206,6 +197,7 @@ impl NetworkProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::primitives::U256;
     use config::{address::ADDR_LEN, ZIL_MAIN_SCILLA_URL};
     use tokio;
 
