@@ -367,17 +367,17 @@ mod tests {
         let mut tokens = vec![
             FToken::zil(),
             FToken::eth(),
-            FToken {
-                name: "ZilPay token".to_string(),
-                symbol: "ZLP".to_string(),
-                decimals: 18,
-                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
-                    .unwrap(),
-                native: false,
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-            },
+            // FToken {
+            //     name: "ZilPay token".to_string(),
+            //     symbol: "ZLP".to_string(),
+            //     decimals: 18,
+            //     addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
+            //         .unwrap(),
+            //     native: false,
+            //     logo: None,
+            //     default: false,
+            //     balances: HashMap::new(),
+            // }, TODO: unlock it when zilliqa 2.0 support deploy contracts.
             FToken {
                 name: "MyToken".to_string(),
                 symbol: "MTK".to_string(),
@@ -402,6 +402,22 @@ mod tests {
             .await
             .unwrap();
 
-        dbg!(&tokens);
+        assert!(&tokens[0].balances.contains_key(&accounts[0]));
+        assert!(&tokens[0].balances.contains_key(&accounts[1]));
+        assert!(&tokens[0].balances.contains_key(&accounts[2]));
+        assert!(&tokens[0].balances.contains_key(&accounts[3]));
+        assert!(&tokens[0].balances.contains_key(&accounts[4]));
+
+        assert!(&tokens[1].balances.contains_key(&accounts[0]));
+        assert!(&tokens[1].balances.contains_key(&accounts[1]));
+        assert!(&tokens[1].balances.contains_key(&accounts[2]));
+        assert!(&tokens[1].balances.contains_key(&accounts[3]));
+        assert!(&tokens[1].balances.contains_key(&accounts[4]));
+
+        assert!(&tokens[2].balances.contains_key(&accounts[0]));
+        assert!(&tokens[2].balances.contains_key(&accounts[1]));
+        assert!(&tokens[2].balances.contains_key(&accounts[2]));
+        assert!(&tokens[2].balances.contains_key(&accounts[3]));
+        assert!(&tokens[2].balances.contains_key(&accounts[4]));
     }
 }
