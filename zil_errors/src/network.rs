@@ -3,6 +3,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum NetworkErrors {
+    #[error("Network {0}")]
+    RPCError(String),
+
     #[error("Fail to crate function from ABI, Error: {0}")]
     ABIError(String),
 
