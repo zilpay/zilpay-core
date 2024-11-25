@@ -140,10 +140,15 @@ fn build_zil_requests(
 
     // Build balance requests
     for account in accounts {
-        let base16_account = account
-            .get_zil_check_sum_addr()
-            .map_err(NetworkErrors::InvalidZilAddress)?
-            .to_lowercase();
+        let base16_account = match &account {
+            Address::Secp256k1Sha256Zilliqa(_) => &account
+                .get_zil_check_sum_addr()
+                .map_err(NetworkErrors::InvalidZilAddress)?
+                .to_lowercase(),
+            Address::Secp256k1Keccak256Ethereum(_) => &account
+                .to_eth_checksummed()
+                .map_err(NetworkErrors::InvalidETHAddress)?,
+        };
 
         let request = if native {
             ZilliqaJsonRPC::build_payload(json!([base16_account]), ZilMethods::GetBalance)
@@ -306,17 +311,20 @@ pub fn process_zil_balance_response(
     account: &Address,
     is_native: bool,
 ) -> Result<U256, NetworkErrors> {
-    let response = response.validate()?;
+    if response.error.is_some() {
+        return Ok(U256::from(0));
+    }
 
     if is_native {
-        response
+        let balance = response
             .result
             .as_ref()
             .and_then(|v| v.get("balance"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| NetworkErrors::ABIError("Invalid native balance format".to_string()))?
-            .parse()
-            .map_err(|_| NetworkErrors::ABIError("Invalid native balance value".to_string()))
+            .and_then(|v| v.parse::<U256>().ok())
+            .unwrap_or_default();
+
+        Ok(balance)
     } else {
         let base16_account = account
             .get_zil_check_sum_addr()
