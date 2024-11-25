@@ -15,6 +15,11 @@ use zilliqa::json_rpc::{
     zil_interfaces::{GetTokenInitItem, ResultRes},
 };
 
+use crate::token::{
+    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
+    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
+};
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum NetworkProvider {
     Zilliqa(ZilliqaJsonRPC),
@@ -52,250 +57,101 @@ impl NetworkProvider {
             NetworkProvider::Ethereum => {
                 unreachable!()
             }
-            NetworkProvider::Zilliqa(zil) => match contract {
-                Address::Secp256k1Sha256Zilliqa(_) => {
-                    // Convert contract address to base16
-                    let base16_contract = contract
-                        .get_zil_base16()
-                        .map_err(NetworkErrors::InvalidZilAddress)?;
+            NetworkProvider::Zilliqa(zil) => {
+                // Build requests using support methods
+                let requests = build_token_requests(contract, accounts, false)?;
 
-                    // Build the init request
-                    let init_req = ZilliqaJsonRPC::build_payload(
-                        json!([base16_contract]),
-                        zilliqa::json_rpc::zil_methods::ZilMethods::GetSmartContractInit,
-                    );
+                // Make all requests
+                let responses = zil
+                    .req::<Vec<ResultRes<Value>>>(
+                        &requests
+                            .iter()
+                            .map(|(req, _)| req.clone())
+                            .collect::<Vec<_>>(),
+                    )
+                    .await
+                    .map_err(NetworkErrors::Request)?;
 
-                    // Create balance requests for each account
-                    let mut all_requests = vec![init_req];
+                // Process responses based on contract type
+                match contract {
+                    Address::Secp256k1Sha256Zilliqa(_) => {
+                        // Get metadata from first response
+                        let (name, symbol, decimals) = process_zil_metadata_response(
+                            responses[0]
+                                .result
+                                .as_ref()
+                                .ok_or(NetworkErrors::InvalidContractInit)?,
+                        )?;
 
-                    // Store base16 addresses to use when processing responses
-                    let mut base16_accounts = Vec::with_capacity(accounts.len());
+                        // Process balances
+                        let mut balances = HashMap::new();
+                        for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
+                            if let RequestType::Balance(account) = req_type {
+                                let balance =
+                                    process_zil_balance_response(&responses[i], account, false)?;
+                                balances.insert(account.clone(), balance);
+                            }
+                        }
 
-                    for account in accounts {
-                        let base16_account = account
-                            .get_zil_check_sum_addr()
-                            .map_err(NetworkErrors::InvalidZilAddress)?
-                            .to_lowercase();
-
-                        let balance_req = ZilliqaJsonRPC::build_payload(
-                            json!([base16_contract, "balances", [base16_account.clone()]]),
-                            zilliqa::json_rpc::zil_methods::ZilMethods::GetSmartContractSubState,
-                        );
-
-                        base16_accounts.push(base16_account);
-                        all_requests.push(balance_req);
+                        Ok(FToken {
+                            balances,
+                            name,
+                            symbol,
+                            decimals,
+                            addr: contract.clone(),
+                            logo: None,
+                            default: false,
+                            native: false,
+                        })
                     }
-
-                    // Make all requests
-                    let res_vec = zil
-                        .req::<Vec<ResultRes<Value>>>(&all_requests)
-                        .await
-                        .map_err(NetworkErrors::Request)?;
-
-                    // Process init response (first response)
-                    let res_init = res_vec
-                        .first()
-                        .ok_or(NetworkErrors::ResponseParseError)?
-                        .result
-                        .as_ref()
-                        .ok_or(NetworkErrors::InvalidContractInit)?
-                        .as_array()
-                        .ok_or(NetworkErrors::InvalidContractInit)?
-                        .iter()
-                        .map(|v| v.try_into())
-                        .collect::<Result<Vec<GetTokenInitItem>, _>>()
-                        .map_err(NetworkErrors::TokenParseError)?;
-
-                    // Extract token metadata
-                    let name = res_init
-                        .iter()
-                        .find(|v| v.vname == "name")
-                        .ok_or(NetworkErrors::InvalidContractInit)?
-                        .value
-                        .clone();
-                    let symbol = res_init
-                        .iter()
-                        .find(|v| v.vname == "symbol")
-                        .ok_or(NetworkErrors::InvalidContractInit)?
-                        .value
-                        .clone();
-                    let decimals: u8 = res_init
-                        .iter()
-                        .find(|v| v.vname == "decimals")
-                        .ok_or(NetworkErrors::InvalidContractInit)?
-                        .value
-                        .clone()
+                    Address::Secp256k1Keccak256Ethereum(_) => {
+                        // Process metadata fields
+                        let mut metadata_iter = responses.iter();
+                        let name = process_eth_metadata_response(
+                            metadata_iter
+                                .next()
+                                .ok_or(NetworkErrors::InvalidContractInit)?,
+                            &MetadataField::Name,
+                        )?;
+                        let symbol = process_eth_metadata_response(
+                            metadata_iter
+                                .next()
+                                .ok_or(NetworkErrors::InvalidContractInit)?,
+                            &MetadataField::Symbol,
+                        )?;
+                        let decimals: u8 = process_eth_metadata_response(
+                            metadata_iter
+                                .next()
+                                .ok_or(NetworkErrors::InvalidContractInit)?,
+                            &MetadataField::Decimals,
+                        )?
                         .parse()
-                        .or(Err(NetworkErrors::InvalidContractInit))?;
+                        .map_err(|_| NetworkErrors::InvalidContractInit)?;
 
-                    // Process balance responses (skip first response which was init)
-                    let mut balances = HashMap::new();
+                        // Process balances
+                        let mut balances = HashMap::new();
+                        for ((_, req_type), response) in
+                            requests.iter().zip(responses.iter()).skip(3)
+                        {
+                            if let RequestType::Balance(account) = req_type {
+                                let balance = process_eth_balance_response(response)?;
+                                balances.insert(account.clone(), balance);
+                            }
+                        }
 
-                    for ((account, base16_account), response) in accounts
-                        .iter()
-                        .zip(base16_accounts.iter())
-                        .zip(res_vec.iter().skip(1))
-                    {
-                        let balance = response
-                            .result
-                            .as_ref()
-                            .and_then(|v| v.get("balances"))
-                            .and_then(|v| v.get(base16_account))
-                            .and_then(|v| v.as_str())
-                            .and_then(|v| v.parse::<U256>().ok())
-                            .unwrap_or_default();
-
-                        balances.insert(account.clone(), balance);
+                        Ok(FToken {
+                            balances,
+                            name,
+                            symbol,
+                            decimals,
+                            addr: contract.clone(),
+                            logo: None,
+                            default: false,
+                            native: false,
+                        })
                     }
-
-                    let ftoken = FToken {
-                        balances,
-                        name,
-                        symbol,
-                        decimals,
-                        addr: contract.clone(),
-                        logo: None,
-                        default: false,
-                        native: false,
-                    };
-
-                    Ok(ftoken)
                 }
-                Address::Secp256k1Keccak256Ethereum(_) => {
-                    let token_addr = contract
-                        .to_eth_checksummed()
-                        .map_err(NetworkErrors::InvalidETHAddress)?;
-
-                    // TODO: should't panic unwrap.
-                    let erc20: JsonAbi = serde_json::from_str(ERC20_ABI).unwrap();
-                    let balance_call = erc20
-                        .function("balanceOf")
-                        .and_then(|ff| ff.first())
-                        .unwrap();
-
-                    let name_call = erc20.function("name").and_then(|v| v.first()).unwrap();
-                    let symbol_call = erc20.function("symbol").and_then(|v| v.first()).unwrap();
-                    let decimals_call = erc20.function("decimals").and_then(|v| v.first()).unwrap();
-
-                    let name_payload = {
-                        let data = format!(
-                            "0x{}",
-                            hex::encode(
-                                &name_call
-                                    .abi_encode_input(&[])
-                                    .map_err(|e| NetworkErrors::ABIError(e.to_string()))?
-                            )
-                        );
-                        let params = json!([{
-                            "to": token_addr,
-                            "data": data
-                        },
-                            "latest"
-                        ]);
-                        ZilliqaJsonRPC::build_payload(
-                            params,
-                            zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
-                        )
-                    };
-                    let symbol_payload = ZilliqaJsonRPC::build_payload(
-                        json!([{
-                                        "to": token_addr,
-                                        "data": format!("0x{}", hex::encode(&symbol_call.abi_encode_input(&[]).map_err(|e| NetworkErrors::ABIError(e.to_string()))?))
-                                    }, "latest"]),
-                        zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
-                    );
-                    let decimals_payload = ZilliqaJsonRPC::build_payload(
-                        json!([{
-                                        "to": token_addr,
-                                        "data": format!("0x{}", hex::encode(&decimals_call.abi_encode_input(&[])
-                        .map_err(|e| NetworkErrors::ABIError(e.to_string()))?))
-                                    }, "latest"]),
-                        zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
-                    );
-
-                    // Store base16 addresses to use when processing responses
-                    let mut eth_accounts = Vec::with_capacity(accounts.len());
-                    let mut all_requests = vec![name_payload, symbol_payload, decimals_payload];
-
-                    for account in accounts {
-                        let alloy_addr = &account.clone().to_alloy_addr();
-                        let input = DynSolValue::Address(*alloy_addr);
-                        let call_data = balance_call
-                            .abi_encode_input(&[input])
-                            .map_err(|e| NetworkErrors::ABIError(e.to_string()))?;
-
-                        let balance_req = ZilliqaJsonRPC::build_payload(
-                            json!([{
-                                        "to": token_addr,
-                                        "data": format!("0x{}", hex::encode(&call_data))
-                                    }, "latest"]),
-                            zilliqa::json_rpc::zil_methods::ZilMethods::ETHCall,
-                        );
-
-                        eth_accounts.push(*alloy_addr);
-                        all_requests.push(balance_req);
-                    }
-
-                    // Make all requests
-                    let res_vec = zil
-                        .req::<Vec<ResultRes<Value>>>(&all_requests)
-                        .await
-                        .map_err(NetworkErrors::Request)?;
-
-                    let name = res_vec
-                        .first()
-                        .and_then(|r| r.result.as_ref())
-                        .and_then(|result| result.as_str())
-                        .and_then(|str| hex::decode(str.replace("0x", "")).ok())
-                        .and_then(|bytes| name_call.abi_decode_output(&bytes, false).ok())
-                        .and_then(|v| v.first().cloned())
-                        .ok_or(NetworkErrors::ABIError("Fail to parse name".to_string()))?;
-                    let symbol = res_vec
-                        .get(1)
-                        .and_then(|r| r.result.as_ref())
-                        .and_then(|result| result.as_str())
-                        .and_then(|str| hex::decode(str.replace("0x", "")).ok())
-                        .and_then(|bytes| symbol_call.abi_decode_output(&bytes, false).ok())
-                        .and_then(|v| v.first().cloned())
-                        .ok_or(NetworkErrors::ABIError("Fail to parse symbol".to_string()))?;
-                    let decimals = res_vec
-                        .get(2)
-                        .and_then(|r| r.result.as_ref())
-                        .and_then(|result| result.as_str())
-                        .and_then(|str| hex::decode(str.replace("0x", "")).ok())
-                        .and_then(|bytes| decimals_call.abi_decode_output(&bytes, false).ok())
-                        .and_then(|v| v.first().cloned())
-                        .ok_or(NetworkErrors::ABIError(
-                            "Fail to parse decimals".to_string(),
-                        ))?;
-
-                    let mut balances = HashMap::new();
-
-                    for (account, response) in accounts.iter().zip(res_vec.iter().skip(3)) {
-                        let balance = response
-                            .result
-                            .as_ref()
-                            .and_then(|v| v.as_str())
-                            .and_then(|v| v.parse::<U256>().ok())
-                            .unwrap_or_default();
-
-                        balances.insert(account.clone(), balance);
-                    }
-
-                    let ftoken = FToken {
-                        balances,
-                        name: name.as_str().unwrap().to_string(),
-                        symbol: symbol.as_str().unwrap().to_string(),
-                        decimals: decimals.as_uint().unwrap().0.to(),
-                        addr: contract.clone(),
-                        logo: None,
-                        default: false,
-                        native: false,
-                    };
-
-                    Ok(ftoken)
-                }
-            },
+            }
         }
     }
 
@@ -466,7 +322,6 @@ mod tests {
             Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
             Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
         ];
-
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
 
         assert!(*ftoken.balances.get(&account[0]).unwrap() > U256::from(0));

@@ -216,7 +216,6 @@ fn build_eth_requests(
 pub fn process_eth_metadata_response(
     response: &ResultRes<Value>,
     field_type: &MetadataField,
-    field_name: &str,
 ) -> Result<String, NetworkErrors> {
     if let Some(error) = &response.error {
         return Err(NetworkErrors::RPCError(format!(
@@ -232,7 +231,7 @@ pub fn process_eth_metadata_response(
     }
 
     let erc20 = ERC20Helper::new()?;
-    let func = erc20.get_function(field_name)?;
+    let func = erc20.get_function(&field_type.to_string())?;
     let hex_str = response
         .result
         .as_ref()
@@ -324,15 +323,16 @@ pub fn process_zil_balance_response(
             .map_err(NetworkErrors::InvalidZilAddress)?
             .to_lowercase();
 
-        response
+        let balance = response
             .result
             .as_ref()
             .and_then(|v| v.get("balances"))
             .and_then(|v| v.get(base16_account))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| NetworkErrors::ABIError("Invalid token balance format".to_string()))?
-            .parse()
-            .map_err(|_| NetworkErrors::ABIError("Invalid token balance value".to_string()))
+            .and_then(|v| v.parse::<U256>().ok())
+            .unwrap_or_default();
+
+        Ok(balance)
     }
 }
 
@@ -449,12 +449,7 @@ mod ftoken_tests {
                 error: None,
             };
 
-            let result = process_eth_metadata_response(
-                &response,
-                &MetadataField::Name,
-                &MetadataField::Name.to_string(),
-            )
-            .unwrap();
+            let result = process_eth_metadata_response(&response, &MetadataField::Name).unwrap();
             assert_eq!(result, "test");
         }
 
@@ -468,23 +463,15 @@ mod ftoken_tests {
                 error: None,
             };
 
-            let result = process_eth_metadata_response(
-                &response,
-                &MetadataField::Decimals,
-                &MetadataField::Decimals.to_string(),
-            )
-            .unwrap();
+            let result =
+                process_eth_metadata_response(&response, &MetadataField::Decimals).unwrap();
             assert_eq!(result, "18");
         }
 
         #[test]
         fn test_process_rpc_error() {
             let response = create_mock_error_response::<Value>(1, "Test error");
-            let result = process_eth_metadata_response(
-                &response,
-                &MetadataField::Name,
-                &MetadataField::Name.to_string(),
-            );
+            let result = process_eth_metadata_response(&response, &MetadataField::Name);
             assert!(matches!(result, Err(NetworkErrors::RPCError(_))));
         }
     }
