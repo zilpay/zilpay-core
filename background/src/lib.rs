@@ -13,10 +13,10 @@ use settings::common_settings::CommonSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
 use wallet::{
-    wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams, Wallet,
-    WalletConfig,
+    ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams,
+    Wallet, WalletConfig,
 };
-use zil_errors::background::BackgroundError;
+use zil_errors::{background::BackgroundError, network::NetworkErrors};
 
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -373,7 +373,7 @@ impl Background {
         &self,
         wallet_index: usize,
         contract: Address,
-    ) -> Result<(), BackgroundError> {
+    ) -> Result<FToken, BackgroundError> {
         let w = self
             .wallets
             .get(wallet_index)
@@ -384,17 +384,27 @@ impl Background {
             .iter()
             .map(|a| a.addr.clone())
             .collect::<Vec<Address>>();
+        let mut error: NetworkErrors = NetworkErrors::ResponseParseError;
 
         for net_id in &w.data.network {
-            self.netowrk
+            match self
+                .netowrk
                 .get(*net_id)
                 .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
                 .get_ftoken_meta(&contract, &accounts)
                 .await
-                .map_err(BackgroundError::NetworkErrors)?;
+            {
+                Ok(meta) => {
+                    return Ok(meta);
+                }
+                Err(e) => {
+                    error = e;
+                    continue;
+                }
+            }
         }
 
-        Ok(())
+        Err(BackgroundError::NetworkErrors(error))
     }
 
     pub async fn sync_ftokens_balances(
