@@ -256,7 +256,7 @@ impl Background {
         }
 
         let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(device_indicator.as_bytes(), "ledger")
+        let argon_seed = argon2::derive_key(device_indicator.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
