@@ -267,7 +267,6 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let biometric_type = params.biometric_type;
         let options = &wallet_config.settings.crypto.cipher_orders.clone();
         let wallet = Wallet::from_ledger(params, &proof, wallet_config)
             .map_err(BackgroundError::FailToInitWallet)?;
@@ -276,16 +275,13 @@ impl Background {
             .chain(device_indicators.iter().cloned())
             .collect::<Vec<_>>()
             .join(":");
-        let session = if biometric_type == AuthMethod::None {
-            Vec::new()
-        } else {
-            encrypt_session(&device_indicator, &argon_seed, options)
-                .map_err(BackgroundError::CreateSessionError)?
-        };
+        let session = encrypt_session(&device_indicator, &argon_seed, options)
+            .map_err(BackgroundError::CreateSessionError)?;
 
         wallet
             .save_to_storage()
             .map_err(BackgroundError::FailToSaveWallet)?;
+
         self.indicators.push(indicator);
         self.wallets.push(wallet);
         self.save_indicators()?;
