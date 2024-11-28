@@ -31,6 +31,19 @@ impl FToken {
         }
     }
 
+    pub fn zlp() -> Self {
+        FToken {
+            default: true,
+            name: "ZilPay wallet".to_string(),
+            symbol: "ZLP".to_string(),
+            decimals: 18,
+            addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap(),
+            logo: None, // TODO: add logo
+            balances: HashMap::new(),
+            native: false,
+        }
+    }
+
     pub fn eth() -> Self {
         FToken {
             default: true,

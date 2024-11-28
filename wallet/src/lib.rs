@@ -424,8 +424,9 @@ impl Wallet {
             .get(self.data.selected_account)
             .ok_or(WalletErrors::FailToGetAccount(self.data.selected_account))?;
 
+        // here we can add default token!
         match selected.pub_key {
-            PubKey::Secp256k1Sha256Zilliqa(_) => self.ftokens = vec![FToken::zil()],
+            PubKey::Secp256k1Sha256Zilliqa(_) => self.ftokens = vec![FToken::zil(), FToken::zlp()],
             PubKey::Secp256k1Keccak256Ethereum(_) => self.ftokens = vec![FToken::eth()],
             _ => unreachable!(),
         }
