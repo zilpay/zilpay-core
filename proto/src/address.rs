@@ -25,6 +25,13 @@ impl Address {
         Ok(Self::Secp256k1Sha256Zilliqa(addr))
     }
 
+    pub fn auto_format(&self) -> String {
+        match self {
+            Address::Secp256k1Sha256Zilliqa(_) => self.get_bech32().unwrap_or_default(),
+            Address::Secp256k1Keccak256Ethereum(_) => self.to_eth_checksummed().unwrap_or_default(),
+        }
+    }
+
     pub fn from_zil_bech32(addr: &str) -> Result<Self, AddressError> {
         let addr = from_zil_bech32_address(addr)?;
         Ok(Self::Secp256k1Sha256Zilliqa(addr))
