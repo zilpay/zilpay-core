@@ -673,26 +673,15 @@ mod tests_background {
         drop(bg);
 
         let mut bg = Background::from_storage_path(&dir).unwrap();
+
+        bg.unlock_wallet_with_session(session.clone(), &device_indicators, 0)
+            .unwrap();
+
         let wallet = bg.wallets.first_mut().unwrap();
-
-        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
-            .chain(device_indicators)
-            .collect::<Vec<_>>()
-            .join(":");
-
-        let seed_bytes = decrypt_session(
-            &wallet_device_indicators,
-            session,
-            &wallet.data.settings.crypto.cipher_orders,
-        )
-        .unwrap();
-
         assert_eq!(
             wallet.unlock(&[42u8; KEY_SIZE]),
             Err(zil_errors::wallet::WalletErrors::KeyChainFailToGetProof)
         );
-
-        wallet.unlock(&seed_bytes).unwrap();
     }
 
     #[test]
