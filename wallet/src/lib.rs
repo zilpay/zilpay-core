@@ -153,7 +153,7 @@ impl Wallet {
         };
         let ftokens = match params.pub_key {
             PubKey::Secp256k1Sha256Zilliqa(_) => {
-                vec![FToken::zil()]
+                vec![FToken::zil(), FToken::zlp()]
             }
             PubKey::Secp256k1Keccak256Ethereum(_) => {
                 vec![FToken::eth()]
@@ -217,7 +217,7 @@ impl Wallet {
         };
         let ftokens = match sk {
             SecretKey::Secp256k1Sha256Zilliqa(_) => {
-                vec![FToken::zil()]
+                vec![FToken::zil(), FToken::zlp()]
             }
             SecretKey::Secp256k1Keccak256Ethereum(_) => {
                 vec![FToken::eth()]
@@ -272,7 +272,7 @@ impl Wallet {
 
         let ftokens = match accounts[0].pub_key {
             PubKey::Secp256k1Sha256Zilliqa(_) => {
-                vec![FToken::zil()]
+                vec![FToken::zil(), FToken::zlp()]
             }
             PubKey::Secp256k1Keccak256Ethereum(_) => {
                 vec![FToken::eth()]
