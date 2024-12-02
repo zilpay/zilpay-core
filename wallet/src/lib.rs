@@ -353,6 +353,41 @@ impl Wallet {
         }
     }
 
+    pub fn add_next_bip39_account(
+        &mut self,
+        name: String,
+        bip49: &Bip49DerivationPath,
+        passphrase: &str,
+        seed_bytes: &[u8; KEY_SIZE],
+    ) -> Result<(), WalletErrors> {
+        match self.data.wallet_type {
+            WalletTypes::SecretPhrase((key, _)) => {
+                let keychain =
+                    KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
+                let storage_key = usize::to_le_bytes(key);
+                let cipher_entropy = self
+                    .storage
+                    .get(&storage_key)
+                    .map_err(WalletErrors::FailToGetContent)?;
+                let entropy = keychain
+                    .decrypt(cipher_entropy, &self.data.settings.crypto.cipher_orders)
+                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
+                // TODO: add more Languages
+                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
+                    .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
+                let mnemonic_seed = m.to_seed_normalized(passphrase);
+                let hd_account = account::Account::from_hd(&mnemonic_seed, name.to_owned(), bip49)
+                    .or(Err(WalletErrors::InvalidBip39Account))?;
+
+                self.data.accounts.push(hd_account);
+                self.save_to_storage()?;
+
+                Ok(())
+            }
+            _ => Err(WalletErrors::InvalidAccountType),
+        }
+    }
+
     pub fn reveal_mnemonic(&self, seed_bytes: &[u8; KEY_SIZE]) -> Result<Mnemonic, WalletErrors> {
         match self.data.wallet_type {
             WalletTypes::SecretPhrase((key, _)) => {
