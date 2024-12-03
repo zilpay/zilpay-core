@@ -26,8 +26,7 @@ impl Signature {
                 Ok(verify.is_some())
             }
             Signature::ECDSASecp256k1Keccak256(sig) => {
-                let signature = EthersSignature::from_bytes_and_parity(&sig[..64], sig[64] as u64)
-                    .or(Err(SignatureError::FailParseSignature))?;
+                let signature = EthersSignature::from_bytes_and_parity(&sig[..64], true);
                 let signer_address = pk
                     .get_bytes_addr()
                     .map_err(SignatureError::FailIntoPubKey)?;

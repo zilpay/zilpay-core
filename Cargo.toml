@@ -45,8 +45,7 @@ proto = { path = "./proto" }
 hex = "0.4.3"
 serde_json = "1.0.133"
 serde = { version = "1.0.215", features = ["derive", "rc"] }
-# alloy = { version = "0.7.2", features = ["full"] }
-alloy = { version = "0.4.2", features = ["full"] }
+alloy = { version = "0.7.2", features = ["full"] }
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 sha2 = "0.10.8"
