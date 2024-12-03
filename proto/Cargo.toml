@@ -15,13 +15,9 @@ bip39.workspace = true
 ripemd.workspace = true
 bech32.workspace = true
 k256.workspace = true
+hmac.workspace = true
 crypto = { path = "../crypto" }
 config = { path = "../config" }
 bincode = { path = "../bincode" }
 zil_errors = { path = "../zil_errors" }
 prost = "0.12.6"
-tiny-hderive = "0.3.0"
-
-
-[build-dependencies]
-prost-build = "0.12.6"

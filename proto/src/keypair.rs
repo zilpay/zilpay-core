@@ -9,14 +9,16 @@ use crypto::schnorr;
 use k256::SecretKey as K256SecretKey;
 
 use crate::{
-    address::Address, pubkey::PubKey, signature::Signature, tx::TransactionReceipt,
-    tx::TransactionRequest,
+    address::Address,
+    bip32::derive_private_key,
+    pubkey::PubKey,
+    signature::Signature,
+    tx::{TransactionReceipt, TransactionRequest},
 };
 
 use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use tiny_hderive::bip32::ExtendedPrivKey;
 use zil_errors::keypair::KeyPairError;
 
 // One byte for enum type
@@ -85,10 +87,8 @@ impl KeyPair {
         bip49: &Bip49DerivationPath,
     ) -> Result<Self, KeyPairError> {
         let path = bip49.get_path();
-        let ext = ExtendedPrivKey::derive(seed, path.as_str())
-            .map_err(|_| KeyPairError::ExtendedPrivKeyDeriveError)?;
         let secret_key =
-            K256SecretKey::from_slice(&ext.secret()).or(Err(KeyPairError::InvalidEntropy))?;
+            derive_private_key(seed, &path).map_err(KeyPairError::ExtendedPrivKeyDeriveError)?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
             .public_key()
             .to_sec1_bytes()

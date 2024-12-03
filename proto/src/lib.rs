@@ -1,8 +1,5 @@
-pub mod zilliqa_proto {
-    include!("zilliqa_message.rs");
-}
-
 pub mod address;
+pub mod bip32;
 pub mod btc_addr;
 pub mod keypair;
 pub mod pubkey;

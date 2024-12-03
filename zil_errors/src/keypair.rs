@@ -1,5 +1,6 @@
 use crate::{
     address::AddressError,
+    bip32::Bip329Errors,
     crypto::{SchorrError, SignatureError},
 };
 use thiserror::Error;
@@ -8,8 +9,8 @@ use thiserror::Error;
 pub enum KeyPairError {
     #[error("Fail to sign transaction: {0}")]
     FailToSignTx(String),
-    #[error("Extended private key derivation error")]
-    ExtendedPrivKeyDeriveError,
+    #[error("Extended private key derivation error: {0}")]
+    ExtendedPrivKeyDeriveError(Bip329Errors),
     #[error("Schorr error: {0}")]
     SchorrError(#[from] SchorrError),
     #[error("Invalid length")]

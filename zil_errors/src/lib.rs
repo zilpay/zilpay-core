@@ -3,6 +3,7 @@ use storage::LocalStorageError;
 pub mod account;
 pub mod address;
 pub mod background;
+pub mod bip32;
 pub mod cipher;
 pub mod crypto;
 pub mod keychain;
