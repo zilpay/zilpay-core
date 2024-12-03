@@ -21,6 +21,14 @@ impl WalletTypes {
             Self::SecretKey => 2,
         }
     }
+
+    pub fn to_str(self) -> String {
+        match self {
+            Self::Ledger(bytes) => format!("ledger.{:?}", hex::encode(bytes)),
+            Self::SecretPhrase((_, pass)) => format!("SecretPhrase.{:?}", pass),
+            Self::SecretKey => "SecretKey".to_string(),
+        }
+    }
 }
 
 impl std::fmt::Display for WalletTypes {
