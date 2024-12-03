@@ -2,7 +2,7 @@ use bip39::{Language, Mnemonic};
 use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
-    sha::SHA256_SIZE,
+    sha::{SHA256_SIZE, SHA512_SIZE},
     storage::{INDICATORS_DB_KEY, NETWORK_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
@@ -129,7 +129,7 @@ impl Background {
         password: &str,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> Result<(), BackgroundError> {
+    ) -> Result<[u8; SHA512_SIZE], BackgroundError> {
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -142,7 +142,7 @@ impl Background {
             .unlock(&argon_seed)
             .map_err(BackgroundError::FailUnlockWallet)?;
 
-        Ok(())
+        Ok(argon_seed)
     }
 
     pub fn unlock_wallet_with_session(
@@ -150,7 +150,7 @@ impl Background {
         session_cipher: Vec<u8>,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> Result<(), BackgroundError> {
+    ) -> Result<[u8; SHA512_SIZE], BackgroundError> {
         let wallet = self
             .wallets
             .get_mut(wallet_index)
@@ -171,7 +171,7 @@ impl Background {
             .unlock(&seed_bytes)
             .map_err(BackgroundError::FailUnlockWallet)?;
 
-        Ok(())
+        Ok(seed_bytes)
     }
 
     pub fn add_bip39_wallet<F>(
