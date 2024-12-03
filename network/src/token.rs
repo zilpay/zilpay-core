@@ -1,5 +1,6 @@
 use alloy::{
     dyn_abi::{DynSolValue, FunctionExt, JsonAbiExt},
+    hex,
     json_abi::{Function, JsonAbi},
     primitives::U256,
 };

@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+hex.workspace = true
+rand_chacha.workspace = true
+rand.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+bip39.workspace = true
 zil_errors = { path = "../zil_errors" }
 session = { path = "../session" }
 wallet = { path = "../wallet" }
@@ -14,9 +20,3 @@ crypto = { path = "../crypto" }
 proto = { path = "../proto" }
 cipher = { path = "../cipher" }
 network = { path = "../network" }
-bip39 = "2.0.0"
-rand_chacha = "0.3.1"
-rand = "0.8.5"
-hex = "0.4.3"
-serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.124"

@@ -4,23 +4,24 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-prost = "0.12.6"
+alloy.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+sha2.workspace = true
+hex.workspace = true
+rand_chacha.workspace = true
+rand.workspace = true
+bip39.workspace = true
+ripemd.workspace = true
+bech32.workspace = true
+k256.workspace = true
 crypto = { path = "../crypto" }
 config = { path = "../config" }
 bincode = { path = "../bincode" }
 zil_errors = { path = "../zil_errors" }
-serde = { version = "1.0.204", features = ["derive"] }
-sha2 = "0.10.8"
-hex = "0.4.3"
-rand_chacha = "0.3.1"
-rand = "0.8.5"
-k256 = "0.13.3"
+prost = "0.12.6"
 tiny-hderive = "0.3.0"
-bip39 = "2.0.0"
-ripemd = "0.1.3"
-serde_json = "1.0.124"
-bech32 = "0.11.0"
-alloy = { version = "0.4.2", features = ["signer-local", "network", "consensus", "rpc", "rpc-types"] }
+
 
 [build-dependencies]
 prost-build = "0.12.6"

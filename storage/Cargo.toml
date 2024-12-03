@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+hex.workspace = true
+sled.workspace = true
+directories.workspace = true
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 bincode = { path = "../bincode" }
-sled = "0.34.7"
-hex = "0.4.3"
-directories = "5.0.1"

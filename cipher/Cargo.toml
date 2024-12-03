@@ -4,14 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+tokio.workspace = true
+ntrulp.workspace = true
+rand_chacha.workspace = true
+rand.workspace = true
+hex.workspace = true
+serde.workspace = true
 zil_errors = { path = "../zil_errors" }
 bincode = { path = "../bincode" }
 config = { path = "../config" }
-ntrulp = { version = "0.2.3", features = ["ntrup761", "std"] }
-tokio = { version = "1.39.2", features = ["full", "test-util"] }
 aes-gcm = "0.10.3"
 argon2 = "0.5.3"
-rand_chacha = "0.3.1"
-rand = "0.8.5"
-hex = "0.4.3"
-serde = { version = "1.0.204", features = ["derive"] }

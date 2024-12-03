@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+alloy.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+rand_chacha.workspace = true
+rand.workspace = true
+hex.workspace = true
+bip39.workspace = true
+sha2.workspace = true
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 crypto = { path = "../crypto" }
@@ -13,11 +21,3 @@ cipher = { path = "../cipher" }
 storage = { path = "../storage" }
 settings = { path = "../settings" }
 bincode = { path = "../bincode" }
-serde = { version = "1.0.204", features = ["derive"] }
-bip39 = "2.0.0"
-sha2 = "0.10.8"
-hex = "0.4.3"
-rand_chacha = "0.3.1"
-rand = "0.8.5"
-serde_json = "1.0.124"
-alloy = { version = "0.4.2", features = ["signer-local", "network", "consensus", "rpc", "rpc-types"] }
