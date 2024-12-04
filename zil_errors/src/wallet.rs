@@ -9,6 +9,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("Account with index ({}) already exists")]
+    ExistsAccount(usize),
+
     #[error("fail create argon2: {0}")]
     ArgonCipherErrors(CipherErrors),
 

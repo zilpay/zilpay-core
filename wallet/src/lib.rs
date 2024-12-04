@@ -376,6 +376,16 @@ impl Wallet {
                 let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
                     .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
                 let mnemonic_seed = m.to_seed_normalized(passphrase);
+                let has_account = self
+                    .data
+                    .accounts
+                    .iter()
+                    .any(|account| account.account_type.value() == bip49.get_index());
+
+                if has_account {
+                    return Err(WalletErrors::ExistsAccount(bip49.get_index()));
+                }
+
                 let hd_account = account::Account::from_hd(&mnemonic_seed, name.to_owned(), bip49)
                     .or(Err(WalletErrors::InvalidBip39Account))?;
 
