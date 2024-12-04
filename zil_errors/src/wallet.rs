@@ -9,6 +9,9 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("Invalid Ledger account: {0}")]
+    InvalidLedgerAccount(AccountErrors),
+
     #[error("Account with index ({0}) already exists")]
     ExistsAccount(usize),
 

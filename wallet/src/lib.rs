@@ -6,11 +6,13 @@ pub mod wallet_types;
 
 use std::sync::Arc;
 
+use account_type::AccountType;
 use cipher::argon2::derive_key;
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use config::storage::FTOKENS_DB_KEY;
 use ft::FToken;
+use proto::address::Address;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
@@ -351,6 +353,35 @@ impl Wallet {
             }
             _ => Err(WalletErrors::InvalidAccountType),
         }
+    }
+
+    pub fn add_ledger_account(
+        &mut self,
+        name: String,
+        pub_key: &PubKey,
+        index: usize,
+    ) -> Result<(), WalletErrors> {
+        let has_account = self
+            .data
+            .accounts
+            .iter()
+            .any(|account| account.account_type.value() == index);
+
+        if self.data.wallet_type.code() != AccountType::Ledger(0).code() {
+            return Err(WalletErrors::InvalidWalletTypeValue);
+        }
+
+        if has_account {
+            return Err(WalletErrors::ExistsAccount(index));
+        }
+
+        let ledger_account = account::Account::from_ledger(pub_key, name, index)
+            .map_err(WalletErrors::InvalidLedgerAccount)?;
+
+        self.data.accounts.push(ledger_account);
+        self.save_to_storage()?;
+
+        Ok(())
     }
 
     pub fn add_next_bip39_account(

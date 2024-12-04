@@ -21,10 +21,10 @@ impl Account {
     pub fn from_ledger(
         pub_key: &PubKey,
         name: String,
-        cipher_index: usize,
+        index: usize,
     ) -> Result<Self, AccountErrors> {
         let addr = pub_key.get_addr().map_err(AccountErrors::PubKeyError)?;
-        let account_type = AccountType::Ledger(cipher_index);
+        let account_type = AccountType::Ledger(index);
 
         Ok(Self {
             account_type,
