@@ -24,7 +24,7 @@ impl WalletTypes {
 
     pub fn to_str(&self) -> String {
         match self {
-            Self::Ledger(bytes) => format!("ledger.{:?}", hex::encode(bytes)),
+            Self::Ledger(bytes) => format!("ledger.{:?}", String::from_utf8_lossy(bytes)),
             Self::SecretPhrase((_, pass)) => format!("SecretPhrase.{:?}", pass),
             Self::SecretKey => "SecretKey".to_string(),
         }
