@@ -12,7 +12,6 @@ use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use config::storage::FTOKENS_DB_KEY;
 use ft::FToken;
-use proto::address::Address;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;

@@ -18,6 +18,14 @@ pub enum PubKey {
 }
 
 impl PubKey {
+    pub fn from_hex(hex_str: &str) -> Result<Self, PubKeyError> {
+        let clean_hex = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+
+        Self::from_str(clean_hex)
+    }
+}
+
+impl PubKey {
     pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN], PubKeyError> {
         match self {
             PubKey::Secp256k1Keccak256Ethereum(pk) => {
