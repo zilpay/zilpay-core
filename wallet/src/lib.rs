@@ -534,6 +534,21 @@ impl Wallet {
         Ok(keychain)
     }
 
+    pub fn select_account(&mut self, account_index: usize) -> Result<(), WalletErrors> {
+        if self.data.accounts.is_empty() {
+            return Err(WalletErrors::NoAccounts);
+        }
+
+        if account_index >= self.data.accounts.len() {
+            return Err(WalletErrors::InvalidAccountIndex(account_index));
+        }
+
+        self.data.selected_account = account_index;
+        self.save_to_storage()?;
+
+        Ok(())
+    }
+
     pub fn add_ftoken(&mut self, token: FToken) -> Result<(), WalletErrors> {
         self.ftokens.push(token);
 
@@ -1025,5 +1040,78 @@ mod tests {
         assert_eq!(loaded_wallet2.ftokens[0].symbol, "ETH");
         assert_eq!(loaded_wallet2.ftokens[1].symbol, "TK1");
         assert_eq!(loaded_wallet2.ftokens[2].symbol, "TK3");
+    }
+
+    #[test]
+    fn test_select_account() {
+        // Setup initial wallet with bip39 for multiple accounts
+        let argon_seed = derive_key(PASSWORD, "").unwrap();
+        let storage = LocalStorage::new(
+            "com.test_select_account",
+            "SelectTest Wallet Corp",
+            "WalletSelectTest App",
+        )
+        .unwrap();
+        let storage = Arc::new(storage);
+        let keychain = KeyChain::from_seed(&argon_seed).unwrap();
+        let mnemonic =
+            Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
+
+        // Create wallet with 3 accounts
+        let indexes = [0, 1, 2].map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
+
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "").unwrap();
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&storage),
+            settings: Default::default(),
+        };
+
+        let mut wallet = Wallet::from_bip39_words(Bip39Params {
+            proof: &proof,
+            mnemonic: &mnemonic,
+            passphrase: PASSPHRASE,
+            indexes: &indexes,
+            config: wallet_config,
+            wallet_name: "Select Account Test Wallet".to_string(),
+            biometric_type: AuthMethod::Biometric,
+            network: vec![0],
+        })
+        .unwrap();
+
+        // Test 1: Initial state should have account 0 selected
+        assert_eq!(wallet.data.selected_account, 0);
+
+        // Test 2: Successfully select valid account indices
+        assert!(wallet.select_account(1).is_ok());
+        assert_eq!(wallet.data.selected_account, 1);
+
+        assert!(wallet.select_account(2).is_ok());
+        assert_eq!(wallet.data.selected_account, 2);
+
+        assert!(wallet.select_account(0).is_ok());
+        assert_eq!(wallet.data.selected_account, 0);
+
+        // Test 3: Try to select invalid index (out of bounds)
+        assert!(matches!(
+            wallet.select_account(3),
+            Err(WalletErrors::InvalidAccountIndex(3))
+        ));
+        assert_eq!(wallet.data.selected_account, 0); // Should remain unchanged
+
+        // Test 4: Try to select index way out of bounds
+        assert!(matches!(
+            wallet.select_account(999),
+            Err(WalletErrors::InvalidAccountIndex(999))
+        ));
+        assert_eq!(wallet.data.selected_account, 0); // Should remain unchanged
+
+        // Test 5: Verify persistence after selection
+        wallet.select_account(1).unwrap();
+        let wallet_addr = wallet.key().unwrap();
+        wallet.save_to_storage().unwrap();
+
+        let loaded_wallet = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        assert_eq!(loaded_wallet.data.selected_account, 1);
     }
 }

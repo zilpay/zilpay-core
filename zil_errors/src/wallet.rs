@@ -9,6 +9,12 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum WalletErrors {
+    #[error("No accounts available in wallet")]
+    NoAccounts,
+
+    #[error("Invalid account index: {0}. Selected index must be less than number of accounts")]
+    InvalidAccountIndex(usize),
+
     #[error("Invalid Ledger account: {0}")]
     InvalidLedgerAccount(AccountErrors),
 
