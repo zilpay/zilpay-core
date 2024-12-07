@@ -1,4 +1,5 @@
-use bip39::{Language, Mnemonic};
+pub use bip39::{Language, Mnemonic};
+
 use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
