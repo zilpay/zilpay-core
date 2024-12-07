@@ -25,12 +25,12 @@ use rand_chacha::ChaCha20Rng;
 pub struct BackgroundBip39Params<'a> {
     pub password: &'a str,
     pub mnemonic_str: &'a str,
-    pub indexes: &'a [usize],
     pub passphrase: &'a str,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub network: Vec<usize>,
+    pub accounts: Vec<(Bip49DerivationPath, String)>,
 }
 
 pub struct BackgroundSKParams<'a> {
@@ -186,14 +186,10 @@ impl Background {
         Ok(seed_bytes)
     }
 
-    pub fn add_bip39_wallet<F>(
+    pub fn add_bip39_wallet(
         &mut self,
         params: BackgroundBip39Params,
-        derive_fn: F,
-    ) -> Result<Vec<u8>, BackgroundError>
-    where
-        F: Fn(usize) -> Bip49DerivationPath,
-    {
+    ) -> Result<Vec<u8>, BackgroundError> {
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -201,11 +197,6 @@ impl Background {
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
         let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
             .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?;
-        let indexes: Vec<(Bip49DerivationPath, String)> = params
-            .indexes
-            .iter()
-            .map(|i| (derive_fn(*i), format!("account {i}")))
-            .collect();
         let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT)
             .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
@@ -218,7 +209,7 @@ impl Background {
             proof: &proof,
             mnemonic: &mnemonic,
             passphrase: params.passphrase,
-            indexes: &indexes,
+            indexes: &params.accounts,
             config: wallet_config,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
