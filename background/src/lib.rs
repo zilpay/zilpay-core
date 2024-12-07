@@ -80,6 +80,17 @@ impl Background {
         Ok(m.to_string())
     }
 
+    pub fn find_invalid_bip39_words(words: &[String], lang: Language) -> Vec<usize> {
+        let word_list = lang.word_list();
+
+        words
+            .iter()
+            .enumerate()
+            .filter(|(_, word)| !word_list.contains(&word.as_str()))
+            .map(|(index, _)| index)
+            .collect()
+    }
+
     pub fn gen_keypair() -> Result<(String, String), BackgroundError> {
         let (pub_key, secret_key) =
             KeyPair::gen_keys_bytes().map_err(BackgroundError::FailToGenKeyPair)?;
@@ -479,6 +490,19 @@ mod tests_background {
     use proto::keypair::KeyPair;
     use rand::Rng;
     use session::decrypt_session;
+
+    #[test]
+    fn test_bip39_words_exists() {
+        let words: Vec<String> =
+            "area scale vital sell radio pattern not_exits_word mean similar picnic grain gain"
+                .split(" ")
+                .map(|v| v.to_string())
+                .collect();
+
+        let not_exists_ids = Background::find_invalid_bip39_words(&words, Language::English);
+
+        assert_eq!(not_exists_ids, vec![6])
+    }
 
     #[test]
     fn test_add_more_wallets_bip39() {
