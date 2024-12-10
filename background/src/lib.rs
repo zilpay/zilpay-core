@@ -209,11 +209,11 @@ impl Background {
             proof: &proof,
             mnemonic: &mnemonic,
             passphrase: params.passphrase,
-            indexes: &params.accounts,
+            indexes: params.accounts,
             config: wallet_config,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
-            network: &params.network,
+            network: params.network,
         })
         .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;

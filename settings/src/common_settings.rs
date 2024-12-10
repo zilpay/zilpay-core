@@ -1,20 +1,18 @@
-use crate::{language::Language, notificcations::Notificcations, storage::Storage, theme::Theme};
+use crate::{notificcations::Notificcations, theme::Theme};
 
 #[derive(Debug, Clone)]
 pub struct CommonSettings {
-    pub language: Language,
     pub notificcations: Notificcations,
-    pub storage: Storage,
     pub theme: Theme,
+    pub locale: String,
 }
 
 impl Default for CommonSettings {
     fn default() -> Self {
         Self {
-            language: Language {},
             notificcations: Notificcations {},
-            storage: Storage {},
-            theme: Theme {},
+            theme: Theme::default(),
+            locale: String::default(),
         }
     }
 }

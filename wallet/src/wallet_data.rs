@@ -2,7 +2,7 @@ use crate::{account::Account, wallet_types::WalletTypes};
 use serde::{Deserialize, Serialize};
 use settings::wallet_settings::WalletSettings;
 
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum AuthMethod {
     FaceId,
     Fingerprint,
