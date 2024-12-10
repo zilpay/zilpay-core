@@ -57,7 +57,7 @@ pub struct Bip39Params<'a> {
     pub config: WalletConfig,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub network: Vec<usize>,
+    pub network: &'a [usize],
 }
 
 pub struct Wallet {
@@ -281,7 +281,7 @@ impl Wallet {
             _ => unreachable!(),
         };
         let data = WalletData {
-            network: params.network,
+            network: params.network.to_owned(),
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
             proof_key,
@@ -666,7 +666,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Wllaet name".to_string(),
             biometric_type: AuthMethod::Biometric,
-            network: vec![0],
+            network: &[0],
         })
         .unwrap();
 
@@ -1075,7 +1075,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Select Account Test Wallet".to_string(),
             biometric_type: AuthMethod::Biometric,
-            network: vec![0],
+            network: &[0],
         })
         .unwrap();
 

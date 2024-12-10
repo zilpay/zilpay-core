@@ -29,8 +29,8 @@ pub struct BackgroundBip39Params<'a> {
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
-    pub network: Vec<usize>,
-    pub accounts: Vec<(Bip49DerivationPath, String)>,
+    pub network: &'a [usize],
+    pub accounts: &'a [(Bip49DerivationPath, String)],
 }
 
 pub struct BackgroundSKParams<'a> {
@@ -213,7 +213,7 @@ impl Background {
             config: wallet_config,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
-            network: params.network,
+            network: &params.network,
         })
         .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
@@ -507,24 +507,20 @@ mod tests_background {
         let password = "test_password";
         let words: &str =
             "area scale vital sell radio pattern poverty mean similar picnic grain gain";
-        let indexes = [0usize];
-        let derive = Bip49DerivationPath::Zilliqa;
-        let network = vec![0];
+        let accounts = [(Bip49DerivationPath::Zilliqa(0), "Name".to_string())];
+        let network = [0];
 
         let _key = bg
-            .add_bip39_wallet(
-                BackgroundBip39Params {
-                    password,
-                    network: network.clone(),
-                    mnemonic_str: words,
-                    indexes: &indexes,
-                    passphrase: "",
-                    wallet_name: String::new(),
-                    biometric_type: Default::default(),
-                    device_indicators: &[String::from("apple"), String::from("0000")],
-                },
-                derive,
-            )
+            .add_bip39_wallet(BackgroundBip39Params {
+                password,
+                network: &network,
+                mnemonic_str: words,
+                accounts: &accounts,
+                passphrase: "",
+                wallet_name: String::new(),
+                biometric_type: Default::default(),
+                device_indicators: &[String::from("apple"), String::from("0000")],
+            })
             .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
@@ -534,41 +530,37 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
 
         let _key = bg
-            .add_bip39_wallet(
-                BackgroundBip39Params {
-                    password,
-                    network: network.clone(),
-                    mnemonic_str: words,
-                    indexes: &indexes,
-                    passphrase: "",
-                    wallet_name: String::new(),
-                    biometric_type: Default::default(),
-                    device_indicators: &[String::from("apple"), String::from("1102")],
-                },
-                derive,
-            )
+            .add_bip39_wallet(BackgroundBip39Params {
+                password,
+                network: &network,
+                mnemonic_str: words,
+                accounts: &accounts,
+                passphrase: "",
+                wallet_name: String::new(),
+                biometric_type: Default::default(),
+                device_indicators: &[String::from("apple"), String::from("1102")],
+            })
             .unwrap();
 
         let password = "test_password";
         let words: &str =
             "clap chair edit noise sugar box raccoon play another hobby soccer fringe";
-        let indexes = [0, 1];
-        let derive = Bip49DerivationPath::Zilliqa;
+        let accounts = [
+            (Bip49DerivationPath::Zilliqa(0), "Name".to_string()),
+            (Bip49DerivationPath::Zilliqa(1), "account 1".to_string()),
+        ];
 
         let _key = bg
-            .add_bip39_wallet(
-                BackgroundBip39Params {
-                    password,
-                    network,
-                    mnemonic_str: words,
-                    indexes: &indexes,
-                    passphrase: "",
-                    wallet_name: String::new(),
-                    device_indicators: &[String::from("apple"), String::from("43498")],
-                    biometric_type: Default::default(),
-                },
-                derive,
-            )
+            .add_bip39_wallet(BackgroundBip39Params {
+                password,
+                network: &network,
+                accounts: &accounts,
+                mnemonic_str: words,
+                passphrase: "",
+                wallet_name: String::new(),
+                device_indicators: &[String::from("apple"), String::from("43498")],
+                biometric_type: Default::default(),
+            })
             .unwrap();
 
         drop(bg);
@@ -589,25 +581,30 @@ mod tests_background {
         let password = "test_password";
         let words: &str =
             "green process gate doctor slide whip priority shrug diamond crumble average help";
-        let indexes = [0, 1, 2, 3, 4, 5, 6, 7];
-        let derive = Bip49DerivationPath::Zilliqa;
+        let accounts = [
+            (Bip49DerivationPath::Zilliqa(0), "Account 0".to_string()),
+            (Bip49DerivationPath::Zilliqa(1), "Account 1".to_string()),
+            (Bip49DerivationPath::Zilliqa(2), "Account 2".to_string()),
+            (Bip49DerivationPath::Zilliqa(3), "Account 3".to_string()),
+            (Bip49DerivationPath::Zilliqa(4), "Account 4".to_string()),
+            (Bip49DerivationPath::Zilliqa(5), "Account 5".to_string()),
+            (Bip49DerivationPath::Zilliqa(6), "Account 6".to_string()),
+            (Bip49DerivationPath::Zilliqa(7), "Account 7".to_string()),
+        ];
         let device_indicators = [String::from("apple"), String::from("4354")];
-        let network = vec![0];
+        let network = [0];
 
         let session = bg
-            .add_bip39_wallet(
-                BackgroundBip39Params {
-                    device_indicators: &device_indicators,
-                    password,
-                    mnemonic_str: words,
-                    indexes: &indexes,
-                    passphrase: "",
-                    wallet_name: String::new(),
-                    biometric_type: AuthMethod::FaceId,
-                    network,
-                },
-                derive,
-            )
+            .add_bip39_wallet(BackgroundBip39Params {
+                device_indicators: &device_indicators,
+                password,
+                mnemonic_str: words,
+                accounts: &accounts,
+                passphrase: "",
+                wallet_name: String::new(),
+                biometric_type: AuthMethod::FaceId,
+                network: &network,
+            })
             .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
