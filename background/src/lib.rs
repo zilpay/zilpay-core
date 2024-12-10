@@ -175,7 +175,7 @@ impl Background {
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
             session_cipher,
-            &wallet.data.settings.crypto.cipher_orders,
+            &wallet.data.settings.cipher_orders,
         )
         .map_err(BackgroundError::DecryptSessionError)?;
 
@@ -204,7 +204,7 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let options = &wallet_config.settings.crypto.cipher_orders.clone();
+        let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_bip39_words(Bip39Params {
             proof: &proof,
             mnemonic: &mnemonic,
@@ -222,7 +222,7 @@ impl Background {
             .collect::<Vec<_>>()
             .join(":");
 
-        let session = if params.biometric_type == AuthMethod::None {
+        let session = if wallet.data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
             encrypt_session(&device_indicator, &argon_seed, options)
@@ -270,7 +270,7 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let options = &wallet_config.settings.crypto.cipher_orders.clone();
+        let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_ledger(params, &proof, wallet_config)
             .map_err(BackgroundError::FailToInitWallet)?;
         let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
@@ -311,7 +311,7 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let options = &wallet_config.settings.crypto.cipher_orders.clone();
+        let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_sk(
             params.secret_key,
             params.account_name,
@@ -329,7 +329,7 @@ impl Background {
             .collect::<Vec<_>>()
             .join(":");
 
-        let session = if params.biometric_type == AuthMethod::None {
+        let session = if wallet.data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
             encrypt_session(&device_indicator, &argon_seed, options)
@@ -622,7 +622,7 @@ mod tests_background {
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
             session,
-            &wallet.data.settings.crypto.cipher_orders,
+            &wallet.data.settings.cipher_orders,
         )
         .unwrap();
 
@@ -779,7 +779,7 @@ mod tests_background {
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
             session,
-            &wallet.data.settings.crypto.cipher_orders,
+            &wallet.data.settings.cipher_orders,
         )
         .unwrap();
 

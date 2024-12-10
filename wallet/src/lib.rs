@@ -124,7 +124,7 @@ impl Wallet {
         // TODO: add cipher for encrypt account index.
         let cipher_proof = config
             .keychain
-            .make_proof(proof, &config.settings.crypto.cipher_orders)
+            .make_proof(proof, &config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
         let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
@@ -186,11 +186,11 @@ impl Wallet {
 
         let cipher_sk = config
             .keychain
-            .encrypt(sk_as_bytes.to_vec(), &config.settings.crypto.cipher_orders)
+            .encrypt(sk_as_bytes.to_vec(), &config.settings.cipher_orders)
             .or(Err(WalletErrors::TryEncryptSecretKeyError))?;
         let cipher_proof = config
             .keychain
-            .make_proof(proof, &config.settings.crypto.cipher_orders)
+            .make_proof(proof, &config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
         let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
@@ -238,7 +238,7 @@ impl Wallet {
             .keychain
             .encrypt(
                 params.mnemonic.to_entropy(),
-                &params.config.settings.crypto.cipher_orders,
+                &params.config.settings.cipher_orders,
             )
             .map_err(WalletErrors::EncryptKeyChainErrors)?;
         let mut combined = [0u8; SHA256_SIZE];
@@ -246,7 +246,7 @@ impl Wallet {
         let cipher_proof = params
             .config
             .keychain
-            .make_proof(params.proof, &params.config.settings.crypto.cipher_orders)
+            .make_proof(params.proof, &params.config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
         let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&params.config.storage))?;
         drop(cipher_proof);
@@ -283,7 +283,7 @@ impl Wallet {
         let data = WalletData {
             network: params.network.to_owned(),
             wallet_name: params.wallet_name,
-            biometric_type: params.biometric_type,
+            biometric_type: params.biometric_type.clone(),
             proof_key,
             settings: params.config.settings,
             wallet_address,
@@ -323,7 +323,7 @@ impl Wallet {
                     .get(&storage_key)
                     .map_err(WalletErrors::FailToGetContent)?;
                 let sk_bytes = keychain
-                    .decrypt(cipher_sk, &self.data.settings.crypto.cipher_orders)
+                    .decrypt(cipher_sk, &self.data.settings.cipher_orders)
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
                 let sk = SecretKey::from_bytes(sk_bytes.into())
                     .map_err(WalletErrors::FailParseSKBytes)?;
@@ -400,7 +400,7 @@ impl Wallet {
                     .get(&storage_key)
                     .map_err(WalletErrors::FailToGetContent)?;
                 let entropy = keychain
-                    .decrypt(cipher_entropy, &self.data.settings.crypto.cipher_orders)
+                    .decrypt(cipher_entropy, &self.data.settings.cipher_orders)
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
                 // TODO: add more Languages
                 let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
@@ -439,7 +439,7 @@ impl Wallet {
                     .get(&storage_key)
                     .map_err(WalletErrors::FailToGetContent)?;
                 let entropy = keychain
-                    .decrypt(cipher_entropy, &self.data.settings.crypto.cipher_orders)
+                    .decrypt(cipher_entropy, &self.data.settings.cipher_orders)
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
                 // TODO: add more Languages
                 let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
@@ -521,7 +521,7 @@ impl Wallet {
             .map_err(WalletErrors::FailToGetProofFromStorage)?;
 
         let origin_proof = keychain
-            .get_proof(&cipher_proof, &self.data.settings.crypto.cipher_orders)
+            .get_proof(&cipher_proof, &self.data.settings.cipher_orders)
             .or(Err(WalletErrors::KeyChainFailToGetProof))?;
 
         let proof = derive_key(&seed_bytes[..PROOF_SIZE], PROOF_SALT)
