@@ -4,7 +4,7 @@ use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::{SHA256_SIZE, SHA512_SIZE},
-    storage::{INDICATORS_DB_KEY, NETWORK_DB_KEY},
+    storage::{GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
@@ -60,6 +60,16 @@ fn load_network(storage: Arc<LocalStorage>) -> Vec<NetworkProvider> {
     }
 
     serde_json::from_slice(&bytes).unwrap_or(NetworkProvider::new_vec())
+}
+
+fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
+    let bytes = storage.get(GLOBAL_SETTINGS_DB_KEY).unwrap_or_default();
+
+    if bytes.is_empty() {
+        return CommonSettings::default();
+    }
+
+    serde_json::from_slice(&bytes).unwrap_or(CommonSettings::default())
 }
 
 impl Background {
@@ -118,6 +128,7 @@ impl Background {
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::new();
         let netowrk = load_network(Arc::clone(&storage));
+        let settings = load_global_settings(Arc::clone(&storage));
 
         for addr in &indicators {
             let w = Wallet::load_from_storage(addr, Arc::clone(&storage))
@@ -132,7 +143,7 @@ impl Background {
             wallets,
             indicators,
             is_old_storage,
-            settings: Default::default(),
+            settings,
         })
     }
 
