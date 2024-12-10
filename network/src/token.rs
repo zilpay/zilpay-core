@@ -39,12 +39,12 @@ impl<T> ResponseValidator for ResultRes<T> {
 }
 
 // Type alias for clarity
-type RequestResult = Result<Vec<(Value, RequestType)>, NetworkErrors>;
+type RequestResult<'a> = Result<Vec<(Value, RequestType<'a>)>, NetworkErrors>;
 
 #[derive(Debug)]
-pub enum RequestType {
+pub enum RequestType<'a> {
     Metadata(MetadataField),
-    Balance(Address),
+    Balance(&'a Address),
 }
 
 #[derive(Debug, Clone)]
@@ -104,11 +104,11 @@ impl ERC20Helper {
     }
 }
 
-pub fn build_token_requests(
+pub fn build_token_requests<'a>(
     contract: &Address,
-    accounts: &[Address],
+    accounts: &[&'a Address],
     native: bool,
-) -> RequestResult {
+) -> RequestResult<'a> {
     let mut requests = Vec::new();
 
     match contract {
@@ -123,11 +123,11 @@ pub fn build_token_requests(
     Ok(requests)
 }
 
-fn build_zil_requests(
+fn build_zil_requests<'a>(
     contract: &Address,
-    accounts: &[Address],
+    accounts: &[&'a Address],
     native: bool,
-    requests: &mut Vec<(Value, RequestType)>,
+    requests: &mut Vec<(Value, RequestType<'a>)>,
 ) -> Result<(), NetworkErrors> {
     let base16_contract = contract
         .get_zil_base16()
@@ -160,17 +160,17 @@ fn build_zil_requests(
             )
         };
 
-        requests.push((request, RequestType::Balance(account.clone())));
+        requests.push((request, RequestType::Balance(account)));
     }
 
     Ok(())
 }
 
-fn build_eth_requests(
+fn build_eth_requests<'a>(
     contract: &Address,
-    accounts: &[Address],
+    accounts: &[&'a Address],
     native: bool,
-    requests: &mut Vec<(Value, RequestType)>,
+    requests: &mut Vec<(Value, RequestType<'a>)>,
 ) -> Result<(), NetworkErrors> {
     let token_addr = contract
         .to_eth_checksummed()
@@ -208,12 +208,12 @@ fn build_eth_requests(
         } else {
             let call_data = erc20.encode_function_call(
                 "balanceOf",
-                &[DynSolValue::Address(account.clone().to_alloy_addr())],
+                &[DynSolValue::Address(account.to_alloy_addr())],
             )?;
             build_eth_call(call_data)
         };
 
-        requests.push((request, RequestType::Balance(account.clone())));
+        requests.push((request, RequestType::Balance(account)));
     }
 
     Ok(())
@@ -407,7 +407,8 @@ mod ftoken_tests {
         #[test]
         fn test_build_eth_token_requests() {
             let contract = create_mock_eth_address();
-            let accounts = vec![create_mock_eth_address()];
+            let account = create_mock_eth_address();
+            let accounts = vec![&account];
             let requests = build_token_requests(&contract, &accounts, false).unwrap();
 
             // Should have 4 requests: name, symbol, decimals, and balance
@@ -437,7 +438,8 @@ mod ftoken_tests {
         #[test]
         fn test_build_zil_token_requests() {
             let contract = create_mock_zil_address();
-            let accounts = vec![create_mock_zil_address()];
+            let account = create_mock_zil_address();
+            let accounts = vec![&account];
             let requests = build_token_requests(&contract, &accounts, false).unwrap();
 
             // Should have 2 requests: init (metadata) and balance

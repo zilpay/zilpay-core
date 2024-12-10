@@ -379,21 +379,39 @@ impl Background {
         Ok(())
     }
 
+    pub fn get_wallet_by_index(&self, wallet_index: usize) -> Result<&Wallet, BackgroundError> {
+        self.wallets
+            .get(wallet_index)
+            .ok_or(BackgroundError::WalletNotExists(wallet_index))
+    }
+
+    pub fn providers_from_wallet_index(
+        &self,
+        wallet_index: usize,
+    ) -> Result<Vec<&NetworkProvider>, BackgroundError> {
+        let w = self.get_wallet_by_index(wallet_index)?;
+        let providers = w
+            .data
+            .network
+            .iter()
+            .filter_map(|index| self.netowrk.get(*index))
+            .collect();
+
+        Ok(providers)
+    }
+
     pub async fn get_ftoken_meta(
         &self,
         wallet_index: usize,
         contract: Address,
     ) -> Result<FToken, BackgroundError> {
-        let w = self
-            .wallets
-            .get(wallet_index)
-            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let w = self.get_wallet_by_index(wallet_index)?;
         let accounts = w
             .data
             .accounts
             .iter()
-            .map(|a| a.addr.clone())
-            .collect::<Vec<Address>>();
+            .map(|a| &a.addr)
+            .collect::<Vec<&Address>>();
         let mut error: NetworkErrors = NetworkErrors::ResponseParseError;
 
         for net_id in &w.data.network {
@@ -436,8 +454,8 @@ impl Background {
             .data
             .accounts
             .iter()
-            .map(|a| a.addr.clone())
-            .collect::<Vec<Address>>();
+            .map(|a| &a.addr)
+            .collect::<Vec<&Address>>();
 
         for net_id in &w.data.network {
             self.netowrk

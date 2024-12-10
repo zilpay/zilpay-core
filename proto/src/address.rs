@@ -48,7 +48,7 @@ impl Address {
         Ok(Self::Secp256k1Keccak256Ethereum(bytes))
     }
 
-    pub fn to_alloy_addr(self) -> alloy::primitives::Address {
+    pub fn to_alloy_addr(&self) -> alloy::primitives::Address {
         alloy::primitives::Address::from_slice(self.as_ref())
     }
 

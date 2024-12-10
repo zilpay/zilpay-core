@@ -1,3 +1,4 @@
+use alloy::primitives::U256;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,6 +16,15 @@ use crate::token::{
 pub enum NetworkProvider {
     Zilliqa(ZilliqaJsonRPC),
     Ethereum,
+}
+
+impl std::fmt::Display for NetworkProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            NetworkProvider::Zilliqa(_) => write!(f, "ZIL"),
+            NetworkProvider::Ethereum => write!(f, "ETH"),
+        }
+    }
 }
 
 impl NetworkProvider {
@@ -42,7 +52,7 @@ impl NetworkProvider {
     pub async fn get_ftoken_meta(
         &self,
         contract: &Address,
-        accounts: &[Address],
+        accounts: &[&Address],
     ) -> Result<FToken, NetworkErrors> {
         match self {
             NetworkProvider::Ethereum => {
@@ -69,12 +79,12 @@ impl NetworkProvider {
                                 .ok_or(NetworkErrors::InvalidContractInit)?,
                         )?;
 
-                        let mut balances = HashMap::new();
+                        let mut balances: HashMap<Address, U256> = HashMap::new();
                         for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
                             if let RequestType::Balance(account) = req_type {
                                 let balance =
                                     process_zil_balance_response(&responses[i], account, false)?;
-                                balances.insert(account.clone(), balance);
+                                balances.insert(account.to_owned().clone(), balance);
                             }
                         }
 
@@ -112,13 +122,13 @@ impl NetworkProvider {
                         .parse()
                         .map_err(|_| NetworkErrors::InvalidContractInit)?;
 
-                        let mut balances = HashMap::new();
+                        let mut balances: HashMap<Address, U256> = HashMap::new();
                         for ((_, req_type), response) in
                             requests.iter().zip(responses.iter()).skip(3)
                         {
                             if let RequestType::Balance(account) = req_type {
                                 let balance = process_eth_balance_response(response)?;
-                                balances.insert(account.clone(), balance);
+                                balances.insert(account.to_owned().clone(), balance);
                             }
                         }
 
@@ -141,7 +151,7 @@ impl NetworkProvider {
     pub async fn get_tokens_balances(
         &self,
         tokens: &mut [FToken],
-        accounts: &[Address],
+        accounts: &[&Address],
     ) -> Result<(), NetworkErrors> {
         match self {
             NetworkProvider::Ethereum => {
@@ -178,11 +188,16 @@ impl NetworkProvider {
                                     account,
                                     tokens[*token_idx].native,
                                 )?;
-                                tokens[*token_idx].balances.insert(account.clone(), balance);
+                                // let account_index = accounts.po
+                                tokens[*token_idx]
+                                    .balances
+                                    .insert(account.to_owned().clone(), balance);
                             }
                             Address::Secp256k1Keccak256Ethereum(_) => {
                                 let balance = process_eth_balance_response(response)?;
-                                tokens[*token_idx].balances.insert(account.clone(), balance);
+                                tokens[*token_idx]
+                                    .balances
+                                    .insert(account.to_owned().clone(), balance);
                             }
                         }
                     }
@@ -208,17 +223,17 @@ mod tests {
         let token_addr =
             Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap();
         let account = [
-            Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
-            Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
-            Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
-            Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
+            &Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
+            &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
+            &Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
+            &Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
         ];
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
 
-        assert!(*ftoken.balances.get(&account[0]).unwrap() > U256::from(0));
-        assert!(*ftoken.balances.get(&account[1]).unwrap() > U256::from(0));
-        assert!(*ftoken.balances.get(&account[2]).unwrap() == U256::from(0));
-        assert!(*ftoken.balances.get(&account[3]).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(account[0]).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(account[1]).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(account[2]).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(account[3]).unwrap() == U256::from(0));
 
         assert_eq!(&ftoken.name, "ZilPay wallet");
         assert_eq!(&ftoken.symbol, "ZLP");
@@ -267,26 +282,26 @@ mod tests {
             },
         ];
         let accounts = [
-            Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
-            Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
-            Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
+            &Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
+            &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
+            &Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
         ];
 
         net.get_tokens_balances(&mut tokens, &accounts)
             .await
             .unwrap();
 
-        assert!(&tokens[0].balances.contains_key(&accounts[0]));
-        assert!(&tokens[0].balances.contains_key(&accounts[1]));
-        assert!(&tokens[0].balances.contains_key(&accounts[2]));
+        assert!(&tokens[0].balances.contains_key(accounts[0]));
+        assert!(&tokens[0].balances.contains_key(accounts[1]));
+        assert!(&tokens[0].balances.contains_key(accounts[2]));
 
-        assert!(&tokens[1].balances.contains_key(&accounts[0]));
-        assert!(&tokens[1].balances.contains_key(&accounts[1]));
-        assert!(&tokens[1].balances.contains_key(&accounts[2]));
+        assert!(&tokens[1].balances.contains_key(accounts[0]));
+        assert!(&tokens[1].balances.contains_key(accounts[1]));
+        assert!(&tokens[1].balances.contains_key(accounts[2]));
 
-        assert!(&tokens[2].balances.contains_key(&accounts[0]));
-        assert!(&tokens[2].balances.contains_key(&accounts[1]));
-        assert!(&tokens[2].balances.contains_key(&accounts[2]));
+        assert!(&tokens[2].balances.contains_key(accounts[0]));
+        assert!(&tokens[2].balances.contains_key(accounts[1]));
+        assert!(&tokens[2].balances.contains_key(accounts[2]));
     }
 
     #[tokio::test]
@@ -312,19 +327,19 @@ mod tests {
             },
         ];
         let accounts = [
-            Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
-            Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
+            &Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
+            &Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
         ];
 
         net.get_tokens_balances(&mut tokens, &accounts)
             .await
             .unwrap();
 
-        assert!(&tokens[0].balances.contains_key(&accounts[0]));
-        assert!(&tokens[0].balances.contains_key(&accounts[1]));
+        assert!(&tokens[0].balances.contains_key(accounts[0]));
+        assert!(&tokens[0].balances.contains_key(accounts[1]));
 
-        assert!(&tokens[1].balances.contains_key(&accounts[0]));
-        assert!(&tokens[1].balances.contains_key(&accounts[1]));
+        assert!(&tokens[1].balances.contains_key(accounts[0]));
+        assert!(&tokens[1].balances.contains_key(accounts[1]));
     }
 
     #[tokio::test]
@@ -337,8 +352,8 @@ mod tests {
         let token_addr =
             Address::from_eth_address("0x98767212b8D275905f7F8EB65D6355D0Fc67bf6f").unwrap();
         let account = [
-            Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
-            Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
+            &Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
+            &Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
         ];
 
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
@@ -347,8 +362,8 @@ mod tests {
         assert_eq!(&ftoken.symbol, "MTK");
         assert_eq!(ftoken.decimals, 18u8);
 
-        assert!(*ftoken.balances.get(&account[0]).unwrap() > U256::from(0));
-        assert!(*ftoken.balances.get(&account[1]).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(account[0]).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(account[1]).unwrap() == U256::from(0));
     }
 
     #[tokio::test]
@@ -383,33 +398,33 @@ mod tests {
             },
         ];
         let accounts = [
-            Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
-            Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
-            Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
-            Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
-            Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
+            &Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
+            &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
+            &Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
+            &Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
+            &Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
         ];
 
         net.get_tokens_balances(&mut tokens, &accounts)
             .await
             .unwrap();
 
-        assert!(&tokens[0].balances.contains_key(&accounts[0]));
-        assert!(&tokens[0].balances.contains_key(&accounts[1]));
-        assert!(&tokens[0].balances.contains_key(&accounts[2]));
-        assert!(&tokens[0].balances.contains_key(&accounts[3]));
-        assert!(&tokens[0].balances.contains_key(&accounts[4]));
+        assert!(&tokens[0].balances.contains_key(accounts[0]));
+        assert!(&tokens[0].balances.contains_key(accounts[1]));
+        assert!(&tokens[0].balances.contains_key(accounts[2]));
+        assert!(&tokens[0].balances.contains_key(accounts[3]));
+        assert!(&tokens[0].balances.contains_key(accounts[4]));
 
-        assert!(&tokens[1].balances.contains_key(&accounts[0]));
-        assert!(&tokens[1].balances.contains_key(&accounts[1]));
-        assert!(&tokens[1].balances.contains_key(&accounts[2]));
-        assert!(&tokens[1].balances.contains_key(&accounts[3]));
-        assert!(&tokens[1].balances.contains_key(&accounts[4]));
+        assert!(&tokens[1].balances.contains_key(accounts[0]));
+        assert!(&tokens[1].balances.contains_key(accounts[1]));
+        assert!(&tokens[1].balances.contains_key(accounts[2]));
+        assert!(&tokens[1].balances.contains_key(accounts[3]));
+        assert!(&tokens[1].balances.contains_key(accounts[4]));
 
-        assert!(&tokens[2].balances.contains_key(&accounts[0]));
-        assert!(&tokens[2].balances.contains_key(&accounts[1]));
-        assert!(&tokens[2].balances.contains_key(&accounts[2]));
-        assert!(&tokens[2].balances.contains_key(&accounts[3]));
-        assert!(&tokens[2].balances.contains_key(&accounts[4]));
+        assert!(&tokens[2].balances.contains_key(accounts[0]));
+        assert!(&tokens[2].balances.contains_key(accounts[1]));
+        assert!(&tokens[2].balances.contains_key(accounts[2]));
+        assert!(&tokens[2].balances.contains_key(accounts[3]));
+        assert!(&tokens[2].balances.contains_key(accounts[4]));
     }
 }
