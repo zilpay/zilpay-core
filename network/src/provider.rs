@@ -80,6 +80,7 @@ impl NetworkProvider {
                         )?;
 
                         let mut balances: HashMap<Address, U256> = HashMap::new();
+
                         for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
                             if let RequestType::Balance(account) = req_type {
                                 let balance =
