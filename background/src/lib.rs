@@ -10,7 +10,12 @@ use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
 use session::{decrypt_session, encrypt_session};
-use settings::common_settings::CommonSettings;
+use settings::{
+    common_settings::CommonSettings,
+    locale::{self, Locale},
+    notifications::Notifications,
+    theme::Theme,
+};
 use std::sync::Arc;
 use storage::LocalStorage;
 use wallet::{
@@ -215,7 +220,6 @@ impl Background {
             storage: Arc::clone(&self.storage),
             settings: Default::default(), // TODO: setup settings
         };
-        let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_bip39_words(Bip39Params {
             proof: &proof,
             mnemonic: &mnemonic,
@@ -236,8 +240,12 @@ impl Background {
         let session = if wallet.data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
-            encrypt_session(&device_indicator, &argon_seed, options)
-                .map_err(BackgroundError::CreateSessionError)?
+            encrypt_session(
+                &device_indicator,
+                &argon_seed,
+                &wallet.data.settings.cipher_orders,
+            )
+            .map_err(BackgroundError::CreateSessionError)?
         };
 
         wallet
@@ -379,6 +387,30 @@ impl Background {
         Ok(())
     }
 
+    pub fn set_locale(&mut self, new_locale: Locale) -> Result<(), BackgroundError> {
+        self.settings.locale = new_locale;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    pub fn set_theme(&mut self, new_theme: Theme) -> Result<(), BackgroundError> {
+        self.settings.theme = new_theme;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    pub fn set_notifications(
+        &mut self,
+        new_notifications: Notifications,
+    ) -> Result<(), BackgroundError> {
+        self.settings.notifications = new_notifications;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
     pub fn get_wallet_by_index(&self, wallet_index: usize) -> Result<&Wallet, BackgroundError> {
         self.wallets
             .get(wallet_index)
@@ -413,15 +445,11 @@ impl Background {
             .map(|a| &a.addr)
             .collect::<Vec<&Address>>();
         let mut error: NetworkErrors = NetworkErrors::ResponseParseError;
+        let providers = self.providers_from_wallet_index(wallet_index)?;
 
-        for net_id in &w.data.network {
-            match self
-                .netowrk
-                .get(*net_id)
-                .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
-                .get_ftoken_meta(&contract, &accounts)
-                .await
-            {
+        for provider in providers {
+            //TODO: make detect and filter by network tokens detect netwrok type.
+            match provider.get_ftoken_meta(&contract, &accounts).await {
                 Ok(meta) => {
                     return Ok(meta);
                 }
@@ -482,6 +510,20 @@ impl Background {
         self.storage
             .set(NETWORK_DB_KEY, &bytes)
             .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+
+        Ok(())
+    }
+
+    fn save_settings(&self) -> Result<(), BackgroundError> {
+        let bytes =
+            serde_json::to_vec(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
+
+        self.storage
+            .set(GLOBAL_SETTINGS_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
 
         Ok(())
     }
