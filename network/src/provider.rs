@@ -34,6 +34,13 @@ impl NetworkProvider {
         vec![NetworkProvider::Zilliqa(zil_rpc), NetworkProvider::Ethereum]
     }
 
+    pub fn code(&self) -> u8 {
+        match &self {
+            Self::Zilliqa(_) => 0,
+            Self::Ethereum => 1,
+        }
+    }
+
     pub async fn update_nodes(&mut self) -> Result<(), NetworkErrors> {
         match self {
             NetworkProvider::Zilliqa(zil) => {
