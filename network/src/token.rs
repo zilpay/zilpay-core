@@ -311,9 +311,9 @@ pub fn process_zil_balance_response(
     response: &ResultRes<Value>,
     account: &Address,
     is_native: bool,
-) -> Result<U256, NetworkErrors> {
+) -> U256 {
     if response.error.is_some() {
-        return Ok(U256::from(0));
+        return U256::from(0);
     }
 
     if is_native {
@@ -325,23 +325,25 @@ pub fn process_zil_balance_response(
             .and_then(|v| v.parse::<U256>().ok())
             .unwrap_or_default();
 
-        Ok(balance)
+        balance
     } else {
-        let base16_account = account
-            .get_zil_check_sum_addr()
-            .map_err(NetworkErrors::InvalidZilAddress)?
-            .to_lowercase();
+        let addr = match account.get_zil_check_sum_addr() {
+            Ok(v) => v.to_lowercase(),
+            Err(_) => {
+                return U256::ZERO;
+            }
+        };
 
         let balance = response
             .result
             .as_ref()
             .and_then(|v| v.get("balances"))
-            .and_then(|v| v.get(base16_account))
+            .and_then(|v| v.get(addr))
             .and_then(|v| v.as_str())
             .and_then(|v| v.parse::<U256>().ok())
             .unwrap_or_default();
 
-        Ok(balance)
+        balance
     }
 }
 
@@ -520,6 +522,8 @@ mod ftoken_tests {
     }
 
     mod process_zil_balance_response_tests {
+        use proto::keypair::KeyPair;
+
         use super::*;
 
         #[test]
@@ -533,15 +537,17 @@ mod ftoken_tests {
                 error: None,
             };
 
-            let balance =
-                process_zil_balance_response(&response, &create_mock_zil_address(), true).unwrap();
+            let balance = process_zil_balance_response(&response, &create_mock_zil_address(), true);
             assert_eq!(balance, U256::from(100));
         }
 
         #[test]
         fn test_process_token_balance_success() {
-            let account = create_mock_zil_address();
+            let keypair = KeyPair::gen_sha256().unwrap();
+            let account = keypair.get_addr().unwrap();
             let base16_account = account.get_zil_check_sum_addr().unwrap().to_lowercase();
+
+            dbg!(&base16_account);
 
             let mut balances = serde_json::Map::new();
             balances.insert(base16_account, json!("200"));
@@ -555,7 +561,7 @@ mod ftoken_tests {
                 error: None,
             };
 
-            let balance = process_zil_balance_response(&response, &account, false).unwrap();
+            let balance = process_zil_balance_response(&response, &account, false);
             assert_eq!(balance, U256::from(200));
         }
     }

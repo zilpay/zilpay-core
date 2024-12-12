@@ -1,5 +1,5 @@
 use crate::json_rpc::zil_methods::ZilMethods;
-use config::{contracts::STAKEING, PROTO_TESTNET, ZIL_MAIN_SCILLA_URL};
+use config::contracts::STAKEING;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -18,10 +18,14 @@ impl Default for ZilliqaJsonRPC {
 }
 
 impl ZilliqaJsonRPC {
+    pub const ZIL_MAIN_SCILLA_URL: &str = "https://api.zilliqa.com";
+    pub const PROTO_TESTNET: &str = "https://api.zq2-prototestnet.zilliqa.com/";
+    pub const PROTO_MAINNET: &str = "https://api.zq2-protomainnet.zilliqa.com";
+
     pub fn new() -> Self {
         let nodes = [
-            vec![ZIL_MAIN_SCILLA_URL.to_string()],
-            vec![PROTO_TESTNET.to_string()],
+            vec![Self::PROTO_MAINNET.to_string()],
+            vec![Self::PROTO_TESTNET.to_string()],
             vec![],
         ];
         let selected = 0;
@@ -30,8 +34,8 @@ impl ZilliqaJsonRPC {
     }
 
     pub fn from_vec(nodes: Vec<String>, id: usize) -> Self {
-        let mainnet = vec![ZIL_MAIN_SCILLA_URL.to_string()];
-        let testnet = vec![PROTO_TESTNET.to_string()];
+        let mainnet = vec![Self::ZIL_MAIN_SCILLA_URL.to_string()];
+        let testnet = vec![Self::PROTO_TESTNET.to_string()];
         let mut node_list = [mainnet, testnet, vec![]];
 
         if let Some(list) = node_list.get_mut(id) {
@@ -48,7 +52,7 @@ impl ZilliqaJsonRPC {
         self.nodes
             .get(self.selected)
             .and_then(|nodes| nodes.first().cloned())
-            .unwrap_or(ZIL_MAIN_SCILLA_URL.to_string())
+            .unwrap_or(Self::PROTO_MAINNET.to_string())
     }
 
     pub async fn update_scilla_nodes(&mut self) -> Result<(), ZilliqaNetErrors> {
@@ -171,7 +175,6 @@ mod tests {
         zil_interfaces::{CreateTransactionRes, GetBalanceRes, ResultRes},
         zil_methods::ZilMethods,
     };
-    use config::PROTO_TESTNET;
     use proto::{
         keypair::KeyPair,
         secret_key::SecretKey,
@@ -194,7 +197,7 @@ mod tests {
     async fn test_transaction() {
         const CHAIN_ID: u16 = 333;
 
-        let zil = ZilliqaJsonRPC::from_vec(vec![PROTO_TESTNET.to_string()], 1);
+        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_TESTNET.to_string()], 1);
         let secret_key_1_bytes: [u8; 32] = [
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 1,

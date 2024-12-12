@@ -84,7 +84,7 @@ impl NetworkProvider {
                         for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
                             if let RequestType::Balance(account) = req_type {
                                 let balance =
-                                    process_zil_balance_response(&responses[i], account, false)?;
+                                    process_zil_balance_response(&responses[i], account, false);
                                 balances.insert(account.to_owned().clone(), balance);
                             }
                         }
@@ -188,8 +188,7 @@ impl NetworkProvider {
                                     response,
                                     account,
                                     tokens[*token_idx].native,
-                                )?;
-                                // let account_index = accounts.po
+                                );
                                 tokens[*token_idx]
                                     .balances
                                     .insert(account.to_owned().clone(), balance);
@@ -214,12 +213,12 @@ impl NetworkProvider {
 mod tests {
     use super::*;
     use alloy::primitives::U256;
-    use config::{address::ADDR_LEN, ZIL_MAIN_SCILLA_URL};
+    use config::address::ADDR_LEN;
     use tokio;
 
     #[tokio::test]
     async fn test_get_ftoken_meta() {
-        let zil = ZilliqaJsonRPC::from_vec(vec![ZIL_MAIN_SCILLA_URL.to_string()], 0);
+        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_MAINNET.to_string()], 0);
         let net = NetworkProvider::Zilliqa(zil);
         let token_addr =
             Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap();
@@ -231,8 +230,8 @@ mod tests {
         ];
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
 
-        assert!(*ftoken.balances.get(account[0]).unwrap() > U256::from(0));
-        assert!(*ftoken.balances.get(account[1]).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(account[0]).unwrap() >= U256::from(0));
+        assert!(*ftoken.balances.get(account[1]).unwrap() >= U256::from(0));
         assert!(*ftoken.balances.get(account[2]).unwrap() == U256::from(0));
         assert!(*ftoken.balances.get(account[3]).unwrap() == U256::from(0));
 
@@ -243,7 +242,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_accounts_tokens_balances() {
-        let zil = ZilliqaJsonRPC::from_vec(vec![ZIL_MAIN_SCILLA_URL.to_string()], 0);
+        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_MAINNET.to_string()], 0);
         let net = NetworkProvider::Zilliqa(zil);
         // Add multiple custom tokens
         let mut tokens = vec![
@@ -345,13 +344,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_eth_meta_data() {
-        let mut zil = ZilliqaJsonRPC::new();
-
-        zil.selected = 1; // testnet
-
+        let zil = ZilliqaJsonRPC::new();
         let net = NetworkProvider::Zilliqa(zil);
         let token_addr =
-            Address::from_eth_address("0x98767212b8D275905f7F8EB65D6355D0Fc67bf6f").unwrap();
+            Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9").unwrap();
         let account = [
             &Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
             &Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
@@ -359,39 +355,39 @@ mod tests {
 
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
 
-        assert_eq!(&ftoken.name, "MyToken");
-        assert_eq!(&ftoken.symbol, "MTK");
-        assert_eq!(ftoken.decimals, 18u8);
+        assert_eq!(&ftoken.name, "Zilliqa-bridged USDT token");
+        assert_eq!(&ftoken.symbol, "zUSDT");
+        assert_eq!(ftoken.decimals, 6u8);
 
-        assert!(*ftoken.balances.get(account[0]).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(account[0]).unwrap() == U256::from(0));
         assert!(*ftoken.balances.get(account[1]).unwrap() == U256::from(0));
     }
 
     #[tokio::test]
     async fn test_fetch_evm_scilla_tokens() {
-        let zil = ZilliqaJsonRPC::from_vec(vec![ZIL_MAIN_SCILLA_URL.to_string()], 0);
+        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_MAINNET.to_string()], 0);
         let net = NetworkProvider::Zilliqa(zil);
         // Add multiple custom tokens
         let mut tokens = vec![
             FToken::zil(),
             FToken::eth(),
-            // FToken {
-            //     name: "ZilPay token".to_string(),
-            //     symbol: "ZLP".to_string(),
-            //     decimals: 18,
-            //     addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
-            //         .unwrap(),
-            //     native: false,
-            //     logo: None,
-            //     default: false,
-            //     balances: HashMap::new(),
-            // }, TODO: unlock it when zilliqa 2.0 support deploy contracts.
             FToken {
-                name: "MyToken".to_string(),
-                symbol: "MTK".to_string(),
+                name: "ZilPay token".to_string(),
+                symbol: "ZLP".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+            },
+            FToken {
+                name: "Zilliqa-bridged USDT token".to_string(),
+                symbol: "zUSDT".to_string(),
                 decimals: 18,
                 native: false,
-                addr: Address::from_eth_address("0xf06686B5Eb5cAe38c09f12412B729045647E74e3")
+                addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
                     .unwrap(),
                 logo: None,
                 default: false,

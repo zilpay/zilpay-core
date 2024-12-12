@@ -11,10 +11,7 @@ use network::provider::NetworkProvider;
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
 use session::{decrypt_session, encrypt_session};
 use settings::{
-    common_settings::CommonSettings,
-    locale::{self, Locale},
-    notifications::Notifications,
-    theme::Theme,
+    common_settings::CommonSettings, locale::Locale, notifications::Notifications, theme::Theme,
 };
 use std::sync::Arc;
 use storage::LocalStorage;
