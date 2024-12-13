@@ -11,7 +11,10 @@ use network::provider::NetworkProvider;
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
 use session::{decrypt_session, encrypt_session};
 use settings::{
-    common_settings::CommonSettings, locale::Locale, notifications::Notifications, theme::Theme,
+    common_settings::CommonSettings,
+    locale::Locale,
+    notifications::{NotificationState, Notifications},
+    theme::Theme,
 };
 use std::sync::Arc;
 use storage::LocalStorage;
@@ -384,6 +387,30 @@ impl Background {
         Ok(())
     }
 
+    pub fn set_global_notifications(
+        &mut self,
+        global_enabled: bool,
+    ) -> Result<(), BackgroundError> {
+        self.settings.notifications.global_enabled = global_enabled;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    pub fn set_wallet_notifications(
+        &mut self,
+        wallet_index: usize,
+        notification: NotificationState,
+    ) -> Result<(), BackgroundError> {
+        self.settings
+            .notifications
+            .wallet_states
+            .insert(wallet_index, notification);
+        self.save_settings()?;
+
+        Ok(())
+    }
+
     pub fn set_locale(&mut self, new_locale: Locale) -> Result<(), BackgroundError> {
         self.settings.locale = new_locale;
         self.save_settings()?;
@@ -412,21 +439,6 @@ impl Background {
         self.wallets
             .get(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))
-    }
-
-    pub fn providers_from_wallet_index(
-        &self,
-        wallet_index: usize,
-    ) -> Result<Vec<&NetworkProvider>, BackgroundError> {
-        let w = self.get_wallet_by_index(wallet_index)?;
-        let providers = w
-            .data
-            .network
-            .iter()
-            .filter_map(|index| self.netowrk.get(*index))
-            .collect();
-
-        Ok(providers)
     }
 
     pub async fn get_ftoken_meta(
@@ -498,6 +510,21 @@ impl Background {
             .map_err(BackgroundError::LocalStorageFlushError)?;
 
         Ok(())
+    }
+
+    fn providers_from_wallet_index(
+        &self,
+        wallet_index: usize,
+    ) -> Result<Vec<&NetworkProvider>, BackgroundError> {
+        let w = self.get_wallet_by_index(wallet_index)?;
+        let providers = w
+            .data
+            .network
+            .iter()
+            .filter_map(|index| self.netowrk.get(*index))
+            .collect();
+
+        Ok(providers)
     }
 
     fn save_network(&self) -> Result<(), BackgroundError> {
