@@ -11,6 +11,15 @@ pub enum Appearances {
 }
 
 impl Appearances {
+    pub fn from_code(code: u8) -> Result<Self, SettingsErrors> {
+        match code {
+            0 => Ok(Self::System),
+            1 => Ok(Self::Light),
+            2 => Ok(Self::Dark),
+            _ => Err(SettingsErrors::InvalidThemeCode(code)),
+        }
+    }
+
     pub fn code(&self) -> u8 {
         match &self {
             Self::System => 0,
