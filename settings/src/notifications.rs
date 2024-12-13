@@ -12,10 +12,10 @@ pub struct NotificationState {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Notifications {
     /// HashMap mapping wallet index to notification states
-    wallet_states: HashMap<usize, NotificationState>,
+    pub wallet_states: HashMap<usize, NotificationState>,
     /// Global notification state that affects all wallets
     #[serde(default)]
-    global_enabled: bool,
+    pub global_enabled: bool,
 }
 
 impl NotificationState {
