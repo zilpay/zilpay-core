@@ -457,7 +457,6 @@ impl Background {
         let providers = self.providers_from_wallet_index(wallet_index)?;
 
         for provider in providers {
-            //TODO: make detect and filter by network tokens detect netwrok type.
             match provider.get_ftoken_meta(&contract, &accounts).await {
                 Ok(meta) => {
                     return Ok(meta);
@@ -495,10 +494,18 @@ impl Background {
             .collect::<Vec<&Address>>();
 
         for net_id in &w.data.network {
+            let tokens = &mut w.ftokens;
+            let matching_end = tokens.partition_point(|token| token.net_id == *net_id);
+            let matching_tokens = &mut tokens[..matching_end];
+
+            if matching_tokens.is_empty() {
+                continue;
+            }
+
             self.netowrk
                 .get_mut(*net_id)
                 .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
-                .get_tokens_balances(&mut w.ftokens, &addresses)
+                .get_tokens_balances(matching_tokens, &addresses)
                 .await
                 .map_err(BackgroundError::NetworkErrors)?;
         }
