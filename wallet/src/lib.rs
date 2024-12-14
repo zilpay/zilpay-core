@@ -619,6 +619,7 @@ mod tests {
     use config::{
         argon::KEY_SIZE,
         cipher::{PROOF_SALT, PROOF_SIZE},
+        provider::ZILLIQA_ITERNEL_ID,
         sha::SHA256_SIZE,
     };
     use crypto::bip49::Bip49DerivationPath;
@@ -788,6 +789,7 @@ mod tests {
             default: false,
             native: false,
             balances: HashMap::new(),
+            net_id: ZILLIQA_ITERNEL_ID,
         };
 
         // Add custom token
@@ -867,6 +869,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -877,6 +880,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -887,6 +891,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
         ];
 
@@ -964,6 +969,7 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -974,6 +980,7 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -984,6 +991,7 @@ mod tests {
                 native: true,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
         ];
 

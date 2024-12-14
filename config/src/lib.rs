@@ -6,6 +6,7 @@ pub mod argon;
 pub mod cipher;
 pub mod contracts;
 pub mod key;
+pub mod provider;
 pub mod sha;
 pub mod storage;
 pub mod wallet;

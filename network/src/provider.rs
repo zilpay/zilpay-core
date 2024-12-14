@@ -1,4 +1,5 @@
 use alloy::primitives::U256;
+use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -34,10 +35,10 @@ impl NetworkProvider {
         vec![NetworkProvider::Zilliqa(zil_rpc), NetworkProvider::Ethereum]
     }
 
-    pub fn code(&self) -> u8 {
+    pub fn code(&self) -> usize {
         match &self {
-            Self::Zilliqa(_) => 0,
-            Self::Ethereum => 1,
+            Self::Zilliqa(_) => ZILLIQA_ITERNEL_ID,
+            Self::Ethereum => ETHEREUM_ITERNEL_ID,
         }
     }
 
@@ -105,6 +106,7 @@ impl NetworkProvider {
                             logo: None,
                             default: false,
                             native: false,
+                            net_id: ZILLIQA_ITERNEL_ID,
                         })
                     }
                     Address::Secp256k1Keccak256Ethereum(_) => {
@@ -149,6 +151,7 @@ impl NetworkProvider {
                             logo: None,
                             default: false,
                             native: false,
+                            net_id: ZILLIQA_ITERNEL_ID,
                         })
                     }
                 }
@@ -264,6 +267,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
             FToken {
                 name: "DMZ".to_string(),
@@ -275,6 +279,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
             FToken {
                 name: "RedChillies".to_string(),
@@ -286,6 +291,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
         ];
         let accounts = [
@@ -331,6 +337,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
         ];
         let accounts = [
@@ -388,6 +395,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
             FToken {
                 name: "Zilliqa-bridged USDT token".to_string(),
@@ -399,6 +407,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                net_id: ZILLIQA_ITERNEL_ID,
             },
         ];
         let accounts = [
