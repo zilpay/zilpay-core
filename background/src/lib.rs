@@ -493,6 +493,38 @@ impl Background {
         serde_json::from_slice(&bytes).unwrap_or(Vec::new())
     }
 
+    pub fn add_wallet_to_connection(
+        &self,
+        domain: String,
+        wallet_index: usize,
+    ) -> Result<(), BackgroundError> {
+        let mut connections = self.get_connections();
+
+        let connection = connections
+            .iter_mut()
+            .find(|c| c.domain == domain)
+            .ok_or_else(|| BackgroundError::ConnectionNotFound(domain.clone()))?;
+
+        if self.wallets.get(wallet_index).is_none() {
+            return Err(BackgroundError::WalletNotExists(wallet_index));
+        }
+
+        connection.add_wallet(wallet_index);
+        connection.update_last_connected();
+
+        let bytes = serde_json::to_vec(&connections)
+            .or(Err(BackgroundError::FailToSerializeConnections))?;
+
+        self.storage
+            .set(CONNECTIONS_LIST_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsConnections)?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(())
+    }
+
     pub fn add_connection(&self, connection: Connection) -> Result<(), BackgroundError> {
         let mut connections = self.get_connections();
 
@@ -503,7 +535,7 @@ impl Background {
         connections.push(connection);
 
         let bytes = serde_json::to_vec(&connections)
-            .or(Err(BackgroundError::FailToSerializeAddressBook))?;
+            .or(Err(BackgroundError::FailToSerializeConnections))?;
 
         self.storage
             .set(CONNECTIONS_LIST_DB_KEY, &bytes)
@@ -1154,5 +1186,101 @@ mod tests_background {
         assert_eq!(loaded_conn.title, "Example DApp");
         assert!(loaded_conn.colors.is_some());
         assert!(loaded_conn.is_wallet_connected(0));
+    }
+
+    #[test]
+    fn test_add_wallet_to_connection() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let mut bg = Background::from_storage_path(&dir).unwrap();
+
+        assert_eq!(bg.wallets.len(), 0);
+
+        let password = "test_password";
+        let words: &str =
+            "area scale vital sell radio pattern poverty mean similar picnic grain gain";
+        let accounts = [
+            (Bip49DerivationPath::Zilliqa(0), "first".to_string()),
+            (Bip49DerivationPath::Zilliqa(1), "second".to_string()),
+        ];
+        let network = [0];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password,
+            network: &network,
+            mnemonic_str: words,
+            accounts: &accounts,
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0000")],
+        })
+        .unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+
+        let device_indicators = [String::from("android"), String::from("4354")];
+        let keypair = KeyPair::gen_sha256().unwrap();
+        let pub_key = keypair.get_pubkey().unwrap();
+        let mut ledger_id = vec![0u8; 32];
+
+        rng.fill_bytes(&mut ledger_id);
+
+        bg.add_ledger_wallet(
+            LedgerParams {
+                networks: network.to_vec(),
+                pub_key: &pub_key,
+                name: String::from("account 0"),
+                ledger_id,
+                wallet_index: 0,
+                wallet_name: String::from("Ledger nano x"),
+                biometric_type: AuthMethod::FaceId,
+            },
+            &device_indicators,
+        )
+        .unwrap();
+
+        drop(bg);
+
+        let bg = Background::from_storage_path(&dir).unwrap();
+
+        // Create and add initial connection
+        let connection = Connection::new(
+            "example.com".to_string(),
+            0,
+            "Example DApp".to_string(),
+            None,
+        );
+        bg.add_connection(connection).unwrap();
+
+        // Add new wallet to connection
+        bg.add_wallet_to_connection("example.com".to_string(), 1)
+            .unwrap();
+
+        // Verify wallet was added
+        let connections = bg.get_connections();
+        assert_eq!(connections.len(), 1);
+        let updated_conn = &connections[0];
+
+        assert!(updated_conn.is_wallet_connected(0));
+        assert!(updated_conn.is_wallet_connected(1));
+
+        // Test adding wallet to non-existent connection
+        match bg.add_wallet_to_connection("nonexistent.com".to_string(), 1) {
+            Err(BackgroundError::ConnectionNotFound(domain)) => {
+                assert_eq!(domain, "nonexistent.com");
+            }
+            _ => panic!("Expected ConnectionNotFound error"),
+        }
+
+        // Test persistence
+        drop(bg);
+        let bg2 = Background::from_storage_path(&dir).unwrap();
+        let loaded_connections = bg2.get_connections();
+
+        assert_eq!(loaded_connections.len(), 1);
+        let loaded_conn = &loaded_connections[0];
+        assert!(loaded_conn.is_wallet_connected(0));
+        assert!(loaded_conn.is_wallet_connected(1));
     }
 }

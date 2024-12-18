@@ -43,8 +43,14 @@ pub enum BackgroundError {
     #[error("Connection with such domain already exits: {0}")]
     ConnectionAlreadyExists(String),
 
+    #[error("connection not found: {0}")]
+    ConnectionNotFound(String),
+
     #[error("such address {0}, already exists")]
     AddressAlreadyExists(String),
+
+    #[error("Fail to serialize connections")]
+    FailToSerializeConnections,
 
     #[error("Invalid BIP39 word count: {0}")]
     InvalidWordCount(u8),
