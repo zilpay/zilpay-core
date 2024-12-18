@@ -1,10 +1,16 @@
+pub mod book;
+
 pub use bip39::{Language, Mnemonic};
 
+use book::AddressBookEntry;
 use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::{SHA256_SIZE, SHA512_SIZE},
-    storage::{CURRENCIES_RATES_DB_KEY, GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY},
+    storage::{
+        ADDRESS_BOOK_DB_KEY, CURRENCIES_RATES_DB_KEY, GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY,
+        NETWORK_DB_KEY,
+    },
 };
 use crypto::bip49::Bip49DerivationPath;
 use network::{provider::NetworkProvider, rates::fetch_zilliqa_rates};
@@ -470,6 +476,34 @@ impl Background {
         }
 
         Err(BackgroundError::NetworkErrors(error))
+    }
+
+    pub fn get_address_book(&self) -> Vec<AddressBookEntry> {
+        let bytes = self.storage.get(ADDRESS_BOOK_DB_KEY).unwrap_or_default();
+
+        if bytes.is_empty() {
+            return Vec::new();
+        }
+
+        serde_json::from_slice(&bytes).unwrap_or(Vec::new())
+    }
+
+    pub fn add_to_address_book(&self, address: AddressBookEntry) -> Result<(), BackgroundError> {
+        let mut book = self.get_address_book();
+
+        book.push(address);
+
+        let bytes =
+            serde_json::to_vec(&book).or(Err(BackgroundError::FailToSerializeAddressBook))?;
+
+        self.storage
+            .set(ADDRESS_BOOK_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsAddressBook)?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(())
     }
 
     pub async fn update_rates(&self) -> Result<Value, BackgroundError> {
@@ -960,5 +994,62 @@ mod tests_background {
 
         assert_eq!(hex::decode(sk).unwrap().len(), SECRET_KEY_SIZE);
         assert_eq!(hex::decode(pk).unwrap().len(), PUB_KEY_SIZE);
+    }
+
+    #[test]
+    fn test_address_book() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let bg = Background::from_storage_path(&dir).unwrap();
+
+        // Test empty address book
+        let book = bg.get_address_book();
+        assert!(book.is_empty());
+
+        // Create test address
+        let name = "Test Contact".to_string();
+        let address =
+            Address::from_eth_address("0x1234567890123456789012345678901234567890").unwrap();
+        let entry = AddressBookEntry {
+            name,
+            addr: address.clone(),
+        };
+
+        // Add address to book
+        bg.add_to_address_book(entry.clone()).unwrap();
+
+        // Verify address was added
+        let book = bg.get_address_book();
+        assert_eq!(book.len(), 1);
+        assert_eq!(&book[0].name, "Test Contact");
+        assert_eq!(&book[0].addr, &address);
+
+        // Add another address
+        let name2 = "Second Contact".to_string();
+        let address2 =
+            Address::from_eth_address("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd").unwrap();
+        let entry2 = AddressBookEntry {
+            name: name2,
+            addr: address2.clone(),
+        };
+
+        bg.add_to_address_book(entry2.clone()).unwrap();
+
+        // Verify both addresses exist
+        let book = bg.get_address_book();
+        assert_eq!(book.len(), 2);
+        assert_eq!(book[1].name, "Second Contact");
+        assert_eq!(book[1].addr, address2);
+
+        // Test persistence - create new instance
+        drop(bg);
+        let bg2 = Background::from_storage_path(&dir).unwrap();
+        let book = bg2.get_address_book();
+
+        assert_eq!(book.len(), 2);
+        assert_eq!(book[0].name, "Test Contact");
+        assert_eq!(book[0].addr, address);
+        assert_eq!(book[1].name, "Second Contact");
+        assert_eq!(book[1].addr, address2);
     }
 }

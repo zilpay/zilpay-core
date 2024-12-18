@@ -8,12 +8,9 @@ use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
 use zilliqa::json_rpc::{zil::ZilliqaJsonRPC, zil_interfaces::ResultRes};
 
-use crate::{
-    rates::fetch_zilliqa_rates,
-    token::{
-        build_token_requests, process_eth_balance_response, process_eth_metadata_response,
-        process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
-    },
+use crate::token::{
+    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
+    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
 };
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -224,8 +221,6 @@ impl NetworkProvider {
 
 #[cfg(test)]
 mod tests {
-    use crate::rates::get_rate;
-
     use super::*;
     use alloy::primitives::U256;
     use config::address::ADDR_LEN;

@@ -4,3 +4,4 @@ pub const FTOKENS_DB_KEY: &[u8] = b"f_tokens";
 pub const NETWORK_DB_KEY: &[u8] = b"network_db_key";
 pub const GLOBAL_SETTINGS_DB_KEY: &[u8] = b"global_settings_db_key";
 pub const CURRENCIES_RATES_DB_KEY: &[u8] = b"currencies_rates_db_key";
+pub const ADDRESS_BOOK_DB_KEY: &[u8] = b"address_book_db_key";

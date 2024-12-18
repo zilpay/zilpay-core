@@ -16,6 +16,9 @@ pub enum BackgroundError {
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,
 
+    #[error("failt to serialize address book")]
+    FailToSerializeAddressBook,
+
     #[error("Failed to serialize rates!")]
     FailToSerializeRates,
 
@@ -48,6 +51,9 @@ pub enum BackgroundError {
 
     #[error("Failed to write wallet indicators to DB: {0}")]
     FailToWriteIndicatorsWallet(LocalStorageError),
+
+    #[error("Failed to write address book to DB: {0}")]
+    FailToWriteIndicatorsAddressBook(LocalStorageError),
 
     #[error("Failed to load wallet from storage: {0}")]
     TryLoadWalletError(WalletErrors),
