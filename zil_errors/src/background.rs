@@ -40,6 +40,12 @@ pub enum BackgroundError {
     #[error("Failed to generate key pair: {0}")]
     FailToGenKeyPair(KeyPairError),
 
+    #[error("Connection with such domain already exits: {0}")]
+    ConnectionAlreadyExists(String),
+
+    #[error("such address {0}, already exists")]
+    AddressAlreadyExists(String),
+
     #[error("Invalid BIP39 word count: {0}")]
     InvalidWordCount(u8),
 
@@ -54,6 +60,9 @@ pub enum BackgroundError {
 
     #[error("Failed to write address book to DB: {0}")]
     FailToWriteIndicatorsAddressBook(LocalStorageError),
+
+    #[error("Failed to write address book to DB: {0}")]
+    FailToWriteIndicatorsConnections(LocalStorageError),
 
     #[error("Failed to load wallet from storage: {0}")]
     TryLoadWalletError(WalletErrors),

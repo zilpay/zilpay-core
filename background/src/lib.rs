@@ -496,13 +496,17 @@ impl Background {
     pub fn add_connection(&self, connection: Connection) -> Result<(), BackgroundError> {
         let mut connections = self.get_connections();
 
+        if connections.iter().any(|c| c.domain == connection.domain) {
+            return Err(BackgroundError::ConnectionAlreadyExists(connection.domain));
+        }
+
         connections.push(connection);
 
         let bytes = serde_json::to_vec(&connections)
             .or(Err(BackgroundError::FailToSerializeAddressBook))?;
 
         self.storage
-            .set(ADDRESS_BOOK_DB_KEY, &bytes)
+            .set(CONNECTIONS_LIST_DB_KEY, &bytes)
             .map_err(BackgroundError::FailToWriteIndicatorsConnections)?;
         self.storage
             .flush()
@@ -523,6 +527,12 @@ impl Background {
 
     pub fn add_to_address_book(&self, address: AddressBookEntry) -> Result<(), BackgroundError> {
         let mut book = self.get_address_book();
+
+        if book.iter().any(|c| c.addr == address.addr) {
+            return Err(BackgroundError::AddressAlreadyExists(
+                address.addr.auto_format(),
+            ));
+        }
 
         book.push(address);
 
@@ -678,6 +688,7 @@ mod tests_background {
         argon::KEY_SIZE,
         key::{PUB_KEY_SIZE, SECRET_KEY_SIZE},
     };
+    use connections::DAppColors;
     use proto::keypair::KeyPair;
     use rand::Rng;
     use session::decrypt_session;
@@ -1086,5 +1097,62 @@ mod tests_background {
         assert_eq!(book[0].addr, address);
         assert_eq!(book[1].name, "Second Contact");
         assert_eq!(book[1].addr, address2);
+    }
+
+    #[test]
+    fn test_connections_storage() {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let bg = Background::from_storage_path(&dir).unwrap();
+
+        // Test empty connections
+        let connections = bg.get_connections();
+        assert!(connections.is_empty());
+
+        // Create test connection
+        let colors = DAppColors {
+            primary: "#000000".to_string(),
+            secondary: Some("#FFFFFF".to_string()),
+            background: None,
+            text: None,
+        };
+
+        let connection = Connection::new(
+            "example.com".to_string(),
+            0,
+            "Example DApp".to_string(),
+            Some(colors),
+        );
+
+        // Add connection
+        bg.add_connection(connection.clone()).unwrap();
+
+        // Try to add duplicate connection
+
+        assert_eq!(
+            bg.add_connection(connection.clone()),
+            Err(BackgroundError::ConnectionAlreadyExists(
+                "example.com".to_string()
+            ))
+        );
+
+        // Verify first connection
+        let connections = bg.get_connections();
+        assert_eq!(connections.len(), 1);
+        let first_conn = &connections[0];
+        assert_eq!(first_conn.domain, "example.com");
+        assert_eq!(first_conn.title, "Example DApp");
+
+        // Test persistence
+        drop(bg);
+        let bg2 = Background::from_storage_path(&dir).unwrap();
+        let loaded_connections = bg2.get_connections();
+
+        assert_eq!(loaded_connections.len(), 1);
+        let loaded_conn = &loaded_connections[0];
+        assert_eq!(loaded_conn.domain, "example.com");
+        assert_eq!(loaded_conn.title, "Example DApp");
+        assert!(loaded_conn.colors.is_some());
+        assert!(loaded_conn.is_wallet_connected(0));
     }
 }
