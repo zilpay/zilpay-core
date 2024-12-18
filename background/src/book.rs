@@ -5,10 +5,11 @@ use serde::{Deserialize, Serialize};
 pub struct AddressBookEntry {
     pub name: String,
     pub addr: Address,
+    pub net: usize,
 }
 
 impl AddressBookEntry {
-    pub fn add(name: String, addr: Address) -> Self {
-        Self { name, addr }
+    pub fn add(name: String, addr: Address, net: usize) -> Self {
+        Self { name, addr, net }
     }
 }

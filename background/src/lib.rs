@@ -1,4 +1,5 @@
 pub mod book;
+pub mod connections;
 
 pub use bip39::{Language, Mnemonic};
 
@@ -8,10 +9,11 @@ use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::{SHA256_SIZE, SHA512_SIZE},
     storage::{
-        ADDRESS_BOOK_DB_KEY, CURRENCIES_RATES_DB_KEY, GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY,
-        NETWORK_DB_KEY,
+        ADDRESS_BOOK_DB_KEY, CONNECTIONS_LIST_DB_KEY, CURRENCIES_RATES_DB_KEY,
+        GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY,
     },
 };
+use connections::Connection;
 use crypto::bip49::Bip49DerivationPath;
 use network::{provider::NetworkProvider, rates::fetch_zilliqa_rates};
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
@@ -476,6 +478,37 @@ impl Background {
         }
 
         Err(BackgroundError::NetworkErrors(error))
+    }
+
+    pub fn get_connections(&self) -> Vec<Connection> {
+        let bytes = self
+            .storage
+            .get(CONNECTIONS_LIST_DB_KEY)
+            .unwrap_or_default();
+
+        if bytes.is_empty() {
+            return Vec::new();
+        }
+
+        serde_json::from_slice(&bytes).unwrap_or(Vec::new())
+    }
+
+    pub fn add_connection(&self, connection: Connection) -> Result<(), BackgroundError> {
+        let mut connections = self.get_connections();
+
+        connections.push(connection);
+
+        let bytes = serde_json::to_vec(&connections)
+            .or(Err(BackgroundError::FailToSerializeAddressBook))?;
+
+        self.storage
+            .set(ADDRESS_BOOK_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsConnections)?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(())
     }
 
     pub fn get_address_book(&self) -> Vec<AddressBookEntry> {
@@ -1013,6 +1046,7 @@ mod tests_background {
         let entry = AddressBookEntry {
             name,
             addr: address.clone(),
+            net: 0,
         };
 
         // Add address to book
@@ -1031,6 +1065,7 @@ mod tests_background {
         let entry2 = AddressBookEntry {
             name: name2,
             addr: address2.clone(),
+            net: 0,
         };
 
         bg.add_to_address_book(entry2.clone()).unwrap();
