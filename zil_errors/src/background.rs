@@ -16,6 +16,9 @@ pub enum BackgroundError {
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,
 
+    #[error("Failed to serialize rates!")]
+    FailToSerializeRates,
+
     #[error("Ledger ID already exists")]
     LedgerIdExists(String),
 

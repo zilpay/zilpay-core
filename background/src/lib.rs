@@ -4,11 +4,12 @@ use cipher::{argon2, keychain::KeyChain};
 use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::{SHA256_SIZE, SHA512_SIZE},
-    storage::{GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY},
+    storage::{CURRENCIES_RATES_DB_KEY, GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY},
 };
 use crypto::bip49::Bip49DerivationPath;
-use network::provider::NetworkProvider;
+use network::{provider::NetworkProvider, rates::fetch_zilliqa_rates};
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
+use serde_json::{json, Value};
 use session::{decrypt_session, encrypt_session};
 use settings::{
     common_settings::CommonSettings,
@@ -469,6 +470,35 @@ impl Background {
         }
 
         Err(BackgroundError::NetworkErrors(error))
+    }
+
+    pub async fn update_rates(&self) -> Result<Value, BackgroundError> {
+        let rates = fetch_zilliqa_rates()
+            .await
+            .map_err(BackgroundError::NetworkErrors)?;
+        let bytes = serde_json::to_vec(&rates).or(Err(BackgroundError::FailToSerializeRates))?;
+
+        self.storage
+            .set(NETWORK_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+        self.storage
+            .flush()
+            .map_err(BackgroundError::LocalStorageFlushError)?;
+
+        Ok(rates)
+    }
+
+    pub fn get_rates(&self) -> Value {
+        let bytes = self
+            .storage
+            .get(CURRENCIES_RATES_DB_KEY)
+            .unwrap_or_default();
+
+        if bytes.is_empty() {
+            return json!([]);
+        }
+
+        serde_json::from_slice(&bytes).unwrap_or(json!([]))
     }
 
     pub async fn sync_ftokens_balances(

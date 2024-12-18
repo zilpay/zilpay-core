@@ -2,7 +2,7 @@ use alloy::primitives::U256;
 use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::collections::HashMap;
 use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
@@ -58,16 +58,6 @@ impl NetworkProvider {
         };
 
         Ok(())
-    }
-
-    pub async fn get_rates(&self) -> Result<Value, NetworkErrors> {
-        match self {
-            NetworkProvider::Ethereum => {
-                // TODO: make a ETH rates API.
-                Ok(json!([]))
-            }
-            NetworkProvider::Zilliqa(_) => fetch_zilliqa_rates().await,
-        }
     }
 
     pub async fn get_ftoken_meta(
@@ -454,17 +444,5 @@ mod tests {
         assert!(&tokens[2].balances.contains_key(accounts[2]));
         assert!(&tokens[2].balances.contains_key(accounts[3]));
         assert!(&tokens[2].balances.contains_key(accounts[4]));
-    }
-
-    #[tokio::test]
-    async fn test_fetch_zil_rates() {
-        let zil = ZilliqaJsonRPC::new();
-        let net = NetworkProvider::Zilliqa(zil);
-        let rates = net.get_rates().await.unwrap();
-
-        assert!(get_rate(&rates, "invalid").is_none());
-        assert!(get_rate(&rates, "btc").is_some());
-        assert!(get_rate(&rates, "usd").is_some());
-        assert!(get_rate(&rates, "rub").is_some());
     }
 }
