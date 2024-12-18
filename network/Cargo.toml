@@ -8,6 +8,7 @@ alloy.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+reqwest.workspace = true
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 wallet = { path = "../wallet" }

@@ -2,15 +2,18 @@ use alloy::primitives::U256;
 use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
 use zilliqa::json_rpc::{zil::ZilliqaJsonRPC, zil_interfaces::ResultRes};
 
-use crate::token::{
-    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
-    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
+use crate::{
+    rates::fetch_zilliqa_rates,
+    token::{
+        build_token_requests, process_eth_balance_response, process_eth_metadata_response,
+        process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
+    },
 };
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -55,6 +58,16 @@ impl NetworkProvider {
         };
 
         Ok(())
+    }
+
+    pub async fn get_rates(&self) -> Result<Value, NetworkErrors> {
+        match self {
+            NetworkProvider::Ethereum => {
+                // TODO: make a ETH rates API.
+                Ok(json!([]))
+            }
+            NetworkProvider::Zilliqa(_) => fetch_zilliqa_rates().await,
+        }
     }
 
     pub async fn get_ftoken_meta(
@@ -221,6 +234,8 @@ impl NetworkProvider {
 
 #[cfg(test)]
 mod tests {
+    use crate::rates::get_rate;
+
     use super::*;
     use alloy::primitives::U256;
     use config::address::ADDR_LEN;
@@ -439,5 +454,17 @@ mod tests {
         assert!(&tokens[2].balances.contains_key(accounts[2]));
         assert!(&tokens[2].balances.contains_key(accounts[3]));
         assert!(&tokens[2].balances.contains_key(accounts[4]));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_zil_rates() {
+        let zil = ZilliqaJsonRPC::new();
+        let net = NetworkProvider::Zilliqa(zil);
+        let rates = net.get_rates().await.unwrap();
+
+        assert!(get_rate(&rates, "invalid").is_none());
+        assert!(get_rate(&rates, "btc").is_some());
+        assert!(get_rate(&rates, "usd").is_some());
+        assert!(get_rate(&rates, "rub").is_some());
     }
 }

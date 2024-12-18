@@ -15,6 +15,15 @@ pub enum NetworkErrors {
     #[error("Failed to make request: {0}")]
     Request(ZilliqaNetErrors),
 
+    #[error("Http state: {0}, message {1}")]
+    HttpError(u16, String),
+
+    #[error("Network error: {0}")]
+    HttpNetworkError(String),
+
+    #[error("Http json parse error: {0}")]
+    ParseHttpError(String),
+
     #[error("Token parse error: {0}")]
     TokenParseError(TokenError),
 
