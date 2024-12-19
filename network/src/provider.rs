@@ -87,13 +87,18 @@ impl NetworkProvider {
                                 .ok_or(NetworkErrors::InvalidContractInit)?,
                         )?;
 
-                        let mut balances: HashMap<Address, U256> = HashMap::new();
+                        let mut balances: HashMap<usize, U256> = HashMap::new();
 
                         for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
                             if let RequestType::Balance(account) = req_type {
                                 let balance =
                                     process_zil_balance_response(&responses[i], account, false);
-                                balances.insert(account.to_owned().clone(), balance);
+
+                                if let Some(account_index) =
+                                    accounts.iter().position(|&addr| addr == *account)
+                                {
+                                    balances.insert(account_index, balance);
+                                }
                             }
                         }
 
@@ -132,13 +137,18 @@ impl NetworkProvider {
                         .parse()
                         .map_err(|_| NetworkErrors::InvalidContractInit)?;
 
-                        let mut balances: HashMap<Address, U256> = HashMap::new();
+                        let mut balances: HashMap<usize, U256> = HashMap::new();
                         for ((_, req_type), response) in
                             requests.iter().zip(responses.iter()).skip(3)
                         {
                             if let RequestType::Balance(account) = req_type {
                                 let balance = process_eth_balance_response(response)?;
-                                balances.insert(account.to_owned().clone(), balance);
+
+                                if let Some(account_index) =
+                                    accounts.iter().position(|&addr| addr == *account)
+                                {
+                                    balances.insert(account_index, balance);
+                                }
                             }
                         }
 
@@ -199,15 +209,21 @@ impl NetworkProvider {
                                     account,
                                     tokens[*token_idx].native,
                                 );
-                                tokens[*token_idx]
-                                    .balances
-                                    .insert(account.to_owned().clone(), balance);
+
+                                if let Some(account_index) =
+                                    accounts.iter().position(|&addr| addr == *account)
+                                {
+                                    tokens[*token_idx].balances.insert(account_index, balance);
+                                }
                             }
                             Address::Secp256k1Keccak256Ethereum(_) => {
                                 let balance = process_eth_balance_response(response)?;
-                                tokens[*token_idx]
-                                    .balances
-                                    .insert(account.to_owned().clone(), balance);
+
+                                if let Some(account_index) =
+                                    accounts.iter().position(|&addr| addr == *account)
+                                {
+                                    tokens[*token_idx].balances.insert(account_index, balance);
+                                }
                             }
                         }
                     }
@@ -240,10 +256,10 @@ mod tests {
         ];
         let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
 
-        assert!(*ftoken.balances.get(account[0]).unwrap() >= U256::from(0));
-        assert!(*ftoken.balances.get(account[1]).unwrap() >= U256::from(0));
-        assert!(*ftoken.balances.get(account[2]).unwrap() == U256::from(0));
-        assert!(*ftoken.balances.get(account[3]).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&0).unwrap() >= U256::from(0));
+        assert!(*ftoken.balances.get(&1).unwrap() >= U256::from(0));
+        assert!(*ftoken.balances.get(&2).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&3).unwrap() == U256::from(0));
 
         assert_eq!(&ftoken.name, "ZilPay wallet");
         assert_eq!(&ftoken.symbol, "ZLP");
@@ -304,17 +320,17 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(&tokens[0].balances.contains_key(accounts[0]));
-        assert!(&tokens[0].balances.contains_key(accounts[1]));
-        assert!(&tokens[0].balances.contains_key(accounts[2]));
+        assert!(&tokens[0].balances.contains_key(&0));
+        assert!(&tokens[0].balances.contains_key(&1));
+        assert!(&tokens[0].balances.contains_key(&2));
 
-        assert!(&tokens[1].balances.contains_key(accounts[0]));
-        assert!(&tokens[1].balances.contains_key(accounts[1]));
-        assert!(&tokens[1].balances.contains_key(accounts[2]));
+        assert!(&tokens[1].balances.contains_key(&0));
+        assert!(&tokens[1].balances.contains_key(&1));
+        assert!(&tokens[1].balances.contains_key(&2));
 
-        assert!(&tokens[2].balances.contains_key(accounts[0]));
-        assert!(&tokens[2].balances.contains_key(accounts[1]));
-        assert!(&tokens[2].balances.contains_key(accounts[2]));
+        assert!(&tokens[2].balances.contains_key(&0));
+        assert!(&tokens[2].balances.contains_key(&1));
+        assert!(&tokens[2].balances.contains_key(&2));
     }
 
     #[tokio::test]
@@ -349,11 +365,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(&tokens[0].balances.contains_key(accounts[0]));
-        assert!(&tokens[0].balances.contains_key(accounts[1]));
+        assert!(&tokens[0].balances.contains_key(&0));
+        assert!(&tokens[0].balances.contains_key(&1));
 
-        assert!(&tokens[1].balances.contains_key(accounts[0]));
-        assert!(&tokens[1].balances.contains_key(accounts[1]));
+        assert!(&tokens[1].balances.contains_key(&0));
+        assert!(&tokens[1].balances.contains_key(&1));
     }
 
     #[tokio::test]
@@ -373,8 +389,8 @@ mod tests {
         assert_eq!(&ftoken.symbol, "zUSDT");
         assert_eq!(ftoken.decimals, 6u8);
 
-        assert!(*ftoken.balances.get(account[0]).unwrap() == U256::from(0));
-        assert!(*ftoken.balances.get(account[1]).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&0).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
     }
 
     #[tokio::test]
@@ -422,22 +438,22 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(&tokens[0].balances.contains_key(accounts[0]));
-        assert!(&tokens[0].balances.contains_key(accounts[1]));
-        assert!(&tokens[0].balances.contains_key(accounts[2]));
-        assert!(&tokens[0].balances.contains_key(accounts[3]));
-        assert!(&tokens[0].balances.contains_key(accounts[4]));
+        assert!(&tokens[0].balances.contains_key(&0));
+        assert!(&tokens[0].balances.contains_key(&1));
+        assert!(&tokens[0].balances.contains_key(&2));
+        assert!(&tokens[0].balances.contains_key(&3));
+        assert!(&tokens[0].balances.contains_key(&4));
 
-        assert!(&tokens[1].balances.contains_key(accounts[0]));
-        assert!(&tokens[1].balances.contains_key(accounts[1]));
-        assert!(&tokens[1].balances.contains_key(accounts[2]));
-        assert!(&tokens[1].balances.contains_key(accounts[3]));
-        assert!(&tokens[1].balances.contains_key(accounts[4]));
+        assert!(&tokens[1].balances.contains_key(&0));
+        assert!(&tokens[1].balances.contains_key(&1));
+        assert!(&tokens[1].balances.contains_key(&2));
+        assert!(&tokens[1].balances.contains_key(&3));
+        assert!(&tokens[1].balances.contains_key(&4));
 
-        assert!(&tokens[2].balances.contains_key(accounts[0]));
-        assert!(&tokens[2].balances.contains_key(accounts[1]));
-        assert!(&tokens[2].balances.contains_key(accounts[2]));
-        assert!(&tokens[2].balances.contains_key(accounts[3]));
-        assert!(&tokens[2].balances.contains_key(accounts[4]));
+        assert!(&tokens[2].balances.contains_key(&0));
+        assert!(&tokens[2].balances.contains_key(&1));
+        assert!(&tokens[2].balances.contains_key(&2));
+        assert!(&tokens[2].balances.contains_key(&3));
+        assert!(&tokens[2].balances.contains_key(&4));
     }
 }

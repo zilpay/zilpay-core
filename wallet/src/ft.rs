@@ -14,7 +14,7 @@ pub struct FToken {
     pub decimals: u8,
     pub addr: Address,
     pub logo: Option<String>,
-    pub balances: HashMap<Address, U256>,
+    pub balances: HashMap<usize, U256>,
     pub default: bool,
     pub native: bool,
 }
