@@ -15,7 +15,7 @@ use config::{
 };
 use connections::Connection;
 use crypto::bip49::Bip49DerivationPath;
-use network::{provider::NetworkProvider, rates::fetch_zilliqa_rates};
+use network::{provider::NetworkProvider, rates::fetch_rates};
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
 use serde_json::{json, Value};
 use session::{decrypt_session, encrypt_session};
@@ -582,13 +582,13 @@ impl Background {
     }
 
     pub async fn update_rates(&self) -> Result<Value, BackgroundError> {
-        let rates = fetch_zilliqa_rates()
+        let rates = fetch_rates()
             .await
             .map_err(BackgroundError::NetworkErrors)?;
         let bytes = serde_json::to_vec(&rates).or(Err(BackgroundError::FailToSerializeRates))?;
 
         self.storage
-            .set(NETWORK_DB_KEY, &bytes)
+            .set(CURRENCIES_RATES_DB_KEY, &bytes)
             .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
         self.storage
             .flush()

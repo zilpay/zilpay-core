@@ -3,7 +3,7 @@ use reqwest;
 use serde_json::Value;
 use zil_errors::network::NetworkErrors;
 
-pub async fn fetch_zilliqa_rates() -> Result<Value, NetworkErrors> {
+pub async fn fetch_rates() -> Result<Value, NetworkErrors> {
     let client = reqwest::Client::new();
 
     let response = client
@@ -32,4 +32,17 @@ pub fn get_rate(rates: &Value, currency: &str) -> Option<f64> {
     rates[currency]
         .as_f64()
         .or_else(|| rates[currency].as_str().and_then(|s| s.parse().ok()))
+}
+
+#[cfg(test)]
+mod tests_rates {
+    use super::*;
+    use tokio;
+
+    #[tokio::test]
+    async fn test_fetch_rates() {
+        let rates = fetch_rates().await.unwrap();
+
+        dbg!(rates);
+    }
 }
