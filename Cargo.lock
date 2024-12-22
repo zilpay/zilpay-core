@@ -946,7 +946,6 @@ dependencies = [
  "rand_chacha",
  "serde",
  "serde_json",
- "session",
  "settings",
  "storage",
  "wallet",
@@ -3469,17 +3468,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "session"
-version = "0.1.0"
-dependencies = [
- "cipher 0.1.0",
- "config",
- "rand",
- "rand_chacha",
- "zil_errors",
-]
-
-[[package]]
 name = "settings"
 version = "0.1.0"
 dependencies = [
@@ -4185,7 +4173,6 @@ dependencies = [
  "rand_chacha",
  "serde",
  "serde_json",
- "session",
  "settings",
  "sha2",
  "storage",

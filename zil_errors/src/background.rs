@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{
     cipher::CipherErrors, keychain::KeyChainErrors, keypair::KeyPairError, network::NetworkErrors,
-    session::SessionErrors, storage::LocalStorageError, wallet::WalletErrors,
+    storage::LocalStorageError, wallet::WalletErrors,
 };
 
 #[derive(Debug, Error, PartialEq)]
@@ -24,9 +24,6 @@ pub enum BackgroundError {
 
     #[error("Ledger ID already exists")]
     LedgerIdExists(String),
-
-    #[error("Failed to decrypt session: {0}")]
-    DecryptSessionError(SessionErrors),
 
     #[error("Failed to unlock wallet: {0}")]
     FailUnlockWallet(WalletErrors),

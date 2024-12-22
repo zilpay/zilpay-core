@@ -16,7 +16,6 @@ zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }
-session = { path = "../session" }
 cipher = { path = "../cipher" }
 storage = { path = "../storage" }
 settings = { path = "../settings" }

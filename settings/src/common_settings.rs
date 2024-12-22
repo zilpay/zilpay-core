@@ -15,7 +15,7 @@ pub struct CommonSettings {
 
     /// Language and regional settings
     #[serde(default)]
-    pub locale: Locale,
+    pub locale: Locle,
 }
 
 impl CommonSettings {

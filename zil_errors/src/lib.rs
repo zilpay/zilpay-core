@@ -10,7 +10,6 @@ pub mod keychain;
 pub mod keypair;
 pub mod network;
 pub mod ntru;
-pub mod session;
 pub mod settings;
 pub mod storage;
 pub mod token;
