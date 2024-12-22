@@ -3473,6 +3473,7 @@ version = "0.1.0"
 dependencies = [
  "cipher 0.1.0",
  "config",
+ "rust-argon2",
  "serde",
  "serde_json",
  "zil_errors",

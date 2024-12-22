@@ -5,6 +5,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
 use zil_errors::zilliqa::ZilliqaNetErrors;
 
+type Result<T> = std::result::Result<T, ZilliqaNetErrors>;
+
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZilliqaJsonRPC {
     pub nodes: [Vec<String>; 3], // mainnet, testnet, custom
@@ -55,7 +57,7 @@ impl ZilliqaJsonRPC {
             .unwrap_or(Self::PROTO_MAINNET.to_string())
     }
 
-    pub async fn update_scilla_nodes(&mut self) -> Result<(), ZilliqaNetErrors> {
+    pub async fn update_scilla_nodes(&mut self) -> Result<()> {
         let node_url = self.get_node();
         let client = reqwest::Client::new();
         let payload = json!({
@@ -101,7 +103,7 @@ impl ZilliqaJsonRPC {
         Ok(())
     }
 
-    pub async fn req<SR>(&self, payloads: &[Value]) -> Result<SR, ZilliqaNetErrors>
+    pub async fn req<SR>(&self, payloads: &[Value]) -> Result<SR>
     where
         SR: DeserializeOwned + std::fmt::Debug,
     {

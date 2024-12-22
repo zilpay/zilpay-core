@@ -79,9 +79,6 @@ pub enum BackgroundError {
     #[error("Argon2 proof creation error: {0}")]
     ArgonCreateProofError(CipherErrors),
 
-    #[error("Failed to create session: {0}")]
-    CreateSessionError(SessionErrors),
-
     #[error("Failed to create keychain from Argon2 seed: {0}")]
     FailCreateKeychain(KeyChainErrors),
 

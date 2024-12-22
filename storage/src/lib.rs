@@ -7,6 +7,8 @@ use directories::ProjectDirs;
 use sled::{Db, IVec};
 use zil_errors::storage::LocalStorageError;
 
+type Result<T> = std::result::Result<T, LocalStorageError>;
+
 pub struct LocalStorage {
     tree: Db,
     version: u16,
@@ -23,7 +25,7 @@ impl std::fmt::Display for LocalStorage {
 }
 
 impl LocalStorage {
-    pub fn from(path: &str) -> Result<Self, LocalStorageError> {
+    pub fn from(path: &str) -> Result<Self> {
         let tree =
             sled::open(path).map_err(|e| LocalStorageError::StorageAccessError(e.to_string()))?;
         let version = STORAGE_VERSION;
@@ -35,11 +37,7 @@ impl LocalStorage {
         })
     }
 
-    pub fn new(
-        qualifier: &str,
-        organization: &str,
-        application: &str,
-    ) -> Result<Self, LocalStorageError> {
+    pub fn new(qualifier: &str, organization: &str, application: &str) -> Result<Self> {
         let path = ProjectDirs::from(qualifier, organization, application)
             .ok_or(LocalStorageError::StoragePathError)?;
         let tree = sled::open(path.data_dir())
@@ -61,13 +59,13 @@ impl LocalStorage {
         self.tree.size_on_disk().unwrap_or(0)
     }
 
-    pub fn exists(&self, key: &[u8]) -> Result<bool, LocalStorageError> {
+    pub fn exists(&self, key: &[u8]) -> Result<bool> {
         self.tree
             .contains_key(key)
             .map_err(|e| LocalStorageError::StorageAccessError(e.to_string()))
     }
 
-    pub fn get(&self, key: &[u8]) -> Result<Vec<u8>, LocalStorageError> {
+    pub fn get(&self, key: &[u8]) -> Result<Vec<u8>> {
         let some_value = self
             .tree
             .get(key)
@@ -80,7 +78,7 @@ impl LocalStorage {
         Ok(data.payload)
     }
 
-    pub fn set(&self, key: &[u8], payload: &[u8]) -> Result<(), LocalStorageError> {
+    pub fn set(&self, key: &[u8], payload: &[u8]) -> Result<()> {
         let data = DataWarp {
             payload: payload.into(),
             version: self.version,
@@ -94,7 +92,7 @@ impl LocalStorage {
         Ok(())
     }
 
-    pub fn flush(&self) -> Result<(), LocalStorageError> {
+    pub fn flush(&self) -> Result<()> {
         self.tree
             .flush()
             .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;

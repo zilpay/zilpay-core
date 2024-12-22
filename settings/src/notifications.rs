@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct NotificationState {
     pub transactions: bool,
     pub price: bool,
@@ -51,7 +51,7 @@ impl Notifications {
     }
 
     pub fn get_state(&self, wallet_index: usize) -> Option<NotificationState> {
-        self.wallet_states.get(&wallet_index).copied()
+        self.wallet_states.get(&wallet_index).cloned()
     }
 
     pub fn remove_state(&mut self, wallet_index: usize) -> Option<NotificationState> {
@@ -97,7 +97,7 @@ mod tests {
             balance: false,
         };
 
-        notifications.set_state(0, state);
+        notifications.set_state(0, state.clone());
         assert_eq!(notifications.get_state(0), Some(state));
         assert_eq!(notifications.get_state(1), None);
     }
@@ -107,7 +107,7 @@ mod tests {
         let mut notifications = Notifications::new();
         let state = NotificationState::all_enabled();
 
-        notifications.set_state(0, state);
+        notifications.set_state(0, state.clone());
         assert_eq!(notifications.remove_state(0), Some(state));
         assert_eq!(notifications.get_state(0), None);
     }

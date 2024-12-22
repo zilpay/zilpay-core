@@ -1,4 +1,4 @@
-use crate::{locale::Locale, notifications::Notifications, theme::Theme};
+use crate::{argon2::ArgonParams, locale::Locale, notifications::Notifications, theme::Theme};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -15,17 +15,31 @@ pub struct CommonSettings {
 
     /// Language and regional settings
     #[serde(default)]
-    pub locale: Locle,
+    pub locale: Locale,
+
+    /// Password hashing configuration parameters
+    #[serde(default)]
+    pub argon_params: ArgonParams,
 }
 
 impl CommonSettings {
-    /// Creates a new CommonSettings instance with custom values
-    pub fn new(notifications: Notifications, theme: Theme, locale: Locale) -> Self {
+    pub fn new(
+        notifications: Notifications,
+        theme: Theme,
+        locale: Locale,
+        argon_params: ArgonParams,
+    ) -> Self {
         Self {
             notifications,
             theme,
             locale,
+            argon_params,
         }
+    }
+
+    pub fn with_argon_params(mut self, argon_params: ArgonParams) -> Self {
+        self.argon_params = argon_params;
+        self
     }
 
     /// Returns a new instance with the specified theme
@@ -71,9 +85,31 @@ mod tests {
         let theme = Theme::default();
         let locale = Locale::Custom("en-US".to_string());
 
-        let settings = CommonSettings::new(notifications, theme, locale.clone());
+        let settings =
+            CommonSettings::new(notifications, theme, locale.clone(), Default::default());
 
         assert_eq!(settings.locale, locale);
+    }
+
+    #[test]
+    fn test_with_argon_params() {
+        let settings = setup_test_settings();
+        let new_params = ArgonParams::secure();
+        let updated = settings.with_argon_params(new_params.clone());
+        assert_eq!(updated.argon_params, new_params);
+    }
+
+    #[test]
+    fn test_new_settings_with_argon() {
+        let notifications = Notifications::default();
+        let theme = Theme::default();
+        let locale = Locale::Custom("en-US".to_string());
+        let argon_params = ArgonParams::owasp_default();
+
+        let settings =
+            CommonSettings::new(notifications, theme, locale.clone(), argon_params.clone());
+
+        assert_eq!(settings.argon_params, argon_params);
     }
 
     #[test]
