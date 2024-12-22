@@ -36,6 +36,8 @@ use zil_errors::{background::BackgroundError, network::NetworkErrors};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
+type Result<T> = std::result::Result<T, BackgroundError>;
+
 pub struct BackgroundBip39Params<'a> {
     pub password: &'a str,
     pub mnemonic_str: &'a str,
@@ -87,7 +89,7 @@ fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
 }
 
 impl Background {
-    pub fn gen_bip39(count: u8) -> Result<String, BackgroundError> {
+    pub fn gen_bip39(count: u8) -> Result<String> {
         if ![12, 15, 18, 21, 24].contains(&count) {
             return Err(BackgroundError::InvalidWordCount(count));
         }
@@ -116,7 +118,7 @@ impl Background {
             .collect()
     }
 
-    pub fn gen_keypair() -> Result<(String, String), BackgroundError> {
+    pub fn gen_keypair() -> Result<(String, String)> {
         let (pub_key, secret_key) =
             KeyPair::gen_keys_bytes().map_err(BackgroundError::FailToGenKeyPair)?;
 
@@ -125,7 +127,7 @@ impl Background {
 }
 
 impl Background {
-    pub fn from_storage_path(path: &str) -> Result<Self, BackgroundError> {
+    pub fn from_storage_path(path: &str) -> Result<Self> {
         let storage =
             LocalStorage::from(path).map_err(BackgroundError::TryInitLocalStorageError)?;
         let storage = Arc::new(storage);
@@ -166,7 +168,7 @@ impl Background {
         password: &str,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> Result<[u8; SHA512_SIZE], BackgroundError> {
+    ) -> Result<[u8; SHA512_SIZE]> {
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -187,7 +189,7 @@ impl Background {
         session_cipher: Vec<u8>,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> Result<[u8; SHA512_SIZE], BackgroundError> {
+    ) -> Result<[u8; SHA512_SIZE]> {
         let wallet = self
             .wallets
             .get_mut(wallet_index)
@@ -211,10 +213,7 @@ impl Background {
         Ok(seed_bytes)
     }
 
-    pub fn add_bip39_wallet(
-        &mut self,
-        params: BackgroundBip39Params,
-    ) -> Result<Vec<u8>, BackgroundError> {
+    pub fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -275,7 +274,7 @@ impl Background {
         &mut self,
         params: LedgerParams,
         device_indicators: &[String],
-    ) -> Result<Vec<u8>, BackgroundError> {
+    ) -> Result<Vec<u8>> {
         if self
             .wallets
             .iter()
@@ -323,10 +322,7 @@ impl Background {
         Ok(session)
     }
 
-    pub fn add_sk_wallet(
-        &mut self,
-        params: BackgroundSKParams,
-    ) -> Result<Vec<u8>, BackgroundError> {
+    pub fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -377,7 +373,7 @@ impl Background {
         Ok(session)
     }
 
-    pub async fn update_nodes(&mut self, id: usize) -> Result<(), BackgroundError> {
+    pub async fn update_nodes(&mut self, id: usize) -> Result<()> {
         let net_pointer = self
             .netowrk
             .get_mut(id)
@@ -396,10 +392,7 @@ impl Background {
         Ok(())
     }
 
-    pub fn set_global_notifications(
-        &mut self,
-        global_enabled: bool,
-    ) -> Result<(), BackgroundError> {
+    pub fn set_global_notifications(&mut self, global_enabled: bool) -> Result<()> {
         self.settings.notifications.global_enabled = global_enabled;
         self.save_settings()?;
 
@@ -410,7 +403,7 @@ impl Background {
         &mut self,
         wallet_index: usize,
         notification: NotificationState,
-    ) -> Result<(), BackgroundError> {
+    ) -> Result<()> {
         self.settings
             .notifications
             .wallet_states
@@ -420,41 +413,34 @@ impl Background {
         Ok(())
     }
 
-    pub fn set_locale(&mut self, new_locale: Locale) -> Result<(), BackgroundError> {
+    pub fn set_locale(&mut self, new_locale: Locale) -> Result<()> {
         self.settings.locale = new_locale;
         self.save_settings()?;
 
         Ok(())
     }
 
-    pub fn set_theme(&mut self, new_theme: Theme) -> Result<(), BackgroundError> {
+    pub fn set_theme(&mut self, new_theme: Theme) -> Result<()> {
         self.settings.theme = new_theme;
         self.save_settings()?;
 
         Ok(())
     }
 
-    pub fn set_notifications(
-        &mut self,
-        new_notifications: Notifications,
-    ) -> Result<(), BackgroundError> {
+    pub fn set_notifications(&mut self, new_notifications: Notifications) -> Result<()> {
         self.settings.notifications = new_notifications;
         self.save_settings()?;
 
         Ok(())
     }
 
-    pub fn get_wallet_by_index(&self, wallet_index: usize) -> Result<&Wallet, BackgroundError> {
+    pub fn get_wallet_by_index(&self, wallet_index: usize) -> Result<&Wallet> {
         self.wallets
             .get(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))
     }
 
-    pub async fn get_ftoken_meta(
-        &self,
-        wallet_index: usize,
-        contract: Address,
-    ) -> Result<FToken, BackgroundError> {
+    pub async fn get_ftoken_meta(&self, wallet_index: usize, contract: Address) -> Result<FToken> {
         let w = self.get_wallet_by_index(wallet_index)?;
         let accounts = w
             .data
@@ -493,11 +479,7 @@ impl Background {
         serde_json::from_slice(&bytes).unwrap_or(Vec::new())
     }
 
-    pub fn add_wallet_to_connection(
-        &self,
-        domain: String,
-        wallet_index: usize,
-    ) -> Result<(), BackgroundError> {
+    pub fn add_wallet_to_connection(&self, domain: String, wallet_index: usize) -> Result<()> {
         let mut connections = self.get_connections();
 
         let connection = connections
@@ -525,7 +507,7 @@ impl Background {
         Ok(())
     }
 
-    pub fn add_connection(&self, connection: Connection) -> Result<(), BackgroundError> {
+    pub fn add_connection(&self, connection: Connection) -> Result<()> {
         let mut connections = self.get_connections();
 
         if connections.iter().any(|c| c.domain == connection.domain) {
@@ -557,7 +539,7 @@ impl Background {
         serde_json::from_slice(&bytes).unwrap_or(Vec::new())
     }
 
-    pub fn add_to_address_book(&self, address: AddressBookEntry) -> Result<(), BackgroundError> {
+    pub fn add_to_address_book(&self, address: AddressBookEntry) -> Result<()> {
         let mut book = self.get_address_book();
 
         if book.iter().any(|c| c.addr == address.addr) {
@@ -581,7 +563,7 @@ impl Background {
         Ok(())
     }
 
-    pub async fn update_rates(&self) -> Result<Value, BackgroundError> {
+    pub async fn update_rates(&self) -> Result<Value> {
         let rates = fetch_rates()
             .await
             .map_err(BackgroundError::NetworkErrors)?;
@@ -610,10 +592,7 @@ impl Background {
         serde_json::from_slice(&bytes).unwrap_or(json!([]))
     }
 
-    pub async fn sync_ftokens_balances(
-        &mut self,
-        wallet_index: usize,
-    ) -> Result<(), BackgroundError> {
+    pub async fn sync_ftokens_balances(&mut self, wallet_index: usize) -> Result<()> {
         let w = self
             .wallets
             .get_mut(wallet_index)
@@ -658,10 +637,7 @@ impl Background {
         Ok(())
     }
 
-    fn providers_from_wallet_index(
-        &self,
-        wallet_index: usize,
-    ) -> Result<Vec<&NetworkProvider>, BackgroundError> {
+    fn providers_from_wallet_index(&self, wallet_index: usize) -> Result<Vec<&NetworkProvider>> {
         let w = self.get_wallet_by_index(wallet_index)?;
         let providers = w
             .data
@@ -673,7 +649,7 @@ impl Background {
         Ok(providers)
     }
 
-    fn save_network(&self) -> Result<(), BackgroundError> {
+    fn save_network(&self) -> Result<()> {
         let bytes =
             serde_json::to_vec(&self.netowrk).or(Err(BackgroundError::FailToSerializeNetworks))?;
 
@@ -684,7 +660,7 @@ impl Background {
         Ok(())
     }
 
-    fn save_settings(&self) -> Result<(), BackgroundError> {
+    fn save_settings(&self) -> Result<()> {
         let bytes =
             serde_json::to_vec(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
 
@@ -698,7 +674,7 @@ impl Background {
         Ok(())
     }
 
-    fn save_indicators(&self) -> Result<(), BackgroundError> {
+    fn save_indicators(&self) -> Result<()> {
         let bytes: Vec<u8> = self
             .indicators
             .iter()
