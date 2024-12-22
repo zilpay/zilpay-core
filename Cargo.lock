@@ -3476,6 +3476,7 @@ dependencies = [
  "config",
  "rand",
  "rand_chacha",
+ "rust-argon2",
  "zil_errors",
 ]
 

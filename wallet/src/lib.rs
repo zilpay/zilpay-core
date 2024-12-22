@@ -26,7 +26,6 @@ use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use config::wallet::{N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
-use settings::argon2::ArgonParams;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
@@ -486,8 +485,8 @@ impl Wallet {
             .map_err(WalletErrors::FailToSignTransaction)
     }
 
-    pub fn unlock(&mut self, seed_bytes: &Argon2Seed, argon2_params: &ArgonParams) -> Result<()> {
-        self.unlock_iternel(seed_bytes, argon2_params)?;
+    pub fn unlock(&mut self, seed_bytes: &Argon2Seed) -> Result<()> {
+        self.unlock_iternel(seed_bytes)?;
 
         let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
         let ftokens: Vec<FToken> = serde_json::from_slice(&bytes).unwrap_or_default();
@@ -509,11 +508,7 @@ impl Wallet {
         Ok(())
     }
 
-    fn unlock_iternel(
-        &mut self,
-        seed_bytes: &Argon2Seed,
-        argon2_params: &ArgonParams,
-    ) -> Result<KeyChain> {
+    fn unlock_iternel(&mut self, seed_bytes: &Argon2Seed) -> Result<KeyChain> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
         let proof_key = usize::to_le_bytes(self.data.proof_key);
@@ -526,7 +521,7 @@ impl Wallet {
             .get_proof(&cipher_proof, &self.data.settings.cipher_orders)
             .or(Err(WalletErrors::KeyChainFailToGetProof))?;
 
-        let argon2_config = argon2_params.into_config();
+        let argon2_config = self.data.settings.argon_params.into_config();
         let proof = derive_key(&seed_bytes[..PROOF_SIZE], PROOF_SALT, &argon2_config)
             .map_err(WalletErrors::ArgonCipherErrors)?;
 
@@ -823,9 +818,7 @@ mod tests {
         assert_eq!(loaded_wallet.ftokens.len(), 0);
 
         // Unlock wallet - should restore tokens
-        loaded_wallet
-            .unlock(&argon_seed, &Default::default())
-            .unwrap();
+        loaded_wallet.unlock(&argon_seed).unwrap();
 
         // Verify tokens were restored correctly
         assert_eq!(loaded_wallet.ftokens.len(), 2);
@@ -927,9 +920,7 @@ mod tests {
 
         let mut loaded_wallet =
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-        loaded_wallet
-            .unlock(&argon_seed, &Default::default())
-            .unwrap();
+        loaded_wallet.unlock(&argon_seed).unwrap();
 
         // Verify all tokens were restored
         assert_eq!(loaded_wallet.ftokens.len(), 4);
@@ -1047,9 +1038,7 @@ mod tests {
 
         let mut loaded_wallet =
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-        loaded_wallet
-            .unlock(&argon_seed, &Default::default())
-            .unwrap();
+        loaded_wallet.unlock(&argon_seed).unwrap();
 
         // Verify state after reload
         assert_eq!(loaded_wallet.ftokens.len(), 3);
@@ -1067,9 +1056,7 @@ mod tests {
         wallet.save_to_storage().unwrap();
         let mut loaded_wallet2 =
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-        loaded_wallet2
-            .unlock(&argon_seed, &Default::default())
-            .unwrap();
+        loaded_wallet2.unlock(&argon_seed).unwrap();
 
         // Default token should be restored
         assert_eq!(loaded_wallet2.ftokens.len(), 3);

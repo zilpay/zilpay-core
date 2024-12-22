@@ -36,7 +36,7 @@ impl From<String> for AuthMethod {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct WalletData {
     pub proof_key: usize,
     pub wallet_type: WalletTypes,
