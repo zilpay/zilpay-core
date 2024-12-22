@@ -24,6 +24,7 @@ use settings::{
     locale::Locale,
     notifications::{NotificationState, Notifications},
     theme::Theme,
+    wallet_settings::WalletSettings,
 };
 use std::sync::Arc;
 use storage::LocalStorage;
@@ -46,6 +47,7 @@ pub struct BackgroundBip39Params<'a> {
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub network: &'a [usize],
+    pub wallet_settings: WalletSettings,
     pub accounts: &'a [(Bip49DerivationPath, String)],
 }
 
@@ -57,6 +59,7 @@ pub struct BackgroundSKParams<'a> {
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub network: Vec<usize>,
+    pub wallet_settings: WalletSettings,
 }
 
 pub struct Background {
@@ -169,20 +172,20 @@ impl Background {
         device_indicators: &[String],
         wallet_index: usize,
     ) -> Result<[u8; SHA512_SIZE]> {
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            password.as_bytes(),
-            &device_indicator,
-            &self.settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonPasswordHashError)?;
         let wallet = self
             .wallets
             .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            password.as_bytes(),
+            &device_indicator,
+            &wallet.data.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonPasswordHashError)?;
 
         wallet
-            .unlock(&argon_seed, &self.settings.argon_params)
+            .unlock(&argon_seed)
             .map_err(BackgroundError::FailUnlockWallet)?;
 
         Ok(argon_seed)
@@ -207,11 +210,12 @@ impl Background {
             &wallet_device_indicators,
             session_cipher,
             &wallet.data.settings.cipher_orders,
+            &wallet.data.settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::DecryptSessionError)?;
 
         wallet
-            .unlock(&seed_bytes, &self.settings.argon_params)
+            .unlock(&seed_bytes)
             .map_err(BackgroundError::FailUnlockWallet)?;
 
         Ok(seed_bytes)
@@ -222,7 +226,7 @@ impl Background {
         let argon_seed = argon2::derive_key(
             params.password.as_bytes(),
             &device_indicator,
-            &self.settings.argon_params.into_config(),
+            &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
@@ -232,13 +236,13 @@ impl Background {
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
-            &self.settings.argon_params.into_config(),
+            &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
-            settings: Default::default(), // TODO: setup settings
+            settings: params.wallet_settings,
         };
         let wallet = Wallet::from_bip39_words(Bip39Params {
             proof: &proof,
@@ -264,6 +268,7 @@ impl Background {
                 &device_indicator,
                 &argon_seed,
                 &wallet.data.settings.cipher_orders,
+                &wallet.data.settings.argon_params.into_config(),
             )
             .map_err(BackgroundError::CreateSessionError)?
         };
@@ -285,6 +290,7 @@ impl Background {
     pub fn add_ledger_wallet(
         &mut self,
         params: LedgerParams,
+        wallet_settings: WalletSettings,
         device_indicators: &[String],
     ) -> Result<Vec<u8>> {
         if self
@@ -301,7 +307,7 @@ impl Background {
         let argon_seed = argon2::derive_key(
             device_indicator.as_bytes(),
             &device_indicator,
-            &self.settings.argon_params.into_config(),
+            &wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
@@ -309,13 +315,13 @@ impl Background {
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
-            &self.settings.argon_params.into_config(),
+            &wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
-            settings: Default::default(), // TODO: setup settings
+            settings: wallet_settings,
         };
         let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_ledger(params, &proof, wallet_config)
@@ -325,8 +331,13 @@ impl Background {
             .chain(device_indicators.iter().cloned())
             .collect::<Vec<_>>()
             .join(":");
-        let session = encrypt_session(&device_indicator, &argon_seed, options)
-            .map_err(BackgroundError::CreateSessionError)?;
+        let session = encrypt_session(
+            &device_indicator,
+            &argon_seed,
+            options,
+            &wallet.data.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::CreateSessionError)?;
 
         wallet
             .save_to_storage()
@@ -347,7 +358,7 @@ impl Background {
         let argon_seed = argon2::derive_key(
             params.password.as_bytes(),
             &device_indicator,
-            &self.settings.argon_params.into_config(),
+            &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
@@ -355,13 +366,13 @@ impl Background {
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
-            &self.settings.argon_params.into_config(),
+            &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
-            settings: Default::default(), // TODO: setup settings
+            settings: params.wallet_settings,
         };
         let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_sk(
@@ -384,8 +395,13 @@ impl Background {
         let session = if wallet.data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
-            encrypt_session(&device_indicator, &argon_seed, options)
-                .map_err(BackgroundError::CreateSessionError)?
+            encrypt_session(
+                &device_indicator,
+                &argon_seed,
+                options,
+                &wallet.data.settings.argon_params.into_config(),
+            )
+            .map_err(BackgroundError::CreateSessionError)?
         };
 
         wallet
@@ -762,6 +778,7 @@ mod tests_background {
                 network: &network,
                 mnemonic_str: words,
                 accounts: &accounts,
+                wallet_settings: Default::default(),
                 passphrase: "",
                 wallet_name: String::new(),
                 biometric_type: Default::default(),
@@ -781,6 +798,7 @@ mod tests_background {
                 network: &network,
                 mnemonic_str: words,
                 accounts: &accounts,
+                wallet_settings: Default::default(),
                 passphrase: "",
                 wallet_name: String::new(),
                 biometric_type: Default::default(),
@@ -802,6 +820,7 @@ mod tests_background {
                 network: &network,
                 accounts: &accounts,
                 mnemonic_str: words,
+                wallet_settings: Default::default(),
                 passphrase: "",
                 wallet_name: String::new(),
                 device_indicators: &[String::from("apple"), String::from("43498")],
@@ -846,6 +865,7 @@ mod tests_background {
                 password,
                 mnemonic_str: words,
                 accounts: &accounts,
+                wallet_settings: Default::default(),
                 passphrase: "",
                 wallet_name: String::new(),
                 biometric_type: AuthMethod::FaceId,
@@ -869,6 +889,7 @@ mod tests_background {
             &wallet_device_indicators,
             session,
             &wallet.data.settings.cipher_orders,
+            &wallet.data.settings.argon_params.into_config(),
         )
         .unwrap();
 
@@ -915,10 +936,12 @@ mod tests_background {
                     pub_key: &pub_key,
                     name: String::from("account 0"),
                     ledger_id,
+
                     wallet_index: 0,
                     wallet_name: String::from("Ledger nano x"),
                     biometric_type: AuthMethod::FaceId,
                 },
+                Default::default(),
                 &device_indicators,
             )
             .unwrap();
@@ -963,6 +986,7 @@ mod tests_background {
                 wallet_name: String::from("Ledger nano x"),
                 biometric_type: AuthMethod::FaceId,
             },
+            Default::default(),
             &device_indicators,
         )
         .unwrap();
@@ -978,6 +1002,7 @@ mod tests_background {
                     wallet_name: String::from("Ledger nano x"),
                     biometric_type: AuthMethod::FaceId,
                 },
+                Default::default(),
                 &device_indicators,
             ),
             Err(BackgroundError::LedgerIdExists(
@@ -1006,6 +1031,7 @@ mod tests_background {
                 password,
                 secret_key: &sk,
                 account_name: name,
+                wallet_settings: Default::default(),
                 wallet_name: "test_wallet name".to_string(),
                 biometric_type: AuthMethod::Fingerprint,
                 device_indicators: &device_indicators,
@@ -1026,6 +1052,7 @@ mod tests_background {
             &wallet_device_indicators,
             session,
             &wallet.data.settings.cipher_orders,
+            &wallet.data.settings.argon_params.into_config(),
         )
         .unwrap();
 
@@ -1214,6 +1241,7 @@ mod tests_background {
             network: &network,
             mnemonic_str: words,
             accounts: &accounts,
+            wallet_settings: Default::default(),
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
@@ -1240,6 +1268,7 @@ mod tests_background {
                 wallet_name: String::from("Ledger nano x"),
                 biometric_type: AuthMethod::FaceId,
             },
+            Default::default(),
             &device_indicators,
         )
         .unwrap();

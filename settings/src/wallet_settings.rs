@@ -138,8 +138,9 @@ mod wallet_settings_tests {
         let mut features = WalletFeatures::default();
 
         // Test currency conversion modification
-        features.currency_convert = Some("USD".to_string());
-        assert_eq!(features.currency_convert, Some("USD".to_string()));
+        let usd = "USD";
+        features.currency_convert = Some(usd.to_string());
+        assert_eq!(features.currency_convert, Some(usd.to_string()));
 
         // Test ENS disabling
         features.ens_enabled = false;
@@ -155,7 +156,7 @@ mod wallet_settings_tests {
         let mut network = NetworkSettings::default();
 
         // Test gas control modification
-        network.gas_control_enabled = false;
+        // network.gas_control_enabled = false;
         assert!(!network.gas_control_enabled);
 
         // Test node ranking modification
