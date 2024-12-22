@@ -10,9 +10,9 @@ use rand_chacha::ChaChaRng;
 use std::sync::Arc;
 use zil_errors::ntru::NTRULPCipherErrors;
 
-pub fn ntru_keys_from_seed(
-    seed_bytes: &[u8; SHA512_SIZE],
-) -> Result<(PubKey, PrivKey), NTRULPCipherErrors> {
+type Result<T> = std::result::Result<T, NTRULPCipherErrors>;
+
+pub fn ntru_keys_from_seed(seed_bytes: &[u8; SHA512_SIZE]) -> Result<(PubKey, PrivKey)> {
     let seed_pq: [u8; SHA256_SIZE] = seed_bytes[..SHA256_SIZE]
         .try_into()
         .or(Err(NTRULPCipherErrors::InvalidSeedPQBytesSize))?;
@@ -34,14 +34,14 @@ pub fn ntru_keys_from_seed(
     Ok((pk, sk))
 }
 
-pub fn ntru_encrypt(pk: PubKey, plaintext: &[u8]) -> Result<Vec<u8>, NTRULPCipherErrors> {
+pub fn ntru_encrypt(pk: PubKey, plaintext: &[u8]) -> Result<Vec<u8>> {
     let mut pq_rng = ChaChaRng::from_entropy();
 
     ntru::std_cipher::bytes_encrypt(&mut pq_rng, plaintext, pk)
         .map_err(NTRULPCipherErrors::EncryptError)
 }
 
-pub fn ntru_decrypt(sk: PrivKey, ciphertext: Vec<u8>) -> Result<Vec<u8>, NTRULPCipherErrors> {
+pub fn ntru_decrypt(sk: PrivKey, ciphertext: Vec<u8>) -> Result<Vec<u8>> {
     let ciphertext = Arc::new(ciphertext);
 
     ntru::std_cipher::bytes_decrypt(&ciphertext, sk).map_err(NTRULPCipherErrors::DecryptError)

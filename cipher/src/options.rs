@@ -3,6 +3,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 use zil_errors::cipher::CipherErrors;
 
+type Result<T> = std::result::Result<T, CipherErrors>;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CipherOrders {
     AESGCM256,
@@ -10,7 +12,7 @@ pub enum CipherOrders {
 }
 
 impl CipherOrders {
-    pub fn from_code(code: u8) -> Result<Self, CipherErrors> {
+    pub fn from_code(code: u8) -> Result<Self> {
         match code {
             0 => Ok(CipherOrders::AESGCM256),
             1 => Ok(CipherOrders::NTRUP1277),
@@ -34,7 +36,7 @@ impl ToVecBytes for CipherOrders {
 
 impl FromBytes for CipherOrders {
     type Error = CipherErrors;
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
         Self::from_code(bytes[0])
     }
 }
@@ -49,7 +51,7 @@ impl std::fmt::Display for CipherOrders {
 impl FromStr for CipherOrders {
     type Err = CipherErrors;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         let bytes = hex::decode(s).or(Err(CipherErrors::InvalidTypeCode))?;
 
         Self::from_code(bytes[0])
@@ -57,7 +59,10 @@ impl FromStr for CipherOrders {
 }
 
 impl Serialize for CipherOrders {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(
+        &self,
+        serializer: S,
+    ) -> std::result::Result<<S as serde::Serializer>::Ok, <S as serde::Serializer>::Error>
     where
         S: Serializer,
     {
@@ -66,7 +71,7 @@ impl Serialize for CipherOrders {
 }
 
 impl<'de> Deserialize<'de> for CipherOrders {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
