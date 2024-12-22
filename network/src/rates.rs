@@ -1,9 +1,10 @@
+use crate::Result;
 use config::provider::ZILPAY_RATES_SCILLA_API;
 use reqwest;
 use serde_json::Value;
 use zil_errors::network::NetworkErrors;
 
-pub async fn fetch_rates() -> Result<Value, NetworkErrors> {
+pub async fn fetch_rates() -> Result<Value> {
     let client = reqwest::Client::new();
 
     let response = client

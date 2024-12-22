@@ -1,3 +1,4 @@
+use crate::Result;
 use alloy::{
     dyn_abi::{DynSolValue, FunctionExt, JsonAbiExt},
     hex,
@@ -15,11 +16,11 @@ use zilliqa::json_rpc::{
 };
 
 trait ResponseValidator {
-    fn validate(&self) -> Result<&Self, NetworkErrors>;
+    fn validate(&self) -> Result<&Self>;
 }
 
 impl<T> ResponseValidator for ResultRes<T> {
-    fn validate(&self) -> Result<&Self, NetworkErrors> {
+    fn validate(&self) -> Result<&Self> {
         if let Some(error) = &self.error {
             let error_msg = format!(
                 "JSON-RPC error (code: {}): {}{}",
@@ -39,7 +40,7 @@ impl<T> ResponseValidator for ResultRes<T> {
 }
 
 // Type alias for clarity
-type RequestResult<'a> = Result<Vec<(Value, RequestType<'a>)>, NetworkErrors>;
+type RequestResult<'a> = std::result::Result<Vec<(Value, RequestType<'a>)>, NetworkErrors>;
 
 #[derive(Debug)]
 pub enum RequestType<'a> {
@@ -70,7 +71,7 @@ struct ERC20Helper {
 }
 
 impl ERC20Helper {
-    fn new() -> Result<Self, NetworkErrors> {
+    fn new() -> Result<Self> {
         Ok(Self {
             abi: serde_json::from_str(ERC20_ABI).map_err(|e| {
                 NetworkErrors::ABIError(format!("Failed to parse ERC20 ABI: {}", e))
@@ -78,7 +79,7 @@ impl ERC20Helper {
         })
     }
 
-    fn get_function(&self, name: &str) -> Result<&Function, NetworkErrors> {
+    fn get_function(&self, name: &str) -> Result<&Function> {
         self.abi
             .function(name)
             .and_then(|f| f.first())
@@ -87,11 +88,7 @@ impl ERC20Helper {
             })
     }
 
-    fn encode_function_call(
-        &self,
-        name: &str,
-        inputs: &[DynSolValue],
-    ) -> Result<String, NetworkErrors> {
+    fn encode_function_call(&self, name: &str, inputs: &[DynSolValue]) -> Result<String> {
         let func = self.get_function(name)?;
         Ok(format!(
             "0x{}",
@@ -128,7 +125,7 @@ fn build_zil_requests<'a>(
     accounts: &[&'a Address],
     native: bool,
     requests: &mut Vec<(Value, RequestType<'a>)>,
-) -> Result<(), NetworkErrors> {
+) -> Result<()> {
     let base16_contract = contract
         .get_zil_base16()
         .map_err(NetworkErrors::InvalidZilAddress)?;
@@ -171,7 +168,7 @@ fn build_eth_requests<'a>(
     accounts: &[&'a Address],
     native: bool,
     requests: &mut Vec<(Value, RequestType<'a>)>,
-) -> Result<(), NetworkErrors> {
+) -> Result<()> {
     let token_addr = contract
         .to_eth_checksummed()
         .map_err(NetworkErrors::InvalidETHAddress)?;
@@ -222,7 +219,7 @@ fn build_eth_requests<'a>(
 pub fn process_eth_metadata_response(
     response: &ResultRes<Value>,
     field_type: &MetadataField,
-) -> Result<String, NetworkErrors> {
+) -> Result<String> {
     if let Some(error) = &response.error {
         return Err(NetworkErrors::RPCError(format!(
             "JSON-RPC error (code: {}): {}{}",
@@ -267,18 +264,16 @@ pub fn process_eth_metadata_response(
     }
 }
 
-pub fn process_zil_metadata_response(
-    init_res: &Value,
-) -> Result<(String, String, u8), NetworkErrors> {
+pub fn process_zil_metadata_response(init_res: &Value) -> Result<(String, String, u8)> {
     let res_init: Vec<GetTokenInitItem> = init_res
         .as_array()
         .ok_or(NetworkErrors::InvalidContractInit)?
         .iter()
         .map(|v| v.try_into())
-        .collect::<Result<_, _>>()
+        .collect::<std::result::Result<_, _>>()
         .map_err(NetworkErrors::TokenParseError)?;
 
-    let get_field = |field: &str| -> Result<String, NetworkErrors> {
+    let get_field = |field: &str| -> Result<String> {
         res_init
             .iter()
             .find(|v| v.vname == field)
@@ -295,7 +290,7 @@ pub fn process_zil_metadata_response(
     Ok((name, symbol, decimals))
 }
 
-pub fn process_eth_balance_response(response: &ResultRes<Value>) -> Result<U256, NetworkErrors> {
+pub fn process_eth_balance_response(response: &ResultRes<Value>) -> Result<U256> {
     let response = response.validate()?;
 
     response
