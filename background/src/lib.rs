@@ -170,15 +170,19 @@ impl Background {
         wallet_index: usize,
     ) -> Result<[u8; SHA512_SIZE]> {
         let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(password.as_bytes(), &device_indicator)
-            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let argon_seed = argon2::derive_key(
+            password.as_bytes(),
+            &device_indicator,
+            &self.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonPasswordHashError)?;
         let wallet = self
             .wallets
             .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
 
         wallet
-            .unlock(&argon_seed)
+            .unlock(&argon_seed, &self.settings.argon_params)
             .map_err(BackgroundError::FailUnlockWallet)?;
 
         Ok(argon_seed)
@@ -207,7 +211,7 @@ impl Background {
         .map_err(BackgroundError::DecryptSessionError)?;
 
         wallet
-            .unlock(&seed_bytes)
+            .unlock(&seed_bytes, &self.settings.argon_params)
             .map_err(BackgroundError::FailUnlockWallet)?;
 
         Ok(seed_bytes)
@@ -215,14 +219,22 @@ impl Background {
 
     pub fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
         let device_indicator = params.device_indicators.join(":");
-        let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
-            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let argon_seed = argon2::derive_key(
+            params.password.as_bytes(),
+            &device_indicator,
+            &self.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
         let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
             .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?;
-        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT)
-            .map_err(BackgroundError::ArgonCreateProofError)?;
+        let proof = argon2::derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &self.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
@@ -286,12 +298,20 @@ impl Background {
         }
 
         let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(device_indicator.as_bytes(), &device_indicator)
-            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let argon_seed = argon2::derive_key(
+            device_indicator.as_bytes(),
+            &device_indicator,
+            &self.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
-        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT)
-            .map_err(BackgroundError::ArgonCreateProofError)?;
+        let proof = argon2::derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &self.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
@@ -324,12 +344,20 @@ impl Background {
 
     pub fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
         let device_indicator = params.device_indicators.join(":");
-        let argon_seed = argon2::derive_key(params.password.as_bytes(), &device_indicator)
-            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let argon_seed = argon2::derive_key(
+            params.password.as_bytes(),
+            &device_indicator,
+            &self.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
-        let proof = argon2::derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT)
-            .map_err(BackgroundError::ArgonCreateProofError)?;
+        let proof = argon2::derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &self.settings.argon_params.into_config(),
+        )
+        .map_err(BackgroundError::ArgonCreateProofError)?;
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),

@@ -7,7 +7,7 @@ pub mod wallet_types;
 use std::sync::Arc;
 
 use account_type::AccountType;
-use cipher::argon2::derive_key;
+use cipher::argon2::{derive_key, Argon2Seed};
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use config::storage::FTOKENS_DB_KEY;
@@ -26,6 +26,7 @@ use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use config::wallet::{N_BYTES_HASH, N_SALT};
 use crypto::bip49::Bip49DerivationPath;
+use settings::argon2::ArgonParams;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
@@ -485,8 +486,8 @@ impl Wallet {
             .map_err(WalletErrors::FailToSignTransaction)
     }
 
-    pub fn unlock(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<()> {
-        self.unlock_iternel(seed_bytes)?;
+    pub fn unlock(&mut self, seed_bytes: &Argon2Seed, argon2_params: &ArgonParams) -> Result<()> {
+        self.unlock_iternel(seed_bytes, argon2_params)?;
 
         let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
         let ftokens: Vec<FToken> = serde_json::from_slice(&bytes).unwrap_or_default();
@@ -508,7 +509,11 @@ impl Wallet {
         Ok(())
     }
 
-    fn unlock_iternel(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<KeyChain> {
+    fn unlock_iternel(
+        &mut self,
+        seed_bytes: &Argon2Seed,
+        argon2_params: &ArgonParams,
+    ) -> Result<KeyChain> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
         let proof_key = usize::to_le_bytes(self.data.proof_key);
@@ -521,7 +526,8 @@ impl Wallet {
             .get_proof(&cipher_proof, &self.data.settings.cipher_orders)
             .or(Err(WalletErrors::KeyChainFailToGetProof))?;
 
-        let proof = derive_key(&seed_bytes[..PROOF_SIZE], PROOF_SALT)
+        let argon2_config = argon2_params.into_config();
+        let proof = derive_key(&seed_bytes[..PROOF_SIZE], PROOF_SALT, &argon2_config)
             .map_err(WalletErrors::ArgonCipherErrors)?;
 
         if proof != origin_proof {
@@ -612,7 +618,10 @@ mod tests {
     use std::{collections::HashMap, sync::Arc};
 
     use bip39::Mnemonic;
-    use cipher::{argon2::derive_key, keychain::KeyChain};
+    use cipher::{
+        argon2::{derive_key, ARGON2_DEFAULT_CONFIG},
+        keychain::KeyChain,
+    };
     use config::{
         argon::KEY_SIZE,
         cipher::{PROOF_SALT, PROOF_SIZE},
@@ -637,7 +646,7 @@ mod tests {
 
     #[test]
     fn test_init_from_bip39_zil() {
-        let argon_seed = derive_key(PASSWORD, "").unwrap();
+        let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let storage = LocalStorage::new(
             "com.test_write_wallet",
             "WriteTest Wallet Corp",
@@ -650,7 +659,7 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             .map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], "").unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&storage),
@@ -694,8 +703,8 @@ mod tests {
 
     #[test]
     fn test_init_from_sk() {
-        let argon_seed = derive_key(PASSWORD, "").unwrap();
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], "").unwrap();
+        let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let storage = LocalStorage::from(&dir).unwrap();
@@ -741,8 +750,13 @@ mod tests {
     #[test]
     fn test_add_and_load_tokens() {
         // Setup initial wallet with secret key
-        let argon_seed = derive_key(PASSWORD, PROOF_SALT).unwrap();
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT).unwrap();
+        let argon_seed = derive_key(PASSWORD, PROOF_SALT, &ARGON2_DEFAULT_CONFIG).unwrap();
+        let proof = derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &ARGON2_DEFAULT_CONFIG,
+        )
+        .unwrap();
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let storage = LocalStorage::from(&dir).unwrap();
@@ -809,7 +823,9 @@ mod tests {
         assert_eq!(loaded_wallet.ftokens.len(), 0);
 
         // Unlock wallet - should restore tokens
-        loaded_wallet.unlock(&argon_seed).unwrap();
+        loaded_wallet
+            .unlock(&argon_seed, &Default::default())
+            .unwrap();
 
         // Verify tokens were restored correctly
         assert_eq!(loaded_wallet.ftokens.len(), 2);
@@ -828,8 +844,13 @@ mod tests {
     #[test]
     fn test_multiple_custom_tokens() {
         // Setup wallet similar to previous test
-        let argon_seed = derive_key(PASSWORD, PROOF_SALT).unwrap();
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT).unwrap();
+        let argon_seed = derive_key(PASSWORD, PROOF_SALT, &ARGON2_DEFAULT_CONFIG).unwrap();
+        let proof = derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &ARGON2_DEFAULT_CONFIG,
+        )
+        .unwrap();
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let storage = LocalStorage::from(&dir).unwrap();
@@ -906,7 +927,9 @@ mod tests {
 
         let mut loaded_wallet =
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-        loaded_wallet.unlock(&argon_seed).unwrap();
+        loaded_wallet
+            .unlock(&argon_seed, &Default::default())
+            .unwrap();
 
         // Verify all tokens were restored
         assert_eq!(loaded_wallet.ftokens.len(), 4);
@@ -928,8 +951,13 @@ mod tests {
     #[test]
     fn test_remove_tokens() {
         // Setup wallet
-        let argon_seed = derive_key(PASSWORD, PROOF_SALT).unwrap();
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], PROOF_SALT).unwrap();
+        let argon_seed = derive_key(PASSWORD, PROOF_SALT, &ARGON2_DEFAULT_CONFIG).unwrap();
+        let proof = derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &ARGON2_DEFAULT_CONFIG,
+        )
+        .unwrap();
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let storage = LocalStorage::from(&dir).unwrap();
@@ -1019,7 +1047,9 @@ mod tests {
 
         let mut loaded_wallet =
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-        loaded_wallet.unlock(&argon_seed).unwrap();
+        loaded_wallet
+            .unlock(&argon_seed, &Default::default())
+            .unwrap();
 
         // Verify state after reload
         assert_eq!(loaded_wallet.ftokens.len(), 3);
@@ -1037,7 +1067,9 @@ mod tests {
         wallet.save_to_storage().unwrap();
         let mut loaded_wallet2 =
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-        loaded_wallet2.unlock(&argon_seed).unwrap();
+        loaded_wallet2
+            .unlock(&argon_seed, &Default::default())
+            .unwrap();
 
         // Default token should be restored
         assert_eq!(loaded_wallet2.ftokens.len(), 3);
@@ -1050,7 +1082,7 @@ mod tests {
     #[test]
     fn test_select_account() {
         // Setup initial wallet with bip39 for multiple accounts
-        let argon_seed = derive_key(PASSWORD, "").unwrap();
+        let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let storage = LocalStorage::new(
             "com.test_select_account",
             "SelectTest Wallet Corp",
@@ -1065,7 +1097,7 @@ mod tests {
         // Create wallet with 3 accounts
         let indexes = [0, 1, 2].map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
 
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], "").unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&storage),

@@ -21,7 +21,7 @@ members = [
   "config",
   "crypto",
   "network",
-  "proto",
+  "proto", "session",
   "settings",
   "storage",
   "wallet",

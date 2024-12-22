@@ -1,0 +1,11 @@
+[package]
+name = "session"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand_chacha.workspace = true
+rand.workspace = true
+zil_errors = { path = "../zil_errors" }
+cipher = { path = "../cipher" }
+config = { path = "../config" }

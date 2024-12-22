@@ -19,3 +19,4 @@ crypto = { path = "../crypto" }
 proto = { path = "../proto" }
 cipher = { path = "../cipher" }
 network = { path = "../network" }
+session = { path = "../session" }

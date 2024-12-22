@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::{
     cipher::CipherErrors, keychain::KeyChainErrors, keypair::KeyPairError, network::NetworkErrors,
-    storage::LocalStorageError, wallet::WalletErrors,
+    session::SessionErrors, storage::LocalStorageError, wallet::WalletErrors,
 };
 
 #[derive(Debug, Error, PartialEq)]
@@ -15,6 +15,12 @@ pub enum BackgroundError {
 
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,
+
+    #[error("Failed to decrypt session: {0}")]
+    DecryptSessionError(SessionErrors),
+
+    #[error("Failed to create session: {0}")]
+    CreateSessionError(SessionErrors),
 
     #[error("failt to serialize address book")]
     FailToSerializeAddressBook,
