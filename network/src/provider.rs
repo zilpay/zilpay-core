@@ -1,3 +1,4 @@
+use crate::Result;
 use alloy::primitives::U256;
 use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
 use proto::address::Address;
@@ -42,7 +43,7 @@ impl NetworkProvider {
         }
     }
 
-    pub async fn update_nodes(&mut self) -> Result<(), NetworkErrors> {
+    pub async fn update_nodes(&mut self) -> Result<()> {
         match self {
             NetworkProvider::Zilliqa(zil) => {
                 zil.update_scilla_nodes()
@@ -61,7 +62,7 @@ impl NetworkProvider {
         &self,
         contract: &Address,
         accounts: &[&Address],
-    ) -> Result<FToken, NetworkErrors> {
+    ) -> Result<FToken> {
         match self {
             NetworkProvider::Ethereum => {
                 unreachable!()
@@ -173,7 +174,7 @@ impl NetworkProvider {
         &self,
         tokens: &mut [FToken],
         accounts: &[&Address],
-    ) -> Result<(), NetworkErrors> {
+    ) -> Result<()> {
         match self {
             NetworkProvider::Ethereum => {
                 unreachable!()

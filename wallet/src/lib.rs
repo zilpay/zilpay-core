@@ -33,6 +33,9 @@ use wallet_data::{AuthMethod, WalletData};
 use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
 
+type Result<T> = std::result::Result<T, WalletErrors>;
+type WalletAddrType = [u8; SHA256_SIZE];
+
 pub struct WalletConfig {
     pub storage: Arc<LocalStorage>,
     pub keychain: KeyChain,
@@ -66,10 +69,7 @@ pub struct Wallet {
     pub ftokens: Vec<FToken>,
 }
 
-fn safe_storage_save(
-    cipher_entropy: &[u8],
-    storage: Arc<LocalStorage>,
-) -> Result<usize, WalletErrors> {
+fn safe_storage_save(cipher_entropy: &[u8], storage: Arc<LocalStorage>) -> Result<usize> {
     let mut rng = ChaCha20Rng::from_entropy();
     let mut cipher_entropy_key: usize;
 
@@ -98,10 +98,7 @@ impl Wallet {
     pub const ZIL_DEFAULT_TOKENS: usize = 1;
     pub const ETH_DEFAULT_TOKENS: usize = 1;
 
-    pub fn load_from_storage(
-        key: &[u8; SHA256_SIZE],
-        storage: Arc<LocalStorage>,
-    ) -> Result<Self, WalletErrors> {
+    pub fn load_from_storage(key: &[u8; SHA256_SIZE], storage: Arc<LocalStorage>) -> Result<Self> {
         let data = storage
             .get(key)
             .map_err(WalletErrors::FailToLoadWalletData)?;
@@ -120,7 +117,7 @@ impl Wallet {
         params: LedgerParams,
         proof: &[u8; KEY_SIZE],
         config: WalletConfig,
-    ) -> Result<Self, WalletErrors> {
+    ) -> Result<Self> {
         // TODO: add cipher for encrypt account index.
         let cipher_proof = config
             .keychain
@@ -177,7 +174,7 @@ impl Wallet {
         wallet_name: String,
         biometric_type: AuthMethod,
         network: Vec<usize>,
-    ) -> Result<Self, WalletErrors> {
+    ) -> Result<Self> {
         let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
 
@@ -232,7 +229,7 @@ impl Wallet {
         })
     }
 
-    pub fn from_bip39_words(params: Bip39Params) -> Result<Self, WalletErrors> {
+    pub fn from_bip39_words(params: Bip39Params) -> Result<Self> {
         let cipher_entropy = params
             .config
             .keychain
@@ -307,7 +304,7 @@ impl Wallet {
         account_index: usize,
         seed_bytes: &[u8; KEY_SIZE],
         passphrase: Option<&str>,
-    ) -> Result<KeyPair, WalletErrors> {
+    ) -> Result<KeyPair> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
         match self.data.wallet_type {
@@ -359,7 +356,7 @@ impl Wallet {
         name: String,
         pub_key: &PubKey,
         index: usize,
-    ) -> Result<(), WalletErrors> {
+    ) -> Result<()> {
         let has_account = self
             .data
             .accounts
@@ -389,7 +386,7 @@ impl Wallet {
         bip49: &Bip49DerivationPath,
         passphrase: &str,
         seed_bytes: &[u8; KEY_SIZE],
-    ) -> Result<(), WalletErrors> {
+    ) -> Result<()> {
         match self.data.wallet_type {
             WalletTypes::SecretPhrase((key, _)) => {
                 let keychain =
@@ -428,7 +425,7 @@ impl Wallet {
         }
     }
 
-    pub fn reveal_mnemonic(&self, seed_bytes: &[u8; KEY_SIZE]) -> Result<Mnemonic, WalletErrors> {
+    pub fn reveal_mnemonic(&self, seed_bytes: &[u8; KEY_SIZE]) -> Result<Mnemonic> {
         match self.data.wallet_type {
             WalletTypes::SecretPhrase((key, _)) => {
                 let keychain =
@@ -457,7 +454,7 @@ impl Wallet {
         account_index: usize,
         seed_bytes: &[u8; KEY_SIZE],
         passphrase: Option<&str>,
-    ) -> Result<Signature, WalletErrors> {
+    ) -> Result<Signature> {
         let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let sig = keypair
             .sign_message(msg)
@@ -479,7 +476,7 @@ impl Wallet {
         account_index: usize,
         seed_bytes: &[u8; KEY_SIZE],
         passphrase: Option<&str>,
-    ) -> Result<TransactionReceipt, WalletErrors> {
+    ) -> Result<TransactionReceipt> {
         let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
         keypair
@@ -488,7 +485,7 @@ impl Wallet {
             .map_err(WalletErrors::FailToSignTransaction)
     }
 
-    pub fn unlock(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<(), WalletErrors> {
+    pub fn unlock(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<()> {
         self.unlock_iternel(seed_bytes)?;
 
         let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
@@ -511,7 +508,7 @@ impl Wallet {
         Ok(())
     }
 
-    fn unlock_iternel(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<KeyChain, WalletErrors> {
+    fn unlock_iternel(&mut self, seed_bytes: &[u8; KEY_SIZE]) -> Result<KeyChain> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
         let proof_key = usize::to_le_bytes(self.data.proof_key);
@@ -534,7 +531,7 @@ impl Wallet {
         Ok(keychain)
     }
 
-    pub fn select_account(&mut self, account_index: usize) -> Result<(), WalletErrors> {
+    pub fn select_account(&mut self, account_index: usize) -> Result<()> {
         if self.data.accounts.is_empty() {
             return Err(WalletErrors::NoAccounts);
         }
@@ -549,7 +546,7 @@ impl Wallet {
         Ok(())
     }
 
-    pub fn add_ftoken(&mut self, token: FToken) -> Result<(), WalletErrors> {
+    pub fn add_ftoken(&mut self, token: FToken) -> Result<()> {
         self.ftokens.push(token);
 
         let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
@@ -565,7 +562,7 @@ impl Wallet {
         Ok(())
     }
 
-    pub fn remove_ftoken(&mut self, index: usize) -> Result<(), WalletErrors> {
+    pub fn remove_ftoken(&mut self, index: usize) -> Result<()> {
         if self.ftokens.get(index).is_none() {
             return Err(WalletErrors::TokenNotExists(index));
         }
@@ -585,7 +582,7 @@ impl Wallet {
         Ok(())
     }
 
-    pub fn save_to_storage(&self) -> Result<(), WalletErrors> {
+    pub fn save_to_storage(&self) -> Result<()> {
         let json_bytes =
             serde_json::to_vec(&self.data).or(Err(WalletErrors::FailToSerializeWalletData))?;
         let key = self.key()?;
@@ -601,7 +598,7 @@ impl Wallet {
     }
 
     #[inline]
-    pub fn key(&self) -> Result<[u8; SHA256_SIZE], WalletErrors> {
+    pub fn key(&self) -> Result<WalletAddrType> {
         hex::decode(&self.data.wallet_address)
             .or(Err(WalletErrors::InvalidWalletAddressHex))?
             .try_into()
