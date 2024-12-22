@@ -5,7 +5,7 @@ use crate::{
     session::SessionErrors, storage::LocalStorageError, wallet::WalletErrors,
 };
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum BackgroundError {
     #[error("Fail, network error: {0}")]
     NetworkErrors(NetworkErrors),

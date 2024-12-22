@@ -3,7 +3,7 @@ use crate::{cipher::AesGCMErrors, ntru::NTRULPCipherErrors};
 use ntrulp::key::kem_error::KemErrors;
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum KeyChainErrors {
     #[error("NTRU Prime cipher error")]
     NTRUPrimeCipherError(NTRULPCipherErrors),

@@ -7,7 +7,7 @@ use crate::{
 };
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum WalletErrors {
     #[error("No accounts available in wallet")]
     NoAccounts,

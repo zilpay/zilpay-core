@@ -1,9 +1,13 @@
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum CipherErrors {
     #[error("Argon key derivation error: {0}")]
-    ArgonKeyDerivingError(String),
+    ArgonKeyDerivingError(argon2::Error),
+
+    #[error("Argon hash is not valid size!")]
+    Argon2HashSizeNotValid,
+
     #[error("Invalid enum code")]
     InvalidTypeCode,
 }

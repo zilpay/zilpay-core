@@ -4,13 +4,13 @@ use aes_gcm::{
 };
 use zil_errors::cipher::AesGCMErrors;
 
+type Result<T> = std::result::Result<T, AesGCMErrors>;
+pub type AESKey = [u8; AES_GCM_KEY_SIZE];
+
 pub const AES_GCM_KEY_SIZE: usize = 32;
 pub const AES_GCM_NONCE_SIZE: usize = 12;
 
-pub fn aes_gcm_encrypt(
-    key: &[u8; AES_GCM_KEY_SIZE],
-    plaintext: &[u8],
-) -> Result<Vec<u8>, AesGCMErrors> {
+pub fn aes_gcm_encrypt(key: &AESKey, plaintext: &[u8]) -> Result<Vec<u8>> {
     let key: &Key<Aes256Gcm> = key.into();
     let cipher = Aes256Gcm::new(key);
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
@@ -23,10 +23,7 @@ pub fn aes_gcm_encrypt(
     Ok(bytes)
 }
 
-pub fn aes_gcm_decrypt(
-    key: &[u8; AES_GCM_KEY_SIZE],
-    cipher_nonce: &[u8],
-) -> Result<Vec<u8>, AesGCMErrors> {
+pub fn aes_gcm_decrypt(key: &AESKey, cipher_nonce: &[u8]) -> Result<Vec<u8>> {
     let key: &Key<Aes256Gcm> = key.into();
     let cipher = Aes256Gcm::new(key);
     let ciphertext = &cipher_nonce[..cipher_nonce.len() - AES_GCM_NONCE_SIZE];

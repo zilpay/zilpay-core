@@ -1,9 +1,10 @@
 use crate::{
-    aes::{aes_gcm_decrypt, aes_gcm_encrypt, AES_GCM_KEY_SIZE},
-    argon2::derive_key,
+    aes::{aes_gcm_decrypt, aes_gcm_encrypt, AESKey, AES_GCM_KEY_SIZE},
+    argon2::{derive_key, Argon2Seed},
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
     options::CipherOrders,
 };
+use argon2::Config as Argon2Config;
 use config::argon::KEY_SIZE;
 use config::sha::SHA256_SIZE;
 use ntrulp::{
@@ -42,10 +43,10 @@ impl KeyChain {
         })
     }
 
-    pub fn from_seed(seed_bytes: &[u8; KEY_SIZE]) -> Result<Self, KeyChainErrors> {
+    pub fn from_seed(seed_bytes: &Argon2Seed) -> Result<Self, KeyChainErrors> {
         let (pk, sk) =
             ntru_keys_from_seed(seed_bytes).map_err(KeyChainErrors::NTRUPrimeCipherError)?;
-        let aes_key: [u8; AES_GCM_KEY_SIZE] = seed_bytes[SHA256_SIZE..]
+        let aes_key: AESKey = seed_bytes[SHA256_SIZE..]
             .try_into()
             .or(Err(KeyChainErrors::AESKeySliceError))?;
 
@@ -55,9 +56,13 @@ impl KeyChain {
         })
     }
 
-    pub fn from_pass(password: &[u8], fingerprint: &str) -> Result<Self, KeyChainErrors> {
-        let seed_bytes =
-            derive_key(password, fingerprint).map_err(KeyChainErrors::Argon2CipherErrors)?;
+    pub fn from_pass(
+        password: &[u8],
+        fingerprint: &str,
+        argon_config: &Argon2Config,
+    ) -> Result<Self, KeyChainErrors> {
+        let seed_bytes = derive_key(password, fingerprint, argon_config)
+            .map_err(KeyChainErrors::Argon2CipherErrors)?;
 
         Self::from_seed(&seed_bytes)
     }
@@ -146,7 +151,7 @@ impl KeyChain {
 mod tests {
     use core::panic;
 
-    use crate::argon2::derive_key;
+    use crate::argon2::{derive_key, ARGON2_DEFAULT_CONFIG};
 
     use super::{CipherOrders, KeyChain};
     use config::cipher::PROOF_SIZE;
@@ -161,7 +166,7 @@ mod tests {
 
         rng.fill_bytes(&mut password);
 
-        let keychain = KeyChain::from_pass(&password, "");
+        let keychain = KeyChain::from_pass(&password, "", &ARGON2_DEFAULT_CONFIG);
 
         assert!(keychain.is_ok());
     }
@@ -175,7 +180,7 @@ mod tests {
         rng.fill_bytes(&mut password);
         rng.fill_bytes(&mut plaintext);
 
-        let keychain = KeyChain::from_pass(&password, "").unwrap();
+        let keychain = KeyChain::from_pass(&password, "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let bytes = keychain.to_bytes();
         let restore_keychain = KeyChain::from_bytes(&bytes).unwrap();
 
@@ -199,7 +204,7 @@ mod tests {
         rng.fill_bytes(&mut password);
         rng.fill_bytes(&mut plaintext);
 
-        let keychain = KeyChain::from_pass(&password, "").unwrap();
+        let keychain = KeyChain::from_pass(&password, "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let options = [CipherOrders::AESGCM256, CipherOrders::NTRUP1277];
         let ciphertext = keychain.encrypt(plaintext.to_vec(), &options).unwrap();
         let res_plaintext = keychain.decrypt(ciphertext.clone(), &options).unwrap();
@@ -227,9 +232,10 @@ mod tests {
         rng.fill_bytes(&mut password);
 
         let options = [CipherOrders::NTRUP1277, CipherOrders::AESGCM256];
-        let seed_bytes = derive_key(&password, "").unwrap();
+        let seed_bytes = derive_key(&password, "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let keychain = KeyChain::from_seed(&seed_bytes).unwrap();
-        let origin_proof = derive_key(&seed_bytes[..PROOF_SIZE], "").unwrap();
+        let origin_proof =
+            derive_key(&seed_bytes[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let proof_cipher = keychain.make_proof(&origin_proof, &options).unwrap();
         let proof = keychain.get_proof(&proof_cipher, &options).unwrap();
 

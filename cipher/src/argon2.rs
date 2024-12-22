@@ -1,37 +1,65 @@
-use argon2::Argon2;
-use config::argon::{KEY_SIZE, WALLET_SALT};
+use argon2::{self, Config, Variant, Version};
+use config::argon::{APP_ID, KEY_SIZE, WALLET_SALT};
 use zil_errors::cipher::CipherErrors;
 
-pub fn derive_key(password: &[u8], salt: &str) -> Result<[u8; KEY_SIZE], CipherErrors> {
-    let mut output_key_material = [0u8; KEY_SIZE];
-    let argon2 = Argon2::default();
-    let mut salt = salt.as_bytes().to_vec();
+type Result<T> = std::result::Result<T, CipherErrors>;
+pub type Argon2Seed = [u8; KEY_SIZE];
 
-    salt.extend_from_slice(WALLET_SALT);
+pub const ARGON2_DEFAULT_CONFIG: Config = Config {
+    variant: Variant::Argon2id,
+    version: Version::Version13,
+    mem_cost: 65536,
+    time_cost: 4,
+    lanes: 4,
+    secret: &[],
+    ad: APP_ID,
+    hash_length: 64,
+};
 
-    argon2
-        .hash_password_into(password, &salt, &mut output_key_material)
-        .map_err(|e| CipherErrors::ArgonKeyDerivingError(e.to_string()))?;
+pub fn derive_key(password: &[u8], salt: &str, config: &Config) -> Result<Argon2Seed> {
+    let salt_len = salt.as_bytes().len() + WALLET_SALT.len();
+    let mut combined_salt = Vec::with_capacity(salt_len);
+
+    combined_salt.extend_from_slice(salt.as_bytes());
+    combined_salt.extend_from_slice(WALLET_SALT);
+
+    let output_key_material: Argon2Seed = argon2::hash_raw(password, &combined_salt, config)
+        .map_err(CipherErrors::ArgonKeyDerivingError)?
+        .try_into()
+        .or(Err(CipherErrors::Argon2HashSizeNotValid))?;
 
     Ok(output_key_material)
 }
 
 #[cfg(test)]
 mod tests {
+    use argon2::{Config, Variant, Version};
+    use config::argon::APP_ID;
+
     use super::derive_key;
 
     #[test]
     fn test_derive_key() {
         let password = b"test_password";
-        let key = derive_key(password, "").unwrap();
+        let config = Config {
+            variant: Variant::Argon2id,
+            version: Version::Version13,
+            mem_cost: 65536,
+            time_cost: 1,
+            lanes: 2,
+            secret: &[],
+            ad: APP_ID,
+            hash_length: 64,
+        };
+        let key = derive_key(password, "some_salt", &config).unwrap();
 
         assert_eq!(
             key,
             [
-                105, 163, 39, 110, 187, 108, 209, 71, 192, 27, 68, 241, 118, 214, 246, 178, 29,
-                104, 200, 155, 198, 86, 120, 219, 16, 9, 228, 81, 190, 208, 236, 153, 9, 88, 58,
-                136, 123, 69, 67, 37, 202, 217, 182, 51, 253, 254, 173, 77, 100, 61, 52, 130, 148,
-                76, 1, 67, 38, 172, 203, 49, 163, 201, 103, 178,
+                241, 5, 105, 168, 214, 152, 5, 38, 199, 60, 34, 215, 245, 198, 217, 49, 108, 140,
+                86, 183, 92, 152, 168, 92, 64, 48, 241, 204, 238, 247, 198, 88, 18, 126, 75, 177,
+                211, 74, 244, 234, 39, 92, 32, 255, 148, 131, 9, 175, 213, 251, 48, 220, 238, 146,
+                16, 147, 132, 15, 46, 51, 176, 134, 238, 69
             ]
         )
     }

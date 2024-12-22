@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 ntrulp.workspace = true
 thiserror.workspace = true
+rust-argon2.workspace = true
+

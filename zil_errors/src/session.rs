@@ -1,7 +1,7 @@
 use crate::{cipher::CipherErrors, keychain::KeyChainErrors};
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum SessionErrors {
     #[error("Fail hashing with argon: {0}")]
     ArgonError(CipherErrors),
