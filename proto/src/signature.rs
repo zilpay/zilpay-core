@@ -8,6 +8,8 @@ use zil_errors::crypto::SignatureError;
 
 use crate::pubkey::PubKey;
 
+type Result<T> = std::result::Result<T, SignatureError>;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Signature {
     SchnorrSecp256k1Sha256([u8; SHA512_SIZE]), // Zilliqa
@@ -15,7 +17,7 @@ pub enum Signature {
 }
 
 impl Signature {
-    pub fn verify(&self, msg_bytes: &[u8], pk: &PubKey) -> Result<bool, SignatureError> {
+    pub fn verify(&self, msg_bytes: &[u8], pk: &PubKey) -> Result<bool> {
         match self {
             Signature::SchnorrSecp256k1Sha256(sig) => {
                 let sig = SchnorrSignature::from_slice(sig)
@@ -46,7 +48,7 @@ impl Signature {
 impl TryFrom<&[u8]> for Signature {
     type Error = SignatureError;
 
-    fn try_from(sig_bytes: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(sig_bytes: &[u8]) -> Result<Self> {
         if sig_bytes.len() == SHA256_SIZE {
             let buf: [u8; SHA512_SIZE] = sig_bytes
                 .try_into()
@@ -68,7 +70,7 @@ impl TryFrom<&[u8]> for Signature {
 impl TryFrom<EthersSignature> for Signature {
     type Error = SignatureError;
 
-    fn try_from(eth_sig: EthersSignature) -> Result<Self, Self::Error> {
+    fn try_from(eth_sig: EthersSignature) -> Result<Self> {
         let sig_bytes: [u8; ECDSAS_ECP256K1_KECCAK256_SIZE] = eth_sig.into();
 
         Ok(Signature::ECDSASecp256k1Keccak256(sig_bytes))
@@ -78,7 +80,7 @@ impl TryFrom<EthersSignature> for Signature {
 impl TryFrom<SchnorrSignature> for Signature {
     type Error = SignatureError;
 
-    fn try_from(sig: SchnorrSignature) -> Result<Self, Self::Error> {
+    fn try_from(sig: SchnorrSignature) -> Result<Self> {
         let sig_bytes: [u8; SHA512_SIZE] = sig.to_bytes().into();
 
         Ok(Signature::SchnorrSecp256k1Sha256(sig_bytes))

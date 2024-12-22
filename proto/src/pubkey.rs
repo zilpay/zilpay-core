@@ -9,6 +9,8 @@ use zil_errors::keypair::PubKeyError;
 use crate::address::Address;
 use crate::zil_address::from_zil_pub_key;
 
+type Result<T> = std::result::Result<T, PubKeyError>;
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum PubKey {
     Secp256k1Sha256Zilliqa([u8; PUB_KEY_SIZE]),     // ZILLIQA
@@ -18,7 +20,7 @@ pub enum PubKey {
 }
 
 impl PubKey {
-    pub fn from_hex(hex_str: &str) -> Result<Self, PubKeyError> {
+    pub fn from_hex(hex_str: &str) -> Result<Self> {
         let clean_hex = hex_str.strip_prefix("0x").unwrap_or(hex_str);
 
         Self::from_str(clean_hex)
@@ -26,7 +28,7 @@ impl PubKey {
 }
 
 impl PubKey {
-    pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN], PubKeyError> {
+    pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN]> {
         match self {
             PubKey::Secp256k1Keccak256Ethereum(pk) => {
                 let k256_pubkey = alloy::signers::k256::ecdsa::VerifyingKey::from_sec1_bytes(pk)
@@ -52,7 +54,7 @@ impl PubKey {
         }
     }
 
-    pub fn get_addr(&self) -> Result<Address, PubKeyError> {
+    pub fn get_addr(&self) -> Result<Address> {
         let buf = self.get_bytes_addr()?;
 
         match self {
@@ -67,7 +69,7 @@ impl PubKey {
 impl TryInto<K256PublicKey> for PubKey {
     type Error = PubKeyError;
 
-    fn try_into(self) -> Result<K256PublicKey, Self::Error> {
+    fn try_into(self) -> Result<K256PublicKey> {
         let pk =
             K256PublicKey::from_sec1_bytes(self.as_ref()).or(Err(PubKeyError::FailIntoPubKey))?;
 
@@ -78,14 +80,14 @@ impl TryInto<K256PublicKey> for PubKey {
 impl TryFrom<&PubKey> for K256PublicKey {
     type Error = PubKeyError;
 
-    fn try_from(pk: &PubKey) -> Result<Self, Self::Error> {
+    fn try_from(pk: &PubKey) -> Result<Self> {
         K256PublicKey::from_sec1_bytes(pk.as_ref()).map_err(|_| PubKeyError::FailIntoPubKey)
     }
 }
 
 impl ToBytes<{ PUB_KEY_SIZE + 1 }> for PubKey {
     type Error = PubKeyError;
-    fn to_bytes(&self) -> Result<[u8; PUB_KEY_SIZE + 1], Self::Error> {
+    fn to_bytes(&self) -> Result<[u8; PUB_KEY_SIZE + 1]> {
         let mut result = [0u8; PUB_KEY_SIZE + 1];
 
         result[0] = match self {
@@ -107,7 +109,7 @@ impl std::fmt::Display for PubKey {
 }
 
 impl Serialize for PubKey {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -116,7 +118,7 @@ impl Serialize for PubKey {
 }
 
 impl<'de> Deserialize<'de> for PubKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -143,7 +145,7 @@ impl From<[u8; PUB_KEY_SIZE + 1]> for PubKey {
 impl TryFrom<&[u8]> for PubKey {
     type Error = PubKeyError;
 
-    fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(slice: &[u8]) -> Result<Self> {
         if slice.len() != PUB_KEY_SIZE + 1 {
             return Err(PubKeyError::InvalidLength);
         }
@@ -175,7 +177,7 @@ impl AsRef<[u8]> for PubKey {
 impl FromStr for PubKey {
     type Err = PubKeyError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         let data = hex::decode(s).map_err(|_| PubKeyError::InvalidHex)?;
         let bytes: [u8; PUB_KEY_SIZE] = data[1..]
             .try_into()

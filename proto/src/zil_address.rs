@@ -4,7 +4,9 @@ use config::address::{ADDR_LEN, HRP};
 use sha2::{Digest, Sha256};
 use zil_errors::address::AddressError;
 
-pub fn to_checksum_address(address: &str) -> Result<String, AddressError> {
+type Result<T> = std::result::Result<T, AddressError>;
+
+pub fn to_checksum_address(address: &str) -> Result<String> {
     let address = address.trim_start_matches("0x").to_lowercase();
     let address_bytes = hex::decode(&address).or(Err(AddressError::InvalidHex))?;
 
@@ -38,7 +40,7 @@ pub fn from_zil_base16(addr: &str) -> Option<[u8; ADDR_LEN]> {
     Some(value)
 }
 
-pub fn from_zil_pub_key(pub_key: &[u8]) -> Result<[u8; ADDR_LEN], AddressError> {
+pub fn from_zil_pub_key(pub_key: &[u8]) -> Result<[u8; ADDR_LEN]> {
     let mut hasher = Sha256::new();
     hasher.update(pub_key);
     let hash = hasher.finalize();
@@ -48,7 +50,7 @@ pub fn from_zil_pub_key(pub_key: &[u8]) -> Result<[u8; ADDR_LEN], AddressError> 
     Ok(value)
 }
 
-pub fn from_zil_bech32_address(address: &str) -> Result<[u8; ADDR_LEN], AddressError> {
+pub fn from_zil_bech32_address(address: &str) -> Result<[u8; ADDR_LEN]> {
     let (hrp, bytes) = bech32::decode(address).map_err(|_| AddressError::InvalidBech32Len)?;
     let bytes: [u8; ADDR_LEN] = bytes.try_into().or(Err(AddressError::InvalidBech32Len))?;
 
@@ -59,7 +61,7 @@ pub fn from_zil_bech32_address(address: &str) -> Result<[u8; ADDR_LEN], AddressE
     Ok(bytes)
 }
 
-pub fn to_zil_bech32(value: &[u8; ADDR_LEN]) -> Result<String, AddressError> {
+pub fn to_zil_bech32(value: &[u8; ADDR_LEN]) -> Result<String> {
     let hrp = Hrp::parse(HRP).map_err(|_| AddressError::InvalidHRP)?;
 
     bech32::encode::<Bech32>(hrp, value).map_err(|_| AddressError::InvalidBech32Len)

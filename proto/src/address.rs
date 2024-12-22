@@ -12,6 +12,8 @@ use std::str::FromStr;
 use config::address::ADDR_LEN;
 use zil_errors::address::AddressError;
 
+type Result<T> = std::result::Result<T, AddressError>;
+
 #[derive(Clone, PartialEq, Eq)]
 pub enum Address {
     Secp256k1Sha256Zilliqa([u8; ADDR_LEN]),     // ZILLIQA
@@ -19,7 +21,7 @@ pub enum Address {
 }
 
 impl Address {
-    pub fn from_zil_base16(addr: &str) -> Result<Self, AddressError> {
+    pub fn from_zil_base16(addr: &str) -> Result<Self> {
         let addr = from_zil_base16(addr).ok_or(AddressError::InvalidBase16Address)?;
 
         Ok(Self::Secp256k1Sha256Zilliqa(addr))
@@ -32,12 +34,12 @@ impl Address {
         }
     }
 
-    pub fn from_zil_bech32(addr: &str) -> Result<Self, AddressError> {
+    pub fn from_zil_bech32(addr: &str) -> Result<Self> {
         let addr = from_zil_bech32_address(addr)?;
         Ok(Self::Secp256k1Sha256Zilliqa(addr))
     }
 
-    pub fn from_eth_address(addr: &str) -> Result<Self, AddressError> {
+    pub fn from_eth_address(addr: &str) -> Result<Self> {
         let addr = alloy::primitives::Address::from_str(addr)
             .map_err(|e| AddressError::InvalidETHAddress(e.to_string()))?;
         let bytes: [u8; ADDR_LEN] = addr
@@ -52,14 +54,14 @@ impl Address {
         alloy::primitives::Address::from_slice(self.as_ref())
     }
 
-    pub fn to_eth_checksummed(&self) -> Result<String, AddressError> {
+    pub fn to_eth_checksummed(&self) -> Result<String> {
         let addr = alloy::primitives::Address::from_slice(self.as_ref());
 
         // TODO: check chain id;
         Ok(addr.to_checksum(None))
     }
 
-    pub fn from_pubkey(pk: &PubKey) -> Result<Self, AddressError> {
+    pub fn from_pubkey(pk: &PubKey) -> Result<Self> {
         match pk {
             PubKey::Secp256k1Sha256Zilliqa(pk) => {
                 let addr = from_zil_pub_key(pk)?;
@@ -95,14 +97,14 @@ impl Address {
         }
     }
 
-    pub fn get_bech32(&self) -> Result<String, AddressError> {
+    pub fn get_bech32(&self) -> Result<String> {
         match self {
             Address::Secp256k1Sha256Zilliqa(v) => to_zil_bech32(v),
             _ => Err(AddressError::InvalidSecp256k1Sha256Type),
         }
     }
 
-    pub fn get_zil_base16(&self) -> Result<String, AddressError> {
+    pub fn get_zil_base16(&self) -> Result<String> {
         match self {
             Address::Secp256k1Sha256Zilliqa(v) => {
                 let addr = hex::encode(v);
@@ -113,7 +115,7 @@ impl Address {
         }
     }
 
-    pub fn get_zil_check_sum_addr(&self) -> Result<String, AddressError> {
+    pub fn get_zil_check_sum_addr(&self) -> Result<String> {
         match self {
             Address::Secp256k1Sha256Zilliqa(v) => {
                 let addr = hex::encode(v);
@@ -169,7 +171,7 @@ impl Hash for Address {
 }
 
 impl Serialize for Address {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -179,7 +181,7 @@ impl Serialize for Address {
 }
 
 impl<'de> Deserialize<'de> for Address {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -191,7 +193,7 @@ impl<'de> Deserialize<'de> for Address {
 impl FromStr for Address {
     type Err = AddressError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         let data = hex::decode(s).map_err(|_| AddressError::InvalidHex)?;
         let bytes: [u8; ADDR_LEN] = data[1..]
             .try_into()
@@ -222,7 +224,7 @@ impl From<[u8; ADDR_LEN + 1]> for Address {
 impl TryFrom<&[u8]> for Address {
     type Error = AddressError;
 
-    fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
+    fn try_from(slice: &[u8]) -> Result<Self> {
         if slice.len() != ADDR_LEN + 1 {
             return Err(AddressError::InvalidLength);
         }

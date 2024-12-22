@@ -24,6 +24,8 @@ use zil_errors::keypair::KeyPairError;
 // One byte for enum type
 pub const KEYPAIR_BYTES_SIZE: usize = PUB_KEY_SIZE + SECRET_KEY_SIZE + 1;
 
+type Result<T> = std::result::Result<T, KeyPairError>;
+
 #[derive(Debug, PartialEq)]
 pub enum KeyPair {
     Secp256k1Sha256Zilliqa(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])), // ZILLIQA
@@ -31,19 +33,19 @@ pub enum KeyPair {
 }
 
 impl KeyPair {
-    pub fn gen_sha256() -> Result<Self, KeyPairError> {
+    pub fn gen_sha256() -> Result<Self> {
         let keys = Self::gen_keys_bytes()?;
 
         Ok(Self::Secp256k1Sha256Zilliqa(keys))
     }
 
-    pub fn gen_keccak256() -> Result<Self, KeyPairError> {
+    pub fn gen_keccak256() -> Result<Self> {
         let keys = Self::gen_keys_bytes()?;
 
         Ok(Self::Secp256k1Keccak256Ethereum(keys))
     }
 
-    pub fn gen_keys_bytes() -> Result<([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE]), KeyPairError> {
+    pub fn gen_keys_bytes() -> Result<([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])> {
         let mut rng = ChaCha20Rng::from_entropy();
         let mut sk_bytes = [0u8; SECRET_KEY_SIZE];
 
@@ -62,7 +64,7 @@ impl KeyPair {
         Ok((pub_key, secret_key))
     }
 
-    pub fn from_secret_key(sk: &SecretKey) -> Result<Self, KeyPairError> {
+    pub fn from_secret_key(sk: &SecretKey) -> Result<Self> {
         let secret_key: K256SecretKey =
             K256SecretKey::from_slice(sk.as_ref()).or(Err(KeyPairError::InvalidSecretKey))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
@@ -85,7 +87,7 @@ impl KeyPair {
     pub fn from_bip39_seed(
         seed: &[u8; BIP39_SEED_SIZE],
         bip49: &Bip49DerivationPath,
-    ) -> Result<Self, KeyPairError> {
+    ) -> Result<Self> {
         let path = bip49.get_path();
         let secret_key =
             derive_private_key(seed, &path).map_err(KeyPairError::ExtendedPrivKeyDeriveError)?;
@@ -107,14 +109,14 @@ impl KeyPair {
         }
     }
 
-    pub fn get_addr(&self) -> Result<Address, KeyPairError> {
+    pub fn get_addr(&self) -> Result<Address> {
         let pk = self.get_pubkey()?;
         let addr = Address::from_pubkey(&pk).map_err(KeyPairError::AddressParseError)?;
 
         Ok(addr)
     }
 
-    pub fn get_secretkey(&self) -> Result<SecretKey, KeyPairError> {
+    pub fn get_secretkey(&self) -> Result<SecretKey> {
         match self {
             KeyPair::Secp256k1Sha256Zilliqa((_, sk)) => Ok(SecretKey::Secp256k1Sha256Zilliqa(*sk)),
             KeyPair::Secp256k1Keccak256Ethereum((_, sk)) => {
@@ -123,7 +125,7 @@ impl KeyPair {
         }
     }
 
-    pub fn get_pubkey(&self) -> Result<PubKey, KeyPairError> {
+    pub fn get_pubkey(&self) -> Result<PubKey> {
         match self {
             KeyPair::Secp256k1Sha256Zilliqa((pk, _)) => Ok(PubKey::Secp256k1Sha256Zilliqa(*pk)),
             KeyPair::Secp256k1Keccak256Ethereum((pk, _)) => {
@@ -139,19 +141,19 @@ impl KeyPair {
         }
     }
 
-    pub fn get_local_eth_siger(&self) -> Result<PrivateKeySigner, KeyPairError> {
+    pub fn get_local_eth_siger(&self) -> Result<PrivateKeySigner> {
         let bytes = self.get_sk_bytes();
         PrivateKeySigner::from_slice(&bytes)
             .map_err(|e| KeyPairError::EthersInvalidSecretKey(e.to_string()))
     }
 
-    pub fn get_local_eth_wallet(&self) -> Result<EthereumWallet, KeyPairError> {
+    pub fn get_local_eth_wallet(&self) -> Result<EthereumWallet> {
         let signer: PrivateKeySigner = self.get_local_eth_siger()?;
         let wallet = EthereumWallet::from(signer);
         Ok(wallet)
     }
 
-    pub fn sign_message(&self, msg: &[u8]) -> Result<Signature, KeyPairError> {
+    pub fn sign_message(&self, msg: &[u8]) -> Result<Signature> {
         match self {
             KeyPair::Secp256k1Keccak256Ethereum((_, _sk)) => {
                 let signer = self.get_local_eth_siger()?;
@@ -176,7 +178,7 @@ impl KeyPair {
         }
     }
 
-    pub fn verify_sig(&self, msg_bytes: &[u8], sig: &Signature) -> Result<bool, KeyPairError> {
+    pub fn verify_sig(&self, msg_bytes: &[u8], sig: &Signature) -> Result<bool> {
         let pk = self.get_pubkey()?;
         let is_verify = sig
             .verify(msg_bytes, &pk)
@@ -185,17 +187,14 @@ impl KeyPair {
         Ok(is_verify)
     }
 
-    pub async fn sign_tx(
-        &self,
-        tx: &TransactionRequest,
-    ) -> Result<TransactionReceipt, KeyPairError> {
+    pub async fn sign_tx(&self, tx: &TransactionRequest) -> Result<TransactionReceipt> {
         tx.sign(self).await
     }
 }
 
 impl ToBytes<{ KEYPAIR_BYTES_SIZE }> for KeyPair {
     type Error = KeyPairError;
-    fn to_bytes(&self) -> Result<[u8; KEYPAIR_BYTES_SIZE], Self::Error> {
+    fn to_bytes(&self) -> Result<[u8; KEYPAIR_BYTES_SIZE]> {
         let mut result = [0u8; KEYPAIR_BYTES_SIZE];
 
         match self {
@@ -218,7 +217,7 @@ impl ToBytes<{ KEYPAIR_BYTES_SIZE }> for KeyPair {
 impl FromBytes for KeyPair {
     type Error = KeyPairError;
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
         if bytes.len() != KEYPAIR_BYTES_SIZE {
             return Err(KeyPairError::InvalidLength);
         }

@@ -4,6 +4,8 @@ use bincode::{FromBytes, ToBytes};
 use config::key::SECRET_KEY_SIZE;
 use zil_errors::keypair::SecretKeyError;
 
+type Result<T> = std::result::Result<T, SecretKeyError>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKey {
     Secp256k1Sha256Zilliqa([u8; SECRET_KEY_SIZE]), // ZILLIQA
@@ -27,7 +29,7 @@ impl std::fmt::Display for SecretKey {
 
 impl ToBytes<{ SECRET_KEY_SIZE + 1 }> for SecretKey {
     type Error = SecretKeyError;
-    fn to_bytes(&self) -> Result<[u8; SECRET_KEY_SIZE + 1], Self::Error> {
+    fn to_bytes(&self) -> Result<[u8; SECRET_KEY_SIZE + 1]> {
         let mut result = [0u8; SECRET_KEY_SIZE + 1];
 
         result[0] = match self {
@@ -42,7 +44,7 @@ impl ToBytes<{ SECRET_KEY_SIZE + 1 }> for SecretKey {
 
 impl TryInto<Vec<u8>> for SecretKey {
     type Error = SecretKeyError;
-    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+    fn try_into(self) -> Result<Vec<u8>> {
         let bytes = self.to_bytes()?;
 
         Ok(bytes.to_vec())
@@ -52,7 +54,7 @@ impl TryInto<Vec<u8>> for SecretKey {
 impl FromBytes for SecretKey {
     type Error = SecretKeyError;
 
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
         let key_type = bytes[0];
         let key_data: [u8; SECRET_KEY_SIZE] = bytes[1..]
             .try_into()
@@ -78,7 +80,7 @@ impl AsRef<[u8]> for SecretKey {
 impl FromStr for SecretKey {
     type Err = SecretKeyError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         let data = hex::decode(s).map_err(|_| SecretKeyError::InvalidHex)?;
         let bytes: [u8; SECRET_KEY_SIZE] = data[1..]
             .try_into()

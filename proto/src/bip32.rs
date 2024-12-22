@@ -1,3 +1,4 @@
+use config::sha::SHA256_SIZE;
 use hmac::{Hmac, Mac};
 use k256::{
     elliptic_curve::{bigint::U256, scalar::FromUintUnchecked},
@@ -9,6 +10,8 @@ use zil_errors::bip32::Bip329Errors;
 
 const HARDENED_BIT: u32 = 1 << 31;
 const BITCOIN_SEED: &[u8] = b"Bitcoin seed";
+
+type Result<T> = std::result::Result<T, Bip329Errors>;
 
 #[derive(Clone, Debug)]
 struct ChildNumber(u32);
@@ -26,7 +29,7 @@ impl ChildNumber {
 impl FromStr for ChildNumber {
     type Err = Bip329Errors;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         let (num_str, hardened) = if let Some(stripped) = s.strip_suffix('\'') {
             (stripped, true)
         } else {
@@ -51,7 +54,7 @@ impl FromStr for ChildNumber {
     }
 }
 
-fn derive_master_key(seed: &[u8]) -> Result<(SecretKey, [u8; 32]), Bip329Errors> {
+fn derive_master_key(seed: &[u8]) -> Result<(SecretKey, [u8; SHA256_SIZE])> {
     let mut hmac = Hmac::<Sha512>::new_from_slice(BITCOIN_SEED)
         .map_err(|e| Bip329Errors::HmacError(e.to_string()))?;
 
@@ -60,7 +63,7 @@ fn derive_master_key(seed: &[u8]) -> Result<(SecretKey, [u8; 32]), Bip329Errors>
     let result = hmac.finalize().into_bytes();
     let (key_bytes, chain_code) = result.split_at(32);
 
-    let mut chain_code_arr = [0u8; 32];
+    let mut chain_code_arr = [0u8; SHA256_SIZE];
     chain_code_arr.copy_from_slice(chain_code);
 
     Ok((
@@ -69,7 +72,7 @@ fn derive_master_key(seed: &[u8]) -> Result<(SecretKey, [u8; 32]), Bip329Errors>
     ))
 }
 
-pub fn derive_private_key(seed: &[u8], path: &str) -> Result<SecretKey, Bip329Errors> {
+pub fn derive_private_key(seed: &[u8], path: &str) -> Result<SecretKey> {
     if !path.starts_with("m/") {
         return Err(Bip329Errors::InvalidPath(
             "Path must start with 'm/'".to_string(),
@@ -95,9 +98,9 @@ pub fn derive_private_key(seed: &[u8], path: &str) -> Result<SecretKey, Bip329Er
 
 fn derive_child_key(
     parent_key: &SecretKey,
-    chain_code: &[u8; 32],
+    chain_code: &[u8; SHA256_SIZE],
     child: &ChildNumber,
-) -> Result<(SecretKey, [u8; 32]), Bip329Errors> {
+) -> Result<(SecretKey, [u8; SHA256_SIZE])> {
     let mut hmac = Hmac::<Sha512>::new_from_slice(chain_code)
         .map_err(|e| Bip329Errors::HmacError(e.to_string()))?;
 

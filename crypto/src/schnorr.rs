@@ -10,7 +10,9 @@ use zil_errors::crypto::SchorrError;
 
 pub const MAX_TRY_SIGN: usize = 100_000_000;
 
-pub fn sign(message: &[u8], secret_key: &SecretKey) -> Result<Signature, SchorrError> {
+type Result<T> = std::result::Result<T, SchorrError>;
+
+pub fn sign(message: &[u8], secret_key: &SecretKey) -> Result<Signature> {
     let mut rng = ChaCha20Rng::from_entropy();
     let safe_counter: usize = 0;
 
