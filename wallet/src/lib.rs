@@ -626,6 +626,7 @@ mod tests {
     use crypto::bip49::Bip49DerivationPath;
     use proto::{address::Address, keypair::KeyPair};
     use rand::Rng;
+    use settings::wallet_settings::WalletSettings;
     use storage::LocalStorage;
     use zil_errors::wallet::WalletErrors;
 
@@ -942,25 +943,27 @@ mod tests {
     #[test]
     fn test_remove_tokens() {
         // Setup wallet
-        let argon_seed = derive_key(PASSWORD, PROOF_SALT, &ARGON2_DEFAULT_CONFIG).unwrap();
-        let proof = derive_key(
-            &argon_seed[..PROOF_SIZE],
-            PROOF_SALT,
-            &ARGON2_DEFAULT_CONFIG,
-        )
-        .unwrap();
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let storage = LocalStorage::from(&dir).unwrap();
         let storage = Arc::new(storage);
+        let settings = WalletSettings::default();
+        let argon_seed =
+            derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+        let proof = derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &settings.argon_params.into_config(),
+        )
+        .unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let keypair = KeyPair::gen_keccak256().unwrap();
         let sk = keypair.get_secretkey().unwrap();
 
         let wallet_config = WalletConfig {
             keychain,
+            settings,
             storage: Arc::clone(&storage),
-            settings: Default::default(),
         };
 
         let mut wallet = Wallet::from_sk(
