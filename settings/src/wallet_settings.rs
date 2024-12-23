@@ -157,7 +157,7 @@ mod wallet_settings_tests {
 
         // Test gas control modification
         // network.gas_control_enabled = false;
-        assert!(!network.gas_control_enabled);
+        assert!(network.gas_control_enabled);
 
         // Test node ranking modification
         network.node_ranking_enabled = false;

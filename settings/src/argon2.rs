@@ -35,7 +35,7 @@ impl ArgonParams {
 
     pub fn owasp_default() -> Self {
         Self {
-            memory: 19 * 1024,
+            memory: 6553,
             iterations: 2,
             threads: 1,
             secret: [0u8; SHA256_SIZE],
@@ -63,6 +63,6 @@ impl ArgonParams {
 
 impl Default for ArgonParams {
     fn default() -> Self {
-        Self::secure()
+        Self::owasp_default()
     }
 }
