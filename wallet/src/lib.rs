@@ -745,18 +745,19 @@ mod tests {
 
     #[test]
     fn test_add_and_load_tokens() {
-        // Setup initial wallet with secret key
-        let argon_seed = derive_key(PASSWORD, PROOF_SALT, &ARGON2_DEFAULT_CONFIG).unwrap();
-        let proof = derive_key(
-            &argon_seed[..PROOF_SIZE],
-            PROOF_SALT,
-            &ARGON2_DEFAULT_CONFIG,
-        )
-        .unwrap();
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let storage = LocalStorage::from(&dir).unwrap();
         let storage = Arc::new(storage);
+        let settings = WalletSettings::default();
+        let argon_seed =
+            derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+        let proof = derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &settings.argon_params.into_config(),
+        )
+        .unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
 
         // Generate ETH keypair for test wallet
@@ -765,8 +766,8 @@ mod tests {
 
         let wallet_config = WalletConfig {
             keychain,
+            settings,
             storage: Arc::clone(&storage),
-            settings: Default::default(),
         };
 
         // Create wallet
@@ -837,26 +838,27 @@ mod tests {
 
     #[test]
     fn test_multiple_custom_tokens() {
-        // Setup wallet similar to previous test
-        let argon_seed = derive_key(PASSWORD, PROOF_SALT, &ARGON2_DEFAULT_CONFIG).unwrap();
-        let proof = derive_key(
-            &argon_seed[..PROOF_SIZE],
-            PROOF_SALT,
-            &ARGON2_DEFAULT_CONFIG,
-        )
-        .unwrap();
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let storage = LocalStorage::from(&dir).unwrap();
         let storage = Arc::new(storage);
+        let settings = WalletSettings::default();
+        let argon_seed =
+            derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+        let proof = derive_key(
+            &argon_seed[..PROOF_SIZE],
+            PROOF_SALT,
+            &settings.argon_params.into_config(),
+        )
+        .unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let keypair = KeyPair::gen_keccak256().unwrap();
         let sk = keypair.get_secretkey().unwrap();
 
         let wallet_config = WalletConfig {
             keychain,
+            settings,
             storage: Arc::clone(&storage),
-            settings: Default::default(),
         };
 
         let mut wallet = Wallet::from_sk(
