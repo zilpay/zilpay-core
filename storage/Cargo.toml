@@ -9,4 +9,3 @@ sled.workspace = true
 directories.workspace = true
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
-bincode = { path = "../bincode" }

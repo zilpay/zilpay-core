@@ -1005,10 +1005,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230c5f1ca6a325a32553f8640d31ac9b49f2411e901e427570154868b46da4f7"
 
 [[package]]
-name = "bincode"
-version = "0.1.0"
-
-[[package]]
 name = "bip39"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1168,7 +1164,6 @@ name = "cipher"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
- "bincode",
  "config",
  "hex",
  "ntrulp",
@@ -2903,7 +2898,6 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "bech32",
- "bincode",
  "bip39",
  "config",
  "crypto",
@@ -3638,7 +3632,6 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 name = "storage"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "config",
  "directories",
  "hex",
@@ -4176,7 +4169,6 @@ name = "wallet"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "bincode",
  "bip39",
  "cipher 0.1.0",
  "config",

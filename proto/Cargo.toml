@@ -18,6 +18,5 @@ k256.workspace = true
 hmac.workspace = true
 crypto = { path = "../crypto" }
 config = { path = "../config" }
-bincode = { path = "../bincode" }
 zil_errors = { path = "../zil_errors" }
 prost = "0.12.6"

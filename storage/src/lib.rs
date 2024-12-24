@@ -1,6 +1,5 @@
 pub mod data_warp;
 
-use bincode::{FromBytes, ToVecBytes};
 use config::storage::STORAGE_VERSION;
 use data_warp::DataWarp;
 use directories::ProjectDirs;

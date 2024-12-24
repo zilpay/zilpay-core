@@ -1,7 +1,8 @@
-use bincode::{FromBytes, ToVecBytes};
 use std::borrow::Cow;
 use std::mem::size_of;
 use zil_errors::storage::LocalStorageError;
+
+type Result<T> = std::result::Result<T, LocalStorageError>;
 
 #[derive(Debug)]
 pub struct DataWarp {
@@ -10,10 +11,26 @@ pub struct DataWarp {
     pub version: u16,
 }
 
-impl FromBytes for DataWarp {
-    type Error = LocalStorageError;
+impl PartialEq for DataWarp {
+    fn eq(&self, other: &Self) -> bool {
+        self.version == other.version
+    }
+}
 
-    fn from_bytes(bytes: Cow<[u8]>) -> Result<Self, Self::Error> {
+impl DataWarp {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let payload_len = self.payload.len();
+        let mut bytes: Vec<u8> =
+            Vec::with_capacity(size_of::<usize>() + payload_len + size_of::<u16>());
+
+        bytes.extend_from_slice(&payload_len.to_le_bytes());
+        bytes.extend_from_slice(&self.payload);
+        bytes.extend_from_slice(&self.version.to_le_bytes());
+
+        bytes
+    }
+
+    pub fn from_bytes(bytes: Cow<[u8]>) -> Result<Self> {
         if bytes.len() < size_of::<usize>() + size_of::<u16>() {
             return Err(LocalStorageError::InsufficientBytes);
         }
@@ -45,27 +62,6 @@ impl FromBytes for DataWarp {
             payload: payload.to_vec(),
             version,
         })
-    }
-}
-
-impl ToVecBytes for DataWarp {
-    fn to_bytes(&self) -> Vec<u8> {
-        // let payload_bytes = ST::to_bytes(&self.payload);
-        let payload_len = self.payload.len();
-        let mut bytes: Vec<u8> =
-            Vec::with_capacity(size_of::<usize>() + payload_len + size_of::<u16>());
-
-        bytes.extend_from_slice(&payload_len.to_le_bytes());
-        bytes.extend_from_slice(&self.payload);
-        bytes.extend_from_slice(&self.version.to_le_bytes());
-
-        bytes
-    }
-}
-
-impl PartialEq for DataWarp {
-    fn eq(&self, other: &Self) -> bool {
-        self.version == other.version
     }
 }
 
