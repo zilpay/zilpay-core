@@ -5,13 +5,13 @@ edition = "2021"
 
 [dependencies]
 alloy.workspace = true
-serde_json.workspace = true
 serde.workspace = true
 rand_chacha.workspace = true
 rand.workspace = true
 hex.workspace = true
 bip39.workspace = true
 sha2.workspace = true
+bincode.workspace = true
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 crypto = { path = "../crypto" }

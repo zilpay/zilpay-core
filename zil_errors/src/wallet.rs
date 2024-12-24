@@ -97,14 +97,14 @@ pub enum WalletErrors {
     #[error("Invalid account type")]
     InvalidAccountType,
 
-    #[error("Fail to deserialize wallet data")]
-    FailToDeserializeWalletData,
+    #[error("Fail to deserialize wallet data error: {0}")]
+    FailToDeserializeWalletData(String),
 
-    #[error("Fail to serialize wallet data")]
-    FailToSerializeWalletData,
+    #[error("Fail to serialize wallet data error: {0}")]
+    FailToSerializeWalletData(String),
 
-    #[error("Failed to serialize token data")]
-    FailToSerializeToken,
+    #[error("Failed to serialize token data error: {0}")]
+    TokenSerdeError(String),
 
     #[error("Fail to save wallet data to storage: {0}")]
     FailtoSaveWalletDataToStorage(LocalStorageError),
@@ -133,11 +133,11 @@ pub enum WalletErrors {
     #[error("invalid hex wallet type")]
     InvalidHexToWalletType,
 
-    #[error("Invalid Wallet type value")]
-    InvalidWalletTypeValue,
+    #[error("WalletType serialize error: {0}")]
+    WalletTypeSerialize(String),
 
-    #[error("Unknown type: {0}")]
-    UnknownWalletType(u8),
+    #[error("WalletType deserialize error: {0}")]
+    WalletTypeDeserialize(String),
 
     #[error("Proof does not match")]
     ProofNotMatch,

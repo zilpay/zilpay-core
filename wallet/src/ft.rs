@@ -1,10 +1,10 @@
-use std::collections::HashMap;
-
 use alloy::primitives::U256;
 use config::address::ADDR_LEN;
 use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use zil_errors::wallet::WalletErrors;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FToken {
@@ -20,6 +20,20 @@ pub struct FToken {
 }
 
 impl FToken {
+    pub fn from_bytes(encoded: &[u8]) -> Result<Self, WalletErrors> {
+        let decoded: Self = bincode::deserialize(encoded)
+            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+
+        Ok(decoded)
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, WalletErrors> {
+        let encoded: Vec<u8> =
+            bincode::serialize(&self).map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+
+        Ok(encoded)
+    }
+
     pub fn zil() -> Self {
         FToken {
             default: true,

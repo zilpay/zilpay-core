@@ -2,7 +2,6 @@ use alloy::{
     network::EthereumWallet,
     signers::{local::PrivateKeySigner, SignerSync},
 };
-use bincode::{FromBytes, ToBytes};
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use crypto::bip49::Bip49DerivationPath;
 use crypto::schnorr;
@@ -190,11 +189,8 @@ impl KeyPair {
     pub async fn sign_tx(&self, tx: &TransactionRequest) -> Result<TransactionReceipt> {
         tx.sign(self).await
     }
-}
 
-impl ToBytes<{ KEYPAIR_BYTES_SIZE }> for KeyPair {
-    type Error = KeyPairError;
-    fn to_bytes(&self) -> Result<[u8; KEYPAIR_BYTES_SIZE]> {
+    pub fn to_bytes(&self) -> Result<[u8; KEYPAIR_BYTES_SIZE]> {
         let mut result = [0u8; KEYPAIR_BYTES_SIZE];
 
         match self {
@@ -212,12 +208,8 @@ impl ToBytes<{ KEYPAIR_BYTES_SIZE }> for KeyPair {
 
         Ok(result)
     }
-}
 
-impl FromBytes for KeyPair {
-    type Error = KeyPairError;
-
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
+    pub fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
         if bytes.len() != KEYPAIR_BYTES_SIZE {
             return Err(KeyPairError::InvalidLength);
         }

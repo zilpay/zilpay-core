@@ -1,4 +1,3 @@
-use bincode::{FromBytes, ToVecBytes};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 use zil_errors::cipher::CipherErrors;
@@ -26,17 +25,12 @@ impl CipherOrders {
             CipherOrders::NTRUP1277 => 1,
         }
     }
-}
 
-impl ToVecBytes for CipherOrders {
-    fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         vec![self.code()]
     }
-}
 
-impl FromBytes for CipherOrders {
-    type Error = CipherErrors;
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
+    pub fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
         Self::from_code(bytes[0])
     }
 }

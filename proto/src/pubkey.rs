@@ -1,4 +1,3 @@
-use bincode::ToBytes;
 use config::address::ADDR_LEN;
 use config::key::PUB_KEY_SIZE;
 use k256::PublicKey as K256PublicKey;
@@ -64,6 +63,20 @@ impl PubKey {
             PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
         }
     }
+
+    pub fn to_bytes(&self) -> Result<[u8; PUB_KEY_SIZE + 1]> {
+        let mut result = [0u8; PUB_KEY_SIZE + 1];
+
+        result[0] = match self {
+            PubKey::Secp256k1Sha256Zilliqa(_) => 0,
+            PubKey::Secp256k1Keccak256Ethereum(_) => 1,
+            PubKey::Secp256k1Bitcoin(_) => 2,
+            PubKey::Ed25519Solana(_) => 3,
+        };
+        result[1..].copy_from_slice(self.as_ref());
+
+        Ok(result)
+    }
 }
 
 impl TryInto<K256PublicKey> for PubKey {
@@ -82,23 +95,6 @@ impl TryFrom<&PubKey> for K256PublicKey {
 
     fn try_from(pk: &PubKey) -> Result<Self> {
         K256PublicKey::from_sec1_bytes(pk.as_ref()).map_err(|_| PubKeyError::FailIntoPubKey)
-    }
-}
-
-impl ToBytes<{ PUB_KEY_SIZE + 1 }> for PubKey {
-    type Error = PubKeyError;
-    fn to_bytes(&self) -> Result<[u8; PUB_KEY_SIZE + 1]> {
-        let mut result = [0u8; PUB_KEY_SIZE + 1];
-
-        result[0] = match self {
-            PubKey::Secp256k1Sha256Zilliqa(_) => 0,
-            PubKey::Secp256k1Keccak256Ethereum(_) => 1,
-            PubKey::Secp256k1Bitcoin(_) => 2,
-            PubKey::Ed25519Solana(_) => 3,
-        };
-        result[1..].copy_from_slice(self.as_ref());
-
-        Ok(result)
     }
 }
 

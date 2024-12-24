@@ -7,36 +7,54 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AccountErrors {
-    #[error("Fail to get address form pub_key: {0}")]
+    #[error("Failed to get address from public key: {0}")]
     PubKeyError(PubKeyError),
-    #[error("Invalid PubKey type")]
+
+    #[error("Invalid public key type")]
     InvalidPubKeyType,
-    #[error("Invalid Account type: {0}")]
+
+    #[error("Invalid account type: {0}")]
     InvalidAccountType(String),
-    #[error("Fail to deserialize json")]
-    FailToDeserialize,
-    #[error("Fail to serialize json")]
-    FailToSerialize,
+
+    #[error("Failed to deserialize: {0}")]
+    FailedToDeserialize(String),
+
+    #[error("Failed to serialize: {0}")]
+    FailedToSerialize(String),
+
     #[error("Invalid secret key bytes: {0}")]
     InvalidSecretKeyBytes(KeyPairError),
+
     #[error("Invalid secret key: {0}")]
     InvalidSecretKey(KeyPairError),
+
     #[error("Invalid public key: {0}")]
     InvalidPubKey(KeyPairError),
+
     #[error("Invalid address: {0}")]
     InvalidAddress(KeyPairError),
-    #[error("Error converting address from public key: {0}")]
+
+    #[error("Failed to convert address from public key: {0}")]
     AddrFromPubKeyError(#[from] AddressError),
+
     #[error("Failed to save cipher: {0}")]
-    FailToSaveCipher(#[from] LocalStorageError),
+    FailedToSaveCipher(#[from] LocalStorageError),
+
     #[error("Invalid seed: {0}")]
     InvalidSeed(KeyPairError),
+
     #[error("Invalid secret bytes")]
     InvalidSecretBytes,
-    #[error("Invalid account type code")]
-    InvalidAccountTypeCode,
-    #[error("Not enough bytes to create from bytes")]
+
+    #[error("AccountType serde error: {0}")]
+    AccountTypeSerdeError(String),
+
+    #[error("Account serde error: {0}")]
+    AccountSerdeError(String),
+
+    #[error("Insufficient bytes for creation")]
     FromBytesErrorNotEnoughBytes,
-    #[error("Invalide account type value")]
+
+    #[error("Invalid account type value")]
     InvalidAccountTypeValue,
 }

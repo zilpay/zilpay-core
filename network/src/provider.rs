@@ -336,20 +336,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_fetch_eth_tokens() {
-        let mut zil = ZilliqaJsonRPC::new();
-
-        zil.selected = 1; // testnet
-
+        let zil = ZilliqaJsonRPC::new();
         let net = NetworkProvider::Zilliqa(zil);
         // Add multiple custom tokens
         let mut tokens = vec![
             FToken::eth(),
             FToken {
-                name: "MyToken".to_string(),
-                symbol: "MTK".to_string(),
+                name: "Zilliqa-bridged USDT token".to_string(),
+                symbol: "zUSDT".to_string(),
                 decimals: 18,
                 native: false,
-                addr: Address::from_eth_address("0xf06686B5Eb5cAe38c09f12412B729045647E74e3")
+                addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
                     .unwrap(),
                 logo: None,
                 default: false,

@@ -20,7 +20,6 @@ use proto::tx::{TransactionReceipt, TransactionRequest};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use bincode::{FromBytes, ToBytes};
 use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
@@ -102,8 +101,7 @@ impl Wallet {
         let data = storage
             .get(key)
             .map_err(WalletErrors::FailToLoadWalletData)?;
-        let data = serde_json::from_slice::<WalletData>(&data)
-            .or(Err(WalletErrors::FailToDeserializeWalletData))?;
+        let data = WalletData::from_bytes(&data)?;
         let ftokens = Vec::new();
 
         Ok(Self {
@@ -364,7 +362,7 @@ impl Wallet {
             .any(|account| account.account_type.value() == index);
 
         if self.data.wallet_type.code() != AccountType::Ledger(0).code() {
-            return Err(WalletErrors::InvalidWalletTypeValue);
+            return Err(WalletErrors::InvalidAccountType);
         }
 
         if has_account {
@@ -447,7 +445,6 @@ impl Wallet {
             _ => Err(WalletErrors::InvalidAccountType),
         }
     }
-
     pub fn sign_message(
         &self,
         msg: &[u8],
@@ -489,7 +486,7 @@ impl Wallet {
         self.unlock_iternel(seed_bytes)?;
 
         let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
-        let ftokens: Vec<FToken> = serde_json::from_slice(&bytes).unwrap_or_default();
+        let ftokens: Vec<FToken> = bincode::deserialize(&bytes).unwrap_or_default();
         let selected = self
             .data
             .accounts
@@ -551,7 +548,8 @@ impl Wallet {
         self.ftokens.push(token);
 
         let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
-        let bytes = serde_json::to_vec(&ftokens).or(Err(WalletErrors::FailToSerializeToken))?;
+        let bytes = bincode::serialize(&ftokens)
+            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
 
         self.storage
             .set(FTOKENS_DB_KEY, &bytes)
@@ -571,7 +569,8 @@ impl Wallet {
         self.ftokens.remove(index);
 
         let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
-        let bytes = serde_json::to_vec(&ftokens).or(Err(WalletErrors::FailToSerializeToken))?;
+        let bytes = bincode::serialize(&ftokens)
+            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
 
         self.storage
             .set(FTOKENS_DB_KEY, &bytes)
@@ -584,12 +583,10 @@ impl Wallet {
     }
 
     pub fn save_to_storage(&self) -> Result<()> {
-        let json_bytes =
-            serde_json::to_vec(&self.data).or(Err(WalletErrors::FailToSerializeWalletData))?;
         let key = self.key()?;
 
         self.storage
-            .set(&key, &json_bytes)
+            .set(&key, &self.data.to_bytes()?)
             .map_err(WalletErrors::FailtoSaveWalletDataToStorage)?;
         self.storage
             .flush()

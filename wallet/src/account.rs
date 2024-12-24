@@ -1,5 +1,4 @@
 use crate::account_type::AccountType;
-use bincode::{FromBytes, ToOptionVecBytes};
 use config::sha::SHA512_SIZE;
 use crypto::bip49::Bip49DerivationPath;
 use proto::address::Address;
@@ -8,6 +7,8 @@ use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
 use serde::{Deserialize, Serialize};
 use zil_errors::account::AccountErrors;
+
+type Result<T> = std::result::Result<T, AccountErrors>;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
 pub struct Account {
@@ -18,11 +19,14 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn from_ledger(
-        pub_key: &PubKey,
-        name: String,
-        index: usize,
-    ) -> Result<Self, AccountErrors> {
+    pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
+        let decoded: Self = bincode::deserialize(encoded)
+            .map_err(|e| AccountErrors::AccountSerdeError(e.to_string()))?;
+
+        Ok(decoded)
+    }
+
+    pub fn from_ledger(pub_key: &PubKey, name: String, index: usize) -> Result<Self> {
         let addr = pub_key.get_addr().map_err(AccountErrors::PubKeyError)?;
         let account_type = AccountType::Ledger(index);
 
@@ -34,11 +38,7 @@ impl Account {
         })
     }
 
-    pub fn from_secret_key(
-        sk: &SecretKey,
-        name: String,
-        key: usize,
-    ) -> Result<Self, AccountErrors> {
+    pub fn from_secret_key(sk: &SecretKey, name: String, key: usize) -> Result<Self> {
         let keypair = KeyPair::from_secret_key(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
         let pub_key = keypair.get_pubkey().map_err(AccountErrors::InvalidPubKey)?;
         let addr = keypair.get_addr().map_err(AccountErrors::InvalidAddress)?;
@@ -56,7 +56,7 @@ impl Account {
         mnemonic_seed: &[u8; SHA512_SIZE],
         name: String,
         bip49: &Bip49DerivationPath,
-    ) -> Result<Self, AccountErrors> {
+    ) -> Result<Self> {
         let keypair =
             KeyPair::from_bip39_seed(mnemonic_seed, bip49).map_err(AccountErrors::InvalidSeed)?;
         let pub_key = keypair.get_pubkey().map_err(AccountErrors::InvalidPubKey)?;
@@ -71,7 +71,7 @@ impl Account {
         })
     }
 
-    pub fn get_bip49(&self) -> Result<Bip49DerivationPath, AccountErrors> {
+    pub fn get_bip49(&self) -> Result<Bip49DerivationPath> {
         match &self.account_type {
             AccountType::Bip39HD(v) => match &self.pub_key {
                 PubKey::Secp256k1Sha256Zilliqa(_) => Ok(Bip49DerivationPath::Zilliqa(*v)),
@@ -83,20 +83,12 @@ impl Account {
             )),
         }
     }
-}
 
-// TODO: maybe remake it bytes encode.
-impl ToOptionVecBytes for Account {
-    type Error = AccountErrors;
-    fn to_bytes(&self) -> Result<Vec<u8>, Self::Error> {
-        serde_json::to_vec(&self).or(Err(AccountErrors::FailToSerialize))
-    }
-}
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let encoded: Vec<u8> = bincode::serialize(&self)
+            .map_err(|e| AccountErrors::AccountSerdeError(e.to_string()))?;
 
-impl FromBytes for Account {
-    type Error = AccountErrors;
-    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self, Self::Error> {
-        serde_json::from_slice(&bytes).or(Err(AccountErrors::FailToDeserialize))
+        Ok(encoded)
     }
 }
 
@@ -125,13 +117,8 @@ mod tests {
             rng.fill_bytes(&mut ft_addr);
         }
 
-        let json_file = serde_json::to_string(&acc).unwrap();
-        let res_acc: Account = serde_json::from_str(&json_file).unwrap();
-
-        assert_eq!(res_acc, acc);
-
         let buf = acc.to_bytes().unwrap();
-        let res = Account::from_bytes(buf.into()).unwrap();
+        let res = Account::from_bytes(&buf).unwrap();
 
         assert_eq!(res.pub_key, acc.pub_key);
         assert_eq!(res.addr, acc.addr);
@@ -158,13 +145,8 @@ mod tests {
             rng.fill_bytes(&mut ft_addr);
         }
 
-        let json_file = serde_json::to_string(&acc).unwrap();
-        let res_acc: Account = serde_json::from_str(&json_file).unwrap();
-
-        assert_eq!(res_acc, acc);
-
         let buf = acc.to_bytes().unwrap();
-        let res = Account::from_bytes(buf.into()).unwrap();
+        let res = Account::from_bytes(&buf).unwrap();
 
         assert_eq!(res.pub_key, acc.pub_key);
         assert_eq!(res.addr, acc.addr);

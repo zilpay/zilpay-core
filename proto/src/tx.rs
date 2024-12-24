@@ -27,7 +27,10 @@ impl TransactionRequest {
             TransactionRequest::Zilliqa(tx) => {
                 let pub_key = keypair.get_pubkey()?;
                 let bytes = encode_zilliqa_transaction(tx, &pub_key);
-                let secret_key = keypair.get_secretkey()?.to_vec();
+                let secret_key = keypair
+                    .get_secretkey()?
+                    .to_bytes()
+                    .map_err(KeyPairError::SecretKeyError)?;
                 let secret_key = K256SecretKey::from_slice(&secret_key)
                     .or(Err(KeyPairError::InvalidSecretKey))?;
                 let signature = zil_sign(&bytes, &secret_key)

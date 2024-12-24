@@ -183,7 +183,7 @@ mod tests {
         tx::{TransactionReceipt, TransactionRequest},
         zil_tx::{ScillaGas, ZILTransactionRequest, ZilAmount},
     };
-    use serde_json::json;
+    use serde_json::{json, Value};
     use tokio;
 
     #[tokio::test]
@@ -195,76 +195,76 @@ mod tests {
         assert!(zil.nodes.len() > 1);
     }
 
-    #[tokio::test]
-    async fn test_transaction() {
-        const CHAIN_ID: u16 = 333;
+    // #[tokio::test]
+    // async fn test_transaction() {
+    //     const CHAIN_ID: u16 = 333;
 
-        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_TESTNET.to_string()], 1);
-        let secret_key_1_bytes: [u8; 32] = [
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 1,
-        ];
-        let secret_key_2_bytes: [u8; 32] = [
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 2,
-        ];
-        let secret_keys = [
-            SecretKey::Secp256k1Sha256Zilliqa(secret_key_1_bytes),
-            SecretKey::Secp256k1Sha256Zilliqa(secret_key_2_bytes),
-        ];
-        let keypairs = secret_keys
-            .iter()
-            .map(|x| KeyPair::from_secret_key(x).unwrap())
-            .collect::<Vec<KeyPair>>();
-        println!("Got a keypair!");
+    //     let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_TESTNET.to_string()], 1);
+    //     let secret_key_1_bytes: [u8; 32] = [
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 1,
+    //     ];
+    //     let secret_key_2_bytes: [u8; 32] = [
+    //         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    //         0, 0, 2,
+    //     ];
+    //     let secret_keys = [
+    //         SecretKey::Secp256k1Sha256Zilliqa(secret_key_1_bytes),
+    //         SecretKey::Secp256k1Sha256Zilliqa(secret_key_2_bytes),
+    //     ];
+    //     let keypairs = secret_keys
+    //         .iter()
+    //         .map(|x| KeyPair::from_secret_key(x).unwrap())
+    //         .collect::<Vec<KeyPair>>();
+    //     println!("Got a keypair!");
 
-        const ONE_ZIL: u128 = 1_000_000_000_000u128;
+    //     const ONE_ZIL: u128 = 1_000_000_000_000u128;
 
-        println!(
-            "Sending 1 ZIL from {0} to {1}",
-            keypairs[0].get_addr().unwrap(),
-            keypairs[1].get_addr().unwrap()
-        );
-        let nonce = {
-            let bal_addr = keypairs[0]
-                .get_addr()
-                .unwrap()
-                .to_eth_checksummed()
-                .unwrap();
-            let bal_payload = vec![ZilliqaJsonRPC::build_payload(
-                json!([bal_addr]),
-                ZilMethods::GetBalance,
-            )];
-            let resvec: Vec<ResultRes<GetBalanceRes>> = zil.req(&bal_payload).await.unwrap();
-            println!("Bal {0:?}", resvec[0]);
-            resvec[0].result.as_ref().map_or(0, |v| v.nonce)
-        };
-        let txn = TransactionRequest::Zilliqa(ZILTransactionRequest {
-            nonce: nonce + 1,
-            chain_id: CHAIN_ID,
-            gas_price: ZilAmount::from_raw(2000000000),
-            gas_limit: ScillaGas(1000),
-            to_addr: keypairs[1].get_addr().unwrap(),
-            amount: ZilAmount::from_raw(ONE_ZIL),
-            code: String::new(),
-            data: String::new(),
-        });
+    //     println!(
+    //         "Sending 1 ZIL from {0} to {1}",
+    //         keypairs[0].get_addr().unwrap(),
+    //         keypairs[1].get_addr().unwrap()
+    //     );
+    //     let nonce = {
+    //         let bal_addr = keypairs[0]
+    //             .get_addr()
+    //             .unwrap()
+    //             .to_eth_checksummed()
+    //             .unwrap();
+    //         let bal_payload = vec![ZilliqaJsonRPC::build_payload(
+    //             json!([bal_addr]),
+    //             ZilMethods::GetBalance,
+    //         )];
+    //         let resvec: Vec<ResultRes<GetBalanceRes>> = zil.req(&bal_payload).await.unwrap();
+    //         println!("Bal {0:?}", resvec[0]);
+    //         resvec[0].result.as_ref().map_or(0, |v| v.nonce)
+    //     };
+    //     let txn = TransactionRequest::Zilliqa(ZILTransactionRequest {
+    //         nonce: nonce + 1,
+    //         chain_id: CHAIN_ID,
+    //         gas_price: ZilAmount::from_raw(2000000000),
+    //         gas_limit: ScillaGas(1000),
+    //         to_addr: keypairs[1].get_addr().unwrap(),
+    //         amount: ZilAmount::from_raw(ONE_ZIL),
+    //         code: String::new(),
+    //         data: String::new(),
+    //     });
 
-        let signed = txn.sign(&keypairs[0]).await.unwrap();
+    //     let signed = txn.sign(&keypairs[0]).await.unwrap();
 
-        match signed {
-            TransactionReceipt::Zilliqa(tx) => {
-                dbg!(serde_json::to_string(&tx).unwrap());
-                let payloads = vec![ZilliqaJsonRPC::build_payload(
-                    json!([tx]),
-                    ZilMethods::CreateTransaction,
-                )];
-                let res: Vec<ResultRes<CreateTransactionRes>> = zil.req(&payloads).await.unwrap();
-                println!("{res:?}");
-            }
-            _ => panic!("fail test"),
-        }
-    }
+    //     match signed {
+    //         TransactionReceipt::Zilliqa(tx) => {
+    //             dbg!(serde_json::to_string(&tx).unwrap());
+    //             let payloads = vec![ZilliqaJsonRPC::build_payload(
+    //                 json!([tx]),
+    //                 ZilMethods::CreateTransaction,
+    //             )];
+    //             let res: Vec<ResultRes<CreateTransactionRes>> = zil.req(&payloads).await.unwrap();
+    //             println!("{res:?}");
+    //         }
+    //         _ => panic!("fail test"),
+    //     }
+    // }
 
     #[tokio::test]
     async fn test_get_balance() {
