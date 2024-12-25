@@ -54,7 +54,7 @@ impl NetworkConfigTrait for NetworkConfig {
         Ok(())
     }
 
-    fn remove_node_group(&mut self, indexes: &[usize]) -> Result<()> {
+    fn remove_node_group(&mut self, indexes: Vec<usize>) -> Result<()> {
         if indexes.is_empty() {
             return Ok(());
         }
@@ -208,19 +208,19 @@ mod tests_network_config {
         );
 
         // Test empty indexes
-        assert!(config.remove_node_group(&[]).is_ok());
+        assert!(config.remove_node_group(Vec::new()).is_ok());
         assert_eq!(config.urls().len(), 4);
 
         // Test removing multiple nodes
-        assert!(config.remove_node_group(&[2, 1]).is_ok());
+        assert!(config.remove_node_group([2, 1].to_vec()).is_ok());
         assert_eq!(config.urls().len(), 2);
 
         // Test removing default node (should fail)
-        let err = config.remove_node_group(&[0, 1]).unwrap_err();
+        let err = config.remove_node_group([0, 1].to_vec()).unwrap_err();
         assert!(matches!(err, RpcError::DefaultNodeUnremovable));
 
         // Test invalid index
-        let err = config.remove_node_group(&[5]).unwrap_err();
+        let err = config.remove_node_group([5].to_vec()).unwrap_err();
         assert!(matches!(err, RpcError::NodeNotExits(_)));
 
         // Test removing nodes in descending order
@@ -233,7 +233,7 @@ mod tests_network_config {
             ])
             .unwrap();
 
-        assert!(config.remove_node_group(&[3, 2, 1]).is_ok());
+        assert!(config.remove_node_group([3, 2, 1].to_vec()).is_ok());
         assert_eq!(config.urls().len(), 1);
         assert_eq!(config.default_node(), "http://default.com");
     }

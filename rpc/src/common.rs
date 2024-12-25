@@ -15,7 +15,7 @@ pub trait NetworkConfigTrait {
     fn add_node(&mut self, node: String) -> Result<()>;
     fn add_node_group(&mut self, nodes: Vec<String>) -> Result<()>;
 
-    fn remove_node_group(&mut self, indexes: &[usize]) -> Result<()>;
+    fn remove_node_group(&mut self, indexes: Vec<usize>) -> Result<()>;
     fn remove_node(&mut self, node_index: usize) -> Result<()>;
 }
 
