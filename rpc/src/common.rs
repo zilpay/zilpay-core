@@ -6,7 +6,9 @@ use zil_errors::rpc::RpcError;
 
 pub type Result<T> = std::result::Result<T, RpcError>;
 
-pub trait RpcMethod: ToString {}
+pub trait RpcMethod: std::fmt::Display {
+    fn as_str(&self) -> &'static str;
+}
 
 pub trait NetworkConfigTrait {
     fn nodes(&self) -> &[String];

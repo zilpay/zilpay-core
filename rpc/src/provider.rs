@@ -32,7 +32,7 @@ where
         serde_json::json!({
             "id": 1,
             "jsonrpc": "2.0",
-            "method": method.to_string(),
+            "method": method.as_str(),
             "params": params
         })
     }
@@ -93,5 +93,55 @@ where
         }
 
         Err(error)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        methods::{EvmMethods, ZilMethods},
+        network_config::NetworkConfig,
+        zil_interfaces::{GetBalanceRes, ResultRes},
+    };
+    use serde_json::json;
+
+    const ZERO_ADDR: &str = "0000000000000000000000000000000000000000";
+
+    #[tokio::test]
+    async fn test_get_balance_scilla() {
+        let net_conf =
+            NetworkConfig::new("Zilliqa", 1, vec!["https://api.zilliqa.com".to_string()]);
+        let zil: RpcProvider<NetworkConfig, ZilMethods> = RpcProvider::new(net_conf);
+        let payloads = vec![RpcProvider::<NetworkConfig, ZilMethods>::build_payload(
+            json!([ZERO_ADDR]),
+            ZilMethods::GetBalance,
+        )];
+
+        let res: Vec<ResultRes<GetBalanceRes>> = zil.req(&payloads).await.unwrap();
+
+        assert!(res.len() == 1);
+        assert!(res[0].result.is_some());
+        assert!(res[0].error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_balance_bsc() {
+        let net_conf = NetworkConfig::new(
+            "Binance-smart-chain",
+            56,
+            vec!["https://bsc-dataseed.binance.org".to_string()],
+        );
+        let zil: RpcProvider<NetworkConfig, ZilMethods> = RpcProvider::new(net_conf);
+        let payloads = vec![RpcProvider::<NetworkConfig, EvmMethods>::build_payload(
+            json!(["0x0000000000000000000000000000000000000000", "latest"]),
+            EvmMethods::GetBalance,
+        )];
+
+        let res: Vec<ResultRes<String>> = zil.req(&payloads).await.unwrap();
+
+        assert!(res.len() == 1);
+        assert!(res[0].result.is_some());
+        assert!(res[0].error.is_none());
     }
 }
