@@ -7,13 +7,13 @@ use alloy::{
 };
 use config::abi::ERC20_ABI;
 use proto::address::Address;
-use serde_json::{json, Value};
-use zil_errors::network::NetworkErrors;
-use zilliqa::json_rpc::{
+use rpc::{
     zil::ZilliqaJsonRPC,
     zil_interfaces::{GetTokenInitItem, ResultRes},
     zil_methods::ZilMethods,
 };
+use serde_json::{json, Value};
+use zil_errors::network::NetworkErrors;
 
 trait ResponseValidator {
     fn validate(&self) -> Result<&Self>;
@@ -346,8 +346,8 @@ pub fn process_zil_balance_response(
 mod ftoken_tests {
     use super::*;
     use config::address::ADDR_LEN;
+    use rpc::zil_interfaces::ErrorRes;
     use serde_json::json;
-    use zilliqa::json_rpc::zil_interfaces::ErrorRes;
 
     fn create_mock_eth_address() -> Address {
         Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN])

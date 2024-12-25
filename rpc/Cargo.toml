@@ -1,5 +1,5 @@
 [package]
-name = "zilliqa"
+name = "rpc"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,6 +9,7 @@ serde.workspace = true
 hex.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
+async-trait.workspace = true
 zil_errors = { path = "../zil_errors" }
 crypto = { path = "../crypto" }
 config = { path = "../config" }

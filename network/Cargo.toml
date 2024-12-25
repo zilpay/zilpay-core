@@ -13,7 +13,7 @@ zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 wallet = { path = "../wallet" }
 proto = { path = "../proto" }
-zilliqa = { path = "../zilliqa" }
+rpc = { path = "../rpc" }
 
 [dev-dependencies]
 mockito = "1.5.0"

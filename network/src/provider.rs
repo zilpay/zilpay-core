@@ -2,12 +2,12 @@ use crate::Result;
 use alloy::primitives::U256;
 use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
 use proto::address::Address;
+use rpc::{zil::ZilliqaJsonRPC, zil_interfaces::ResultRes};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
-use zilliqa::json_rpc::{zil::ZilliqaJsonRPC, zil_interfaces::ResultRes};
 
 use crate::token::{
     build_token_requests, process_eth_balance_response, process_eth_metadata_response,

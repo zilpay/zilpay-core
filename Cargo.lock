@@ -2472,12 +2472,12 @@ dependencies = [
  "mockito",
  "proto",
  "reqwest 0.11.27",
+ "rpc",
  "serde",
  "serde_json",
  "tokio",
  "wallet",
  "zil_errors",
- "zilliqa",
 ]
 
 [[package]]
@@ -3169,6 +3169,23 @@ checksum = "bb919243f34364b6bd2fc10ef797edbfa75f33c252e7998527479c6d6b47e1ec"
 dependencies = [
  "bytes",
  "rustc-hex",
+]
+
+[[package]]
+name = "rpc"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "config",
+ "crypto",
+ "hex",
+ "mockito",
+ "proto",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "tokio",
+ "zil_errors",
 ]
 
 [[package]]
@@ -4690,22 +4707,6 @@ dependencies = [
  "ntrulp",
  "rust-argon2",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "zilliqa"
-version = "0.1.0"
-dependencies = [
- "config",
- "crypto",
- "hex",
- "mockito",
- "proto",
- "reqwest 0.11.27",
- "serde",
- "serde_json",
- "tokio",
- "zil_errors",
 ]
 
 [[package]]
