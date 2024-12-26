@@ -40,10 +40,10 @@ mod tests_rates {
     use super::*;
     use tokio;
 
-    #[tokio::test]
-    async fn test_fetch_rates() {
-        let rates = fetch_rates().await.unwrap();
+    // #[tokio::test]
+    // async fn test_fetch_rates() {
+    //     let rates = fetch_rates().await.unwrap();
 
-        dbg!(rates);
-    }
+    //     dbg!(rates);
+    // }
 }

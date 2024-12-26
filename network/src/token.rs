@@ -107,7 +107,11 @@ pub fn build_token_requests<'a>(
     accounts: &[&'a Address],
     native: bool,
 ) -> RequestResult<'a> {
-    let mut requests = Vec::new();
+    let size = match contract {
+        Address::Secp256k1Sha256Zilliqa(_) => 1 + accounts.len(),
+        Address::Secp256k1Keccak256Ethereum(_) => 3 + accounts.len(),
+    };
+    let mut requests = Vec::with_capacity(size);
 
     match contract {
         Address::Secp256k1Sha256Zilliqa(_) => {
