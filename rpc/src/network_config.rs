@@ -3,7 +3,7 @@ use zil_errors::rpc::RpcError;
 
 use crate::common::{NetworkConfigTrait, Result};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, Hash)]
 pub struct NetworkConfig {
     pub network_name: String,
     pub chain_id: u64,

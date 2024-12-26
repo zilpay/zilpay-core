@@ -10,6 +10,8 @@ serde_json.workspace = true
 serde.workspace = true
 reqwest.workspace = true
 async-trait.workspace = true
+bincode.workspace = true
+storage = { path = "../storage" }
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 wallet = { path = "../wallet" }

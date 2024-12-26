@@ -2471,6 +2471,7 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "async-trait",
+ "bincode",
  "config",
  "crypto",
  "mockito",
@@ -2479,6 +2480,7 @@ dependencies = [
  "rpc",
  "serde",
  "serde_json",
+ "storage",
  "tokio",
  "wallet",
  "zil_errors",

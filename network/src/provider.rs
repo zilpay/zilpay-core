@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::common::Provider;
 use crate::token::{
@@ -15,12 +16,13 @@ use rpc::network_config::NetworkConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
 use serde_json::Value;
+use storage::LocalStorage;
 use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
 
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct NetworkProvider {
     config: NetworkConfig,
-    storage: Arc<LocalStorage>,
 }
 
 impl Provider for NetworkProvider {
@@ -31,11 +33,11 @@ impl Provider for NetworkProvider {
         xor_hash(name, chain_id)
     }
 
-    fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
+    fn load_network_configs(storage: Arc<LocalStorage>) -> HashSet<Self> {
         let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
 
         if bytes.is_empty() {
-            return Vec::with_capacity(1);
+            return HashSet::new();
         }
 
         let configs: Vec<NetworkConfig> =
@@ -43,27 +45,26 @@ impl Provider for NetworkProvider {
         let mut providers = Vec::with_capacity(configs.len());
 
         for config in configs {
-            providers.push(self::new(config));
+            providers.push(NetworkProvider::new(config));
         }
 
-        providers
+        providers.into_iter().collect()
     }
 
-    fn save_network_configs(&self) -> Result<()> {
-        let bytes =
-            serde_json::to_vec(&self.config).or(Err(BackgroundError::FailToSerializeNetworks))?;
+    fn save_network_config(&self, storage: Arc<LocalStorage>) -> Result<()> {
+        let bytes = self.config.to_bytes().map_err(NetworkErrors::RPCSerde)?;
 
-        self.storage
+        storage
             .set(NETWORK_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+            .map_err(NetworkErrors::Storage)?;
 
         Ok(())
     }
 }
 
 impl NetworkProvider {
-    pub fn new(config: NetworkConfig, storage: Arc<LocalStorage>) -> Self {
-        Self { config, storage }
+    pub fn new(config: NetworkConfig) -> Self {
+        Self { config }
     }
 
     pub async fn fetch_nodes_list(&mut self) -> Result<()> {

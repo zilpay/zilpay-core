@@ -52,8 +52,8 @@ pub enum BackgroundError {
     #[error("such address {0}, already exists")]
     AddressAlreadyExists(String),
 
-    #[error("Fail to serialize connections")]
-    FailToSerializeConnections,
+    #[error("Fail to serialize connections error: {0}")]
+    FailToSerializeConnections(String),
 
     #[error("Invalid BIP39 word count: {0}")]
     InvalidWordCount(u8),

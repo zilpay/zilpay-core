@@ -10,14 +10,13 @@ use config::{
     sha::{SHA256_SIZE, SHA512_SIZE},
     storage::{
         ADDRESS_BOOK_DB_KEY, CONNECTIONS_LIST_DB_KEY, CURRENCIES_RATES_DB_KEY,
-        GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY, NETWORK_DB_KEY,
+        GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY,
     },
 };
 use connections::Connection;
 use crypto::bip49::Bip49DerivationPath;
 use network::{common::Provider, provider::NetworkProvider, rates::fetch_rates};
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
-use rpc::network_config::NetworkConfig;
 use serde_json::{json, Value};
 use session::{decrypt_session, encrypt_session};
 use settings::{
@@ -27,7 +26,7 @@ use settings::{
     theme::Theme,
     wallet_settings::WalletSettings,
 };
-use std::sync::Arc;
+use std::{collections::HashSet, sync::Arc};
 use storage::LocalStorage;
 use wallet::{
     ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams,
@@ -47,7 +46,7 @@ pub struct BackgroundBip39Params<'a> {
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
-    pub network: &'a [usize],
+    pub network: HashSet<u64>,
     pub wallet_settings: WalletSettings,
     pub accounts: &'a [(Bip49DerivationPath, String)],
 }
@@ -59,7 +58,7 @@ pub struct BackgroundSKParams<'a> {
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
-    pub network: Vec<usize>,
+    pub network: HashSet<u64>,
     pub wallet_settings: WalletSettings,
 }
 
@@ -69,7 +68,7 @@ pub struct Background {
     pub indicators: Vec<[u8; SHA256_SIZE]>,
     pub is_old_storage: bool,
     pub settings: CommonSettings,
-    pub netowrk: Vec<NetworkProvider>,
+    pub netowrk: HashSet<NetworkProvider>,
 }
 
 fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
@@ -490,10 +489,10 @@ impl Background {
             .unwrap_or_default();
 
         if bytes.is_empty() {
-            return Vec::new();
+            return Vec::with_capacity(1);
         }
 
-        serde_json::from_slice(&bytes).unwrap_or(Vec::new())
+        bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1))
     }
 
     pub fn add_wallet_to_connection(&self, domain: String, wallet_index: usize) -> Result<()> {
@@ -511,8 +510,8 @@ impl Background {
         connection.add_wallet(wallet_index);
         connection.update_last_connected();
 
-        let bytes = serde_json::to_vec(&connections)
-            .or(Err(BackgroundError::FailToSerializeConnections))?;
+        let bytes = bincode::serialize(&connections)
+            .map_err(|e| BackgroundError::FailToSerializeConnections(e.to_string()))?;
 
         self.storage
             .set(CONNECTIONS_LIST_DB_KEY, &bytes)
@@ -533,8 +532,8 @@ impl Background {
 
         connections.push(connection);
 
-        let bytes = serde_json::to_vec(&connections)
-            .or(Err(BackgroundError::FailToSerializeConnections))?;
+        let bytes = bincode::serialize(&connections)
+            .map_err(|e| BackgroundError::FailToSerializeConnections(e.to_string()))?;
 
         self.storage
             .set(CONNECTIONS_LIST_DB_KEY, &bytes)
@@ -550,10 +549,10 @@ impl Background {
         let bytes = self.storage.get(ADDRESS_BOOK_DB_KEY).unwrap_or_default();
 
         if bytes.is_empty() {
-            return Vec::new();
+            return Vec::with_capacity(1);
         }
 
-        serde_json::from_slice(&bytes).unwrap_or(Vec::new())
+        bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1))
     }
 
     pub fn add_to_address_book(&self, address: AddressBookEntry) -> Result<()> {
@@ -581,6 +580,7 @@ impl Background {
     }
 
     pub async fn update_rates(&self) -> Result<Value> {
+        // TODO: remake this method with timestamp and struct.
         let rates = fetch_rates()
             .await
             .map_err(BackgroundError::NetworkErrors)?;
@@ -603,6 +603,7 @@ impl Background {
             .unwrap_or_default();
 
         if bytes.is_empty() {
+            // TODO: remake it with struct and timestamp.
             return json!([]);
         }
 
@@ -638,9 +639,10 @@ impl Background {
             }
 
             self.netowrk
-                .get_mut(*net_id)
+                .iter()
+                .find(|n| n.get_network_id() == *net_id)
                 .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
-                .get_tokens_balances(matching_tokens, &addresses)
+                .update_balances(matching_tokens, &addresses)
                 .await
                 .map_err(BackgroundError::NetworkErrors)?;
         }
@@ -656,25 +658,15 @@ impl Background {
 
     fn providers_from_wallet_index(&self, wallet_index: usize) -> Result<Vec<&NetworkProvider>> {
         let w = self.get_wallet_by_index(wallet_index)?;
-        let providers = w
-            .data
-            .network
-            .iter()
-            .filter_map(|index| self.netowrk.get(*index))
-            .collect();
+        // let providers = w
+        //     .data
+        //     .network
+        //     .iter()
+        //     .filter_map(|index| self.netowrk.get(*index))
+        //     .collect();
+        // let providers = self.netowrk.;
 
         Ok(providers)
-    }
-
-    fn save_network(&self) -> Result<()> {
-        let bytes =
-            serde_json::to_vec(&self.netowrk).or(Err(BackgroundError::FailToSerializeNetworks))?;
-
-        self.storage
-            .set(NETWORK_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
-
-        Ok(())
     }
 
     fn save_settings(&self) -> Result<()> {
@@ -1207,11 +1199,11 @@ mod tests_background {
             (Bip49DerivationPath::Zilliqa(0), "first".to_string()),
             (Bip49DerivationPath::Zilliqa(1), "second".to_string()),
         ];
-        let network = [0];
+        let network = [0u64];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            network: &network,
+            network: network.to_vec(),
             mnemonic_str: words,
             accounts: &accounts,
             wallet_settings: Default::default(),

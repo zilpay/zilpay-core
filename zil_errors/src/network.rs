@@ -1,9 +1,9 @@
-use crate::{address::AddressError, rpc::RpcError, token::TokenError};
+use crate::{address::AddressError, rpc::RpcError, storage::LocalStorageError, token::TokenError};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum NetworkErrors {
-    #[error("Network {0}")]
+    #[error("jsonRPC: {0}")]
     RPCError(String),
 
     #[error("Fail to crate function from ABI, Error: {0}")]
@@ -11,6 +11,12 @@ pub enum NetworkErrors {
 
     #[error("Failed to make request: {0}")]
     Request(RpcError),
+
+    #[error("Fail to serde config: {0}")]
+    RPCSerde(RpcError),
+
+    #[error("Fail to save/read from storage err: {0}")]
+    Storage(LocalStorageError),
 
     #[error("Http state: {0}, message {1}")]
     HttpError(u16, String),

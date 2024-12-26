@@ -4,6 +4,7 @@ pub mod ft;
 pub mod wallet_data;
 pub mod wallet_types;
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use account_type::AccountType;
@@ -48,7 +49,7 @@ pub struct LedgerParams<'a> {
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub networks: Vec<usize>,
+    pub networks: HashSet<u64>,
 }
 
 pub struct Bip39Params<'a> {
@@ -59,7 +60,7 @@ pub struct Bip39Params<'a> {
     pub config: WalletConfig,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub network: &'a [usize],
+    pub network: HashSet<u64>,
 }
 
 pub struct Wallet {
@@ -171,7 +172,7 @@ impl Wallet {
         config: WalletConfig,
         wallet_name: String,
         biometric_type: AuthMethod,
-        network: Vec<usize>,
+        network: HashSet<u64>,
     ) -> Result<Self> {
         let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
@@ -276,7 +277,7 @@ impl Wallet {
             _ => unreachable!(),
         };
         let data = WalletData {
-            network: params.network.to_owned(),
+            network: params.network,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type.clone(),
             proof_key,
@@ -607,7 +608,10 @@ impl Wallet {
 #[cfg(test)]
 mod tests {
     use core::panic;
-    use std::{collections::HashMap, sync::Arc};
+    use std::{
+        collections::{HashMap, HashSet},
+        sync::Arc,
+    };
 
     use bip39::Mnemonic;
     use cipher::{
@@ -645,7 +649,7 @@ mod tests {
             "WalletWriteTest App",
         )
         .unwrap();
-        let storage = Arc::new(storage);
+        let storag = Arc::new(storage);
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
@@ -665,7 +669,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Wllaet name".to_string(),
             biometric_type: AuthMethod::Biometric,
-            network: &[0],
+            network: HashSet::new(),
         })
         .unwrap();
 
@@ -718,7 +722,7 @@ mod tests {
             wallet_config,
             "test Name".to_string(),
             Default::default(),
-            vec![0],
+            HashSet::from(0),
         )
         .unwrap();
 
