@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::common::Provider;
@@ -20,10 +21,23 @@ use storage::LocalStorage;
 use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
 
-#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct NetworkProvider {
     config: NetworkConfig,
 }
+
+impl Hash for NetworkProvider {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.get_network_id().hash(state);
+    }
+}
+
+impl PartialEq for NetworkProvider {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_network_id() == other.get_network_id()
+    }
+}
+
+impl Eq for NetworkProvider {}
 
 impl Provider for NetworkProvider {
     fn get_network_id(&self) -> u64 {
