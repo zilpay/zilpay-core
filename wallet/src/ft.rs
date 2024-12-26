@@ -1,6 +1,5 @@
 use alloy::primitives::U256;
 use config::address::ADDR_LEN;
-use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -8,7 +7,7 @@ use zil_errors::wallet::WalletErrors;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FToken {
-    pub net_id: usize,
+    pub net_id: u64,
     pub name: String,
     pub symbol: String,
     pub decimals: u8,
@@ -44,7 +43,7 @@ impl FToken {
             logo: None, // TODO: add logo
             balances: HashMap::new(),
             native: true,
-            net_id: ZILLIQA_ITERNEL_ID,
+            net_id: 0,
         }
     }
 
@@ -58,7 +57,7 @@ impl FToken {
             logo: None, // TODO: add logo
             balances: HashMap::new(),
             native: false,
-            net_id: ZILLIQA_ITERNEL_ID,
+            net_id: 0,
         }
     }
 
@@ -72,7 +71,7 @@ impl FToken {
             logo: None, // TODO: add logo
             balances: HashMap::new(),
             native: true,
-            net_id: ETHEREUM_ITERNEL_ID,
+            net_id: 1,
         }
     }
 }

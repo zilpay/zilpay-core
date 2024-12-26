@@ -8,9 +8,10 @@ use alloy::{
 use config::abi::ERC20_ABI;
 use proto::address::Address;
 use rpc::{
-    zil::ZilliqaJsonRPC,
+    methods::{EvmMethods, ZilMethods},
+    network_config::NetworkConfig,
+    provider::RpcProvider,
     zil_interfaces::{GetTokenInitItem, ResultRes},
-    zil_methods::ZilMethods,
 };
 use serde_json::{json, Value};
 use zil_errors::network::NetworkErrors;
@@ -129,10 +130,12 @@ fn build_zil_requests<'a>(
     let base16_contract = contract
         .get_zil_base16()
         .map_err(NetworkErrors::InvalidZilAddress)?;
-
     // Add metadata request
     requests.push((
-        ZilliqaJsonRPC::build_payload(json!([base16_contract]), ZilMethods::GetSmartContractInit),
+        RpcProvider::<NetworkConfig>::build_payload(
+            json!([base16_contract]),
+            ZilMethods::GetSmartContractInit,
+        ),
         RequestType::Metadata(MetadataField::Name),
     ));
 
@@ -149,9 +152,12 @@ fn build_zil_requests<'a>(
         };
 
         let request = if native {
-            ZilliqaJsonRPC::build_payload(json!([base16_account]), ZilMethods::GetBalance)
+            RpcProvider::<NetworkConfig>::build_payload(
+                json!([base16_account]),
+                ZilMethods::GetBalance,
+            )
         } else {
-            ZilliqaJsonRPC::build_payload(
+            RpcProvider::<NetworkConfig>::build_payload(
                 json!([base16_contract, "balances", [base16_account]]),
                 ZilMethods::GetSmartContractSubState,
             )
@@ -169,6 +175,7 @@ fn build_eth_requests<'a>(
     native: bool,
     requests: &mut Vec<(Value, RequestType<'a>)>,
 ) -> Result<()> {
+    let build_payload = RpcProvider::<NetworkConfig>::build_payload;
     let token_addr = contract
         .to_eth_checksummed()
         .map_err(NetworkErrors::InvalidETHAddress)?;
@@ -176,12 +183,12 @@ fn build_eth_requests<'a>(
 
     // Create a closure for building ETH call payloads
     let build_eth_call = |data: String| -> Value {
-        ZilliqaJsonRPC::build_payload(
+        build_payload(
             json!([{
                 "to": &token_addr,
                 "data": data
             }, "latest"]),
-            ZilMethods::ETHCall,
+            EvmMethods::Call,
         )
     };
 
@@ -201,7 +208,7 @@ fn build_eth_requests<'a>(
             let owner = account
                 .to_eth_checksummed()
                 .map_err(NetworkErrors::InvalidETHAddress)?;
-            ZilliqaJsonRPC::build_payload(json!([owner, "latest"]), ZilMethods::ETHgetBalance)
+            build_payload(json!([owner, "latest"]), EvmMethods::GetBalance)
         } else {
             let call_data = erc20.encode_function_call(
                 "balanceOf",

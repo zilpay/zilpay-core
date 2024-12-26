@@ -1,457 +1,204 @@
-use crate::Result;
-use alloy::primitives::U256;
-use config::provider::{ETHEREUM_ITERNEL_ID, ZILLIQA_ITERNEL_ID};
-use proto::address::Address;
-use rpc::{zil::ZilliqaJsonRPC, zil_interfaces::ResultRes};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::HashMap;
-use wallet::ft::FToken;
-use zil_errors::network::NetworkErrors;
 
+use crate::common::Provider;
 use crate::token::{
     build_token_requests, process_eth_balance_response, process_eth_metadata_response,
     process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
 };
+use crate::Result;
+use alloy::primitives::U256;
+use crypto::xor_hash::xor_hash;
+use proto::address::Address;
+use rpc::common::JsonRPC;
+use rpc::network_config::NetworkConfig;
+use rpc::provider::RpcProvider;
+use rpc::zil_interfaces::ResultRes;
+use serde_json::Value;
+use wallet::ft::FToken;
+use zil_errors::network::NetworkErrors;
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub enum NetworkProvider {
-    Zilliqa(ZilliqaJsonRPC),
-    Ethereum,
+pub struct NetworkProvider {
+    config: NetworkConfig,
 }
 
-impl std::fmt::Display for NetworkProvider {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NetworkProvider::Zilliqa(_) => write!(f, "ZIL"),
-            NetworkProvider::Ethereum => write!(f, "ETH"),
-        }
+impl Provider for NetworkProvider {
+    fn get_network_id(&self) -> u64 {
+        let name = &self.config.network_name;
+        let chain_id = self.config.chain_id;
+
+        xor_hash(name, chain_id)
     }
 }
 
 impl NetworkProvider {
-    pub fn new_vec() -> Vec<Self> {
-        let zil_rpc = ZilliqaJsonRPC::new();
-
-        vec![NetworkProvider::Zilliqa(zil_rpc), NetworkProvider::Ethereum]
+    pub fn new(config: NetworkConfig) -> Self {
+        Self { config }
     }
 
-    pub fn code(&self) -> usize {
-        match &self {
-            Self::Zilliqa(_) => ZILLIQA_ITERNEL_ID,
-            Self::Ethereum => ETHEREUM_ITERNEL_ID,
-        }
-    }
-
-    pub async fn update_nodes(&mut self) -> Result<()> {
-        match self {
-            NetworkProvider::Zilliqa(zil) => {
-                zil.update_scilla_nodes()
-                    .await
-                    .map_err(NetworkErrors::FetchNodes)?;
-            }
-            NetworkProvider::Ethereum => {
-                unreachable!()
-            }
-        };
-
+    pub async fn fetch_nodes_list(&mut self) -> Result<()> {
+        // TODO: make server ZilPay which track nodes and makes ranking.
         Ok(())
     }
 
-    pub async fn get_ftoken_meta(
-        &self,
-        contract: &Address,
-        accounts: &[&Address],
-    ) -> Result<FToken> {
-        match self {
-            NetworkProvider::Ethereum => {
-                unreachable!()
-            }
-            NetworkProvider::Zilliqa(zil) => {
-                let requests = build_token_requests(contract, accounts, false)?;
-                let responses = zil
-                    .req::<Vec<ResultRes<Value>>>(
-                        &requests
-                            .iter()
-                            .map(|(req, _)| req.clone())
-                            .collect::<Vec<_>>(),
-                    )
-                    .await
-                    .map_err(NetworkErrors::Request)?;
-
-                match contract {
-                    Address::Secp256k1Sha256Zilliqa(_) => {
-                        let (name, symbol, decimals) = process_zil_metadata_response(
-                            responses[0]
-                                .result
-                                .as_ref()
-                                .ok_or(NetworkErrors::InvalidContractInit)?,
-                        )?;
-
-                        let mut balances: HashMap<usize, U256> = HashMap::new();
-
-                        for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
-                            if let RequestType::Balance(account) = req_type {
-                                let balance =
-                                    process_zil_balance_response(&responses[i], account, false);
-
-                                if let Some(account_index) =
-                                    accounts.iter().position(|&addr| addr == *account)
-                                {
-                                    balances.insert(account_index, balance);
-                                }
-                            }
-                        }
-
-                        Ok(FToken {
-                            balances,
-                            name,
-                            symbol,
-                            decimals,
-                            addr: contract.clone(),
-                            logo: None,
-                            default: false,
-                            native: false,
-                            net_id: ZILLIQA_ITERNEL_ID,
-                        })
-                    }
-                    Address::Secp256k1Keccak256Ethereum(_) => {
-                        let mut metadata_iter = responses.iter();
-                        let name = process_eth_metadata_response(
-                            metadata_iter
-                                .next()
-                                .ok_or(NetworkErrors::InvalidContractInit)?,
-                            &MetadataField::Name,
-                        )?;
-                        let symbol = process_eth_metadata_response(
-                            metadata_iter
-                                .next()
-                                .ok_or(NetworkErrors::InvalidContractInit)?,
-                            &MetadataField::Symbol,
-                        )?;
-                        let decimals: u8 = process_eth_metadata_response(
-                            metadata_iter
-                                .next()
-                                .ok_or(NetworkErrors::InvalidContractInit)?,
-                            &MetadataField::Decimals,
-                        )?
-                        .parse()
-                        .map_err(|_| NetworkErrors::InvalidContractInit)?;
-
-                        let mut balances: HashMap<usize, U256> = HashMap::new();
-                        for ((_, req_type), response) in
-                            requests.iter().zip(responses.iter()).skip(3)
-                        {
-                            if let RequestType::Balance(account) = req_type {
-                                let balance = process_eth_balance_response(response)?;
-
-                                if let Some(account_index) =
-                                    accounts.iter().position(|&addr| addr == *account)
-                                {
-                                    balances.insert(account_index, balance);
-                                }
-                            }
-                        }
-
-                        Ok(FToken {
-                            balances,
-                            name,
-                            symbol,
-                            decimals,
-                            addr: contract.clone(),
-                            logo: None,
-                            default: false,
-                            native: false,
-                            net_id: ZILLIQA_ITERNEL_ID,
-                        })
-                    }
-                }
-            }
-        }
+    pub fn update_balances(&self, tokens: &mut [FToken], accounts: &[&Address]) -> Result<()> {
+        Ok(())
     }
 
-    pub async fn get_tokens_balances(
-        &self,
-        tokens: &mut [FToken],
-        accounts: &[&Address],
-    ) -> Result<()> {
-        match self {
-            NetworkProvider::Ethereum => {
-                unreachable!()
+    pub async fn ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
+        let requests = build_token_requests(&contract, accounts, false)?;
+        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
+        let responses: Vec<ResultRes<Value>> = provider
+            .req(
+                &requests
+                    .iter()
+                    .map(|(req, _)| req.clone())
+                    .collect::<Vec<_>>(),
+            )
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        match contract {
+            Address::Secp256k1Sha256Zilliqa(_) => {
+                let (name, symbol, decimals) = process_zil_metadata_response(
+                    responses[0]
+                        .result
+                        .as_ref()
+                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                )?;
+
+                let mut balances: HashMap<usize, U256> = HashMap::new();
+
+                for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
+                    if let RequestType::Balance(account) = req_type {
+                        let balance = process_zil_balance_response(&responses[i], account, false);
+
+                        if let Some(account_index) =
+                            accounts.iter().position(|&addr| addr == *account)
+                        {
+                            balances.insert(account_index, balance);
+                        }
+                    }
+                }
+
+                Ok(FToken {
+                    balances,
+                    name,
+                    symbol,
+                    decimals,
+                    addr: contract,
+                    logo: None,
+                    default: false,
+                    native: false,
+                    net_id: self.get_network_id(),
+                })
             }
-            NetworkProvider::Zilliqa(zil) => {
-                let mut all_requests = Vec::new();
-                let mut request_mapping = Vec::new();
+            Address::Secp256k1Keccak256Ethereum(_) => {
+                let mut metadata_iter = responses.iter();
+                let name = process_eth_metadata_response(
+                    metadata_iter
+                        .next()
+                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                    &MetadataField::Name,
+                )?;
+                let symbol = process_eth_metadata_response(
+                    metadata_iter
+                        .next()
+                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                    &MetadataField::Symbol,
+                )?;
+                let decimals: u8 = process_eth_metadata_response(
+                    metadata_iter
+                        .next()
+                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                    &MetadataField::Decimals,
+                )?
+                .parse()
+                .map_err(|_| NetworkErrors::InvalidContractInit)?;
 
-                for (token_idx, token) in tokens.iter().enumerate() {
-                    let requests = build_token_requests(&token.addr, accounts, token.native)?;
+                let mut balances: HashMap<usize, U256> = HashMap::new();
+                for ((_, req_type), response) in requests.iter().zip(responses.iter()).skip(3) {
+                    if let RequestType::Balance(account) = req_type {
+                        let balance = process_eth_balance_response(response)?;
 
-                    for (req, req_type) in requests {
-                        if let RequestType::Balance(account) = req_type {
-                            request_mapping.push((token_idx, account));
-                            all_requests.push(req);
+                        if let Some(account_index) =
+                            accounts.iter().position(|&addr| addr == *account)
+                        {
+                            balances.insert(account_index, balance);
                         }
                     }
                 }
 
-                if !all_requests.is_empty() {
-                    let responses = zil
-                        .req::<Vec<ResultRes<Value>>>(&all_requests)
-                        .await
-                        .map_err(NetworkErrors::Request)?;
-
-                    for ((token_idx, account), response) in
-                        request_mapping.iter().zip(responses.iter())
-                    {
-                        match tokens[*token_idx].addr {
-                            Address::Secp256k1Sha256Zilliqa(_) => {
-                                let balance = process_zil_balance_response(
-                                    response,
-                                    account,
-                                    tokens[*token_idx].native,
-                                );
-
-                                if let Some(account_index) =
-                                    accounts.iter().position(|&addr| addr == *account)
-                                {
-                                    tokens[*token_idx].balances.insert(account_index, balance);
-                                }
-                            }
-                            Address::Secp256k1Keccak256Ethereum(_) => {
-                                let balance = process_eth_balance_response(response)?;
-
-                                if let Some(account_index) =
-                                    accounts.iter().position(|&addr| addr == *account)
-                                {
-                                    tokens[*token_idx].balances.insert(account_index, balance);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Ok(())
+                Ok(FToken {
+                    balances,
+                    name,
+                    symbol,
+                    decimals,
+                    addr: contract,
+                    logo: None,
+                    default: false,
+                    native: false,
+                    net_id: self.get_network_id(),
+                })
             }
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_network {
     use super::*;
     use alloy::primitives::U256;
     use config::address::ADDR_LEN;
     use tokio;
 
     #[tokio::test]
-    async fn test_get_ftoken_meta() {
-        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_MAINNET.to_string()], 0);
-        let net = NetworkProvider::Zilliqa(zil);
+    async fn test_get_ftoken_meta_bsc() {
+        let net_conf = NetworkConfig::new(
+            "Binance-smart-chain",
+            56,
+            vec!["https://bsc-dataseed.binance.org".to_string()],
+        );
+        let provider = NetworkProvider::new(net_conf);
+
         let token_addr =
-            Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap();
+            Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
         let account = [
-            &Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
-            &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
-            &Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
-            &Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
+            &Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap(),
+            &Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
         ];
-        let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
+        let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
-        assert!(*ftoken.balances.get(&0).unwrap() >= U256::from(0));
-        assert!(*ftoken.balances.get(&1).unwrap() >= U256::from(0));
-        assert!(*ftoken.balances.get(&2).unwrap() == U256::from(0));
-        assert!(*ftoken.balances.get(&3).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
 
-        assert_eq!(&ftoken.name, "ZilPay wallet");
-        assert_eq!(&ftoken.symbol, "ZLP");
+        assert_eq!(&ftoken.name, "Tether USD");
+        assert_eq!(&ftoken.symbol, "USDT");
         assert_eq!(ftoken.decimals, 18u8);
     }
 
     #[tokio::test]
-    async fn test_fetch_accounts_tokens_balances() {
-        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_MAINNET.to_string()], 0);
-        let net = NetworkProvider::Zilliqa(zil);
-        // Add multiple custom tokens
-        let mut tokens = vec![
-            FToken::zil(),
-            FToken {
-                name: "ZilPay token".to_string(),
-                symbol: "ZLP".to_string(),
-                decimals: 18,
-                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
-                    .unwrap(),
-                native: false,
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
-            },
-            FToken {
-                name: "DMZ".to_string(),
-                symbol: "DMZ".to_string(),
-                decimals: 18,
-                addr: Address::from_zil_bech32("zil19lr3vlpm4lufu2q94mmjvdkvmx8wdwajuntzx2")
-                    .unwrap(),
-                native: false,
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
-            },
-            FToken {
-                name: "RedChillies".to_string(),
-                symbol: "REDC".to_string(),
-                decimals: 9,
-                native: false,
-                addr: Address::from_zil_bech32("zil14jmjrkvfcz2uvj3y69kl6gas34ecuf2j5ggmye")
-                    .unwrap(),
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
-            },
-        ];
-        let accounts = [
-            &Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
-            &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
-            &Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
-        ];
+    async fn test_get_ftoken_meta_zil_legacy() {
+        let net_conf = NetworkConfig::new(
+            "Zilliqa(Legacy)",
+            1,
+            vec!["https://api.zilliqa.com".to_string()],
+        );
 
-        net.get_tokens_balances(&mut tokens, &accounts)
-            .await
-            .unwrap();
+        let provider = NetworkProvider::new(net_conf);
 
-        assert!(&tokens[0].balances.contains_key(&0));
-        assert!(&tokens[0].balances.contains_key(&1));
-        assert!(&tokens[0].balances.contains_key(&2));
-
-        assert!(&tokens[1].balances.contains_key(&0));
-        assert!(&tokens[1].balances.contains_key(&1));
-        assert!(&tokens[1].balances.contains_key(&2));
-
-        assert!(&tokens[2].balances.contains_key(&0));
-        assert!(&tokens[2].balances.contains_key(&1));
-        assert!(&tokens[2].balances.contains_key(&2));
-    }
-
-    #[tokio::test]
-    async fn test_fetch_eth_tokens() {
-        let zil = ZilliqaJsonRPC::new();
-        let net = NetworkProvider::Zilliqa(zil);
-        // Add multiple custom tokens
-        let mut tokens = vec![
-            FToken::eth(),
-            FToken {
-                name: "Zilliqa-bridged USDT token".to_string(),
-                symbol: "zUSDT".to_string(),
-                decimals: 18,
-                native: false,
-                addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
-                    .unwrap(),
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
-            },
-        ];
-        let accounts = [
-            &Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
-            &Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
-        ];
-
-        net.get_tokens_balances(&mut tokens, &accounts)
-            .await
-            .unwrap();
-
-        assert!(&tokens[0].balances.contains_key(&0));
-        assert!(&tokens[0].balances.contains_key(&1));
-
-        assert!(&tokens[1].balances.contains_key(&0));
-        assert!(&tokens[1].balances.contains_key(&1));
-    }
-
-    #[tokio::test]
-    async fn test_fetch_eth_meta_data() {
-        let zil = ZilliqaJsonRPC::new();
-        let net = NetworkProvider::Zilliqa(zil);
         let token_addr =
-            Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9").unwrap();
+            Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy").unwrap();
         let account = [
-            &Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
-            &Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
+            &Address::from_zil_bech32("zil1gkwt95a67lnpe774lcmz72y6ay4jh2asmmjw6u").unwrap(),
+            &Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
         ];
+        let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
-        let ftoken = net.get_ftoken_meta(&token_addr, &account).await.unwrap();
+        assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
 
         assert_eq!(&ftoken.name, "Zilliqa-bridged USDT token");
         assert_eq!(&ftoken.symbol, "zUSDT");
         assert_eq!(ftoken.decimals, 6u8);
-
-        assert!(*ftoken.balances.get(&0).unwrap() == U256::from(0));
-        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
-    }
-
-    #[tokio::test]
-    async fn test_fetch_evm_scilla_tokens() {
-        let zil = ZilliqaJsonRPC::from_vec(vec![ZilliqaJsonRPC::PROTO_MAINNET.to_string()], 0);
-        let net = NetworkProvider::Zilliqa(zil);
-        // Add multiple custom tokens
-        let mut tokens = vec![
-            FToken::zil(),
-            FToken::eth(),
-            FToken {
-                name: "ZilPay token".to_string(),
-                symbol: "ZLP".to_string(),
-                decimals: 18,
-                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
-                    .unwrap(),
-                native: false,
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
-            },
-            FToken {
-                name: "Zilliqa-bridged USDT token".to_string(),
-                symbol: "zUSDT".to_string(),
-                decimals: 18,
-                native: false,
-                addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
-                    .unwrap(),
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
-            },
-        ];
-        let accounts = [
-            &Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap(),
-            &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
-            &Address::from_zil_bech32("zil12nfykegk3gtatvc50yratrahxt662sr3yhy8c2").unwrap(),
-            &Address::from_eth_address("0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe").unwrap(),
-            &Address::from_eth_address("0x4d9DF80AD454fFE924f98321bF7280Fd3705BD85").unwrap(),
-        ];
-
-        net.get_tokens_balances(&mut tokens, &accounts)
-            .await
-            .unwrap();
-
-        assert!(&tokens[0].balances.contains_key(&0));
-        assert!(&tokens[0].balances.contains_key(&1));
-        assert!(&tokens[0].balances.contains_key(&2));
-        assert!(&tokens[0].balances.contains_key(&3));
-        assert!(&tokens[0].balances.contains_key(&4));
-
-        assert!(&tokens[1].balances.contains_key(&0));
-        assert!(&tokens[1].balances.contains_key(&1));
-        assert!(&tokens[1].balances.contains_key(&2));
-        assert!(&tokens[1].balances.contains_key(&3));
-        assert!(&tokens[1].balances.contains_key(&4));
-
-        assert!(&tokens[2].balances.contains_key(&0));
-        assert!(&tokens[2].balances.contains_key(&1));
-        assert!(&tokens[2].balances.contains_key(&2));
-        assert!(&tokens[2].balances.contains_key(&3));
-        assert!(&tokens[2].balances.contains_key(&4));
     }
 }

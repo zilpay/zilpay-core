@@ -1,16 +1,24 @@
+use serde::{Deserialize, Serialize};
 use zil_errors::rpc::RpcError;
 
 use crate::common::{NetworkConfigTrait, Result};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct NetworkConfig {
-    network_name: String,
-    chain_id: u64,
-    fallback_enabled: bool,
-    urls: Vec<String>,
+    pub network_name: String,
+    pub chain_id: u64,
+    pub fallback_enabled: bool,
+    pub urls: Vec<String>,
 }
 
 impl NetworkConfig {
+    pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
+        let decoded: Self =
+            bincode::deserialize(encoded).map_err(|e| RpcError::SerdeFail(e.to_string()))?;
+
+        Ok(decoded)
+    }
+
     pub fn new(network_name: impl Into<String>, chain_id: u64, urls: Vec<String>) -> Self {
         Self {
             fallback_enabled: true,
@@ -18,6 +26,13 @@ impl NetworkConfig {
             chain_id,
             urls,
         }
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        let encoded: Vec<u8> =
+            bincode::serialize(&self).map_err(|e| RpcError::SerdeFail(e.to_string()))?;
+
+        Ok(encoded)
     }
 
     pub fn network_name(&self) -> &str {

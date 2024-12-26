@@ -1,4 +1,4 @@
-use crate::{address::AddressError, token::TokenError, zilliqa::ZilliqaNetErrors};
+use crate::{address::AddressError, rpc::RpcError, token::TokenError};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -9,11 +9,8 @@ pub enum NetworkErrors {
     #[error("Fail to crate function from ABI, Error: {0}")]
     ABIError(String),
 
-    #[error("Failed to fetch nodes: {0}")]
-    FetchNodes(ZilliqaNetErrors),
-
     #[error("Failed to make request: {0}")]
-    Request(ZilliqaNetErrors),
+    Request(RpcError),
 
     #[error("Http state: {0}, message {1}")]
     HttpError(u16, String),
@@ -28,7 +25,7 @@ pub enum NetworkErrors {
     TokenParseError(TokenError),
 
     #[error("Invalid response: {0}")]
-    InvalidResponse(ZilliqaNetErrors),
+    InvalidResponse(RpcError),
 
     #[error("invalid contract data (init)")]
     InvalidContractInit,

@@ -9,10 +9,12 @@ tokio.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 reqwest.workspace = true
+async-trait.workspace = true
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 wallet = { path = "../wallet" }
 proto = { path = "../proto" }
+crypto = { path = "../crypto" }
 rpc = { path = "../rpc" }
 
 [dev-dependencies]

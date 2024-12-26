@@ -19,4 +19,7 @@ pub enum RpcError {
 
     #[error("Duplicate node: {0}")]
     DuplicateNode(String),
+
+    #[error("Invlid config serde error: {0}")]
+    SerdeFail(String),
 }

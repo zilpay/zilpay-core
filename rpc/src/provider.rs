@@ -2,33 +2,26 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fmt::Debug;
-use std::marker::PhantomData;
 use zil_errors::rpc::RpcError;
 
 use crate::common::{JsonRPC, NetworkConfigTrait, Result, RpcMethod};
 
-pub struct RpcProvider<N, M>
+pub struct RpcProvider<'a, N>
 where
     N: NetworkConfigTrait,
-    M: RpcMethod,
 {
-    pub network: N,
-    _method: PhantomData<M>,
+    pub network: &'a N,
 }
 
-impl<N, M> RpcProvider<N, M>
+impl<'a, N> RpcProvider<'a, N>
 where
     N: NetworkConfigTrait,
-    M: RpcMethod,
 {
-    pub fn new(network: N) -> Self {
-        Self {
-            network,
-            _method: PhantomData,
-        }
+    pub fn new(network: &'a N) -> Self {
+        Self { network }
     }
 
-    pub fn build_payload(params: Value, method: M) -> Value {
+    pub fn build_payload<M: RpcMethod>(params: Value, method: M) -> Value {
         serde_json::json!({
             "id": 1,
             "jsonrpc": "2.0",
@@ -39,13 +32,10 @@ where
 }
 
 #[async_trait]
-impl<N, M> JsonRPC for RpcProvider<N, M>
+impl<'a, N> JsonRPC for RpcProvider<'a, N>
 where
     N: NetworkConfigTrait + Send + Sync,
-    M: RpcMethod + Send + Sync,
 {
-    type Method = M;
-
     fn get_nodes(&self) -> &[String] {
         self.network.nodes()
     }
@@ -112,8 +102,8 @@ mod tests {
     async fn test_get_balance_scilla() {
         let net_conf =
             NetworkConfig::new("Zilliqa", 1, vec!["https://api.zilliqa.com".to_string()]);
-        let zil: RpcProvider<NetworkConfig, ZilMethods> = RpcProvider::new(net_conf);
-        let payloads = vec![RpcProvider::<NetworkConfig, ZilMethods>::build_payload(
+        let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
+        let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(
             json!([ZERO_ADDR]),
             ZilMethods::GetBalance,
         )];
@@ -132,8 +122,8 @@ mod tests {
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
         );
-        let zil: RpcProvider<NetworkConfig, ZilMethods> = RpcProvider::new(net_conf);
-        let payloads = vec![RpcProvider::<NetworkConfig, EvmMethods>::build_payload(
+        let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
+        let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(
             json!(["0x0000000000000000000000000000000000000000", "latest"]),
             EvmMethods::GetBalance,
         )];

@@ -16,4 +16,3 @@ pub mod settings;
 pub mod storage;
 pub mod token;
 pub mod wallet;
-pub mod zilliqa;
