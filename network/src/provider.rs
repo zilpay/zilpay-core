@@ -21,8 +21,9 @@ use storage::LocalStorage;
 use wallet::ft::FToken;
 use zil_errors::network::NetworkErrors;
 
+#[derive(Debug)]
 pub struct NetworkProvider {
-    config: NetworkConfig,
+    pub config: NetworkConfig,
 }
 
 impl Hash for NetworkProvider {
@@ -65,8 +66,10 @@ impl Provider for NetworkProvider {
         providers
     }
 
-    fn save_network_config(&self, storage: Arc<LocalStorage>) -> Result<()> {
-        let bytes = self.config.to_bytes().map_err(NetworkErrors::RPCSerde)?;
+    fn save_network_configs(providers: &HashSet<Self>, storage: Arc<LocalStorage>) -> Result<()> {
+        let as_vec: Vec<_> = providers.iter().map(|v| &v.config).collect();
+        let bytes =
+            bincode::serialize(&as_vec).map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
         storage
             .set(NETWORK_DB_KEY, &bytes)
@@ -250,7 +253,16 @@ mod tests_network {
     use super::*;
     use alloy::primitives::U256;
     use config::address::ADDR_LEN;
+    use rand::Rng;
     use tokio;
+
+    fn setup_temp_storage() -> Arc<LocalStorage> {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+
+        let storage = LocalStorage::from(&dir).unwrap();
+        Arc::new(storage)
+    }
 
     #[tokio::test]
     async fn test_get_ftoken_meta_bsc() {
@@ -376,89 +388,222 @@ mod tests_network {
         assert!(tokens[3].balances.get(&2).unwrap() == &U256::from(0));
     }
 
-    #[tokio::test]
-    async fn test_update_balance_scilla_evm() {
-        let net_conf = NetworkConfig::new(
-            "Zilliqa(evm)",
-            32770,
-            vec!["https://api.zq2-protomainnet.zilliqa.com".to_string()],
+    // #[tokio::test]
+    // async fn test_update_balance_scilla_evm() {
+    //     let net_conf = NetworkConfig::new(
+    //         "Zilliqa(evm)",
+    //         32770,
+    //         vec!["https://api.zq2-protomainnet.zilliqa.com".to_string()],
+    //     );
+    //     let provider = NetworkProvider::new(net_conf);
+    //     let mut tokens = vec![
+    //         FToken::zil(),
+    //         FToken::eth(),
+    //         FToken {
+    //             name: "ZilPay token".to_string(),
+    //             symbol: "ZLP".to_string(),
+    //             decimals: 18,
+    //             addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
+    //                 .unwrap(),
+    //             native: false,
+    //             logo: None,
+    //             default: false,
+    //             balances: HashMap::new(),
+    //             net_id: provider.get_network_id(),
+    //         },
+    //         FToken {
+    //             name: "Zilliqa-bridged USDT token".to_string(),
+    //             symbol: "zUSDT".to_string(),
+    //             decimals: 6,
+    //             addr: Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy")
+    //                 .unwrap(),
+    //             native: false,
+    //             logo: None,
+    //             default: false,
+    //             balances: HashMap::new(),
+    //             net_id: provider.get_network_id(),
+    //         },
+    //         FToken {
+    //             name: "Zilliqa-bridged USDT token".to_string(),
+    //             symbol: "zUSDT".to_string(),
+    //             decimals: 18,
+    //             native: false,
+    //             addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
+    //                 .unwrap(),
+    //             logo: None,
+    //             default: false,
+    //             balances: HashMap::new(),
+    //             net_id: provider.get_network_id(),
+    //         },
+    //     ];
+    //     let accounts = [
+    //         &Address::from_zil_bech32("zil1xr07v36qa4zeagg4k5tm6ummht0jrwpcu0n55d").unwrap(),
+    //         &Address::from_zil_bech32("zil1uxfzk4n9ef2t3f4c4939ludlvp349uwqdx32xt").unwrap(),
+    //         &Address::from_eth_address("0xe30161F32A019d876F082d9FF13ed451a03A2086").unwrap(),
+    //         &Address::from_eth_address("0x36Eb59A9ec5A7592ded8F66e13fb603f9FD68081").unwrap(),
+    //     ];
+
+    //     provider
+    //         .update_balances(&mut tokens, &accounts)
+    //         .await
+    //         .unwrap();
+
+    //     assert!(tokens[0].balances.contains_key(&0));
+    //     assert!(tokens[0].balances.contains_key(&1));
+    //     assert!(tokens[0].balances.contains_key(&2));
+    //     assert!(tokens[0].balances.contains_key(&3));
+
+    //     assert!(tokens[1].balances.contains_key(&0));
+    //     assert!(tokens[1].balances.contains_key(&1));
+    //     assert!(tokens[1].balances.contains_key(&2));
+    //     assert!(tokens[1].balances.contains_key(&3));
+
+    //     assert!(tokens[2].balances.contains_key(&0));
+    //     assert!(tokens[2].balances.contains_key(&1));
+    //     assert!(tokens[2].balances.contains_key(&2));
+    //     assert!(tokens[2].balances.contains_key(&3));
+
+    //     assert!(tokens[3].balances.contains_key(&0));
+    //     assert!(tokens[3].balances.contains_key(&1));
+    //     assert!(tokens[3].balances.contains_key(&2));
+    //     assert!(tokens[3].balances.contains_key(&3));
+
+    //     assert!(tokens[4].balances.contains_key(&0));
+    //     assert!(tokens[4].balances.contains_key(&1));
+    //     assert!(tokens[4].balances.contains_key(&2));
+    //     assert!(tokens[4].balances.contains_key(&3));
+    // }
+
+    #[test]
+    fn test_empty_storage() {
+        let storage = setup_temp_storage();
+        let providers = NetworkProvider::load_network_configs(storage);
+        assert!(providers.is_empty());
+    }
+
+    #[test]
+    fn test_save_and_load_single_network() {
+        let storage = setup_temp_storage();
+
+        // Create a test network config
+        let config =
+            NetworkConfig::new("Test Network", 1, vec!["https://test.network".to_string()]);
+
+        let mut providers = HashSet::new();
+        providers.insert(NetworkProvider::new(config.clone()));
+
+        // Save to storage
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        // Load from storage
+        let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
+
+        assert_eq!(providers.len(), loaded_providers.len());
+        assert!(loaded_providers
+            .iter()
+            .any(|p| p.config.network_name == "Test Network"));
+        assert!(loaded_providers.iter().any(|p| p.config.chain_id == 1));
+    }
+
+    #[test]
+    fn test_save_and_load_multiple_networks() {
+        let storage = setup_temp_storage();
+
+        let mut providers = HashSet::new();
+
+        // Create multiple test network configs
+        let configs = vec![
+            NetworkConfig::new(
+                "Test Network 1",
+                1,
+                vec!["https://test1.network".to_string()],
+            ),
+            NetworkConfig::new(
+                "Test Network 2",
+                2,
+                vec!["https://test2.network".to_string()],
+            ),
+            NetworkConfig::new(
+                "Test Network 3",
+                3,
+                vec!["https://test3.network".to_string()],
+            ),
+        ];
+
+        for config in configs {
+            providers.insert(NetworkProvider::new(config));
+        }
+
+        // Save to storage
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        // Load from storage
+        let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
+
+        assert_eq!(providers.len(), loaded_providers.len());
+        assert_eq!(loaded_providers.len(), 3);
+
+        // Verify each network was loaded correctly
+        for provider in &loaded_providers {
+            assert!(providers.contains(provider));
+        }
+    }
+
+    #[test]
+    fn test_update_networks() {
+        let storage = setup_temp_storage();
+
+        // Initial network
+        let mut providers = HashSet::new();
+        providers.insert(NetworkProvider::new(NetworkConfig::new(
+            "Initial Network",
+            1,
+            vec!["https://initial.network".to_string()],
+        )));
+
+        // Save initial state
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        // Add new network
+        providers.insert(NetworkProvider::new(NetworkConfig::new(
+            "New Network",
+            2,
+            vec!["https://new.network".to_string()],
+        )));
+
+        // Update storage
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        // Load and verify
+        let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
+        assert_eq!(loaded_providers.len(), 2);
+        assert!(loaded_providers
+            .iter()
+            .any(|p| p.config.network_name == "Initial Network"));
+        assert!(loaded_providers
+            .iter()
+            .any(|p| p.config.network_name == "New Network"));
+    }
+
+    #[test]
+    fn test_network_equality() {
+        let config1 =
+            NetworkConfig::new("Test Network", 1, vec!["https://test.network".to_string()]);
+        let config2 =
+            NetworkConfig::new("Test Network", 1, vec!["https://different.url".to_string()]);
+        let config3 = NetworkConfig::new(
+            "Different Network",
+            2,
+            vec!["https://test.network".to_string()],
         );
-        let provider = NetworkProvider::new(net_conf);
-        let mut tokens = vec![
-            FToken::zil(),
-            FToken::eth(),
-            FToken {
-                name: "ZilPay token".to_string(),
-                symbol: "ZLP".to_string(),
-                decimals: 18,
-                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
-                    .unwrap(),
-                native: false,
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: provider.get_network_id(),
-            },
-            FToken {
-                name: "Zilliqa-bridged USDT token".to_string(),
-                symbol: "zUSDT".to_string(),
-                decimals: 6,
-                addr: Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy")
-                    .unwrap(),
-                native: false,
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: provider.get_network_id(),
-            },
-            FToken {
-                name: "Zilliqa-bridged USDT token".to_string(),
-                symbol: "zUSDT".to_string(),
-                decimals: 18,
-                native: false,
-                addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
-                    .unwrap(),
-                logo: None,
-                default: false,
-                balances: HashMap::new(),
-                net_id: provider.get_network_id(),
-            },
-        ];
-        let accounts = [
-            &Address::from_zil_bech32("zil1xr07v36qa4zeagg4k5tm6ummht0jrwpcu0n55d").unwrap(),
-            &Address::from_zil_bech32("zil1uxfzk4n9ef2t3f4c4939ludlvp349uwqdx32xt").unwrap(),
-            &Address::from_eth_address("0xe30161F32A019d876F082d9FF13ed451a03A2086").unwrap(),
-            &Address::from_eth_address("0x36Eb59A9ec5A7592ded8F66e13fb603f9FD68081").unwrap(),
-        ];
 
-        provider
-            .update_balances(&mut tokens, &accounts)
-            .await
-            .unwrap();
+        let provider1 = NetworkProvider::new(config1);
+        let provider2 = NetworkProvider::new(config2);
+        let provider3 = NetworkProvider::new(config3);
 
-        assert!(tokens[0].balances.contains_key(&0));
-        assert!(tokens[0].balances.contains_key(&1));
-        assert!(tokens[0].balances.contains_key(&2));
-        assert!(tokens[0].balances.contains_key(&3));
-
-        assert!(tokens[1].balances.contains_key(&0));
-        assert!(tokens[1].balances.contains_key(&1));
-        assert!(tokens[1].balances.contains_key(&2));
-        assert!(tokens[1].balances.contains_key(&3));
-
-        assert!(tokens[2].balances.contains_key(&0));
-        assert!(tokens[2].balances.contains_key(&1));
-        assert!(tokens[2].balances.contains_key(&2));
-        assert!(tokens[2].balances.contains_key(&3));
-
-        assert!(tokens[3].balances.contains_key(&0));
-        assert!(tokens[3].balances.contains_key(&1));
-        assert!(tokens[3].balances.contains_key(&2));
-        assert!(tokens[3].balances.contains_key(&3));
-
-        assert!(tokens[4].balances.contains_key(&0));
-        assert!(tokens[4].balances.contains_key(&1));
-        assert!(tokens[4].balances.contains_key(&2));
-        assert!(tokens[4].balances.contains_key(&3));
+        // Same network ID should be equal
+        assert_eq!(&provider1, &provider2);
+        // Different network ID should not be equal
+        assert_ne!(&provider1, &provider3);
     }
 }

@@ -12,9 +12,6 @@ pub enum NetworkErrors {
     #[error("Failed to make request: {0}")]
     Request(RpcError),
 
-    #[error("Fail to serde config: {0}")]
-    RPCSerde(RpcError),
-
     #[error("Fail to save/read from storage err: {0}")]
     Storage(LocalStorageError),
 
