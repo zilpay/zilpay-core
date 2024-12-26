@@ -37,18 +37,18 @@ impl Provider for NetworkProvider {
         let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
 
         if bytes.is_empty() {
-            return HashSet::new();
+            return HashSet::with_capacity(1);
         }
 
         let configs: Vec<NetworkConfig> =
             bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
-        let mut providers = Vec::with_capacity(configs.len());
+        let mut providers = HashSet::with_capacity(configs.len());
 
         for config in configs {
-            providers.push(NetworkProvider::new(config));
+            providers.insert(NetworkProvider::new(config));
         }
 
-        providers.into_iter().collect()
+        providers
     }
 
     fn save_network_config(&self, storage: Arc<LocalStorage>) -> Result<()> {

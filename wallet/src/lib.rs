@@ -649,7 +649,7 @@ mod tests {
             "WalletWriteTest App",
         )
         .unwrap();
-        let storag = Arc::new(storage);
+        let storage = Arc::new(storage);
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
@@ -722,7 +722,7 @@ mod tests {
             wallet_config,
             "test Name".to_string(),
             Default::default(),
-            HashSet::from(0),
+            HashSet::new(),
         )
         .unwrap();
 
@@ -778,7 +778,7 @@ mod tests {
             wallet_config,
             "Token Test Wallet".to_string(),
             Default::default(),
-            vec![0],
+            HashSet::new(),
         )
         .unwrap();
 
@@ -868,7 +868,7 @@ mod tests {
             wallet_config,
             "Multi Token Test Wallet".to_string(),
             Default::default(),
-            vec![0],
+            HashSet::new(),
         )
         .unwrap();
 
@@ -975,7 +975,7 @@ mod tests {
             wallet_config,
             "Remove Token Test Wallet".to_string(),
             Default::default(),
-            vec![0],
+            HashSet::new(),
         )
         .unwrap();
 
@@ -1104,7 +1104,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Select Account Test Wallet".to_string(),
             biometric_type: AuthMethod::Biometric,
-            network: &[0],
+            network: HashSet::new(),
         })
         .unwrap();
 
