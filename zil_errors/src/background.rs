@@ -11,7 +11,7 @@ pub enum BackgroundError {
     NetworkErrors(NetworkErrors),
 
     #[error("Network provider does not exist with ID: {0}")]
-    NetworkProviderNotExists(usize),
+    NetworkProviderNotExists(u64),
 
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,

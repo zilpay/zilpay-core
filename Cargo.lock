@@ -935,6 +935,7 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 name = "background"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "bip39",
  "cipher 0.1.0",
  "config",
@@ -944,6 +945,7 @@ dependencies = [
  "proto",
  "rand",
  "rand_chacha",
+ "rpc",
  "serde",
  "serde_json",
  "session",

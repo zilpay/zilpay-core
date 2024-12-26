@@ -617,7 +617,6 @@ mod tests {
     use config::{
         argon::KEY_SIZE,
         cipher::{PROOF_SALT, PROOF_SIZE},
-        provider::ZILLIQA_ITERNEL_ID,
         sha::SHA256_SIZE,
     };
     use crypto::bip49::Bip49DerivationPath;
@@ -794,7 +793,7 @@ mod tests {
             default: false,
             native: false,
             balances: HashMap::new(),
-            net_id: ZILLIQA_ITERNEL_ID,
+            net_id: 0,
         };
 
         // Add custom token
@@ -880,7 +879,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
+                net_id: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -891,7 +890,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
+                net_id: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -902,7 +901,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
+                net_id: 0,
             },
         ];
 
@@ -987,7 +986,7 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
+                net_id: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -998,7 +997,7 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
+                net_id: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -1009,7 +1008,7 @@ mod tests {
                 native: true,
                 default: false,
                 balances: HashMap::new(),
-                net_id: ZILLIQA_ITERNEL_ID,
+                net_id: 0,
             },
         ];
 

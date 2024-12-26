@@ -7,6 +7,7 @@ use crate::token::{
 };
 use crate::Result;
 use alloy::primitives::U256;
+use config::storage::NETWORK_DB_KEY;
 use crypto::xor_hash::xor_hash;
 use proto::address::Address;
 use rpc::common::JsonRPC;
@@ -19,6 +20,7 @@ use zil_errors::network::NetworkErrors;
 
 pub struct NetworkProvider {
     config: NetworkConfig,
+    storage: Arc<LocalStorage>,
 }
 
 impl Provider for NetworkProvider {
@@ -28,11 +30,40 @@ impl Provider for NetworkProvider {
 
         xor_hash(name, chain_id)
     }
+
+    fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
+        let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
+
+        if bytes.is_empty() {
+            return Vec::with_capacity(1);
+        }
+
+        let configs: Vec<NetworkConfig> =
+            bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
+        let mut providers = Vec::with_capacity(configs.len());
+
+        for config in configs {
+            providers.push(self::new(config));
+        }
+
+        providers
+    }
+
+    fn save_network_configs(&self) -> Result<()> {
+        let bytes =
+            serde_json::to_vec(&self.config).or(Err(BackgroundError::FailToSerializeNetworks))?;
+
+        self.storage
+            .set(NETWORK_DB_KEY, &bytes)
+            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+
+        Ok(())
+    }
 }
 
 impl NetworkProvider {
-    pub fn new(config: NetworkConfig) -> Self {
-        Self { config }
+    pub fn new(config: NetworkConfig, storage: Arc<LocalStorage>) -> Self {
+        Self { config, storage }
     }
 
     pub async fn fetch_nodes_list(&mut self) -> Result<()> {
@@ -328,5 +359,91 @@ mod tests_network {
         assert!(tokens[3].balances.get(&0).unwrap() > &U256::from(0));
         assert!(tokens[3].balances.get(&1).unwrap() == &U256::from(0));
         assert!(tokens[3].balances.get(&2).unwrap() == &U256::from(0));
+    }
+
+    #[tokio::test]
+    async fn test_update_balance_scilla_evm() {
+        let net_conf = NetworkConfig::new(
+            "Zilliqa(evm)",
+            32770,
+            vec!["https://api.zq2-protomainnet.zilliqa.com".to_string()],
+        );
+        let provider = NetworkProvider::new(net_conf);
+        let mut tokens = vec![
+            FToken::zil(),
+            FToken::eth(),
+            FToken {
+                name: "ZilPay token".to_string(),
+                symbol: "ZLP".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+                net_id: provider.get_network_id(),
+            },
+            FToken {
+                name: "Zilliqa-bridged USDT token".to_string(),
+                symbol: "zUSDT".to_string(),
+                decimals: 6,
+                addr: Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+                net_id: provider.get_network_id(),
+            },
+            FToken {
+                name: "Zilliqa-bridged USDT token".to_string(),
+                symbol: "zUSDT".to_string(),
+                decimals: 18,
+                native: false,
+                addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
+                    .unwrap(),
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+                net_id: provider.get_network_id(),
+            },
+        ];
+        let accounts = [
+            &Address::from_zil_bech32("zil1xr07v36qa4zeagg4k5tm6ummht0jrwpcu0n55d").unwrap(),
+            &Address::from_zil_bech32("zil1uxfzk4n9ef2t3f4c4939ludlvp349uwqdx32xt").unwrap(),
+            &Address::from_eth_address("0xe30161F32A019d876F082d9FF13ed451a03A2086").unwrap(),
+            &Address::from_eth_address("0x36Eb59A9ec5A7592ded8F66e13fb603f9FD68081").unwrap(),
+        ];
+
+        provider
+            .update_balances(&mut tokens, &accounts)
+            .await
+            .unwrap();
+
+        assert!(tokens[0].balances.contains_key(&0));
+        assert!(tokens[0].balances.contains_key(&1));
+        assert!(tokens[0].balances.contains_key(&2));
+        assert!(tokens[0].balances.contains_key(&3));
+
+        assert!(tokens[1].balances.contains_key(&0));
+        assert!(tokens[1].balances.contains_key(&1));
+        assert!(tokens[1].balances.contains_key(&2));
+        assert!(tokens[1].balances.contains_key(&3));
+
+        assert!(tokens[2].balances.contains_key(&0));
+        assert!(tokens[2].balances.contains_key(&1));
+        assert!(tokens[2].balances.contains_key(&2));
+        assert!(tokens[2].balances.contains_key(&3));
+
+        assert!(tokens[3].balances.contains_key(&0));
+        assert!(tokens[3].balances.contains_key(&1));
+        assert!(tokens[3].balances.contains_key(&2));
+        assert!(tokens[3].balances.contains_key(&3));
+
+        assert!(tokens[4].balances.contains_key(&0));
+        assert!(tokens[4].balances.contains_key(&1));
+        assert!(tokens[4].balances.contains_key(&2));
+        assert!(tokens[4].balances.contains_key(&3));
     }
 }

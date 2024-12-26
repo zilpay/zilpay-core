@@ -9,9 +9,11 @@ rand_chacha.workspace = true
 rand.workspace = true
 serde_json.workspace = true
 serde.workspace = true
+bincode.workspace = true
 bip39.workspace = true
 zil_errors = { path = "../zil_errors" }
 wallet = { path = "../wallet" }
+rpc = { path = "../rpc" }
 storage = { path = "../storage" }
 config = { path = "../config" }
 settings = { path = "../settings" }

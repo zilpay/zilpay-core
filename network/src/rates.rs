@@ -34,16 +34,3 @@ pub fn get_rate(rates: &Value, currency: &str) -> Option<f64> {
         .as_f64()
         .or_else(|| rates[currency].as_str().and_then(|s| s.parse().ok()))
 }
-
-#[cfg(test)]
-mod tests_rates {
-    use super::*;
-    use tokio;
-
-    // #[tokio::test]
-    // async fn test_fetch_rates() {
-    //     let rates = fetch_rates().await.unwrap();
-
-    //     dbg!(rates);
-    // }
-}

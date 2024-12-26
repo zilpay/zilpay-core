@@ -15,8 +15,9 @@ use config::{
 };
 use connections::Connection;
 use crypto::bip49::Bip49DerivationPath;
-use network::{provider::NetworkProvider, rates::fetch_rates};
+use network::{common::Provider, provider::NetworkProvider, rates::fetch_rates};
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
+use rpc::network_config::NetworkConfig;
 use serde_json::{json, Value};
 use session::{decrypt_session, encrypt_session};
 use settings::{
@@ -71,16 +72,6 @@ pub struct Background {
     pub netowrk: Vec<NetworkProvider>,
 }
 
-fn load_network(storage: Arc<LocalStorage>) -> Vec<NetworkProvider> {
-    let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
-
-    if bytes.is_empty() {
-        return NetworkProvider::new_vec();
-    }
-
-    serde_json::from_slice(&bytes).unwrap_or(NetworkProvider::new_vec())
-}
-
 fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
     let bytes = storage.get(GLOBAL_SETTINGS_DB_KEY).unwrap_or_default();
 
@@ -88,7 +79,7 @@ fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
         return CommonSettings::default();
     }
 
-    serde_json::from_slice(&bytes).unwrap_or(CommonSettings::default())
+    bincode::deserialize(&bytes).unwrap_or(CommonSettings::default())
 }
 
 impl Background {
@@ -146,7 +137,7 @@ impl Background {
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::new();
-        let netowrk = load_network(Arc::clone(&storage));
+        let netowrk = NetworkProvider::load_network_configs(Arc::clone(&storage));
         let settings = load_global_settings(Arc::clone(&storage));
 
         for addr in &indicators {
@@ -417,25 +408,6 @@ impl Background {
         Ok(session)
     }
 
-    pub async fn update_nodes(&mut self, id: usize) -> Result<()> {
-        let net_pointer = self
-            .netowrk
-            .get_mut(id)
-            .ok_or(BackgroundError::NetworkProviderNotExists(id))?;
-
-        net_pointer
-            .update_nodes()
-            .await
-            .map_err(BackgroundError::NetworkErrors)?;
-
-        self.save_network()?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
-
-        Ok(())
-    }
-
     pub fn set_global_notifications(&mut self, global_enabled: bool) -> Result<()> {
         self.settings.notifications.global_enabled = global_enabled;
         self.save_settings()?;
@@ -496,7 +468,8 @@ impl Background {
         let providers = self.providers_from_wallet_index(wallet_index)?;
 
         for provider in providers {
-            match provider.get_ftoken_meta(&contract, &accounts).await {
+            // TODO: maybe remove clone.
+            match provider.ftoken_meta(contract.clone(), &accounts).await {
                 Ok(meta) => {
                     return Ok(meta);
                 }
@@ -706,7 +679,7 @@ impl Background {
 
     fn save_settings(&self) -> Result<()> {
         let bytes =
-            serde_json::to_vec(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
+            bincode::serialize(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
 
         self.storage
             .set(GLOBAL_SETTINGS_DB_KEY, &bytes)
