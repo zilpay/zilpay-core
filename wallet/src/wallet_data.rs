@@ -1,4 +1,4 @@
-use crate::{account::Account, wallet_types::WalletTypes, WalletAddrType};
+use crate::{account::Account, traits::WalletAddrType, wallet_types::WalletTypes};
 use serde::{Deserialize, Serialize};
 use settings::wallet_settings::WalletSettings;
 use zil_errors::wallet::WalletErrors;

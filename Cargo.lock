@@ -4219,6 +4219,7 @@ name = "wallet"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "async-trait",
  "bincode",
  "bip39",
  "cipher 0.1.0",

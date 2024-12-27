@@ -1,12 +1,8 @@
-pub mod account;
-pub mod account_type;
-pub mod wallet_data;
-pub mod wallet_types;
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
 use account_type::AccountType;
+use async_trait::async_trait;
 use cipher::argon2::{derive_key, Argon2Seed};
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
@@ -29,12 +25,15 @@ use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
 use token::ft::FToken;
+use traits::{
+    AccountManagement, StorageOperations, TokenManagement, TransactionSigning, WalletCrypto,
+    WalletInit, WalletSecurity,
+};
 use wallet_data::{AuthMethod, WalletData};
 use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
 
 type Result<T> = std::result::Result<T, WalletErrors>;
-pub type WalletAddrType = [u8; SHA256_SIZE];
 
 pub struct WalletConfig {
     pub storage: Arc<LocalStorage>,
@@ -70,39 +69,11 @@ pub struct Wallet {
     pub providers: HashSet<NetworkProvider>,
 }
 
-fn safe_storage_save(cipher_entropy: &[u8], storage: Arc<LocalStorage>) -> Result<usize> {
-    let mut rng = ChaCha20Rng::from_entropy();
-    let mut cipher_entropy_key: usize;
+impl StorageOperations for Wallet {
+    type Error = WalletErrors;
 
-    loop {
-        cipher_entropy_key = rng.r#gen();
-        let key = usize::to_le_bytes(cipher_entropy_key);
-        let is_exists_key = storage
-            .exists(&key)
-            .map_err(WalletErrors::FailToSaveCipher)?;
-
-        if is_exists_key {
-            continue;
-        }
-
-        storage
-            .set(&key, cipher_entropy)
-            .map_err(WalletErrors::FailToSaveCipher)?;
-
-        break;
-    }
-
-    Ok(cipher_entropy_key)
-}
-
-impl Wallet {
-    pub const ZIL_DEFAULT_TOKENS: usize = 1;
-    pub const ETH_DEFAULT_TOKENS: usize = 1;
-
-    pub fn load_from_storage(key: &[u8; SHA256_SIZE], storage: Arc<LocalStorage>) -> Result<Self> {
-        let data = storage
-            .get(key)
-            .map_err(WalletErrors::FailToLoadWalletData)?;
+    fn load_from_storage(key: &[u8; SHA256_SIZE], storage: Arc<LocalStorage>) -> Result<Self> {
+        let data = storage.get(key)?;
         let data = WalletData::from_bytes(&data)?;
         let ftokens = Vec::new();
         let providers = HashSet::new();
@@ -115,7 +86,40 @@ impl Wallet {
         })
     }
 
-    pub fn from_ledger(
+    fn safe_storage_save(cipher_entropy: &[u8], storage: Arc<LocalStorage>) -> Result<usize> {
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mut cipher_entropy_key: usize;
+
+        loop {
+            cipher_entropy_key = rng.r#gen();
+            let key = usize::to_le_bytes(cipher_entropy_key);
+            let is_exists_key = storage.exists(&key)?;
+
+            if is_exists_key {
+                continue;
+            }
+
+            storage.set(&key, cipher_entropy)?;
+
+            break;
+        }
+
+        Ok(cipher_entropy_key)
+    }
+
+    fn save_to_storage(&self) -> Result<()> {
+        self.storage
+            .set(&self.data.wallet_address, &self.data.to_bytes()?)?;
+        self.storage.flush()?;
+
+        Ok(())
+    }
+}
+
+impl WalletInit for Wallet {
+    type Error = WalletErrors;
+
+    fn from_ledger(
         params: LedgerParams,
         proof: &[u8; KEY_SIZE],
         config: WalletConfig,
@@ -124,7 +128,7 @@ impl Wallet {
             .keychain
             .make_proof(proof, &config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
+        let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
 
         let mut hasher = Sha256::new();
@@ -149,6 +153,7 @@ impl Wallet {
             selected_account: 0,
         };
         let ftokens = match params.pub_key {
+            // TODO: normal init default tokens.
             PubKey::Secp256k1Sha256Zilliqa(_) => {
                 vec![FToken::zil(), FToken::zlp()]
             }
@@ -166,7 +171,7 @@ impl Wallet {
         })
     }
 
-    pub fn from_sk(
+    fn from_sk(
         sk: &SecretKey,
         name: String,
         proof: &[u8; KEY_SIZE],
@@ -189,9 +194,9 @@ impl Wallet {
             .keychain
             .make_proof(proof, &config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
+        let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
-        let cipher_entropy_key = safe_storage_save(&cipher_sk, Arc::clone(&config.storage))?;
+        let cipher_entropy_key = Self::safe_storage_save(&cipher_sk, Arc::clone(&config.storage))?;
 
         let mut hasher = Sha256::new();
         hasher.update(combined);
@@ -228,7 +233,7 @@ impl Wallet {
         })
     }
 
-    pub fn from_bip39_words(params: Bip39Params) -> Result<Self> {
+    fn from_bip39_words(params: Bip39Params) -> Result<Self> {
         let cipher_entropy = params
             .config
             .keychain
@@ -244,10 +249,10 @@ impl Wallet {
             .keychain
             .make_proof(params.proof, &params.config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = safe_storage_save(&cipher_proof, Arc::clone(&params.config.storage))?;
+        let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&params.config.storage))?;
         drop(cipher_proof);
         let cipher_entropy_key =
-            safe_storage_save(&cipher_entropy, Arc::clone(&params.config.storage))?;
+            Self::safe_storage_save(&cipher_entropy, Arc::clone(&params.config.storage))?;
 
         combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
@@ -296,8 +301,12 @@ impl Wallet {
             ftokens,
         })
     }
+}
 
-    pub fn reveal_keypair(
+impl WalletCrypto for Wallet {
+    type Error = WalletErrors;
+
+    fn reveal_keypair(
         &self,
         account_index: usize,
         seed_bytes: &[u8; KEY_SIZE],
@@ -313,10 +322,7 @@ impl Wallet {
                     .get(account_index)
                     .ok_or(WalletErrors::FailToGetAccount(account_index))?;
                 let storage_key = usize::to_le_bytes(account.account_type.value());
-                let cipher_sk = self
-                    .storage
-                    .get(&storage_key)
-                    .map_err(WalletErrors::FailToGetContent)?;
+                let cipher_sk = self.storage.get(&storage_key)?;
                 let sk_bytes = keychain
                     .decrypt(cipher_sk, &self.data.settings.cipher_orders)
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
@@ -349,12 +355,73 @@ impl Wallet {
         }
     }
 
-    pub fn add_ledger_account(
-        &mut self,
-        name: String,
-        pub_key: &PubKey,
-        index: usize,
-    ) -> Result<()> {
+    fn reveal_mnemonic(&self, seed_bytes: &[u8; KEY_SIZE]) -> Result<Mnemonic> {
+        match self.data.wallet_type {
+            WalletTypes::SecretPhrase((key, _)) => {
+                let keychain =
+                    KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
+                let storage_key = usize::to_le_bytes(key);
+                let cipher_entropy = self.storage.get(&storage_key)?;
+                let entropy = keychain
+                    .decrypt(cipher_entropy, &self.data.settings.cipher_orders)
+                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
+                // TODO: add more Languages
+                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
+                    .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
+
+                Ok(m)
+            }
+            _ => Err(WalletErrors::InvalidAccountType),
+        }
+    }
+
+    fn sign_message(
+        &self,
+        msg: &[u8],
+        account_index: usize,
+        seed_bytes: &[u8; KEY_SIZE],
+        passphrase: Option<&str>,
+    ) -> Result<Signature> {
+        let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
+        let sig = keypair
+            .sign_message(msg)
+            .map_err(WalletErrors::FailSignMessage)?;
+        let vrify = keypair
+            .verify_sig(msg, &sig)
+            .map_err(WalletErrors::FailVerifySig)?;
+
+        if !vrify {
+            return Err(WalletErrors::InvalidVerifySig);
+        }
+
+        Ok(sig)
+    }
+}
+
+#[async_trait]
+impl TransactionSigning for Wallet {
+    type Error = WalletErrors;
+
+    async fn sign_transaction(
+        &self,
+        tx: &TransactionRequest,
+        account_index: usize,
+        seed_bytes: &[u8; KEY_SIZE],
+        passphrase: Option<&str>,
+    ) -> Result<TransactionReceipt> {
+        let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
+
+        keypair
+            .sign_tx(tx)
+            .await
+            .map_err(WalletErrors::FailToSignTransaction)
+    }
+}
+
+impl AccountManagement for Wallet {
+    type Error = WalletErrors;
+
+    fn add_ledger_account(&mut self, name: String, pub_key: &PubKey, index: usize) -> Result<()> {
         let has_account = self
             .data
             .accounts
@@ -378,7 +445,7 @@ impl Wallet {
         Ok(())
     }
 
-    pub fn add_next_bip39_account(
+    fn add_next_bip39_account(
         &mut self,
         name: String,
         bip49: &Bip49DerivationPath,
@@ -390,10 +457,7 @@ impl Wallet {
                 let keychain =
                     KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
                 let storage_key = usize::to_le_bytes(key);
-                let cipher_entropy = self
-                    .storage
-                    .get(&storage_key)
-                    .map_err(WalletErrors::FailToGetContent)?;
+                let cipher_entropy = self.storage.get(&storage_key)?;
                 let entropy = keychain
                     .decrypt(cipher_entropy, &self.data.settings.cipher_orders)
                     .map_err(WalletErrors::DecryptKeyChainErrors)?;
@@ -423,66 +487,60 @@ impl Wallet {
         }
     }
 
-    pub fn reveal_mnemonic(&self, seed_bytes: &[u8; KEY_SIZE]) -> Result<Mnemonic> {
-        match self.data.wallet_type {
-            WalletTypes::SecretPhrase((key, _)) => {
-                let keychain =
-                    KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
-                let storage_key = usize::to_le_bytes(key);
-                let cipher_entropy = self
-                    .storage
-                    .get(&storage_key)
-                    .map_err(WalletErrors::FailToGetContent)?;
-                let entropy = keychain
-                    .decrypt(cipher_entropy, &self.data.settings.cipher_orders)
-                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
-                // TODO: add more Languages
-                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
-                    .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
-
-                Ok(m)
-            }
-            _ => Err(WalletErrors::InvalidAccountType),
-        }
-    }
-    pub fn sign_message(
-        &self,
-        msg: &[u8],
-        account_index: usize,
-        seed_bytes: &[u8; KEY_SIZE],
-        passphrase: Option<&str>,
-    ) -> Result<Signature> {
-        let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
-        let sig = keypair
-            .sign_message(msg)
-            .map_err(WalletErrors::FailSignMessage)?;
-        let vrify = keypair
-            .verify_sig(msg, &sig)
-            .map_err(WalletErrors::FailVerifySig)?;
-
-        if !vrify {
-            return Err(WalletErrors::InvalidVerifySig);
+    fn select_account(&mut self, account_index: usize) -> Result<()> {
+        if self.data.accounts.is_empty() {
+            return Err(WalletErrors::NoAccounts);
         }
 
-        Ok(sig)
+        if account_index >= self.data.accounts.len() {
+            return Err(WalletErrors::InvalidAccountIndex(account_index));
+        }
+
+        self.data.selected_account = account_index;
+        self.save_to_storage()?;
+
+        Ok(())
+    }
+}
+
+impl TokenManagement for Wallet {
+    type Error = WalletErrors;
+
+    fn add_ftoken(&mut self, token: FToken) -> Result<()> {
+        self.ftokens.push(token);
+
+        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
+        let bytes = bincode::serialize(&ftokens)
+            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+
+        self.storage.set(FTOKENS_DB_KEY, &bytes)?;
+        self.storage.flush()?;
+
+        Ok(())
     }
 
-    pub async fn sign_transaction(
-        &self,
-        tx: &TransactionRequest,
-        account_index: usize,
-        seed_bytes: &[u8; KEY_SIZE],
-        passphrase: Option<&str>,
-    ) -> Result<TransactionReceipt> {
-        let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
+    fn remove_ftoken(&mut self, index: usize) -> Result<()> {
+        if self.ftokens.get(index).is_none() {
+            return Err(WalletErrors::TokenNotExists(index));
+        }
 
-        keypair
-            .sign_tx(tx)
-            .await
-            .map_err(WalletErrors::FailToSignTransaction)
+        self.ftokens.remove(index);
+
+        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
+        let bytes = bincode::serialize(&ftokens)
+            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+
+        self.storage.set(FTOKENS_DB_KEY, &bytes)?;
+        self.storage.flush()?;
+
+        Ok(())
     }
+}
 
-    pub fn unlock(&mut self, seed_bytes: &Argon2Seed) -> Result<()> {
+impl WalletSecurity for Wallet {
+    type Error = WalletErrors;
+
+    fn unlock(&mut self, seed_bytes: &Argon2Seed) -> Result<()> {
         self.unlock_iternel(seed_bytes)?;
 
         let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
@@ -504,7 +562,9 @@ impl Wallet {
 
         Ok(())
     }
+}
 
+impl Wallet {
     fn unlock_iternel(&mut self, seed_bytes: &Argon2Seed) -> Result<KeyChain> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
 
@@ -528,71 +588,13 @@ impl Wallet {
 
         Ok(keychain)
     }
-
-    pub fn select_account(&mut self, account_index: usize) -> Result<()> {
-        if self.data.accounts.is_empty() {
-            return Err(WalletErrors::NoAccounts);
-        }
-
-        if account_index >= self.data.accounts.len() {
-            return Err(WalletErrors::InvalidAccountIndex(account_index));
-        }
-
-        self.data.selected_account = account_index;
-        self.save_to_storage()?;
-
-        Ok(())
-    }
-
-    pub fn add_ftoken(&mut self, token: FToken) -> Result<()> {
-        self.ftokens.push(token);
-
-        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
-        let bytes = bincode::serialize(&ftokens)
-            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
-
-        self.storage
-            .set(FTOKENS_DB_KEY, &bytes)
-            .map_err(WalletErrors::FailtoSaveFTokensToStorage)?;
-        self.storage
-            .flush()
-            .map_err(WalletErrors::StorageFailFlush)?;
-
-        Ok(())
-    }
-
-    pub fn remove_ftoken(&mut self, index: usize) -> Result<()> {
-        if self.ftokens.get(index).is_none() {
-            return Err(WalletErrors::TokenNotExists(index));
-        }
-
-        self.ftokens.remove(index);
-
-        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
-        let bytes = bincode::serialize(&ftokens)
-            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
-
-        self.storage
-            .set(FTOKENS_DB_KEY, &bytes)
-            .map_err(WalletErrors::FailtoSaveFTokensToStorage)?;
-        self.storage
-            .flush()
-            .map_err(WalletErrors::StorageFailFlush)?;
-
-        Ok(())
-    }
-
-    pub fn save_to_storage(&self) -> Result<()> {
-        self.storage
-            .set(&self.data.wallet_address, &self.data.to_bytes()?)
-            .map_err(WalletErrors::FailtoSaveWalletDataToStorage)?;
-        self.storage
-            .flush()
-            .map_err(WalletErrors::StorageFailFlush)?;
-
-        Ok(())
-    }
 }
+
+pub mod account;
+pub mod account_type;
+pub mod traits;
+pub mod wallet_data;
+pub mod wallet_types;
 
 #[cfg(test)]
 mod tests {
@@ -610,7 +612,6 @@ mod tests {
     use config::{
         argon::KEY_SIZE,
         cipher::{PROOF_SALT, PROOF_SIZE},
-        sha::SHA256_SIZE,
     };
     use crypto::bip49::Bip49DerivationPath;
     use proto::{address::Address, keypair::KeyPair};
@@ -621,7 +622,13 @@ mod tests {
     use zil_errors::wallet::WalletErrors;
 
     use crate::{
-        wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, Wallet, WalletConfig,
+        traits::{
+            AccountManagement, StorageOperations, TokenManagement, WalletCrypto, WalletInit,
+            WalletSecurity,
+        },
+        wallet_data::AuthMethod,
+        wallet_types::WalletTypes,
+        Bip39Params, Wallet, WalletConfig,
     };
 
     const MNEMONIC_STR: &str =

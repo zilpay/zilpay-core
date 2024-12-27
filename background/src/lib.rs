@@ -73,16 +73,6 @@ pub struct Background {
     pub settings: CommonSettings,
 }
 
-fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
-    let bytes = storage.get(GLOBAL_SETTINGS_DB_KEY).unwrap_or_default();
-
-    if bytes.is_empty() {
-        return CommonSettings::default();
-    }
-
-    bincode::deserialize(&bytes).unwrap_or(CommonSettings::default())
-}
-
 impl CryptoOperations for Background {
     type Error = BackgroundError;
 
@@ -141,7 +131,7 @@ impl StorageManagement for Background {
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::new();
-        let settings = load_global_settings(Arc::clone(&storage));
+        let settings = Self::load_global_settings(Arc::clone(&storage));
 
         for addr in &indicators {
             let w = Wallet::load_from_storage(addr, Arc::clone(&storage))

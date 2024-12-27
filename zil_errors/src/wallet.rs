@@ -27,9 +27,6 @@ pub enum WalletErrors {
     #[error("Token doesn't extistsL {0}")]
     TokenNotExists(usize),
 
-    #[error("Fail to flush and save data, error: {0}")]
-    StorageFailFlush(LocalStorageError),
-
     #[error("Try encrypt secret key error")]
     TryEncryptSecretKeyError,
 
@@ -106,20 +103,8 @@ pub enum WalletErrors {
     #[error("Failed to serialize token data error: {0}")]
     TokenSerdeError(String),
 
-    #[error("Fail to save wallet data to storage: {0}")]
-    FailtoSaveWalletDataToStorage(LocalStorageError),
-
-    #[error("Fail to save FT tokens to storage, error: {0}")]
-    FailtoSaveFTokensToStorage(LocalStorageError),
-
-    #[error("Fail to load data from storage: {0}")]
-    FailToLoadWalletData(LocalStorageError),
-
-    #[error("Failed to save cipher: {0}")]
-    FailToSaveCipher(#[from] LocalStorageError),
-
-    #[error("Failed to get content: {0}")]
-    FailToGetContent(LocalStorageError),
+    #[error("LocalStorage error: {0}")]
+    LocalStorageError(LocalStorageError),
 
     #[error("Failed to get proof from storage: {0}")]
     FailToGetProofFromStorage(LocalStorageError),
@@ -135,4 +120,10 @@ pub enum WalletErrors {
 
     #[error("Proof does not match")]
     ProofNotMatch,
+}
+
+impl From<LocalStorageError> for WalletErrors {
+    fn from(error: LocalStorageError) -> Self {
+        WalletErrors::LocalStorageError(error)
+    }
 }
