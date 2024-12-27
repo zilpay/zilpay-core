@@ -1,7 +1,4 @@
-pub mod book;
-pub mod connections;
-pub mod device_indicators;
-
+use async_trait::async_trait;
 pub use bip39::{Language, Mnemonic};
 
 use book::AddressBookEntry;
@@ -30,6 +27,10 @@ use settings::{
 };
 use std::{collections::HashSet, sync::Arc};
 use storage::LocalStorage;
+use traits::{
+    AddressBookManagement, ConnectionManagement, CryptoOperations, RatesManagement,
+    SettingsManagement, StorageManagement, WalletManagement,
+};
 use wallet::{
     wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams, Wallet,
     WalletAddrType, WalletConfig,
@@ -82,8 +83,10 @@ fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
     bincode::deserialize(&bytes).unwrap_or(CommonSettings::default())
 }
 
-impl Background {
-    pub fn gen_bip39(count: u8) -> Result<String> {
+impl CryptoOperations for Background {
+    type Error = BackgroundError;
+
+    fn gen_bip39(count: u8) -> Result<String> {
         if ![12, 15, 18, 21, 24].contains(&count) {
             return Err(BackgroundError::InvalidWordCount(count));
         }
@@ -101,7 +104,7 @@ impl Background {
         Ok(m.to_string())
     }
 
-    pub fn find_invalid_bip39_words(words: &[String], lang: Language) -> Vec<usize> {
+    fn find_invalid_bip39_words(words: &[String], lang: Language) -> Vec<usize> {
         let word_list = lang.word_list();
 
         words
@@ -112,7 +115,7 @@ impl Background {
             .collect()
     }
 
-    pub fn gen_keypair() -> Result<(String, String)> {
+    fn gen_keypair() -> Result<(String, String)> {
         let (pub_key, secret_key) =
             KeyPair::gen_keys_bytes().map_err(BackgroundError::FailToGenKeyPair)?;
 
@@ -120,10 +123,11 @@ impl Background {
     }
 }
 
-impl Background {
-    pub fn from_storage_path(path: &str) -> Result<Self> {
-        let storage =
-            LocalStorage::from(path).map_err(BackgroundError::TryInitLocalStorageError)?;
+impl StorageManagement for Background {
+    type Error = BackgroundError;
+
+    fn from_storage_path(path: &str) -> Result<Self> {
+        let storage = LocalStorage::from(path)?;
         let storage = Arc::new(storage);
         let is_old_storage = false; // TODO: check old storage from first ZilPay version
         let indicators = storage
@@ -155,7 +159,89 @@ impl Background {
         })
     }
 
-    pub fn unlock_wallet_with_password(
+    fn save_indicators(&self) -> Result<()> {
+        let bytes: Vec<u8> = self
+            .indicators
+            .iter()
+            .flat_map(|array| array.iter().cloned())
+            .collect();
+
+        self.storage.set(INDICATORS_DB_KEY, &bytes)?;
+
+        Ok(())
+    }
+}
+
+impl SettingsManagement for Background {
+    type Error = BackgroundError;
+
+    fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
+        let bytes = storage.get(GLOBAL_SETTINGS_DB_KEY).unwrap_or_default();
+
+        if bytes.is_empty() {
+            return CommonSettings::default();
+        }
+
+        bincode::deserialize(&bytes).unwrap_or(CommonSettings::default())
+    }
+
+    fn set_global_notifications(&mut self, global_enabled: bool) -> Result<()> {
+        self.settings.notifications.global_enabled = global_enabled;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    fn set_wallet_notifications(
+        &mut self,
+        wallet_index: usize,
+        notification: NotificationState,
+    ) -> Result<()> {
+        self.settings
+            .notifications
+            .wallet_states
+            .insert(wallet_index, notification);
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    fn set_locale(&mut self, new_locale: Locale) -> Result<()> {
+        self.settings.locale = new_locale;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    fn set_theme(&mut self, new_theme: Theme) -> Result<()> {
+        self.settings.theme = new_theme;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    fn set_notifications(&mut self, new_notifications: Notifications) -> Result<()> {
+        self.settings.notifications = new_notifications;
+        self.save_settings()?;
+
+        Ok(())
+    }
+
+    fn save_settings(&self) -> Result<()> {
+        let bytes =
+            bincode::serialize(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
+
+        self.storage.set(GLOBAL_SETTINGS_DB_KEY, &bytes)?;
+        self.storage.flush()?;
+
+        Ok(())
+    }
+}
+
+impl WalletManagement for Background {
+    type Error = BackgroundError;
+
+    fn unlock_wallet_with_password(
         &mut self,
         password: &str,
         device_indicators: &[String],
@@ -180,7 +266,7 @@ impl Background {
         Ok(argon_seed)
     }
 
-    pub fn unlock_wallet_with_session(
+    fn unlock_wallet_with_session(
         &mut self,
         session_cipher: Vec<u8>,
         device_indicators: &[String],
@@ -209,7 +295,7 @@ impl Background {
         Ok(seed_bytes)
     }
 
-    pub fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
+    fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             params.password.as_bytes(),
@@ -265,14 +351,12 @@ impl Background {
         self.indicators.push(wallet.data.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators()?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
+        self.storage.flush()?;
 
         Ok(session)
     }
 
-    pub fn add_ledger_wallet(
+    fn add_ledger_wallet(
         &mut self,
         params: LedgerParams,
         wallet_settings: WalletSettings,
@@ -329,14 +413,13 @@ impl Background {
         self.indicators.push(wallet.data.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators()?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
+        self.storage.flush()?;
 
         Ok(session)
     }
 
-    pub fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
+    fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
+        // TODO: check this device_indicators is right or not.
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             params.password.as_bytes(),
@@ -389,62 +472,22 @@ impl Background {
         self.indicators.push(wallet.data.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators()?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
+        self.storage.flush()?;
 
         Ok(session)
     }
 
-    pub fn set_global_notifications(&mut self, global_enabled: bool) -> Result<()> {
-        self.settings.notifications.global_enabled = global_enabled;
-        self.save_settings()?;
-
-        Ok(())
-    }
-
-    pub fn set_wallet_notifications(
-        &mut self,
-        wallet_index: usize,
-        notification: NotificationState,
-    ) -> Result<()> {
-        self.settings
-            .notifications
-            .wallet_states
-            .insert(wallet_index, notification);
-        self.save_settings()?;
-
-        Ok(())
-    }
-
-    pub fn set_locale(&mut self, new_locale: Locale) -> Result<()> {
-        self.settings.locale = new_locale;
-        self.save_settings()?;
-
-        Ok(())
-    }
-
-    pub fn set_theme(&mut self, new_theme: Theme) -> Result<()> {
-        self.settings.theme = new_theme;
-        self.save_settings()?;
-
-        Ok(())
-    }
-
-    pub fn set_notifications(&mut self, new_notifications: Notifications) -> Result<()> {
-        self.settings.notifications = new_notifications;
-        self.save_settings()?;
-
-        Ok(())
-    }
-
-    pub fn get_wallet_by_index(&self, wallet_index: usize) -> Result<&Wallet> {
+    fn get_wallet_by_index(&self, wallet_index: usize) -> Result<&Wallet> {
         self.wallets
             .get(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))
     }
+}
 
-    pub fn get_connections(&self) -> Vec<Connection> {
+impl ConnectionManagement for Background {
+    type Error = BackgroundError;
+
+    fn get_connections(&self) -> Vec<Connection> {
         let bytes = self
             .storage
             .get(CONNECTIONS_LIST_DB_KEY)
@@ -457,7 +500,7 @@ impl Background {
         bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1))
     }
 
-    pub fn add_wallet_to_connection(&self, domain: String, wallet_index: usize) -> Result<()> {
+    fn add_wallet_to_connection(&self, domain: String, wallet_index: usize) -> Result<()> {
         let mut connections = self.get_connections();
 
         let connection = connections
@@ -475,17 +518,13 @@ impl Background {
         let bytes = bincode::serialize(&connections)
             .map_err(|e| BackgroundError::FailToSerializeConnections(e.to_string()))?;
 
-        self.storage
-            .set(CONNECTIONS_LIST_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsConnections)?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
+        self.storage.set(CONNECTIONS_LIST_DB_KEY, &bytes)?;
+        self.storage.flush()?;
 
         Ok(())
     }
 
-    pub fn add_connection(&self, connection: Connection) -> Result<()> {
+    fn add_connection(&self, connection: Connection) -> Result<()> {
         let mut connections = self.get_connections();
 
         if connections.iter().any(|c| c.domain == connection.domain) {
@@ -497,17 +536,17 @@ impl Background {
         let bytes = bincode::serialize(&connections)
             .map_err(|e| BackgroundError::FailToSerializeConnections(e.to_string()))?;
 
-        self.storage
-            .set(CONNECTIONS_LIST_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsConnections)?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
+        self.storage.set(CONNECTIONS_LIST_DB_KEY, &bytes)?;
+        self.storage.flush()?;
 
         Ok(())
     }
+}
 
-    pub fn get_address_book(&self) -> Vec<AddressBookEntry> {
+impl AddressBookManagement for Background {
+    type Error = BackgroundError;
+
+    fn get_address_book(&self) -> Vec<AddressBookEntry> {
         let bytes = self.storage.get(ADDRESS_BOOK_DB_KEY).unwrap_or_default();
 
         if bytes.is_empty() {
@@ -517,7 +556,7 @@ impl Background {
         bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1))
     }
 
-    pub fn add_to_address_book(&self, address: AddressBookEntry) -> Result<()> {
+    fn add_to_address_book(&self, address: AddressBookEntry) -> Result<()> {
         let mut book = self.get_address_book();
 
         if book.iter().any(|c| c.addr == address.addr) {
@@ -531,17 +570,18 @@ impl Background {
         let bytes =
             bincode::serialize(&book).or(Err(BackgroundError::FailToSerializeAddressBook))?;
 
-        self.storage
-            .set(ADDRESS_BOOK_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsAddressBook)?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
+        self.storage.set(ADDRESS_BOOK_DB_KEY, &bytes)?;
+        self.storage.flush()?;
 
         Ok(())
     }
+}
 
-    pub async fn update_rates(&self) -> Result<Value> {
+#[async_trait]
+impl RatesManagement for Background {
+    type Error = BackgroundError;
+
+    async fn update_rates(&self) -> Result<Value> {
         // TODO: remake this method with timestamp and struct.
         // let rates = fetch_rates()
         //     .await
@@ -559,7 +599,7 @@ impl Background {
         Ok(json!([]))
     }
 
-    pub fn get_rates(&self) -> Value {
+    fn get_rates(&self) -> Value {
         let bytes = self
             .storage
             .get(CURRENCIES_RATES_DB_KEY)
@@ -572,35 +612,12 @@ impl Background {
 
         serde_json::from_slice(&bytes).unwrap_or(json!([]))
     }
-
-    fn save_settings(&self) -> Result<()> {
-        let bytes =
-            bincode::serialize(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
-
-        self.storage
-            .set(GLOBAL_SETTINGS_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
-
-        Ok(())
-    }
-
-    fn save_indicators(&self) -> Result<()> {
-        let bytes: Vec<u8> = self
-            .indicators
-            .iter()
-            .flat_map(|array| array.iter().cloned())
-            .collect();
-
-        self.storage
-            .set(INDICATORS_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
-
-        Ok(())
-    }
 }
+
+pub mod book;
+pub mod connections;
+pub mod device_indicators;
+pub mod traits;
 
 #[cfg(test)]
 mod tests_background {

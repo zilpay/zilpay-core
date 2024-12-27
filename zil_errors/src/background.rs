@@ -7,6 +7,9 @@ use crate::{
 
 #[derive(Debug, Error, PartialEq)]
 pub enum BackgroundError {
+    #[error("LocalStorageError error: {0}")]
+    LocalStorageError(LocalStorageError),
+
     #[error("Fail, network error: {0}")]
     NetworkErrors(NetworkErrors),
 
@@ -34,9 +37,6 @@ pub enum BackgroundError {
     #[error("Wallet not found with index: {0}")]
     WalletNotExists(usize),
 
-    #[error("Storage flush error: {0}")]
-    LocalStorageFlushError(LocalStorageError),
-
     #[error("Failed to generate key pair: {0}")]
     FailToGenKeyPair(KeyPairError),
 
@@ -58,23 +58,8 @@ pub enum BackgroundError {
     #[error("Failed to generate BIP39 words from entropy: {0}")]
     FailToGenBip39FromEntropy(String),
 
-    #[error("Failed to initialize storage: {0}")]
-    TryInitLocalStorageError(LocalStorageError),
-
-    #[error("Failed to write wallet indicators to DB: {0}")]
-    FailToWriteIndicatorsWallet(LocalStorageError),
-
-    #[error("Failed to write address book to DB: {0}")]
-    FailToWriteIndicatorsAddressBook(LocalStorageError),
-
-    #[error("Failed to write address book to DB: {0}")]
-    FailToWriteIndicatorsConnections(LocalStorageError),
-
     #[error("Failed to load wallet from storage: {0}")]
     TryLoadWalletError(WalletErrors),
-
-    #[error("Failed to write selected wallet: {0}")]
-    FailWriteSelectedWallet(LocalStorageError),
 
     #[error("Argon2 password hashing error: {0}")]
     ArgonPasswordHashError(CipherErrors),
@@ -93,4 +78,10 @@ pub enum BackgroundError {
 
     #[error("Failed to save wallet data: {0}")]
     FailToSaveWallet(WalletErrors),
+}
+
+impl From<LocalStorageError> for BackgroundError {
+    fn from(error: LocalStorageError) -> Self {
+        BackgroundError::LocalStorageError(error)
+    }
 }

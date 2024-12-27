@@ -12,6 +12,7 @@ serde.workspace = true
 bincode.workspace = true
 bip39.workspace = true
 tokio.workspace = true
+async-trait.workspace = true
 
 zil_errors = { path = "../zil_errors" }
 wallet = { path = "../wallet" }
