@@ -11,7 +11,7 @@ use cipher::argon2::{derive_key, Argon2Seed};
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use config::storage::FTOKENS_DB_KEY;
-use ft::FToken;
+use network::provider::NetworkProvider;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
@@ -28,6 +28,7 @@ use crypto::bip49::Bip49DerivationPath;
 use settings::wallet_settings::WalletSettings;
 use sha2::{Digest, Sha256};
 use storage::LocalStorage;
+use token::ft::FToken;
 use wallet_data::{AuthMethod, WalletData};
 use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
@@ -48,6 +49,7 @@ pub struct LedgerParams<'a> {
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
+    pub providers: HashSet<NetworkProvider>,
 }
 
 pub struct Bip39Params<'a> {
@@ -58,6 +60,7 @@ pub struct Bip39Params<'a> {
     pub config: WalletConfig,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
+    pub providers: HashSet<NetworkProvider>,
 }
 
 pub struct Wallet {
@@ -102,8 +105,10 @@ impl Wallet {
             .map_err(WalletErrors::FailToLoadWalletData)?;
         let data = WalletData::from_bytes(&data)?;
         let ftokens = Vec::new();
+        let providers = HashSet::new();
 
         Ok(Self {
+            providers,
             storage,
             data,
             ftokens,
@@ -115,7 +120,6 @@ impl Wallet {
         proof: &[u8; KEY_SIZE],
         config: WalletConfig,
     ) -> Result<Self> {
-        // TODO: add cipher for encrypt account index.
         let cipher_proof = config
             .keychain
             .make_proof(proof, &config.settings.cipher_orders)
@@ -155,6 +159,7 @@ impl Wallet {
         };
 
         Ok(Self {
+            providers: params.providers,
             storage: config.storage,
             data,
             ftokens,
@@ -168,6 +173,7 @@ impl Wallet {
         config: WalletConfig,
         wallet_name: String,
         biometric_type: AuthMethod,
+        providers: HashSet<NetworkProvider>,
     ) -> Result<Self> {
         let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
@@ -215,6 +221,7 @@ impl Wallet {
         };
 
         Ok(Self {
+            providers,
             storage: config.storage,
             data,
             ftokens,
@@ -283,6 +290,7 @@ impl Wallet {
         };
 
         Ok(Self {
+            providers: params.providers,
             storage: params.config.storage,
             data,
             ftokens,
@@ -609,11 +617,11 @@ mod tests {
     use rand::Rng;
     use settings::wallet_settings::WalletSettings;
     use storage::LocalStorage;
+    use token::ft::FToken;
     use zil_errors::wallet::WalletErrors;
 
     use crate::{
-        ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, Wallet,
-        WalletConfig,
+        wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, Wallet, WalletConfig,
     };
 
     const MNEMONIC_STR: &str =
@@ -621,16 +629,20 @@ mod tests {
     const PASSWORD: &[u8] = b"Test_password";
     const PASSPHRASE: &str = "";
 
+    fn setup_test_storage() -> (Arc<LocalStorage>, String) {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let storage = LocalStorage::from(&dir).unwrap();
+        let storage = Arc::new(storage);
+
+        (storage, dir)
+    }
+
     #[test]
     fn test_init_from_bip39_zil() {
+        let (storage, _dir) = setup_test_storage();
+
         let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
-        let storage = LocalStorage::new(
-            "com.test_write_wallet",
-            "WriteTest Wallet Corp",
-            "WalletWriteTest App",
-        )
-        .unwrap();
-        let storage = Arc::new(storage);
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
@@ -650,7 +662,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Wllaet name".to_string(),
             biometric_type: AuthMethod::Biometric,
-            network: HashSet::new(),
+            providers: HashSet::new(),
         })
         .unwrap();
 
@@ -665,10 +677,7 @@ mod tests {
 
         assert_eq!(wallet.data.accounts.len(), indexes.len());
 
-        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address)
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let wallet_addr = wallet.data.wallet_address;
 
         drop(wallet);
 
@@ -680,11 +689,10 @@ mod tests {
 
     #[test]
     fn test_init_from_sk() {
+        let (storage, _dir) = setup_test_storage();
+
         let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let storage = LocalStorage::from(&dir).unwrap();
 
         let storage = Arc::new(storage);
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
@@ -703,6 +711,7 @@ mod tests {
             wallet_config,
             "test Name".to_string(),
             Default::default(),
+            HashSet::new(),
         )
         .unwrap();
 
@@ -712,23 +721,18 @@ mod tests {
             Err(WalletErrors::InvalidAccountType)
         );
 
-        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address)
-            .unwrap()
-            .try_into()
-            .unwrap();
         wallet.save_to_storage().unwrap();
 
-        let w = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        let w =
+            Wallet::load_from_storage(&wallet.data.wallet_address, Arc::clone(&storage)).unwrap();
 
         assert_eq!(w.data, wallet.data);
     }
 
     #[test]
     fn test_add_and_load_tokens() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let storage = LocalStorage::from(&dir).unwrap();
-        let storage = Arc::new(storage);
+        let (storage, _dir) = setup_test_storage();
+
         let settings = WalletSettings::default();
         let argon_seed =
             derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
@@ -758,6 +762,7 @@ mod tests {
             wallet_config,
             "Token Test Wallet".to_string(),
             Default::default(),
+            HashSet::new(),
         )
         .unwrap();
 
@@ -776,7 +781,6 @@ mod tests {
             default: false,
             native: false,
             balances: HashMap::new(),
-            net_id: 0,
         };
 
         // Add custom token
@@ -817,10 +821,8 @@ mod tests {
 
     #[test]
     fn test_multiple_custom_tokens() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let storage = LocalStorage::from(&dir).unwrap();
-        let storage = Arc::new(storage);
+        let (storage, _dir) = setup_test_storage();
+
         let settings = WalletSettings::default();
         let argon_seed =
             derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
@@ -847,6 +849,7 @@ mod tests {
             wallet_config,
             "Multi Token Test Wallet".to_string(),
             Default::default(),
+            HashSet::new(),
         )
         .unwrap();
 
@@ -861,7 +864,6 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -872,7 +874,6 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -883,7 +884,6 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: 0,
             },
         ];
 
@@ -922,11 +922,8 @@ mod tests {
 
     #[test]
     fn test_remove_tokens() {
-        // Setup wallet
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let storage = LocalStorage::from(&dir).unwrap();
-        let storage = Arc::new(storage);
+        let (storage, _dir) = setup_test_storage();
+
         let settings = WalletSettings::default();
         let argon_seed =
             derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
@@ -953,6 +950,7 @@ mod tests {
             wallet_config,
             "Remove Token Test Wallet".to_string(),
             Default::default(),
+            HashSet::new(),
         )
         .unwrap();
 
@@ -967,7 +965,6 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
-                net_id: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -978,7 +975,6 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
-                net_id: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -989,7 +985,6 @@ mod tests {
                 native: true,
                 default: false,
                 balances: HashMap::new(),
-                net_id: 0,
             },
         ];
 
@@ -1052,13 +1047,8 @@ mod tests {
     fn test_select_account() {
         // Setup initial wallet with bip39 for multiple accounts
         let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
-        let storage = LocalStorage::new(
-            "com.test_select_account",
-            "SelectTest Wallet Corp",
-            "WalletSelectTest App",
-        )
-        .unwrap();
-        let storage = Arc::new(storage);
+        let (storage, _dir) = setup_test_storage();
+
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
@@ -1081,7 +1071,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Select Account Test Wallet".to_string(),
             biometric_type: AuthMethod::Biometric,
-            network: HashSet::new(),
+            providers: HashSet::new(),
         })
         .unwrap();
 

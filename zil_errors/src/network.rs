@@ -12,6 +12,9 @@ pub enum NetworkErrors {
     #[error("Fail to save/read from storage err: {0}")]
     Storage(LocalStorageError),
 
+    #[error("Token iternel error: {0}")]
+    Token(TokenError),
+
     #[error("Http state: {0}, message {1}")]
     HttpError(u16, String),
 
@@ -30,26 +33,7 @@ pub enum NetworkErrors {
 
 impl From<TokenError> for NetworkErrors {
     fn from(error: TokenError) -> Self {
-        match error {
-            TokenError::InvalidContractData => {
-                NetworkErrors::ParseHttpError("Invalid contract data".to_string())
-            }
-            TokenError::NetworkError(msg) => NetworkErrors::HttpNetworkError(msg),
-            TokenError::InvalidContractAddress(err) => {
-                NetworkErrors::ParseHttpError(format!("Invalid contract address: {}", err))
-            }
-            TokenError::ABIError(msg) => {
-                NetworkErrors::ParseHttpError(format!("ABI Error: {}", msg))
-            }
-            TokenError::MissingField(field) => {
-                NetworkErrors::ParseHttpError(format!("Missing field: {}", field))
-            }
-            TokenError::InvalidFieldValue { field, value } => NetworkErrors::ParseHttpError(
-                format!("Invalid value '{}' for field '{}'", value, field),
-            ),
-            TokenError::InvalidContractInit => NetworkErrors::ResponseParseError,
-            TokenError::TokenParseError => NetworkErrors::ResponseParseError,
-        }
+        NetworkErrors::Token(error)
     }
 }
 

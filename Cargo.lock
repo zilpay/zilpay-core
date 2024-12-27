@@ -942,6 +942,7 @@ dependencies = [
  "crypto",
  "hex",
  "mockito",
+ "network",
  "proto",
  "rand",
  "rand_chacha",
@@ -4231,6 +4232,7 @@ dependencies = [
  "settings",
  "sha2",
  "storage",
+ "token",
  "zil_errors",
 ]
 

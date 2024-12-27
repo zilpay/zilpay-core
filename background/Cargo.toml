@@ -23,6 +23,7 @@ crypto = { path = "../crypto" }
 proto = { path = "../proto" }
 cipher = { path = "../cipher" }
 session = { path = "../session" }
+network = { path = "../network" }
 
 [dev-dependencies]
 mockito = "1.5.0"

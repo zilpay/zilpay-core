@@ -17,8 +17,8 @@ use config::{
 use connections::Connection;
 use crypto::bip49::Bip49DerivationPath;
 use device_indicators::create_wallet_device_indicator;
-use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
-use rpc::network_config::NetworkConfig;
+use network::provider::NetworkProvider;
+use proto::{keypair::KeyPair, secret_key::SecretKey};
 use serde_json::{json, Value};
 use session::{decrypt_session, encrypt_session};
 use settings::{
@@ -31,10 +31,10 @@ use settings::{
 use std::{collections::HashSet, sync::Arc};
 use storage::LocalStorage;
 use wallet::{
-    ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams,
-    Wallet, WalletAddrType, WalletConfig,
+    wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams, Wallet,
+    WalletAddrType, WalletConfig,
 };
-use zil_errors::{background::BackgroundError, network::NetworkErrors};
+use zil_errors::background::BackgroundError;
 
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -48,9 +48,9 @@ pub struct BackgroundBip39Params<'a> {
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
-    pub network: HashSet<u64>,
     pub wallet_settings: WalletSettings,
     pub accounts: &'a [(Bip49DerivationPath, String)],
+    pub providers: HashSet<NetworkProvider>,
 }
 
 pub struct BackgroundSKParams<'a> {
@@ -60,8 +60,8 @@ pub struct BackgroundSKParams<'a> {
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
-    pub network: HashSet<u64>,
     pub wallet_settings: WalletSettings,
+    pub providers: HashSet<NetworkProvider>,
 }
 
 pub struct Background {
@@ -240,6 +240,7 @@ impl Background {
             config: wallet_config,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
+            providers: params.providers,
         })
         .map_err(BackgroundError::FailToInitWallet)?;
         let wallet_device_indicators =
@@ -364,6 +365,7 @@ impl Background {
             wallet_config,
             params.wallet_name,
             params.biometric_type,
+            params.providers,
         )
         .map_err(BackgroundError::FailToInitWallet)?;
 
@@ -440,34 +442,6 @@ impl Background {
         self.wallets
             .get(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))
-    }
-
-    pub async fn get_ftoken_meta(&self, wallet_index: usize, contract: Address) -> Result<FToken> {
-        let w = self.get_wallet_by_index(wallet_index)?;
-        let accounts = w
-            .data
-            .accounts
-            .iter()
-            .map(|a| &a.addr)
-            .collect::<Vec<&Address>>();
-        let mut error: NetworkErrors = NetworkErrors::ResponseParseError;
-        // let providers = self.providers_from_wallet_index(wallet_index)?;
-
-        // TODO: make it unique from wallet.
-        // for provider in providers {
-        //     // TODO: maybe remove clone.
-        //     match provider.ftoken_meta(contract.clone(), &accounts).await {
-        //         Ok(meta) => {
-        //             return Ok(meta);
-        //         }
-        //         Err(e) => {
-        //             error = e;
-        //             continue;
-        //         }
-        //     }
-        // }
-
-        Err(BackgroundError::NetworkErrors(error))
     }
 
     pub fn get_connections(&self) -> Vec<Connection> {
@@ -599,42 +573,6 @@ impl Background {
         serde_json::from_slice(&bytes).unwrap_or(json!([]))
     }
 
-    pub async fn sync_ftokens_balances(&mut self, wallet_index: usize) -> Result<()> {
-        let w = self
-            .wallets
-            .get_mut(wallet_index)
-            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
-
-        if w.ftokens.is_empty() {
-            return Err(BackgroundError::FailUnlockWallet(
-                zil_errors::wallet::WalletErrors::KeyChainFailToGetProof,
-            ));
-        }
-
-        let addresses = w
-            .data
-            .accounts
-            .iter()
-            .map(|a| &a.addr)
-            .collect::<Vec<&Address>>();
-
-        let tokens = &mut w.ftokens;
-
-        // TODO: remake it with unique wallet provider
-        // self.netowrk
-        //     .update_balances(tokens, &addresses)
-        //     .await
-        //     .map_err(BackgroundError::NetworkErrors)?;
-
-        w.save_to_storage()
-            .map_err(BackgroundError::FailToSaveWallet)?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
-
-        Ok(())
-    }
-
     fn save_settings(&self) -> Result<()> {
         let bytes =
             bincode::serialize(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
@@ -672,7 +610,7 @@ mod tests_background {
         key::{PUB_KEY_SIZE, SECRET_KEY_SIZE},
     };
     use connections::DAppColors;
-    use proto::keypair::KeyPair;
+    use proto::{address::Address, keypair::KeyPair};
     use rand::Rng;
     use session::decrypt_session;
 
@@ -706,12 +644,11 @@ mod tests_background {
         let words: &str =
             "area scale vital sell radio pattern poverty mean similar picnic grain gain";
         let accounts = [(Bip49DerivationPath::Zilliqa(0), "Name".to_string())];
-        let network = HashSet::new();
 
         let _key = bg
             .add_bip39_wallet(BackgroundBip39Params {
                 password,
-                network: network.clone(),
+                providers: HashSet::new(),
                 mnemonic_str: words,
                 accounts: &accounts,
                 wallet_settings: Default::default(),
@@ -731,7 +668,7 @@ mod tests_background {
         let _key = bg
             .add_bip39_wallet(BackgroundBip39Params {
                 password,
-                network: network.clone(),
+                providers: HashSet::new(),
                 mnemonic_str: words,
                 accounts: &accounts,
                 wallet_settings: Default::default(),
@@ -753,7 +690,7 @@ mod tests_background {
         let _key = bg
             .add_bip39_wallet(BackgroundBip39Params {
                 password,
-                network,
+                providers: HashSet::new(),
                 accounts: &accounts,
                 mnemonic_str: words,
                 wallet_settings: Default::default(),
@@ -791,7 +728,6 @@ mod tests_background {
             (Bip49DerivationPath::Zilliqa(7), "Account 7".to_string()),
         ];
         let device_indicators = [String::from("apple"), String::from("4354")];
-        let network = HashSet::new();
 
         let session = bg
             .add_bip39_wallet(BackgroundBip39Params {
@@ -803,7 +739,7 @@ mod tests_background {
                 passphrase: "",
                 wallet_name: String::new(),
                 biometric_type: AuthMethod::FaceId,
-                network,
+                providers: HashSet::new(),
             })
             .unwrap();
 
@@ -870,6 +806,7 @@ mod tests_background {
                     wallet_index: 0,
                     wallet_name: String::from("Ledger nano x"),
                     biometric_type: AuthMethod::FaceId,
+                    providers: HashSet::new(),
                 },
                 Default::default(),
                 &device_indicators,
@@ -911,6 +848,7 @@ mod tests_background {
                 wallet_index: 0,
                 wallet_name: String::from("Ledger nano x"),
                 biometric_type: AuthMethod::FaceId,
+                providers: HashSet::new(),
             },
             Default::default(),
             &device_indicators,
@@ -925,6 +863,7 @@ mod tests_background {
                     ledger_id: ledger_id.clone(),
                     wallet_index: 0,
                     wallet_name: String::from("Ledger nano x"),
+                    providers: HashSet::new(),
                     biometric_type: AuthMethod::FaceId,
                 },
                 Default::default(),
@@ -947,10 +886,9 @@ mod tests_background {
         let sk = keypair.get_secretkey().unwrap();
         let name = "SK Account 0".to_string();
         let device_indicators = vec![String::from("test"), String::from("0543543")];
-        let network = HashSet::new();
         let session = bg
             .add_sk_wallet(BackgroundSKParams {
-                network,
+                providers: HashSet::new(),
                 password,
                 secret_key: &sk,
                 account_name: name,
@@ -1147,11 +1085,10 @@ mod tests_background {
             (Bip49DerivationPath::Zilliqa(0), "first".to_string()),
             (Bip49DerivationPath::Zilliqa(1), "second".to_string()),
         ];
-        let network = HashSet::new();
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            network: network.clone(),
+            providers: HashSet::new(),
             mnemonic_str: words,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -1174,6 +1111,7 @@ mod tests_background {
 
         bg.add_ledger_wallet(
             LedgerParams {
+                providers: HashSet::new(),
                 pub_key: &pub_key,
                 name: String::from("account 0"),
                 ledger_id,

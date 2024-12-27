@@ -21,3 +21,4 @@ proto = { path = "../proto" }
 cipher = { path = "../cipher" }
 storage = { path = "../storage" }
 settings = { path = "../settings" }
+token = { path = "../token" }
