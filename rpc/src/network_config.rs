@@ -9,6 +9,7 @@ pub struct NetworkConfig {
     pub chain_id: u64,
     pub fallback_enabled: bool,
     pub urls: Vec<String>,
+    pub default: bool,
 }
 
 impl NetworkConfig {
@@ -25,6 +26,7 @@ impl NetworkConfig {
             network_name: network_name.into(),
             chain_id,
             urls,
+            default: false,
         }
     }
 

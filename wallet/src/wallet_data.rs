@@ -47,6 +47,7 @@ pub struct WalletData {
     pub accounts: Vec<Account>,
     pub selected_account: usize,
     pub biometric_type: AuthMethod,
+    pub provider_index: usize,
 }
 
 impl WalletData {

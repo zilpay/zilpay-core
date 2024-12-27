@@ -157,7 +157,7 @@ impl WalletManagement for Background {
             config: wallet_config,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
-            providers: params.providers,
+            provider_index: params.provider,
         })?;
         let wallet_device_indicators =
             create_wallet_device_indicator(&wallet.data.wallet_address, params.device_indicators);
@@ -273,7 +273,7 @@ impl WalletManagement for Background {
             wallet_config,
             params.wallet_name,
             params.biometric_type,
-            params.providers,
+            params.provider,
         )?;
 
         let wallet_device_indicators =
@@ -312,7 +312,6 @@ mod tests_background {
     use crate::bg_crypto::CryptoOperations;
     use crypto::bip49::Bip49DerivationPath;
     use rand::Rng;
-    use std::collections::HashSet;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -333,7 +332,7 @@ mod tests_background {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            providers: HashSet::new(),
+            provider: 0,
             mnemonic_str: &words,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -352,7 +351,7 @@ mod tests_background {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            providers: HashSet::new(),
+            provider: 0,
             mnemonic_str: &words,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -371,7 +370,7 @@ mod tests_background {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            providers: HashSet::new(),
+            provider: 0,
             accounts: &accounts,
             mnemonic_str: &words,
             wallet_settings: Default::default(),

@@ -4,7 +4,7 @@ use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
 use proto::secret_key::SecretKey;
 use settings::{common_settings::CommonSettings, wallet_settings::WalletSettings};
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 use storage::LocalStorage;
 use wallet::{wallet_data::AuthMethod, Wallet, WalletAddrType};
 use zil_errors::background::BackgroundError;
@@ -20,7 +20,7 @@ pub struct BackgroundBip39Params<'a> {
     pub device_indicators: &'a [String],
     pub wallet_settings: WalletSettings,
     pub accounts: &'a [(Bip49DerivationPath, String)],
-    pub providers: HashSet<NetworkProvider>,
+    pub provider: usize,
 }
 
 pub struct BackgroundSKParams<'a> {
@@ -31,15 +31,15 @@ pub struct BackgroundSKParams<'a> {
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub wallet_settings: WalletSettings,
-    pub providers: HashSet<NetworkProvider>,
+    pub provider: usize,
 }
 
 pub struct Background {
     storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
     pub indicators: Vec<WalletAddrType>,
-    pub is_old_storage: bool,
     pub settings: CommonSettings,
+    pub providers: Vec<NetworkProvider>,
 }
 
 pub mod bg_book;

@@ -1,10 +1,8 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use cipher::argon2::{derive_key, Argon2Seed};
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
-use network::provider::NetworkProvider;
 use proto::pubkey::PubKey;
 
 use bip39::Mnemonic;
@@ -33,7 +31,7 @@ pub struct LedgerParams<'a> {
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub providers: HashSet<NetworkProvider>,
+    pub provider_index: usize,
 }
 
 pub struct Bip39Params<'a> {
@@ -44,14 +42,13 @@ pub struct Bip39Params<'a> {
     pub config: WalletConfig,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub providers: HashSet<NetworkProvider>,
+    pub provider_index: usize,
 }
 
 pub struct Wallet {
     storage: Arc<LocalStorage>,
     pub data: WalletData,
     pub ftokens: Vec<FToken>,
-    pub providers: HashSet<NetworkProvider>,
 }
 
 impl Wallet {

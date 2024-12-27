@@ -4,10 +4,9 @@ use config::{
     sha::SHA256_SIZE,
     wallet::{N_BYTES_HASH, N_SALT},
 };
-use network::provider::NetworkProvider;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
 use sha2::{Digest, Sha256};
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 use token::ft::FToken;
 use zil_errors::wallet::WalletErrors;
 
@@ -37,7 +36,7 @@ pub trait WalletInit {
         config: WalletConfig,
         wallet_name: String,
         biometric_type: AuthMethod,
-        providers: HashSet<NetworkProvider>,
+        provider: usize,
     ) -> std::result::Result<Self, Self::Error>
     where
         Self: Sized;
@@ -83,6 +82,7 @@ impl WalletInit for Wallet {
             wallet_address,
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
+            provider_index: params.provider_index,
         };
         let ftokens = match params.pub_key {
             // TODO: normal init default tokens.
@@ -96,7 +96,6 @@ impl WalletInit for Wallet {
         };
 
         Ok(Self {
-            providers: params.providers,
             storage: config.storage,
             data,
             ftokens,
@@ -110,7 +109,7 @@ impl WalletInit for Wallet {
         config: WalletConfig,
         wallet_name: String,
         biometric_type: AuthMethod,
-        providers: HashSet<NetworkProvider>,
+        provider_index: usize,
     ) -> Result<Self> {
         let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
@@ -147,6 +146,7 @@ impl WalletInit for Wallet {
             wallet_address,
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0,
+            provider_index,
         };
         let ftokens = match sk {
             SecretKey::Secp256k1Sha256Zilliqa(_) => {
@@ -158,7 +158,6 @@ impl WalletInit for Wallet {
         };
 
         Ok(Self {
-            providers,
             storage: config.storage,
             data,
             ftokens,
@@ -224,10 +223,10 @@ impl WalletInit for Wallet {
                 !params.passphrase.is_empty(),
             )),
             selected_account: 0,
+            provider_index: params.provider_index,
         };
 
         Ok(Self {
-            providers: params.providers,
             storage: params.config.storage,
             data,
             ftokens,
@@ -237,7 +236,7 @@ impl WalletInit for Wallet {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, sync::Arc};
+    use std::sync::Arc;
 
     use bip39::Mnemonic;
     use cipher::{
@@ -295,7 +294,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Wllaet name".to_string(),
             biometric_type: AuthMethod::Biometric,
-            providers: HashSet::new(),
+            provider_index: 0,
         })
         .unwrap();
 
@@ -344,7 +343,7 @@ mod tests {
             wallet_config,
             "test Name".to_string(),
             Default::default(),
-            HashSet::new(),
+            0,
         )
         .unwrap();
 

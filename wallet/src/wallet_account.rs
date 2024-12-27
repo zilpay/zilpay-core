@@ -132,7 +132,7 @@ mod tests {
     use config::cipher::PROOF_SIZE;
     use crypto::bip49::Bip49DerivationPath;
     use rand::Rng;
-    use std::{collections::HashSet, sync::Arc};
+    use std::sync::Arc;
     use storage::LocalStorage;
     use zil_errors::wallet::WalletErrors;
 
@@ -178,7 +178,7 @@ mod tests {
             config: wallet_config,
             wallet_name: "Select Account Test Wallet".to_string(),
             biometric_type: AuthMethod::Biometric,
-            providers: HashSet::new(),
+            provider_index: 0,
         })
         .unwrap();
 

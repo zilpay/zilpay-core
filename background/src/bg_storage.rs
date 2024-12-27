@@ -5,6 +5,7 @@ use config::{
     sha::SHA256_SIZE,
     storage::{GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY},
 };
+use network::provider::NetworkProvider;
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use wallet::{wallet_storage::StorageOperations, Wallet};
@@ -46,7 +47,7 @@ impl StorageManagement for Background {
     fn from_storage_path(path: &str) -> Result<Self> {
         let storage = LocalStorage::from(path)?;
         let storage = Arc::new(storage);
-        let is_old_storage = false; // TODO: check old storage from first ZilPay version
+        // TODO: check old storage from first ZilPay version if indicators is empty
         let indicators = storage
             .get(INDICATORS_DB_KEY)
             .unwrap_or_default()
@@ -57,8 +58,9 @@ impl StorageManagement for Background {
                 array
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
-        let mut wallets = Vec::new(); // TODO: make size alloc
+        let mut wallets = Vec::with_capacity(indicators.len());
         let settings = Self::load_global_settings(Arc::clone(&storage));
+        let providers: Vec<NetworkProvider> = Vec::with_capacity(0); // TODO: empty, need to load from storage.
 
         for addr in &indicators {
             let w = Wallet::load_from_storage(addr, Arc::clone(&storage))?;
@@ -67,10 +69,10 @@ impl StorageManagement for Background {
         }
 
         Ok(Self {
+            providers,
             storage,
             wallets,
             indicators,
-            is_old_storage,
             settings,
         })
     }
@@ -100,8 +102,6 @@ impl StorageManagement for Background {
 
 #[cfg(test)]
 mod tests_background {
-    use std::collections::HashSet;
-
     use crate::{bg_crypto::CryptoOperations, bg_wallet::WalletManagement, BackgroundBip39Params};
 
     use super::*;
@@ -127,7 +127,7 @@ mod tests_background {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            providers: HashSet::new(),
+            provider: 0,
             mnemonic_str: &words,
             accounts: &accounts,
             wallet_settings: Default::default(),

@@ -50,7 +50,7 @@ impl TokenManagement for Wallet {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, sync::Arc};
+    use std::sync::Arc;
 
     use alloy::primitives::map::HashMap;
     use cipher::{argon2::derive_key, keychain::KeyChain};
@@ -110,7 +110,7 @@ mod tests {
             wallet_config,
             "Token Test Wallet".to_string(),
             Default::default(),
-            HashSet::new(),
+            0,
         )
         .unwrap();
 
@@ -197,7 +197,7 @@ mod tests {
             wallet_config,
             "Multi Token Test Wallet".to_string(),
             Default::default(),
-            HashSet::new(),
+            0,
         )
         .unwrap();
 
@@ -298,7 +298,7 @@ mod tests {
             wallet_config,
             "Remove Token Test Wallet".to_string(),
             Default::default(),
-            HashSet::new(),
+            0,
         )
         .unwrap();
 

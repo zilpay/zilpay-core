@@ -5,7 +5,6 @@ use crate::WalletAddrType;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-use std::collections::HashSet;
 use std::sync::Arc;
 use storage::LocalStorage;
 use zil_errors::wallet::WalletErrors;
@@ -45,10 +44,8 @@ impl StorageOperations for Wallet {
         let data = storage.get(key)?;
         let data = WalletData::from_bytes(&data)?;
         let ftokens = Vec::new();
-        let providers = HashSet::new();
 
         Ok(Self {
-            providers,
             storage,
             data,
             ftokens,
