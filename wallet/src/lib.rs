@@ -84,7 +84,6 @@ pub mod wallet_backup;
 pub mod wallet_crypto;
 pub mod wallet_data;
 pub mod wallet_init;
-pub mod wallet_network;
 pub mod wallet_security;
 pub mod wallet_storage;
 pub mod wallet_token;

@@ -45,6 +45,7 @@ pub struct Background {
 pub mod bg_book;
 pub mod bg_connections;
 pub mod bg_crypto;
+pub mod bg_provider;
 pub mod bg_rates;
 pub mod bg_settings;
 pub mod bg_storage;

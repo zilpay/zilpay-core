@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -49,32 +49,30 @@ impl Provider for NetworkProvider {
         xor_hash(name, chain_id)
     }
 
-    fn load_network_configs(storage: Arc<LocalStorage>) -> HashSet<Self> {
+    fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
         let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
 
         if bytes.is_empty() {
-            return HashSet::with_capacity(1);
+            return Vec::with_capacity(1);
         }
 
         let configs: Vec<NetworkConfig> =
             bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
-        let mut providers = HashSet::with_capacity(configs.len());
+        let mut providers = Vec::with_capacity(configs.len());
 
         for config in configs {
-            providers.insert(NetworkProvider::new(config));
+            providers.push(NetworkProvider::new(config));
         }
 
         providers
     }
 
-    fn save_network_configs(providers: &HashSet<Self>, storage: Arc<LocalStorage>) -> Result<()> {
+    fn save_network_configs(providers: &[Self], storage: Arc<LocalStorage>) -> Result<()> {
         let as_vec: Vec<_> = providers.iter().map(|v| &v.config).collect();
         let bytes =
             bincode::serialize(&as_vec).map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
-        storage
-            .set(NETWORK_DB_KEY, &bytes)
-            .map_err(NetworkErrors::Storage)?;
+        storage.set(NETWORK_DB_KEY, &bytes)?;
 
         Ok(())
     }
@@ -484,9 +482,7 @@ mod tests_network {
         // Create a test network config
         let config =
             NetworkConfig::new("Test Network", 1, vec!["https://test.network".to_string()]);
-
-        let mut providers = HashSet::new();
-        providers.insert(NetworkProvider::new(config.clone()));
+        let providers = vec![NetworkProvider::new(config)];
 
         // Save to storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
@@ -504,11 +500,8 @@ mod tests_network {
     #[test]
     fn test_save_and_load_multiple_networks() {
         let storage = setup_temp_storage();
-
-        let mut providers = HashSet::new();
-
         // Create multiple test network configs
-        let configs = vec![
+        let configs = [
             NetworkConfig::new(
                 "Test Network 1",
                 1,
@@ -525,10 +518,10 @@ mod tests_network {
                 vec!["https://test3.network".to_string()],
             ),
         ];
-
-        for config in configs {
-            providers.insert(NetworkProvider::new(config));
-        }
+        let providers: Vec<NetworkProvider> = configs
+            .iter()
+            .map(|conf| NetworkProvider::new(conf.clone()))
+            .collect();
 
         // Save to storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
@@ -550,8 +543,9 @@ mod tests_network {
         let storage = setup_temp_storage();
 
         // Initial network
-        let mut providers = HashSet::new();
-        providers.insert(NetworkProvider::new(NetworkConfig::new(
+        let mut providers = Vec::new();
+
+        providers.push(NetworkProvider::new(NetworkConfig::new(
             "Initial Network",
             1,
             vec!["https://initial.network".to_string()],
@@ -561,7 +555,7 @@ mod tests_network {
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
         // Add new network
-        providers.insert(NetworkProvider::new(NetworkConfig::new(
+        providers.push(NetworkProvider::new(NetworkConfig::new(
             "New Network",
             2,
             vec!["https://new.network".to_string()],

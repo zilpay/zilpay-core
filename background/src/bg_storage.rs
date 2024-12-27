@@ -5,7 +5,7 @@ use config::{
     sha::SHA256_SIZE,
     storage::{GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY},
 };
-use network::provider::NetworkProvider;
+use network::{common::Provider, provider::NetworkProvider};
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use wallet::{wallet_storage::StorageOperations, Wallet};
@@ -60,7 +60,8 @@ impl StorageManagement for Background {
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::with_capacity(indicators.len());
         let settings = Self::load_global_settings(Arc::clone(&storage));
-        let providers: Vec<NetworkProvider> = Vec::with_capacity(0); // TODO: empty, need to load from storage.
+        let providers: Vec<NetworkProvider> =
+            NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         for addr in &indicators {
             let w = Wallet::load_from_storage(addr, Arc::clone(&storage))?;

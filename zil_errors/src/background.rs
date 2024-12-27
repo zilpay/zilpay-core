@@ -13,6 +13,12 @@ pub enum BackgroundError {
     #[error("Fail, network error: {0}")]
     NetworkErrors(NetworkErrors),
 
+    #[error("Provider is not exists with index: {0}")]
+    ProviderNotExists(usize),
+
+    #[error("Default provider cannot be removed: {0}")]
+    ProviderIsDefault(usize),
+
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,
 
@@ -74,6 +80,12 @@ pub enum BackgroundError {
 impl From<LocalStorageError> for BackgroundError {
     fn from(error: LocalStorageError) -> Self {
         BackgroundError::LocalStorageError(error)
+    }
+}
+
+impl From<NetworkErrors> for BackgroundError {
+    fn from(error: NetworkErrors) -> Self {
+        BackgroundError::NetworkErrors(error)
     }
 }
 
