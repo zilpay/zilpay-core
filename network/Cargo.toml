@@ -14,7 +14,6 @@ bincode.workspace = true
 storage = { path = "../storage" }
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
-wallet = { path = "../wallet" }
 proto = { path = "../proto" }
 crypto = { path = "../crypto" }
 rpc = { path = "../rpc" }

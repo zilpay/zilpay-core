@@ -1,0 +1,15 @@
+[package]
+name = "token"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alloy.workspace = true
+serde_json.workspace = true
+bincode.workspace = true
+
+proto = { path = "../proto" }
+config = { path = "../config" }
+serde.workspace = true
+zil_errors = { path = "../zil_errors" }
+rpc = { path = "../rpc" }

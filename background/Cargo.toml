@@ -11,6 +11,8 @@ serde_json.workspace = true
 serde.workspace = true
 bincode.workspace = true
 bip39.workspace = true
+tokio.workspace = true
+
 zil_errors = { path = "../zil_errors" }
 wallet = { path = "../wallet" }
 rpc = { path = "../rpc" }
@@ -20,5 +22,8 @@ settings = { path = "../settings" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }
 cipher = { path = "../cipher" }
-network = { path = "../network" }
 session = { path = "../session" }
+
+[dev-dependencies]
+mockito = "1.5.0"
+

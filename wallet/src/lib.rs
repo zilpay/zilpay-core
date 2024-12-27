@@ -49,7 +49,6 @@ pub struct LedgerParams<'a> {
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub networks: HashSet<u64>,
 }
 
 pub struct Bip39Params<'a> {
@@ -60,13 +59,13 @@ pub struct Bip39Params<'a> {
     pub config: WalletConfig,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub network: HashSet<u64>,
 }
 
 pub struct Wallet {
     storage: Arc<LocalStorage>,
     pub data: WalletData,
     pub ftokens: Vec<FToken>,
+    pub providers: HashSet<NetworkProvider>,
 }
 
 fn safe_storage_save(cipher_entropy: &[u8], storage: Arc<LocalStorage>) -> Result<usize> {
@@ -137,7 +136,6 @@ impl Wallet {
 
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
-            network: params.networks,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
             proof_key,
@@ -171,7 +169,6 @@ impl Wallet {
         config: WalletConfig,
         wallet_name: String,
         biometric_type: AuthMethod,
-        network: HashSet<u64>,
     ) -> Result<Self> {
         let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
@@ -200,7 +197,6 @@ impl Wallet {
             .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
-            network,
             wallet_name,
             biometric_type,
             proof_key,
@@ -274,7 +270,6 @@ impl Wallet {
             _ => unreachable!(),
         };
         let data = WalletData {
-            network: params.network,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type.clone(),
             proof_key,
@@ -709,7 +704,6 @@ mod tests {
             wallet_config,
             "test Name".to_string(),
             Default::default(),
-            HashSet::new(),
         )
         .unwrap();
 
@@ -765,7 +759,6 @@ mod tests {
             wallet_config,
             "Token Test Wallet".to_string(),
             Default::default(),
-            HashSet::new(),
         )
         .unwrap();
 
@@ -855,7 +848,6 @@ mod tests {
             wallet_config,
             "Multi Token Test Wallet".to_string(),
             Default::default(),
-            HashSet::new(),
         )
         .unwrap();
 
@@ -962,7 +954,6 @@ mod tests {
             wallet_config,
             "Remove Token Test Wallet".to_string(),
             Default::default(),
-            HashSet::new(),
         )
         .unwrap();
 

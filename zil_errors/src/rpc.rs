@@ -5,8 +5,8 @@ pub enum RpcError {
     #[error("Bad request")]
     BadRequest,
 
-    #[error("Invalid JSON response")]
-    InvalidJson,
+    #[error("Invalid JSON response: parse: {0}")]
+    InvalidJson(String),
 
     #[error("Network is down")]
     NetworkDown,

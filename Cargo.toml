@@ -26,7 +26,7 @@ members = [
   "wallet",
   "zil_errors",
   "rpc",
-  "zilpay",
+  "zilpay", "token",
 ]
 
 [dependencies]

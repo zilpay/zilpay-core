@@ -17,8 +17,8 @@ use config::{
 use connections::Connection;
 use crypto::bip49::Bip49DerivationPath;
 use device_indicators::create_wallet_device_indicator;
-use network::{common::Provider, provider::NetworkProvider, rates::fetch_rates};
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
+use rpc::network_config::NetworkConfig;
 use serde_json::{json, Value};
 use session::{decrypt_session, encrypt_session};
 use settings::{
@@ -70,7 +70,6 @@ pub struct Background {
     pub indicators: Vec<WalletAddrType>,
     pub is_old_storage: bool,
     pub settings: CommonSettings,
-    pub netowrk: HashSet<NetworkProvider>,
 }
 
 fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
@@ -138,7 +137,6 @@ impl Background {
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
         let mut wallets = Vec::new();
-        let netowrk = NetworkProvider::load_network_configs(Arc::clone(&storage));
         let settings = load_global_settings(Arc::clone(&storage));
 
         for addr in &indicators {
@@ -149,7 +147,6 @@ impl Background {
         }
 
         Ok(Self {
-            netowrk,
             storage,
             wallets,
             indicators,
@@ -243,7 +240,6 @@ impl Background {
             config: wallet_config,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
-            network: params.network,
         })
         .map_err(BackgroundError::FailToInitWallet)?;
         let wallet_device_indicators =
@@ -316,7 +312,7 @@ impl Background {
             .map_err(BackgroundError::FailToInitWallet)?;
 
         let device_indicators =
-            create_wallet_device_indicator(&wallet.data.wallet_address, &device_indicators);
+            create_wallet_device_indicator(&wallet.data.wallet_address, device_indicators);
         let session = encrypt_session(
             &device_indicators,
             &argon_seed,
@@ -368,12 +364,11 @@ impl Background {
             wallet_config,
             params.wallet_name,
             params.biometric_type,
-            params.network,
         )
         .map_err(BackgroundError::FailToInitWallet)?;
 
         let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.data.wallet_address, &params.device_indicators);
+            create_wallet_device_indicator(&wallet.data.wallet_address, params.device_indicators);
         let session = if wallet.data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
@@ -456,20 +451,21 @@ impl Background {
             .map(|a| &a.addr)
             .collect::<Vec<&Address>>();
         let mut error: NetworkErrors = NetworkErrors::ResponseParseError;
-        let providers = self.providers_from_wallet_index(wallet_index)?;
+        // let providers = self.providers_from_wallet_index(wallet_index)?;
 
-        for provider in providers {
-            // TODO: maybe remove clone.
-            match provider.ftoken_meta(contract.clone(), &accounts).await {
-                Ok(meta) => {
-                    return Ok(meta);
-                }
-                Err(e) => {
-                    error = e;
-                    continue;
-                }
-            }
-        }
+        // TODO: make it unique from wallet.
+        // for provider in providers {
+        //     // TODO: maybe remove clone.
+        //     match provider.ftoken_meta(contract.clone(), &accounts).await {
+        //         Ok(meta) => {
+        //             return Ok(meta);
+        //         }
+        //         Err(e) => {
+        //             error = e;
+        //             continue;
+        //         }
+        //     }
+        // }
 
         Err(BackgroundError::NetworkErrors(error))
     }
@@ -573,19 +569,20 @@ impl Background {
 
     pub async fn update_rates(&self) -> Result<Value> {
         // TODO: remake this method with timestamp and struct.
-        let rates = fetch_rates()
-            .await
-            .map_err(BackgroundError::NetworkErrors)?;
-        let bytes = serde_json::to_vec(&rates).or(Err(BackgroundError::FailToSerializeRates))?;
+        // let rates = fetch_rates()
+        //     .await
+        //     .map_err(BackgroundError::NetworkErrors)?;
+        // let bytes =
+        //     serde_json::to_vec(&json!([])).or(Err(BackgroundError::FailToSerializeRates))?;
 
-        self.storage
-            .set(CURRENCIES_RATES_DB_KEY, &bytes)
-            .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
-        self.storage
-            .flush()
-            .map_err(BackgroundError::LocalStorageFlushError)?;
+        // self.storage
+        //     .set(CURRENCIES_RATES_DB_KEY, &bytes)
+        //     .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
+        // self.storage
+        //     .flush()
+        //     .map_err(BackgroundError::LocalStorageFlushError)?;
 
-        Ok(rates)
+        Ok(json!([]))
     }
 
     pub fn get_rates(&self) -> Value {
@@ -621,23 +618,13 @@ impl Background {
             .map(|a| &a.addr)
             .collect::<Vec<&Address>>();
 
-        for net_id in &w.data.network {
-            let tokens = &mut w.ftokens;
-            let matching_end = tokens.partition_point(|token| token.net_id == *net_id);
-            let matching_tokens = &mut tokens[..matching_end];
+        let tokens = &mut w.ftokens;
 
-            if matching_tokens.is_empty() {
-                continue;
-            }
-
-            self.netowrk
-                .iter()
-                .find(|n| n.get_network_id() == *net_id)
-                .ok_or(BackgroundError::NetworkProviderNotExists(*net_id))?
-                .update_balances(matching_tokens, &addresses)
-                .await
-                .map_err(BackgroundError::NetworkErrors)?;
-        }
+        // TODO: remake it with unique wallet provider
+        // self.netowrk
+        //     .update_balances(tokens, &addresses)
+        //     .await
+        //     .map_err(BackgroundError::NetworkErrors)?;
 
         w.save_to_storage()
             .map_err(BackgroundError::FailToSaveWallet)?;
@@ -646,20 +633,6 @@ impl Background {
             .map_err(BackgroundError::LocalStorageFlushError)?;
 
         Ok(())
-    }
-
-    fn providers_from_wallet_index(
-        &self,
-        wallet_index: usize,
-    ) -> Result<HashSet<&NetworkProvider>> {
-        let w = self.get_wallet_by_index(wallet_index)?;
-        let providers = self
-            .netowrk
-            .iter()
-            .filter(|v| w.data.network.contains(&v.get_network_id()))
-            .collect();
-
-        Ok(providers)
     }
 
     fn save_settings(&self) -> Result<()> {
@@ -703,6 +676,13 @@ mod tests_background {
     use rand::Rng;
     use session::decrypt_session;
 
+    fn setup_test_background() -> (Background, String) {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let bg = Background::from_storage_path(&dir).unwrap();
+        (bg, dir)
+    }
+
     #[test]
     fn test_bip39_words_exists() {
         let words: Vec<String> =
@@ -718,9 +698,7 @@ mod tests_background {
 
     #[test]
     fn test_add_more_wallets_bip39() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let (mut bg, dir) = setup_test_background();
 
         assert_eq!(bg.wallets.len(), 0);
 
@@ -795,9 +773,7 @@ mod tests_background {
 
     #[test]
     fn test_from_bip39() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let (mut bg, dir) = setup_test_background();
 
         assert_eq!(bg.wallets.len(), 0);
 
@@ -872,8 +848,8 @@ mod tests_background {
     #[test]
     fn test_from_ledger() {
         let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let (mut bg, dir) = setup_test_background();
+
         let mut ledger_id = vec![0u8; 32];
 
         rng.fill_bytes(&mut ledger_id);
@@ -883,12 +859,10 @@ mod tests_background {
         let device_indicators = [String::from("android"), String::from("4354")];
         let keypair = KeyPair::gen_sha256().unwrap();
         let pub_key = keypair.get_pubkey().unwrap();
-        let networks = HashSet::new();
 
         let session = bg
             .add_ledger_wallet(
                 LedgerParams {
-                    networks,
                     pub_key: &pub_key,
                     name: String::from("account 0"),
                     ledger_id,
@@ -920,9 +894,7 @@ mod tests_background {
 
     #[test]
     fn test_2_same_ledger() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let (mut bg, _dir) = setup_test_background();
         let ledger_id = "ledger_id".as_bytes().to_vec();
 
         assert_eq!(bg.wallets.len(), 0);
@@ -930,11 +902,9 @@ mod tests_background {
         let device_indicators = [String::from("android"), String::from("4354")];
         let keypair = KeyPair::gen_sha256().unwrap();
         let pub_key = keypair.get_pubkey().unwrap();
-        let networks = HashSet::new();
 
         bg.add_ledger_wallet(
             LedgerParams {
-                networks: networks.clone(),
                 pub_key: &pub_key,
                 name: String::from("account 0"),
                 ledger_id: ledger_id.clone(),
@@ -950,7 +920,6 @@ mod tests_background {
         assert_eq!(
             bg.add_ledger_wallet(
                 LedgerParams {
-                    networks,
                     pub_key: &pub_key,
                     name: String::from("account 0"),
                     ledger_id: ledger_id.clone(),
@@ -969,9 +938,7 @@ mod tests_background {
 
     #[test]
     fn test_from_sk() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let (mut bg, dir) = setup_test_background();
 
         assert_eq!(bg.wallets.len(), 0);
 
@@ -1059,10 +1026,7 @@ mod tests_background {
 
     #[test]
     fn test_address_book() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let bg = Background::from_storage_path(&dir).unwrap();
-
+        let (bg, dir) = setup_test_background();
         // Test empty address book
         let book = bg.get_address_book();
         assert!(book.is_empty());
@@ -1085,7 +1049,6 @@ mod tests_background {
         assert_eq!(book.len(), 1);
         assert_eq!(&book[0].name, "Test Contact");
         assert_eq!(&book[0].addr, &address);
-
         // Add another address
         let name2 = "Second Contact".to_string();
         let address2 =
@@ -1118,9 +1081,7 @@ mod tests_background {
 
     #[test]
     fn test_connections_storage() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let bg = Background::from_storage_path(&dir).unwrap();
+        let (bg, dir) = setup_test_background();
 
         // Test empty connections
         let connections = bg.get_connections();
@@ -1175,9 +1136,7 @@ mod tests_background {
 
     #[test]
     fn test_add_wallet_to_connection() {
-        let mut rng = rand::thread_rng();
-        let dir = format!("/tmp/{}", rng.gen::<usize>());
-        let mut bg = Background::from_storage_path(&dir).unwrap();
+        let (mut bg, dir) = setup_test_background();
 
         assert_eq!(bg.wallets.len(), 0);
 
@@ -1210,11 +1169,11 @@ mod tests_background {
         let pub_key = keypair.get_pubkey().unwrap();
         let mut ledger_id = vec![0u8; 32];
 
+        let mut rng = rand::thread_rng();
         rng.fill_bytes(&mut ledger_id);
 
         bg.add_ledger_wallet(
             LedgerParams {
-                networks: network,
                 pub_key: &pub_key,
                 name: String::from("account 0"),
                 ledger_id,

@@ -67,14 +67,14 @@ where
 
             match res.json().await {
                 Ok(json) => return Ok(json),
-                Err(_) => {
-                    if error == RpcError::InvalidJson && k == Self::MAX_ERROR {
+                Err(e) => {
+                    if error == RpcError::InvalidJson(e.to_string()) && k == Self::MAX_ERROR {
                         break;
-                    } else if error == RpcError::InvalidJson {
+                    } else if error == RpcError::InvalidJson(e.to_string()) {
                         k += 1;
                         continue;
                     } else {
-                        error = RpcError::InvalidJson;
+                        error = RpcError::InvalidJson(e.to_string());
                         k = 1;
                         continue;
                     }

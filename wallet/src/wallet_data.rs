@@ -1,7 +1,6 @@
 use crate::{account::Account, wallet_types::WalletTypes, WalletAddrType};
 use serde::{Deserialize, Serialize};
 use settings::wallet_settings::WalletSettings;
-use std::collections::HashSet;
 use zil_errors::wallet::WalletErrors;
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -48,7 +47,6 @@ pub struct WalletData {
     pub accounts: Vec<Account>,
     pub selected_account: usize,
     pub biometric_type: AuthMethod,
-    pub network: HashSet<u64>,
 }
 
 impl WalletData {
