@@ -124,12 +124,6 @@ pub enum WalletErrors {
     #[error("Failed to get proof from storage: {0}")]
     FailToGetProofFromStorage(LocalStorageError),
 
-    #[error("Invalid size str of wallet address")]
-    InvalidWalletAddressSize,
-
-    #[error("Invalid hex str of wallet address")]
-    InvalidWalletAddressHex,
-
     #[error("invalid hex wallet type")]
     InvalidHexToWalletType,
 

@@ -26,12 +26,12 @@ use zil_errors::session::SessionErrors;
 ///   - Encryption process (`KeychainError`)
 ///
 pub fn encrypt_session(
-    fingerprint: &str,
+    fingerprint: &[u8],
     seed_bytes: &[u8; KEY_SIZE],
     options: &[CipherOrders],
     argon2_config: &Argon2Config,
 ) -> Result<Vec<u8>, SessionErrors> {
-    let argon_seed = argon2::derive_key(fingerprint.as_bytes(), SESSION_SALT, argon2_config)
+    let argon_seed = argon2::derive_key(fingerprint, SESSION_SALT, argon2_config)
         .map_err(SessionErrors::ArgonError)?;
     let keychain = KeyChain::from_seed(&argon_seed).map_err(SessionErrors::KeychainError)?;
     let seed_cipher = keychain
@@ -68,12 +68,12 @@ pub fn encrypt_session(
 /// * Cipher options must match the encryption sequence
 /// * Failed decryption may indicate tampering or incorrect device fingerprint
 pub fn decrypt_session(
-    fingerprint: &str,
+    fingerprint: &[u8],
     seed_cipher: Vec<u8>,
     options: &[CipherOrders],
     argon2_config: &Argon2Config,
 ) -> Result<[u8; KEY_SIZE], SessionErrors> {
-    let argon_seed = argon2::derive_key(fingerprint.as_bytes(), SESSION_SALT, argon2_config)
+    let argon_seed = argon2::derive_key(fingerprint, SESSION_SALT, argon2_config)
         .map_err(SessionErrors::ArgonError)?;
     let keychain = KeyChain::from_seed(&argon_seed).map_err(SessionErrors::KeychainError)?;
     let seed_bytes: [u8; KEY_SIZE] = keychain
@@ -90,9 +90,9 @@ mod tests {
     use super::*;
     use config::argon::KEY_SIZE;
 
-    fn setup_test_data() -> ([u8; KEY_SIZE], String, [CipherOrders; 2]) {
+    fn setup_test_data<'a>() -> ([u8; KEY_SIZE], &'a [u8], [CipherOrders; 2]) {
         let test_seed = [1u8; KEY_SIZE];
-        let test_fingerprint = "test_device_id_123".to_string();
+        let test_fingerprint = "test_device_id_123".as_bytes();
         let options = [CipherOrders::AESGCM256, CipherOrders::NTRUP1277];
         (test_seed, test_fingerprint, options)
     }
@@ -101,18 +101,14 @@ mod tests {
     fn test_successful_encryption_decryption_cycle() {
         let (seed, fingerprint, options) = setup_test_data();
 
-        let encrypted = encrypt_session(
-            &fingerprint,
-            &seed,
-            &options,
-            &argon2::ARGON2_DEFAULT_CONFIG,
-        )
-        .expect("Encryption should succeed");
+        let encrypted =
+            encrypt_session(fingerprint, &seed, &options, &argon2::ARGON2_DEFAULT_CONFIG)
+                .expect("Encryption should succeed");
 
         assert_ne!(&encrypted.as_slice(), &seed);
 
         let decrypted = decrypt_session(
-            &fingerprint,
+            fingerprint,
             encrypted,
             &options,
             &argon2::ARGON2_DEFAULT_CONFIG,
@@ -126,14 +122,10 @@ mod tests {
     fn test_wrong_fingerprint_fails() {
         let (seed, fingerprint, options) = setup_test_data();
 
-        let encrypted = encrypt_session(
-            &fingerprint,
-            &seed,
-            &options,
-            &argon2::ARGON2_DEFAULT_CONFIG,
-        )
-        .expect("Encryption should succeed");
-        let wrong_fingerprint = "wrong_device_id_456";
+        let encrypted =
+            encrypt_session(fingerprint, &seed, &options, &argon2::ARGON2_DEFAULT_CONFIG)
+                .expect("Encryption should succeed");
+        let wrong_fingerprint = "wrong_device_id_456".as_bytes();
         let result = decrypt_session(
             wrong_fingerprint,
             encrypted,
@@ -148,16 +140,12 @@ mod tests {
     fn test_wrong_cipher_options() {
         let (seed, fingerprint, options) = setup_test_data();
 
-        let encrypted = encrypt_session(
-            &fingerprint,
-            &seed,
-            &options,
-            &argon2::ARGON2_DEFAULT_CONFIG,
-        )
-        .expect("Encryption should succeed");
+        let encrypted =
+            encrypt_session(fingerprint, &seed, &options, &argon2::ARGON2_DEFAULT_CONFIG)
+                .expect("Encryption should succeed");
         let wrong_options = vec![CipherOrders::NTRUP1277];
         let result = decrypt_session(
-            &fingerprint,
+            fingerprint,
             encrypted,
             &wrong_options,
             &argon2::ARGON2_DEFAULT_CONFIG,
@@ -172,7 +160,7 @@ mod tests {
         let large_fingerprint = "a".repeat(10000);
 
         let result = encrypt_session(
-            &large_fingerprint,
+            large_fingerprint.as_bytes(),
             &seed,
             &options,
             &argon2::ARGON2_DEFAULT_CONFIG,
@@ -180,7 +168,7 @@ mod tests {
 
         let encrypted = result.expect("Should handle large fingerprint");
         let decrypted = decrypt_session(
-            &large_fingerprint,
+            large_fingerprint.as_bytes(),
             encrypted,
             &options,
             &argon2::ARGON2_DEFAULT_CONFIG,

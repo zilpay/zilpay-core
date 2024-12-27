@@ -34,7 +34,7 @@ use wallet_types::WalletTypes;
 use zil_errors::wallet::WalletErrors;
 
 type Result<T> = std::result::Result<T, WalletErrors>;
-type WalletAddrType = [u8; SHA256_SIZE];
+pub type WalletAddrType = [u8; SHA256_SIZE];
 
 pub struct WalletConfig {
     pub storage: Arc<LocalStorage>,
@@ -131,7 +131,6 @@ impl Wallet {
         hasher.update(&params.ledger_id);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
-        let wallet_address = hex::encode(wallet_address);
         let account =
             account::Account::from_ledger(params.pub_key, params.name, params.wallet_index)
                 .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
@@ -196,7 +195,6 @@ impl Wallet {
         hasher.update(combined);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
-        let wallet_address = hex::encode(wallet_address);
         // SecretKey may stores only one account.
         let account = account::Account::from_secret_key(sk, name, cipher_entropy_key)
             .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
@@ -256,7 +254,6 @@ impl Wallet {
         hasher.update(combined);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
-        let wallet_address = hex::encode(wallet_address);
         let mut accounts: Vec<account::Account> = Vec::with_capacity(params.indexes.len());
 
         for index in params.indexes {
@@ -584,24 +581,14 @@ impl Wallet {
     }
 
     pub fn save_to_storage(&self) -> Result<()> {
-        let key = self.key()?;
-
         self.storage
-            .set(&key, &self.data.to_bytes()?)
+            .set(&self.data.wallet_address, &self.data.to_bytes()?)
             .map_err(WalletErrors::FailtoSaveWalletDataToStorage)?;
         self.storage
             .flush()
             .map_err(WalletErrors::StorageFailFlush)?;
 
         Ok(())
-    }
-
-    #[inline]
-    pub fn key(&self) -> Result<WalletAddrType> {
-        hex::decode(&self.data.wallet_address)
-            .or(Err(WalletErrors::InvalidWalletAddressHex))?
-            .try_into()
-            .or(Err(WalletErrors::InvalidWalletAddressSize))
     }
 }
 
@@ -684,7 +671,7 @@ mod tests {
 
         assert_eq!(wallet.data.accounts.len(), indexes.len());
 
-        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address.clone())
+        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address)
             .unwrap()
             .try_into()
             .unwrap();
@@ -732,7 +719,7 @@ mod tests {
             Err(WalletErrors::InvalidAccountType)
         );
 
-        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address.clone())
+        let wallet_addr: [u8; SHA256_SIZE] = hex::decode(wallet.data.wallet_address)
             .unwrap()
             .try_into()
             .unwrap();
@@ -809,7 +796,7 @@ mod tests {
         assert!(!wallet.ftokens[1].default);
 
         // Save wallet state
-        let wallet_addr = wallet.key().unwrap();
+        let wallet_addr = wallet.data.wallet_address;
         wallet.save_to_storage().unwrap();
 
         // Create new wallet instance from storage
@@ -918,7 +905,7 @@ mod tests {
         assert_eq!(wallet.ftokens.len(), 4);
 
         // Save and reload wallet
-        let wallet_addr = wallet.key().unwrap();
+        let wallet_addr = wallet.data.wallet_address;
         wallet.save_to_storage().unwrap();
 
         let mut loaded_wallet =
@@ -1038,7 +1025,7 @@ mod tests {
         assert_eq!(wallet.ftokens[2].symbol, "TK3"); // TK2 should be gone
 
         // Save and reload wallet to verify persistence
-        let wallet_addr = wallet.key().unwrap();
+        let wallet_addr = wallet.data.wallet_address;
         wallet.save_to_storage().unwrap();
 
         let mut loaded_wallet =
@@ -1137,7 +1124,7 @@ mod tests {
 
         // Test 5: Verify persistence after selection
         wallet.select_account(1).unwrap();
-        let wallet_addr = wallet.key().unwrap();
+        let wallet_addr = wallet.data.wallet_address;
         wallet.save_to_storage().unwrap();
 
         let loaded_wallet = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();

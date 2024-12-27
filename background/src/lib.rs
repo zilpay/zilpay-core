@@ -1,5 +1,6 @@
 pub mod book;
 pub mod connections;
+pub mod device_indicators;
 
 pub use bip39::{Language, Mnemonic};
 
@@ -15,6 +16,7 @@ use config::{
 };
 use connections::Connection;
 use crypto::bip49::Bip49DerivationPath;
+use device_indicators::create_wallet_device_indicator;
 use network::{common::Provider, provider::NetworkProvider, rates::fetch_rates};
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey};
 use serde_json::{json, Value};
@@ -30,7 +32,7 @@ use std::{collections::HashSet, sync::Arc};
 use storage::LocalStorage;
 use wallet::{
     ft::FToken, wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams,
-    Wallet, WalletConfig,
+    Wallet, WalletAddrType, WalletConfig,
 };
 use zil_errors::{background::BackgroundError, network::NetworkErrors};
 
@@ -65,7 +67,7 @@ pub struct BackgroundSKParams<'a> {
 pub struct Background {
     storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
-    pub indicators: Vec<[u8; SHA256_SIZE]>,
+    pub indicators: Vec<WalletAddrType>,
     pub is_old_storage: bool,
     pub settings: CommonSettings,
     pub netowrk: HashSet<NetworkProvider>,
@@ -191,10 +193,9 @@ impl Background {
             .wallets
             .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
-        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
-            .chain(device_indicators.iter().cloned())
-            .collect::<Vec<_>>()
-            .join(":");
+
+        let wallet_device_indicators =
+            create_wallet_device_indicator(&wallet.data.wallet_address, device_indicators);
 
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
@@ -245,17 +246,14 @@ impl Background {
             network: params.network,
         })
         .map_err(BackgroundError::FailToInitWallet)?;
-        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
-        let device_indicator = std::iter::once(hex::encode(indicator))
-            .chain(params.device_indicators.iter().cloned())
-            .collect::<Vec<_>>()
-            .join(":");
+        let wallet_device_indicators =
+            create_wallet_device_indicator(&wallet.data.wallet_address, params.device_indicators);
 
         let session = if wallet.data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
             encrypt_session(
-                &device_indicator,
+                &wallet_device_indicators,
                 &argon_seed,
                 &wallet.data.settings.cipher_orders,
                 &wallet.data.settings.argon_params.into_config(),
@@ -267,7 +265,7 @@ impl Background {
             .save_to_storage()
             .map_err(BackgroundError::FailToSaveWallet)?;
 
-        self.indicators.push(indicator);
+        self.indicators.push(wallet.data.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators()?;
         self.storage
@@ -316,13 +314,11 @@ impl Background {
         let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_ledger(params, &proof, wallet_config)
             .map_err(BackgroundError::FailToInitWallet)?;
-        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
-        let device_indicator = std::iter::once(hex::encode(indicator))
-            .chain(device_indicators.iter().cloned())
-            .collect::<Vec<_>>()
-            .join(":");
+
+        let device_indicators =
+            create_wallet_device_indicator(&wallet.data.wallet_address, &device_indicators);
         let session = encrypt_session(
-            &device_indicator,
+            &device_indicators,
             &argon_seed,
             options,
             &wallet.data.settings.argon_params.into_config(),
@@ -333,7 +329,7 @@ impl Background {
             .save_to_storage()
             .map_err(BackgroundError::FailToSaveWallet)?;
 
-        self.indicators.push(indicator);
+        self.indicators.push(wallet.data.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators()?;
         self.storage
@@ -376,17 +372,13 @@ impl Background {
         )
         .map_err(BackgroundError::FailToInitWallet)?;
 
-        let indicator = wallet.key().map_err(BackgroundError::FailToInitWallet)?;
-        let device_indicator = std::iter::once(hex::encode(indicator))
-            .chain(params.device_indicators.iter().cloned())
-            .collect::<Vec<_>>()
-            .join(":");
-
+        let wallet_device_indicators =
+            create_wallet_device_indicator(&wallet.data.wallet_address, &params.device_indicators);
         let session = if wallet.data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
             encrypt_session(
-                &device_indicator,
+                &wallet_device_indicators,
                 &argon_seed,
                 options,
                 &wallet.data.settings.argon_params.into_config(),
@@ -397,7 +389,7 @@ impl Background {
         wallet
             .save_to_storage()
             .map_err(BackgroundError::FailToSaveWallet)?;
-        self.indicators.push(indicator);
+        self.indicators.push(wallet.data.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators()?;
         self.storage
@@ -846,10 +838,8 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
 
-        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
-            .chain(device_indicators)
-            .collect::<Vec<_>>()
-            .join(":");
+        let wallet_device_indicators =
+            create_wallet_device_indicator(&wallet.data.wallet_address, &device_indicators);
 
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
@@ -1009,10 +999,8 @@ mod tests_background {
         drop(bg);
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let wallet = bg.wallets.first_mut().unwrap();
-        let wallet_device_indicators = std::iter::once(wallet.data.wallet_address.clone())
-            .chain(device_indicators)
-            .collect::<Vec<_>>()
-            .join(":");
+        let wallet_device_indicators =
+            create_wallet_device_indicator(&wallet.data.wallet_address, &device_indicators);
 
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
