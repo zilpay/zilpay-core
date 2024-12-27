@@ -7,7 +7,7 @@ use config::{
 };
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
-use wallet::{traits::StorageOperations, Wallet};
+use wallet::{wallet_storage::StorageOperations, Wallet};
 use zil_errors::background::BackgroundError;
 
 use crate::Background;

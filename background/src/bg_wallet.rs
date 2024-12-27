@@ -1,10 +1,7 @@
-use std::sync::Arc;
-
 use crate::{
     bg_storage::StorageManagement, device_indicators::create_wallet_device_indicator, Background,
     Result,
 };
-
 use bip39::Mnemonic;
 use cipher::{argon2, keychain::KeyChain};
 use config::{
@@ -13,11 +10,11 @@ use config::{
 };
 use session::{decrypt_session, encrypt_session};
 use settings::wallet_settings::WalletSettings;
+use std::sync::Arc;
 use wallet::{
-    traits::{StorageOperations, WalletInit, WalletSecurity},
-    wallet_data::AuthMethod,
-    wallet_types::WalletTypes,
-    Bip39Params, LedgerParams, Wallet, WalletConfig,
+    wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
+    wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
+    Wallet, WalletConfig,
 };
 use zil_errors::background::BackgroundError;
 

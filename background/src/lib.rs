@@ -6,7 +6,7 @@ use proto::secret_key::SecretKey;
 use settings::{common_settings::CommonSettings, wallet_settings::WalletSettings};
 use std::{collections::HashSet, sync::Arc};
 use storage::LocalStorage;
-use wallet::{traits::WalletAddrType, wallet_data::AuthMethod, Wallet};
+use wallet::{wallet_data::AuthMethod, Wallet, WalletAddrType};
 use zil_errors::background::BackgroundError;
 
 pub type Result<T> = std::result::Result<T, BackgroundError>;
