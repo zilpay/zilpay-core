@@ -32,8 +32,10 @@ use traits::{
     SettingsManagement, StorageManagement, WalletManagement,
 };
 use wallet::{
-    wallet_data::AuthMethod, wallet_types::WalletTypes, Bip39Params, LedgerParams, Wallet,
-    WalletAddrType, WalletConfig,
+    traits::{StorageOperations, WalletAddrType, WalletInit, WalletSecurity},
+    wallet_data::AuthMethod,
+    wallet_types::WalletTypes,
+    Bip39Params, LedgerParams, Wallet, WalletConfig,
 };
 use zil_errors::background::BackgroundError;
 
@@ -130,7 +132,7 @@ impl StorageManagement for Background {
                 array
             })
             .collect::<Vec<[u8; SHA256_SIZE]>>();
-        let mut wallets = Vec::new();
+        let mut wallets = Vec::new(); // TODO: make size alloc
         let settings = Self::load_global_settings(Arc::clone(&storage));
 
         for addr in &indicators {
@@ -620,6 +622,7 @@ mod tests_background {
     use proto::{address::Address, keypair::KeyPair};
     use rand::Rng;
     use session::decrypt_session;
+    use wallet::traits::WalletCrypto;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
