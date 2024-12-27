@@ -3,10 +3,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::common::Provider;
-use crate::token::{
-    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
-    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
-};
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
@@ -18,8 +14,13 @@ use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
 use serde_json::Value;
 use storage::LocalStorage;
-use wallet::ft::FToken;
+use token::ft::FToken;
+use token::ft_parse::{
+    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
+    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
+};
 use zil_errors::network::NetworkErrors;
+use zil_errors::token::TokenError;
 
 #[derive(Debug)]
 pub struct NetworkProvider {
@@ -167,7 +168,7 @@ impl NetworkProvider {
                     responses[0]
                         .result
                         .as_ref()
-                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                        .ok_or(TokenError::InvalidContractInit)?,
                 )?;
 
                 let mut balances: HashMap<usize, U256> = HashMap::new();
@@ -193,7 +194,6 @@ impl NetworkProvider {
                     logo: None,
                     default: false,
                     native: false,
-                    net_id: self.get_network_id(),
                 })
             }
             Address::Secp256k1Keccak256Ethereum(_) => {
@@ -201,23 +201,23 @@ impl NetworkProvider {
                 let name = process_eth_metadata_response(
                     metadata_iter
                         .next()
-                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                        .ok_or(TokenError::InvalidContractInit)?,
                     &MetadataField::Name,
                 )?;
                 let symbol = process_eth_metadata_response(
                     metadata_iter
                         .next()
-                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                        .ok_or(TokenError::InvalidContractInit)?,
                     &MetadataField::Symbol,
                 )?;
                 let decimals: u8 = process_eth_metadata_response(
                     metadata_iter
                         .next()
-                        .ok_or(NetworkErrors::InvalidContractInit)?,
+                        .ok_or(TokenError::InvalidContractInit)?,
                     &MetadataField::Decimals,
                 )?
                 .parse()
-                .map_err(|_| NetworkErrors::InvalidContractInit)?;
+                .map_err(|_| TokenError::InvalidContractInit)?;
 
                 let mut balances: HashMap<usize, U256> = HashMap::new();
                 for ((_, req_type), response) in requests.iter().zip(responses.iter()).skip(3) {
@@ -241,7 +241,6 @@ impl NetworkProvider {
                     logo: None,
                     default: false,
                     native: false,
-                    net_id: self.get_network_id(),
                 })
             }
         }
@@ -334,7 +333,6 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: provider.get_network_id(),
             },
             FToken {
                 name: "Zilliqa-bridged USDT token".to_string(),
@@ -346,7 +344,6 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: provider.get_network_id(),
             },
             FToken {
                 name: "Zilliqa-bridged ETH token".to_string(),
@@ -358,7 +355,6 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                net_id: provider.get_network_id(),
             },
         ];
         let accounts = [

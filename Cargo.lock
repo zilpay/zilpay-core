@@ -2483,6 +2483,7 @@ dependencies = [
  "serde",
  "serde_json",
  "storage",
+ "token",
  "tokio",
  "zil_errors",
 ]

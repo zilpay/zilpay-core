@@ -1,6 +1,5 @@
 pub mod account;
 pub mod account_type;
-pub mod ft;
 pub mod wallet_data;
 pub mod wallet_types;
 

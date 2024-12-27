@@ -12,6 +12,7 @@ reqwest.workspace = true
 async-trait.workspace = true
 bincode.workspace = true
 storage = { path = "../storage" }
+token = { path = "../token" }
 zil_errors = { path = "../zil_errors" }
 config = { path = "../config" }
 proto = { path = "../proto" }
