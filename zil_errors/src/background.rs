@@ -31,9 +31,6 @@ pub enum BackgroundError {
     #[error("Ledger ID already exists")]
     LedgerIdExists(String),
 
-    #[error("Failed to unlock wallet: {0}")]
-    FailUnlockWallet(WalletErrors),
-
     #[error("Wallet not found with index: {0}")]
     WalletNotExists(usize),
 
@@ -58,9 +55,6 @@ pub enum BackgroundError {
     #[error("Failed to generate BIP39 words from entropy: {0}")]
     FailToGenBip39FromEntropy(String),
 
-    #[error("Failed to load wallet from storage: {0}")]
-    TryLoadWalletError(WalletErrors),
-
     #[error("Argon2 password hashing error: {0}")]
     ArgonPasswordHashError(CipherErrors),
 
@@ -73,15 +67,18 @@ pub enum BackgroundError {
     #[error("Failed to parse mnemonic words: {0}")]
     FailParseMnemonicWords(String),
 
-    #[error("Failed to initialize wallet: {0}")]
-    FailToInitWallet(WalletErrors),
-
-    #[error("Failed to save wallet data: {0}")]
-    FailToSaveWallet(WalletErrors),
+    #[error("wallet error: {0}")]
+    WalletError(WalletErrors),
 }
 
 impl From<LocalStorageError> for BackgroundError {
     fn from(error: LocalStorageError) -> Self {
         BackgroundError::LocalStorageError(error)
+    }
+}
+
+impl From<WalletErrors> for BackgroundError {
+    fn from(error: WalletErrors) -> Self {
+        BackgroundError::WalletError(error)
     }
 }
