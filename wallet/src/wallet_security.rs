@@ -18,6 +18,7 @@ impl WalletSecurity for Wallet {
 
     fn unlock(&mut self, seed_bytes: &Argon2Seed) -> Result<()> {
         self.unlock_iternel(seed_bytes)?;
+
         let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
         self.ftokens = bincode::deserialize(&bytes).unwrap_or_default();
 

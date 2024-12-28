@@ -18,10 +18,13 @@ impl TokenManagement for Wallet {
     type Error = WalletErrors;
 
     fn add_ftoken(&mut self, token: FToken) -> Result<()> {
+        if self.ftokens.iter().any(|t| t.addr == token.addr) {
+            return Err(WalletErrors::TokenAlreadyExists(token.addr.auto_format()));
+        }
+
         self.ftokens.push(token);
 
-        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
-        let bytes = bincode::serialize(&ftokens)
+        let bytes = bincode::serialize(&self.ftokens)
             .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
 
         self.storage.set(FTOKENS_DB_KEY, &bytes)?;
@@ -54,7 +57,10 @@ mod tests {
 
     use alloy::primitives::map::HashMap;
     use cipher::{argon2::derive_key, keychain::KeyChain};
-    use config::cipher::{PROOF_SALT, PROOF_SIZE};
+    use config::{
+        address::ADDR_LEN,
+        cipher::{PROOF_SALT, PROOF_SIZE},
+    };
     use proto::{address::Address, keypair::KeyPair};
     use rand::Rng;
     use settings::wallet_settings::WalletSettings;
@@ -68,6 +74,20 @@ mod tests {
     };
 
     const PASSWORD: &[u8] = b"Test_password";
+
+    fn gen_bsc_token() -> FToken {
+        FToken {
+            provider_index: 0,
+            default: true,
+            name: "Binance Smart Chain".to_string(),
+            symbol: "BSC".to_string(),
+            decimals: 18,
+            addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+            logo: None,
+            balances: HashMap::new(),
+            native: true,
+        }
+    }
 
     fn setup_test_storage() -> (Arc<LocalStorage>, String) {
         let mut rng = rand::thread_rng();
@@ -113,14 +133,14 @@ mod tests {
                 provider_index: 0,
             },
             wallet_config,
-            vec![],
+            vec![gen_bsc_token()],
         )
         .unwrap();
 
         // Verify initial state - should only have default ETH token
         assert_eq!(wallet.ftokens.len(), 1);
         assert!(wallet.ftokens[0].default);
-        assert_eq!(wallet.ftokens[0].symbol, "ETH");
+        assert_eq!(wallet.ftokens[0].symbol, "BSC");
 
         // Create custom token
         let custom_token = FToken {
@@ -194,21 +214,9 @@ mod tests {
             storage: Arc::clone(&storage),
         };
 
-        let mut wallet = Wallet::from_sk(
-            SecretKeyParams {
-                sk,
-                proof,
-                wallet_name: "Test Token Account".to_string(),
-                biometric_type: AuthMethod::None,
-                provider_index: 0,
-            },
-            wallet_config,
-            vec![],
-        )
-        .unwrap();
-
         // Add multiple custom tokens
         let tokens = vec![
+            gen_bsc_token(),
             FToken {
                 name: "Token 1".to_string(),
                 symbol: "TK1".to_string(),
@@ -244,21 +252,33 @@ mod tests {
             },
         ];
 
-        // Add all tokens
-        for token in tokens.iter() {
-            wallet.add_ftoken(token.clone()).unwrap();
-        }
+        let wallet = Wallet::from_sk(
+            SecretKeyParams {
+                sk,
+                proof,
+                wallet_name: "Test Token Account".to_string(),
+                biometric_type: AuthMethod::None,
+                provider_index: 0,
+            },
+            wallet_config,
+            tokens.clone(),
+        )
+        .unwrap();
 
         // Verify all tokens were added (1 default + 3 custom)
         assert_eq!(wallet.ftokens.len(), 4);
 
         // Save and reload wallet
         let wallet_addr = wallet.data.wallet_address;
+
         wallet.save_to_storage().unwrap();
+        drop(wallet);
 
         let mut loaded_wallet =
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
         loaded_wallet.unlock(&argon_seed).unwrap();
+
+        dbg!(&loaded_wallet.ftokens);
 
         // Verify all tokens were restored
         assert_eq!(loaded_wallet.ftokens.len(), 4);

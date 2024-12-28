@@ -27,6 +27,9 @@ pub enum WalletErrors {
     #[error("Token doesn't extistsL {0}")]
     TokenNotExists(usize),
 
+    #[error("This token already exists {0}")]
+    TokenAlreadyExists(String),
+
     #[error("Try encrypt secret key error")]
     TryEncryptSecretKeyError,
 

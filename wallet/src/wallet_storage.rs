@@ -2,6 +2,7 @@ use crate::wallet_data::WalletData;
 use crate::Result;
 use crate::Wallet;
 use crate::WalletAddrType;
+use config::storage::FTOKENS_DB_KEY;
 use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -41,9 +42,11 @@ impl StorageOperations for Wallet {
     type Error = WalletErrors;
 
     fn load_from_storage(key: &WalletAddrType, storage: Arc<LocalStorage>) -> Result<Self> {
+        // TODO: the FTOKENS_DB_KEY is not right this is rewrite for all Wallets tokens.
         let data = storage.get(key)?;
         let data = WalletData::from_bytes(&data)?;
-        let ftokens = Vec::new();
+        let ftokens_bytes = storage.get(FTOKENS_DB_KEY)?;
+        let ftokens = bincode::deserialize(&ftokens_bytes).unwrap_or_default();
 
         Ok(Self {
             storage,
@@ -76,6 +79,10 @@ impl StorageOperations for Wallet {
     fn save_to_storage(&self) -> Result<()> {
         self.storage
             .set(&self.data.wallet_address, &self.data.to_bytes()?)?;
+        let ft_bytes = bincode::serialize(&self.ftokens)
+            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+        self.storage.set(&ft_bytes, FTOKENS_DB_KEY)?;
+
         self.storage.flush()?;
 
         Ok(())
