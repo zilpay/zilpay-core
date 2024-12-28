@@ -1,4 +1,4 @@
-use crate::{Result, Wallet};
+use crate::{Result, Wallet, WalletAddrType};
 use config::storage::FTOKENS_DB_KEY;
 use token::ft::FToken;
 use zil_errors::wallet::WalletErrors;
@@ -12,6 +12,8 @@ pub trait TokenManagement {
 
     /// Removes a fungible token from the wallet
     fn remove_ftoken(&mut self, index: usize) -> std::result::Result<(), Self::Error>;
+
+    fn get_token_db_key(key: &WalletAddrType) -> Vec<u8>;
 }
 
 impl TokenManagement for Wallet {
@@ -34,8 +36,16 @@ impl TokenManagement for Wallet {
     }
 
     fn remove_ftoken(&mut self, index: usize) -> Result<()> {
-        if self.ftokens.get(index).is_none() {
+        let mb_token = self.ftokens.get(index);
+
+        if mb_token.is_none() {
             return Err(WalletErrors::TokenNotExists(index));
+        }
+
+        if let Some(token) = mb_token {
+            if token.default {
+                return Err(WalletErrors::DefaultTokenRemove(index));
+            }
         }
 
         self.ftokens.remove(index);
@@ -48,6 +58,11 @@ impl TokenManagement for Wallet {
         self.storage.flush()?;
 
         Ok(())
+    }
+
+    #[inline]
+    fn get_token_db_key(key: &WalletAddrType) -> Vec<u8> {
+        [key, FTOKENS_DB_KEY].concat()
     }
 }
 
@@ -66,6 +81,7 @@ mod tests {
     use settings::wallet_settings::WalletSettings;
     use storage::LocalStorage;
     use token::ft::FToken;
+    use zil_errors::wallet::WalletErrors;
 
     use crate::{
         wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
@@ -182,7 +198,7 @@ mod tests {
 
         // Verify default token
         assert!(loaded_wallet.ftokens[0].default);
-        assert_eq!(loaded_wallet.ftokens[0].symbol, "ETH");
+        assert_eq!(loaded_wallet.ftokens[0].symbol, "BSC");
 
         // Verify custom token
         assert!(!loaded_wallet.ftokens[1].default);
@@ -278,22 +294,25 @@ mod tests {
             Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
         loaded_wallet.unlock(&argon_seed).unwrap();
 
-        dbg!(&loaded_wallet.ftokens);
-
         // Verify all tokens were restored
         assert_eq!(loaded_wallet.ftokens.len(), 4);
 
         // Verify default token
         assert!(loaded_wallet.ftokens[0].default);
-        assert_eq!(loaded_wallet.ftokens[0].symbol, "ETH");
+        assert_eq!(loaded_wallet.ftokens[0].symbol, "BSC");
 
         // Verify custom tokens
         for (i, token) in tokens.iter().enumerate() {
-            assert_eq!(loaded_wallet.ftokens[i + 1].name, token.name);
-            assert_eq!(loaded_wallet.ftokens[i + 1].symbol, token.symbol);
-            assert_eq!(loaded_wallet.ftokens[i + 1].decimals, token.decimals);
-            assert_eq!(loaded_wallet.ftokens[i + 1].addr, token.addr);
-            assert!(!loaded_wallet.ftokens[i + 1].default);
+            assert_eq!(loaded_wallet.ftokens[i].name, token.name);
+            assert_eq!(loaded_wallet.ftokens[i].symbol, token.symbol);
+            assert_eq!(loaded_wallet.ftokens[i].decimals, token.decimals);
+            assert_eq!(loaded_wallet.ftokens[i].addr, token.addr);
+
+            if i == 0 {
+                assert!(loaded_wallet.ftokens[i].default);
+            } else {
+                assert!(!loaded_wallet.ftokens[i].default);
+            }
         }
     }
 
@@ -335,6 +354,7 @@ mod tests {
 
         // Add multiple custom tokens
         let tokens = vec![
+            gen_bsc_token(),
             FToken {
                 name: "Token 1".to_string(),
                 symbol: "TK1".to_string(),
@@ -406,10 +426,10 @@ mod tests {
         assert_eq!(loaded_wallet.ftokens[2].symbol, "TK3");
 
         // Try to remove default token (should still work but token will be restored on reload)
-        wallet.remove_ftoken(0).unwrap();
-        assert_eq!(wallet.ftokens.len(), 2);
-        assert_eq!(wallet.ftokens[0].symbol, "TK1");
-        assert_eq!(wallet.ftokens[1].symbol, "TK3");
+        assert_eq!(
+            wallet.remove_ftoken(0),
+            Err(WalletErrors::DefaultTokenRemove(0))
+        );
 
         // Save and reload again
         wallet.save_to_storage().unwrap();
@@ -420,7 +440,7 @@ mod tests {
         // Default token should be restored
         assert_eq!(loaded_wallet2.ftokens.len(), 3);
         assert!(loaded_wallet2.ftokens[0].default);
-        assert_eq!(loaded_wallet2.ftokens[0].symbol, "ETH");
+        assert_eq!(loaded_wallet2.ftokens[0].symbol, "BSC");
         assert_eq!(loaded_wallet2.ftokens[1].symbol, "TK1");
         assert_eq!(loaded_wallet2.ftokens[2].symbol, "TK3");
     }

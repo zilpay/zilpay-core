@@ -1,6 +1,5 @@
-use crate::Result;
+use crate::{wallet_token::TokenManagement, Result};
 use cipher::argon2::Argon2Seed;
-use config::storage::FTOKENS_DB_KEY;
 use zil_errors::wallet::WalletErrors;
 
 use crate::Wallet;
@@ -19,8 +18,10 @@ impl WalletSecurity for Wallet {
     fn unlock(&mut self, seed_bytes: &Argon2Seed) -> Result<()> {
         self.unlock_iternel(seed_bytes)?;
 
-        let bytes = self.storage.get(FTOKENS_DB_KEY).unwrap_or_default();
-        self.ftokens = bincode::deserialize(&bytes).unwrap_or_default();
+        let token_key = Wallet::get_token_db_key(&self.data.wallet_address);
+        let ftokens_bytes = self.storage.get(&token_key)?;
+
+        self.ftokens = bincode::deserialize(&ftokens_bytes).unwrap_or_default();
 
         Ok(())
     }
