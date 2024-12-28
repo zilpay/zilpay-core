@@ -84,6 +84,9 @@ mod tests_background {
     use tokio;
     use wallet::wallet_token::TokenManagement;
 
+    const PASSWORD: &str = "TEst password";
+    const USDT_TOKEN: &str = "0x55d398326f99059fF775485246999027B3197955";
+
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
@@ -91,22 +94,41 @@ mod tests_background {
         (bg, dir)
     }
 
+    fn gen_net_conf() -> NetworkConfig {
+        NetworkConfig::new(
+            "Binance-smart-chain",
+            56,
+            vec!["https://bsc-dataseed.binance.org".to_string()],
+        )
+    }
+
+    fn gen_bsc_token() -> FToken {
+        FToken {
+            provider_index: 0,
+            default: true,
+            name: "Binance Smart Chain".to_string(),
+            symbol: "BSC".to_string(),
+            decimals: 18,
+            addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+            logo: None,
+            balances: HashMap::new(),
+            native: true,
+        }
+    }
+
     #[tokio::test]
     async fn test_fetch_ftoken_meta() {
         let (mut bg, _dir) = setup_test_background();
 
-        let password = "test_password";
         let words = Background::gen_bip39(24).unwrap();
-        let accounts = [(Bip49DerivationPath::Ethereum(0), "Name".to_string())];
-        let net_conf = NetworkConfig::new(
-            "Binance-smart-chain",
-            56,
-            vec!["https://bsc-dataseed.binance.org".to_string()],
-        );
+        let accounts = [(
+            Bip49DerivationPath::Ethereum(0),
+            "Bsc account 1".to_string(),
+        )];
 
-        bg.add_provider(net_conf).unwrap();
+        bg.add_provider(gen_net_conf()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password,
+            password: PASSWORD,
             provider: 0,
             mnemonic_str: &words,
             accounts: &accounts,
@@ -115,17 +137,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             device_indicators: &[String::from("apple"), String::from("0000")],
-            ftokens: vec![FToken {
-                provider_index: 0,
-                default: true,
-                name: "Binance Smart Chain".to_string(),
-                symbol: "BSC".to_string(),
-                decimals: 18,
-                addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
-                logo: None,
-                balances: HashMap::new(),
-                native: true,
-            }],
+            ftokens: vec![gen_bsc_token()],
         })
         .unwrap();
 
@@ -133,8 +145,7 @@ mod tests_background {
         assert_eq!(bg.providers.len(), 1);
         assert_eq!(bg.wallets[0].data.accounts.len(), 1);
 
-        let token_addr =
-            Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
+        let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
         let meta = bg.fetch_ftoken_meta(0, token_addr).await.unwrap();
 
         assert_eq!(&meta.name, "Tether USD");
@@ -154,5 +165,66 @@ mod tests_background {
         assert!(tokens[0].native);
         assert!(tokens[0].default);
         assert_eq!(tokens[0].provider_index, 0);
+    }
+
+    #[tokio::test]
+    async fn test_sync_ft_balances() {
+        let (mut bg, _dir) = setup_test_background();
+
+        let words = Background::gen_bip39(24).unwrap();
+        let accounts = [
+            (Bip49DerivationPath::Ethereum(0), "account 0".to_string()),
+            (Bip49DerivationPath::Ethereum(1), "account 1".to_string()),
+            (Bip49DerivationPath::Ethereum(2), "account 2".to_string()),
+            (Bip49DerivationPath::Ethereum(3), "account 3".to_string()),
+            (Bip49DerivationPath::Ethereum(4), "account 4".to_string()),
+            (Bip49DerivationPath::Ethereum(5), "account 5".to_string()),
+            (Bip49DerivationPath::Ethereum(6), "account 6".to_string()),
+        ];
+
+        bg.add_provider(gen_net_conf()).unwrap();
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: PASSWORD,
+            provider: 0,
+            mnemonic_str: &words,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("5435h"), String::from("0000")],
+            ftokens: vec![gen_bsc_token()],
+        })
+        .unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+        assert_eq!(bg.providers.len(), 1);
+        assert_eq!(bg.wallets[0].data.accounts.len(), 7);
+
+        let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
+        let meta = bg.fetch_ftoken_meta(0, token_addr).await.unwrap();
+
+        bg.wallets.first_mut().unwrap().add_ftoken(meta).unwrap();
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&0));
+        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&1));
+        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&2));
+        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&3));
+        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&4));
+        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&5));
+        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&6));
+        assert!(!bg.wallets[0].ftokens[0].balances.contains_key(&7));
+        assert!(!bg.wallets[0].ftokens[0].balances.contains_key(&8));
+
+        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&0));
+        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&1));
+        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&2));
+        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&3));
+        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&4));
+        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&5));
+        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&6));
+        assert!(!bg.wallets[0].ftokens[1].balances.contains_key(&7));
+        assert!(!bg.wallets[0].ftokens[1].balances.contains_key(&8));
     }
 }
