@@ -15,6 +15,7 @@ pub struct FToken {
     pub balances: HashMap<usize, U256>,
     pub default: bool,
     pub native: bool,
+    pub provider_index: usize,
 }
 
 impl FToken {
@@ -34,6 +35,7 @@ impl FToken {
 
     pub fn zil() -> Self {
         FToken {
+            provider_index: 0,
             default: true,
             name: "Zilliqa".to_string(),
             symbol: "ZIL".to_string(),
@@ -47,6 +49,7 @@ impl FToken {
 
     pub fn zlp() -> Self {
         FToken {
+            provider_index: 0,
             default: true,
             name: "ZilPay wallet".to_string(),
             symbol: "ZLP".to_string(),
@@ -60,6 +63,7 @@ impl FToken {
 
     pub fn eth() -> Self {
         FToken {
+            provider_index: 1,
             default: true,
             name: "Ethereum".to_string(),
             symbol: "ETH".to_string(),

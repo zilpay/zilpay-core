@@ -23,6 +23,7 @@ use zil_errors::token::TokenError;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NetworkProvider {
     pub config: NetworkConfig,
+    pub index: usize,
 }
 
 impl Provider for NetworkProvider {
@@ -37,8 +38,8 @@ impl Provider for NetworkProvider {
             bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
         let mut providers = Vec::with_capacity(configs.len());
 
-        for config in configs {
-            providers.push(NetworkProvider::new(config));
+        for (index, config) in configs.iter().enumerate() {
+            providers.push(NetworkProvider::new(config.to_owned(), index));
         }
 
         providers
@@ -50,14 +51,15 @@ impl Provider for NetworkProvider {
             bincode::serialize(&as_vec).map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
         storage.set(NETWORK_DB_KEY, &bytes)?;
+        storage.flush()?;
 
         Ok(())
     }
 }
 
 impl NetworkProvider {
-    pub fn new(config: NetworkConfig) -> Self {
-        Self { config }
+    pub fn new(config: NetworkConfig, index: usize) -> Self {
+        Self { config, index }
     }
 
     pub async fn fetch_nodes_list(&mut self) -> Result<()> {
@@ -169,6 +171,7 @@ impl NetworkProvider {
                     logo: None,
                     default: false,
                     native: false,
+                    provider_index: self.index,
                 })
             }
             Address::Secp256k1Keccak256Ethereum(_) => {
@@ -216,6 +219,7 @@ impl NetworkProvider {
                     logo: None,
                     default: false,
                     native: false,
+                    provider_index: self.index,
                 })
             }
         }
@@ -245,7 +249,7 @@ mod tests_network {
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
         );
-        let provider = NetworkProvider::new(net_conf);
+        let provider = NetworkProvider::new(net_conf, 0);
 
         let token_addr =
             Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
@@ -270,7 +274,7 @@ mod tests_network {
             1,
             vec!["https://api.zilliqa.com".to_string()],
         );
-        let provider = NetworkProvider::new(net_conf);
+        let provider = NetworkProvider::new(net_conf, 0);
 
         let token_addr =
             Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy").unwrap();
@@ -295,7 +299,7 @@ mod tests_network {
             1,
             vec!["https://api.zilliqa.com".to_string()],
         );
-        let provider = NetworkProvider::new(net_conf);
+        let provider = NetworkProvider::new(net_conf, 0);
         let mut tokens = vec![
             FToken::zil(),
             FToken {
@@ -308,6 +312,7 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
             FToken {
                 name: "Zilliqa-bridged USDT token".to_string(),
@@ -319,6 +324,7 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
             FToken {
                 name: "Zilliqa-bridged ETH token".to_string(),
@@ -330,6 +336,7 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
         ];
         let accounts = [
@@ -459,7 +466,7 @@ mod tests_network {
         // Create a test network config
         let config =
             NetworkConfig::new("Test Network", 1, vec!["https://test.network".to_string()]);
-        let providers = vec![NetworkProvider::new(config)];
+        let providers = vec![NetworkProvider::new(config, 0)];
 
         // Save to storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
@@ -497,7 +504,8 @@ mod tests_network {
         ];
         let providers: Vec<NetworkProvider> = configs
             .iter()
-            .map(|conf| NetworkProvider::new(conf.clone()))
+            .enumerate()
+            .map(|(index, conf)| NetworkProvider::new(conf.clone(), index))
             .collect();
 
         // Save to storage
@@ -522,21 +530,23 @@ mod tests_network {
         // Initial network
         let mut providers = Vec::new();
 
-        providers.push(NetworkProvider::new(NetworkConfig::new(
-            "Initial Network",
-            1,
-            vec!["https://initial.network".to_string()],
-        )));
+        providers.push(NetworkProvider::new(
+            NetworkConfig::new(
+                "Initial Network",
+                1,
+                vec!["https://initial.network".to_string()],
+            ),
+            0,
+        ));
 
         // Save initial state
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
         // Add new network
-        providers.push(NetworkProvider::new(NetworkConfig::new(
-            "New Network",
-            2,
-            vec!["https://new.network".to_string()],
-        )));
+        providers.push(NetworkProvider::new(
+            NetworkConfig::new("New Network", 2, vec!["https://new.network".to_string()]),
+            0,
+        ));
 
         // Update storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();

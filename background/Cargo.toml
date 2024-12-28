@@ -17,6 +17,7 @@ async-trait.workspace = true
 zil_errors = { path = "../zil_errors" }
 wallet = { path = "../wallet" }
 rpc = { path = "../rpc" }
+token = { path = "../token" }
 storage = { path = "../storage" }
 config = { path = "../config" }
 settings = { path = "../settings" }

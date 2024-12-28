@@ -49,6 +49,7 @@ pub mod bg_provider;
 pub mod bg_rates;
 pub mod bg_settings;
 pub mod bg_storage;
+pub mod bg_token;
 pub mod bg_wallet;
 pub mod book;
 pub mod connections;

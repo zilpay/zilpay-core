@@ -129,6 +129,7 @@ mod tests {
             default: false,
             native: false,
             balances: HashMap::new(),
+            provider_index: 0,
         };
 
         // Add custom token
@@ -212,6 +213,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -222,6 +224,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -232,6 +235,7 @@ mod tests {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
         ];
 
@@ -313,6 +317,7 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -323,6 +328,7 @@ mod tests {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -333,6 +339,7 @@ mod tests {
                 native: true,
                 default: false,
                 balances: HashMap::new(),
+                provider_index: 0,
             },
         ];
 

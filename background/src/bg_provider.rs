@@ -7,13 +7,36 @@ use zil_errors::background::BackgroundError;
 pub trait ProvidersManagement {
     type Error;
 
-    fn add_providers(&mut self, config: NetworkConfig) -> std::result::Result<(), Self::Error>;
+    fn get_provider(&self, index: usize) -> std::result::Result<&NetworkProvider, Self::Error>;
+    fn get_mut_provider(
+        &mut self,
+        index: usize,
+    ) -> std::result::Result<&mut NetworkProvider, Self::Error>;
+    fn add_provider(&mut self, config: NetworkConfig) -> std::result::Result<(), Self::Error>;
     fn remvoe_providers(&mut self, index: usize) -> std::result::Result<(), Self::Error>;
     fn update_providers(&mut self) -> std::result::Result<(), Self::Error>;
 }
 
 impl ProvidersManagement for Background {
     type Error = BackgroundError;
+    // TODO: add fetch more nodes
+    // TODO: add method with rankeing node depends of network
+    //
+
+    fn get_mut_provider(
+        &mut self,
+        index: usize,
+    ) -> std::result::Result<&mut NetworkProvider, Self::Error> {
+        self.providers
+            .get_mut(index)
+            .ok_or(BackgroundError::ProviderNotExists(index))
+    }
+
+    fn get_provider(&self, index: usize) -> std::result::Result<&NetworkProvider, Self::Error> {
+        self.providers
+            .get(index)
+            .ok_or(BackgroundError::ProviderNotExists(index))
+    }
 
     fn update_providers(&mut self) -> std::result::Result<(), Self::Error> {
         NetworkProvider::save_network_configs(&self.providers, Arc::clone(&self.storage))?;
@@ -21,8 +44,9 @@ impl ProvidersManagement for Background {
         Ok(())
     }
 
-    fn add_providers(&mut self, config: NetworkConfig) -> Result<()> {
-        let new_provider = NetworkProvider::new(config);
+    fn add_provider(&mut self, config: NetworkConfig) -> Result<()> {
+        let index = self.providers.len();
+        let new_provider = NetworkProvider::new(config, index);
 
         self.providers.push(new_provider);
         self.update_providers()?;
@@ -79,14 +103,14 @@ mod tests_providers {
 
         // Test adding a non-default provider
         let config1 = create_test_network_config("Test Network 1", false);
-        bg.add_providers(config1.clone()).unwrap();
+        bg.add_provider(config1.clone()).unwrap();
 
         assert_eq!(bg.providers.len(), 1);
         assert_eq!(bg.providers[0].config.network_name, "Test Network 1");
 
         // Test adding another provider
         let config2 = create_test_network_config("Test Network 2", false);
-        bg.add_providers(config2.clone()).unwrap();
+        bg.add_provider(config2.clone()).unwrap();
 
         assert_eq!(bg.providers.len(), 2);
         assert_eq!(bg.providers[1].config.network_name, "Test Network 2");
@@ -100,8 +124,8 @@ mod tests_providers {
         let config1 = create_test_network_config("Test Network 1", false);
         let config2 = create_test_network_config("Test Network 2", false);
 
-        bg.add_providers(config1.clone()).unwrap();
-        bg.add_providers(config2.clone()).unwrap();
+        bg.add_provider(config1.clone()).unwrap();
+        bg.add_provider(config2.clone()).unwrap();
 
         assert_eq!(bg.providers.len(), 2);
 
@@ -118,7 +142,7 @@ mod tests_providers {
 
         // Add a default provider
         let config = create_test_network_config("Default Network", true);
-        bg.add_providers(config).unwrap();
+        bg.add_provider(config).unwrap();
 
         // Attempt to remove the default provider
         let result = bg.remvoe_providers(0);
@@ -150,8 +174,8 @@ mod tests_providers {
         let config1 = create_test_network_config("Test Network 1", false);
         let config2 = create_test_network_config("Test Network 2", false);
 
-        bg.add_providers(config1.clone()).unwrap();
-        bg.add_providers(config2.clone()).unwrap();
+        bg.add_provider(config1.clone()).unwrap();
+        bg.add_provider(config2.clone()).unwrap();
 
         // Drop the background instance
         drop(bg);
@@ -172,8 +196,8 @@ mod tests_providers {
         let config1 = create_test_network_config("Test Network 1", false);
         let config2 = create_test_network_config("Test Network 2", false);
 
-        bg.add_providers(config1.clone()).unwrap();
-        bg.add_providers(config2.clone()).unwrap();
+        bg.add_provider(config1.clone()).unwrap();
+        bg.add_provider(config2.clone()).unwrap();
 
         // Modify providers directly and update
         bg.providers[0].config.network_name = "Updated Network 1".to_string();
