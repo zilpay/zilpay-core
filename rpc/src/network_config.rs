@@ -3,12 +3,13 @@ use zil_errors::rpc::RpcError;
 
 use crate::common::{NetworkConfigTrait, Result};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NetworkConfig {
     pub network_name: String,
     pub chain_id: u64,
     pub fallback_enabled: bool,
     pub urls: Vec<String>,
+    pub explorer_urls: Vec<String>,
     pub default: bool,
 }
 
@@ -27,6 +28,7 @@ impl NetworkConfig {
             chain_id,
             urls,
             default: false,
+            explorer_urls: Vec::with_capacity(1),
         }
     }
 

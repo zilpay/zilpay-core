@@ -68,6 +68,7 @@ mod tests_providers {
             fallback_enabled: false,
             urls: vec!["http://localhost:8545".to_string()],
             chain_id: 1,
+            explorer_urls: Vec::new(),
             default,
         }
     }

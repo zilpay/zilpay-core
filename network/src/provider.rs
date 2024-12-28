@@ -1,12 +1,10 @@
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use crate::common::Provider;
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
-use crypto::xor_hash::xor_hash;
 use proto::address::Address;
 use rpc::common::JsonRPC;
 use rpc::network_config::NetworkConfig;
@@ -22,33 +20,12 @@ use token::ft_parse::{
 use zil_errors::network::NetworkErrors;
 use zil_errors::token::TokenError;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NetworkProvider {
     pub config: NetworkConfig,
 }
 
-impl Hash for NetworkProvider {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.get_network_id().hash(state);
-    }
-}
-
-impl PartialEq for NetworkProvider {
-    fn eq(&self, other: &Self) -> bool {
-        self.get_network_id() == other.get_network_id()
-    }
-}
-
-impl Eq for NetworkProvider {}
-
 impl Provider for NetworkProvider {
-    fn get_network_id(&self) -> u64 {
-        let name = &self.config.network_name;
-        let chain_id = self.config.chain_id;
-
-        xor_hash(name, chain_id)
-    }
-
     fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
         let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
 
@@ -573,27 +550,5 @@ mod tests_network {
         assert!(loaded_providers
             .iter()
             .any(|p| p.config.network_name == "New Network"));
-    }
-
-    #[test]
-    fn test_network_equality() {
-        let config1 =
-            NetworkConfig::new("Test Network", 1, vec!["https://test.network".to_string()]);
-        let config2 =
-            NetworkConfig::new("Test Network", 1, vec!["https://different.url".to_string()]);
-        let config3 = NetworkConfig::new(
-            "Different Network",
-            2,
-            vec!["https://test.network".to_string()],
-        );
-
-        let provider1 = NetworkProvider::new(config1);
-        let provider2 = NetworkProvider::new(config2);
-        let provider3 = NetworkProvider::new(config3);
-
-        // Same network ID should be equal
-        assert_eq!(&provider1, &provider2);
-        // Different network ID should not be equal
-        assert_ne!(&provider1, &provider3);
     }
 }
