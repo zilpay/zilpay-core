@@ -1,19 +1,16 @@
-use crate::{account, wallet_data::WalletData, wallet_types::WalletTypes, Result, Wallet};
+use crate::{
+    account, wallet_data::WalletData, wallet_types::WalletTypes, Result, SecretKeyParams, Wallet,
+};
 use config::{
-    argon::KEY_SIZE,
     sha::SHA256_SIZE,
     wallet::{N_BYTES_HASH, N_SALT},
 };
-use proto::{pubkey::PubKey, secret_key::SecretKey};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use token::ft::FToken;
 use zil_errors::wallet::WalletErrors;
 
-use crate::{
-    wallet_data::AuthMethod, wallet_storage::StorageOperations, Bip39Params, LedgerParams,
-    WalletConfig,
-};
+use crate::{wallet_storage::StorageOperations, Bip39Params, LedgerParams, WalletConfig};
 
 /// Core wallet initialization operations
 pub trait WalletInit {
@@ -22,27 +19,27 @@ pub trait WalletInit {
     /// Creates a new hardware wallet instance using Ledger device
     fn from_ledger(
         params: LedgerParams,
-        proof: &[u8; KEY_SIZE],
         config: WalletConfig,
+        ftokens: Vec<FToken>,
     ) -> std::result::Result<Self, Self::Error>
     where
         Self: Sized;
 
     /// Creates a new wallet instance from an existing secret key
     fn from_sk(
-        sk: &SecretKey,
-        name: String,
-        proof: &[u8; KEY_SIZE],
+        params: SecretKeyParams,
         config: WalletConfig,
-        wallet_name: String,
-        biometric_type: AuthMethod,
-        provider: usize,
+        ftokens: Vec<FToken>,
     ) -> std::result::Result<Self, Self::Error>
     where
         Self: Sized;
 
     /// Creates a new wallet instance from BIP39 mnemonic words
-    fn from_bip39_words(params: Bip39Params) -> std::result::Result<Self, Self::Error>
+    fn from_bip39_words(
+        params: Bip39Params,
+        config: WalletConfig,
+        ftokens: Vec<FToken>,
+    ) -> std::result::Result<Self, Self::Error>
     where
         Self: Sized;
 }
@@ -52,14 +49,15 @@ impl WalletInit for Wallet {
 
     fn from_ledger(
         params: LedgerParams,
-        proof: &[u8; KEY_SIZE],
         config: WalletConfig,
+        ftokens: Vec<FToken>,
     ) -> Result<Self> {
         let cipher_proof = config
             .keychain
-            .make_proof(proof, &config.settings.cipher_orders)
+            .make_proof(&params.proof, &config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
         let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
+
         drop(cipher_proof);
 
         let mut hasher = Sha256::new();
@@ -68,9 +66,12 @@ impl WalletInit for Wallet {
         hasher.update(&params.ledger_id);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
-        let account =
-            account::Account::from_ledger(params.pub_key, params.name, params.wallet_index)
-                .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
+        let account = account::Account::from_ledger(
+            &params.pub_key,
+            params.account_name,
+            params.wallet_index,
+        )
+        .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
 
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
@@ -84,34 +85,23 @@ impl WalletInit for Wallet {
             selected_account: 0,
             provider_index: params.provider_index,
         };
-        let ftokens = match params.pub_key {
-            // TODO: normal init default tokens.
-            PubKey::Secp256k1Sha256Zilliqa(_) => {
-                vec![FToken::zil(), FToken::zlp()]
-            }
-            PubKey::Secp256k1Keccak256Ethereum(_) => {
-                vec![FToken::eth()]
-            }
-            _ => unreachable!(),
-        };
 
         Ok(Self {
+            ftokens,
             storage: config.storage,
             data,
-            ftokens,
         })
     }
 
     fn from_sk(
-        sk: &SecretKey,
-        name: String,
-        proof: &[u8; KEY_SIZE],
+        params: SecretKeyParams,
         config: WalletConfig,
-        wallet_name: String,
-        biometric_type: AuthMethod,
-        provider_index: usize,
+        ftokens: Vec<FToken>,
     ) -> Result<Self> {
-        let sk_as_bytes = sk.to_bytes().map_err(WalletErrors::FailToGetSKBytes)?;
+        let sk_as_bytes = params
+            .sk
+            .to_bytes()
+            .map_err(WalletErrors::FailToGetSKBytes)?;
         let mut combined = [0u8; SHA256_SIZE];
 
         combined[..N_BYTES_HASH].copy_from_slice(&sk_as_bytes[..N_BYTES_HASH]);
@@ -123,7 +113,7 @@ impl WalletInit for Wallet {
             .or(Err(WalletErrors::TryEncryptSecretKeyError))?;
         let cipher_proof = config
             .keychain
-            .make_proof(proof, &config.settings.cipher_orders)
+            .make_proof(&params.proof, &config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
         let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
@@ -134,56 +124,51 @@ impl WalletInit for Wallet {
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
         // SecretKey may stores only one account.
-        let account = account::Account::from_secret_key(sk, name, cipher_entropy_key)
-            .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
+        let account = account::Account::from_secret_key(
+            params.sk,
+            params.wallet_name.to_owned(),
+            cipher_entropy_key,
+        )
+        .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
-            wallet_name,
-            biometric_type,
+            wallet_name: params.wallet_name,
+            biometric_type: params.biometric_type,
             proof_key,
             settings: config.settings,
             accounts,
             wallet_address,
             wallet_type: WalletTypes::SecretKey,
-            selected_account: 0,
-            provider_index,
-        };
-        let ftokens = match sk {
-            SecretKey::Secp256k1Sha256Zilliqa(_) => {
-                vec![FToken::zil(), FToken::zlp()]
-            }
-            SecretKey::Secp256k1Keccak256Ethereum(_) => {
-                vec![FToken::eth()]
-            }
+            selected_account: params.provider_index,
+            provider_index: params.provider_index,
         };
 
         Ok(Self {
+            ftokens,
             storage: config.storage,
             data,
-            ftokens,
         })
     }
 
-    fn from_bip39_words(params: Bip39Params) -> Result<Self> {
-        let cipher_entropy = params
-            .config
+    fn from_bip39_words(
+        params: Bip39Params,
+        config: WalletConfig,
+        ftokens: Vec<FToken>,
+    ) -> Result<Self> {
+        let cipher_entropy = config
             .keychain
-            .encrypt(
-                params.mnemonic.to_entropy(),
-                &params.config.settings.cipher_orders,
-            )
+            .encrypt(params.mnemonic.to_entropy(), &config.settings.cipher_orders)
             .map_err(WalletErrors::EncryptKeyChainErrors)?;
         let mut combined = [0u8; SHA256_SIZE];
         let mnemonic_seed = params.mnemonic.to_seed_normalized(params.passphrase);
-        let cipher_proof = params
-            .config
+        let cipher_proof = config
             .keychain
-            .make_proof(params.proof, &params.config.settings.cipher_orders)
+            .make_proof(&params.proof, &config.settings.cipher_orders)
             .map_err(WalletErrors::KeyChainMakeCipherProofError)?;
-        let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&params.config.storage))?;
+        let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
         let cipher_entropy_key =
-            Self::safe_storage_save(&cipher_entropy, Arc::clone(&params.config.storage))?;
+            Self::safe_storage_save(&cipher_entropy, Arc::clone(&config.storage))?;
 
         combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
         combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
@@ -202,20 +187,11 @@ impl WalletInit for Wallet {
             accounts.push(hd_account);
         }
 
-        let ftokens = match accounts[0].pub_key {
-            PubKey::Secp256k1Sha256Zilliqa(_) => {
-                vec![FToken::zil(), FToken::zlp()]
-            }
-            PubKey::Secp256k1Keccak256Ethereum(_) => {
-                vec![FToken::eth()]
-            }
-            _ => unreachable!(),
-        };
         let data = WalletData {
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type.clone(),
             proof_key,
-            settings: params.config.settings,
+            settings: config.settings,
             wallet_address,
             accounts,
             wallet_type: WalletTypes::SecretPhrase((
@@ -227,9 +203,9 @@ impl WalletInit for Wallet {
         };
 
         Ok(Self {
-            storage: params.config.storage,
-            data,
             ftokens,
+            storage: config.storage,
+            data,
         })
     }
 }
@@ -252,8 +228,8 @@ mod tests {
 
     use crate::{
         wallet_crypto::WalletCrypto, wallet_data::AuthMethod, wallet_init::WalletInit,
-        wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, Wallet,
-        WalletConfig,
+        wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, SecretKeyParams,
+        Wallet, WalletConfig,
     };
 
     const MNEMONIC_STR: &str =
@@ -286,16 +262,19 @@ mod tests {
             storage: Arc::clone(&storage),
             settings: Default::default(),
         };
-        let wallet = Wallet::from_bip39_words(Bip39Params {
-            proof: &proof,
-            mnemonic: &mnemonic,
-            passphrase: PASSPHRASE,
-            indexes: &indexes,
-            config: wallet_config,
-            wallet_name: "Wllaet name".to_string(),
-            biometric_type: AuthMethod::Biometric,
-            provider_index: 0,
-        })
+        let wallet = Wallet::from_bip39_words(
+            Bip39Params {
+                proof,
+                mnemonic: &mnemonic,
+                passphrase: PASSPHRASE,
+                indexes: &indexes,
+                wallet_name: "Wllaet name".to_string(),
+                biometric_type: AuthMethod::Biometric,
+                provider_index: 0,
+            },
+            wallet_config,
+            vec![],
+        )
         .unwrap();
 
         wallet.save_to_storage().unwrap();
@@ -337,13 +316,15 @@ mod tests {
             settings: Default::default(),
         };
         let wallet = Wallet::from_sk(
-            &sk,
-            name.to_string(),
-            &proof,
+            SecretKeyParams {
+                sk,
+                proof,
+                wallet_name: name.to_string(),
+                biometric_type: AuthMethod::None,
+                provider_index: 0,
+            },
             wallet_config,
-            "test Name".to_string(),
-            Default::default(),
-            0,
+            vec![],
         )
         .unwrap();
 

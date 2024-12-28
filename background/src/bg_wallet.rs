@@ -1,6 +1,6 @@
 use crate::{
     bg_storage::StorageManagement, device_indicators::create_wallet_device_indicator, Background,
-    Result,
+    BackgroundLedgerParams, Result,
 };
 use bip39::Mnemonic;
 use cipher::{argon2, keychain::KeyChain};
@@ -14,7 +14,7 @@ use std::sync::Arc;
 use wallet::{
     wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
     wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
-    Wallet, WalletConfig,
+    SecretKeyParams, Wallet, WalletConfig,
 };
 use zil_errors::background::BackgroundError;
 
@@ -57,7 +57,7 @@ pub trait WalletManagement {
     /// Creates a new Ledger wallet
     fn add_ledger_wallet(
         &mut self,
-        params: LedgerParams,
+        params: BackgroundLedgerParams,
         wallet_settings: WalletSettings,
         device_indicators: &[String],
     ) -> std::result::Result<Vec<u8>, Self::Error>;
@@ -127,6 +127,10 @@ impl WalletManagement for Background {
     }
 
     fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
+        if self.providers.get(params.provider).is_none() {
+            return Err(BackgroundError::ProviderNotExists(params.provider));
+        }
+
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             params.password.as_bytes(),
@@ -149,16 +153,19 @@ impl WalletManagement for Background {
             storage: Arc::clone(&self.storage),
             settings: params.wallet_settings,
         };
-        let wallet = Wallet::from_bip39_words(Bip39Params {
-            proof: &proof,
-            mnemonic: &mnemonic,
-            passphrase: params.passphrase,
-            indexes: params.accounts,
-            config: wallet_config,
-            wallet_name: params.wallet_name,
-            biometric_type: params.biometric_type,
-            provider_index: params.provider,
-        })?;
+        let wallet = Wallet::from_bip39_words(
+            Bip39Params {
+                proof,
+                mnemonic: &mnemonic,
+                passphrase: params.passphrase,
+                indexes: params.accounts,
+                wallet_name: params.wallet_name,
+                biometric_type: params.biometric_type,
+                provider_index: params.provider,
+            },
+            wallet_config,
+            params.ftokens,
+        )?;
         let wallet_device_indicators =
             create_wallet_device_indicator(&wallet.data.wallet_address, params.device_indicators);
 
@@ -186,17 +193,19 @@ impl WalletManagement for Background {
 
     fn add_ledger_wallet(
         &mut self,
-        params: LedgerParams,
+        params: BackgroundLedgerParams,
         wallet_settings: WalletSettings,
         device_indicators: &[String],
     ) -> Result<Vec<u8>> {
-        if self
-            .wallets
-            .iter()
-            .any(|w| w.data.wallet_type == WalletTypes::Ledger(params.ledger_id.clone()))
-        {
+        if self.providers.get(params.provider_index).is_none() {
+            return Err(BackgroundError::ProviderNotExists(params.provider_index));
+        }
+
+        if self.wallets.iter().any(
+            |w| matches!(&w.data.wallet_type, WalletTypes::Ledger(id) if id == &params.ledger_id),
+        ) {
             return Err(BackgroundError::LedgerIdExists(
-                String::from_utf8(params.ledger_id.clone()).unwrap_or_default(),
+                String::from_utf8(params.ledger_id).unwrap_or_default(),
             ));
         }
 
@@ -221,7 +230,20 @@ impl WalletManagement for Background {
             settings: wallet_settings,
         };
         let options = &wallet_config.settings.cipher_orders.clone();
-        let wallet = Wallet::from_ledger(params, &proof, wallet_config)?;
+        let wallet = Wallet::from_ledger(
+            LedgerParams {
+                pub_key: params.pub_key,
+                ledger_id: params.ledger_id,
+                proof,
+                account_name: params.account_name,
+                wallet_name: params.wallet_name,
+                wallet_index: params.wallet_index,
+                provider_index: params.provider_index,
+                biometric_type: params.biometric_type,
+            },
+            wallet_config,
+            params.ftokens,
+        )?;
 
         let device_indicators =
             create_wallet_device_indicator(&wallet.data.wallet_address, device_indicators);
@@ -244,6 +266,10 @@ impl WalletManagement for Background {
     }
 
     fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
+        if self.providers.get(params.provider).is_none() {
+            return Err(BackgroundError::ProviderNotExists(params.provider));
+        }
+
         // TODO: check this device_indicators is right or not.
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -267,13 +293,15 @@ impl WalletManagement for Background {
         };
         let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_sk(
-            params.secret_key,
-            params.account_name,
-            &proof,
+            SecretKeyParams {
+                sk: params.secret_key,
+                proof,
+                wallet_name: params.wallet_name,
+                biometric_type: params.biometric_type,
+                provider_index: params.provider,
+            },
             wallet_config,
-            params.wallet_name,
-            params.biometric_type,
-            params.provider,
+            params.ftokens,
         )?;
 
         let wallet_device_indicators =
@@ -309,9 +337,10 @@ impl WalletManagement for Background {
 #[cfg(test)]
 mod tests_background {
     use super::*;
-    use crate::bg_crypto::CryptoOperations;
+    use crate::{bg_crypto::CryptoOperations, bg_provider::ProvidersManagement};
     use crypto::bip49::Bip49DerivationPath;
     use rand::Rng;
+    use rpc::network_config::NetworkConfig;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -328,8 +357,13 @@ mod tests_background {
 
         let password = "test_password";
         let words = Background::gen_bip39(24).unwrap();
-        let accounts = [(Bip49DerivationPath::Ethereum(0), "Name".to_string())];
+        let accounts = [(
+            Bip49DerivationPath::Zilliqa(0),
+            "Zilliqa wallet".to_string(),
+        )];
+        let net_conf = NetworkConfig::new("", 0, vec!["".to_string()]);
 
+        bg.add_provider(net_conf).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
             provider: 0,
@@ -340,6 +374,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![],
         })
         .unwrap();
 
@@ -348,23 +383,10 @@ mod tests_background {
         drop(bg);
 
         let mut bg = Background::from_storage_path(&dir).unwrap();
-
-        bg.add_bip39_wallet(BackgroundBip39Params {
-            password,
-            provider: 0,
-            mnemonic_str: &words,
-            accounts: &accounts,
-            wallet_settings: Default::default(),
-            passphrase: "",
-            wallet_name: String::new(),
-            biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("1102")],
-        })
-        .unwrap();
-
-        let password = "test_password";
+        let words = Background::gen_bip39(24).unwrap();
+        let password = "newPassowrd";
         let accounts = [
-            (Bip49DerivationPath::Ethereum(1), "Name".to_string()),
+            (Bip49DerivationPath::Ethereum(1), "Eth Wallet".to_string()),
             (Bip49DerivationPath::Ethereum(2), "account 1".to_string()),
         ];
 
@@ -378,6 +400,7 @@ mod tests_background {
             wallet_name: String::new(),
             device_indicators: &[String::from("apple"), String::from("43498")],
             biometric_type: Default::default(),
+            ftokens: vec![],
         })
         .unwrap();
 
@@ -385,6 +408,6 @@ mod tests_background {
 
         let bg = Background::from_storage_path(&dir).unwrap();
 
-        assert_eq!(bg.wallets.len(), 3);
+        assert_eq!(bg.wallets.len(), 2);
     }
 }

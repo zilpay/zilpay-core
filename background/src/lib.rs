@@ -2,10 +2,11 @@ pub use bip39::{Language, Mnemonic};
 
 use crypto::bip49::Bip49DerivationPath;
 use network::provider::NetworkProvider;
-use proto::secret_key::SecretKey;
+use proto::{pubkey::PubKey, secret_key::SecretKey};
 use settings::{common_settings::CommonSettings, wallet_settings::WalletSettings};
 use std::sync::Arc;
 use storage::LocalStorage;
+use token::ft::FToken;
 use wallet::{wallet_data::AuthMethod, Wallet, WalletAddrType};
 use zil_errors::background::BackgroundError;
 
@@ -21,17 +22,32 @@ pub struct BackgroundBip39Params<'a> {
     pub wallet_settings: WalletSettings,
     pub accounts: &'a [(Bip49DerivationPath, String)],
     pub provider: usize,
+    pub ftokens: Vec<FToken>,
 }
 
 pub struct BackgroundSKParams<'a> {
     pub password: &'a str,
-    pub secret_key: &'a SecretKey,
-    pub account_name: String,
+    pub secret_key: SecretKey,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub wallet_settings: WalletSettings,
     pub provider: usize,
+    pub ftokens: Vec<FToken>,
+}
+
+pub struct BackgroundLedgerParams<'a> {
+    pub password: &'a str,
+    pub ledger_id: Vec<u8>,
+    pub pub_key: PubKey,
+    pub wallet_name: String,
+    pub account_name: String,
+    pub wallet_index: usize,
+    pub biometric_type: AuthMethod,
+    pub device_indicators: &'a [String],
+    pub wallet_settings: WalletSettings,
+    pub provider_index: usize,
+    pub ftokens: Vec<FToken>,
 }
 
 pub struct Background {

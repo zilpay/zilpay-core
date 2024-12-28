@@ -301,7 +301,7 @@ mod tests_network {
         );
         let provider = NetworkProvider::new(net_conf, 0);
         let mut tokens = vec![
-            FToken::zil(),
+            FToken::zil(0),
             FToken {
                 name: "ZilPay token".to_string(),
                 symbol: "ZLP".to_string(),

@@ -103,11 +103,15 @@ impl StorageManagement for Background {
 
 #[cfg(test)]
 mod tests_background {
-    use crate::{bg_crypto::CryptoOperations, bg_wallet::WalletManagement, BackgroundBip39Params};
+    use crate::{
+        bg_crypto::CryptoOperations, bg_provider::ProvidersManagement, bg_wallet::WalletManagement,
+        BackgroundBip39Params,
+    };
 
     use super::*;
     use crypto::bip49::Bip49DerivationPath;
     use rand::Rng;
+    use rpc::network_config::NetworkConfig;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -117,7 +121,7 @@ mod tests_background {
     }
 
     #[test]
-    fn test_add_more_wallets_bip39() {
+    fn test_store_and_load_from_storage() {
         let (mut bg, dir) = setup_test_background();
 
         assert_eq!(bg.wallets.len(), 0);
@@ -125,7 +129,9 @@ mod tests_background {
         let password = "test_password";
         let words = Background::gen_bip39(12).unwrap();
         let accounts = [(Bip49DerivationPath::Ethereum(0), "Name".to_string())];
+        let net_conf = NetworkConfig::new("", 0, vec!["".to_string()]);
 
+        bg.add_provider(net_conf).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
             provider: 0,
@@ -136,6 +142,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![],
         })
         .unwrap();
 

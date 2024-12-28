@@ -38,7 +38,7 @@ impl Account {
         })
     }
 
-    pub fn from_secret_key(sk: &SecretKey, name: String, key: usize) -> Result<Self> {
+    pub fn from_secret_key(sk: SecretKey, name: String, key: usize) -> Result<Self> {
         let keypair = KeyPair::from_secret_key(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
         let pub_key = keypair.get_pubkey().map_err(AccountErrors::InvalidPubKey)?;
         let addr = keypair.get_addr().map_err(AccountErrors::InvalidAddress)?;
@@ -107,7 +107,7 @@ mod tests {
             .parse()
             .unwrap();
         let name = "Account 0";
-        let acc = Account::from_secret_key(&sk, name.to_string(), 0).unwrap();
+        let acc = Account::from_secret_key(sk, name.to_string(), 0).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];

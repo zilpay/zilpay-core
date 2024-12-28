@@ -33,9 +33,9 @@ impl FToken {
         Ok(encoded)
     }
 
-    pub fn zil() -> Self {
+    pub fn zil(provider_index: usize) -> Self {
         FToken {
-            provider_index: 0,
+            provider_index,
             default: true,
             name: "Zilliqa".to_string(),
             symbol: "ZIL".to_string(),
@@ -47,9 +47,9 @@ impl FToken {
         }
     }
 
-    pub fn zlp() -> Self {
+    pub fn zlp(provider_index: usize) -> Self {
         FToken {
-            provider_index: 0,
+            provider_index,
             default: true,
             name: "ZilPay wallet".to_string(),
             symbol: "ZLP".to_string(),
@@ -61,9 +61,9 @@ impl FToken {
         }
     }
 
-    pub fn eth() -> Self {
+    pub fn eth(provider_index: usize) -> Self {
         FToken {
-            provider_index: 1,
+            provider_index,
             default: true,
             name: "Ethereum".to_string(),
             symbol: "ETH".to_string(),

@@ -9,6 +9,7 @@ use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use crypto::bip49::Bip49DerivationPath;
+use proto::secret_key::SecretKey;
 use settings::wallet_settings::WalletSettings;
 use storage::LocalStorage;
 use token::ft::FToken;
@@ -24,22 +25,30 @@ pub struct WalletConfig {
     pub settings: WalletSettings,
 }
 
-pub struct LedgerParams<'a> {
-    pub pub_key: &'a PubKey,
+pub struct LedgerParams {
+    pub pub_key: PubKey,
     pub ledger_id: Vec<u8>,
-    pub name: String,
+    pub proof: [u8; KEY_SIZE],
+    pub account_name: String,
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub provider_index: usize,
 }
 
+pub struct SecretKeyParams {
+    pub sk: SecretKey,
+    pub proof: [u8; KEY_SIZE],
+    pub wallet_name: String,
+    pub biometric_type: AuthMethod,
+    pub provider_index: usize,
+}
+
 pub struct Bip39Params<'a> {
-    pub proof: &'a [u8; KEY_SIZE],
+    pub proof: [u8; KEY_SIZE],
     pub mnemonic: &'a Mnemonic,
     pub passphrase: &'a str,
     pub indexes: &'a [(Bip49DerivationPath, String)],
-    pub config: WalletConfig,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub provider_index: usize,

@@ -2,7 +2,7 @@ use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Backg
 use async_trait::async_trait;
 use proto::address::Address;
 use token::ft::FToken;
-use zil_errors::{background::BackgroundError, wallet::WalletErrors};
+use zil_errors::background::BackgroundError;
 
 #[async_trait]
 pub trait TokensManagement {
@@ -46,7 +46,7 @@ impl TokensManagement for Background {
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
 
         if w.ftokens.is_empty() {
-            return Err(WalletErrors::KeyChainFailToGetProof)?;
+            return Ok(());
         }
 
         let addresses: Vec<&Address> = w.data.accounts.iter().map(|a| &a.addr).collect();
@@ -71,14 +71,18 @@ impl TokensManagement for Background {
 
 #[cfg(test)]
 mod tests_background {
+    use std::collections::HashMap;
+
     use super::*;
     use crate::{
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
     };
+    use config::address::ADDR_LEN;
     use crypto::bip49::Bip49DerivationPath;
     use rand::Rng;
     use rpc::network_config::NetworkConfig;
     use tokio;
+    use wallet::wallet_token::TokenManagement;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -111,6 +115,17 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![FToken {
+                provider_index: 0,
+                default: true,
+                name: "Binance Smart Chain".to_string(),
+                symbol: "BSC".to_string(),
+                decimals: 18,
+                addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+                logo: None,
+                balances: HashMap::new(),
+                native: true,
+            }],
         })
         .unwrap();
 
@@ -130,5 +145,14 @@ mod tests_background {
         assert!(!meta.native);
 
         assert!(meta.balances.contains_key(&0));
+        assert_eq!(meta.balances.get(&0).unwrap().to::<usize>(), 0);
+
+        bg.wallets.first_mut().unwrap().add_ftoken(meta).unwrap();
+
+        let tokens = &bg.wallets.first().unwrap().ftokens;
+
+        assert!(tokens[0].native);
+        assert!(tokens[0].default);
+        assert_eq!(tokens[0].provider_index, 0);
     }
 }

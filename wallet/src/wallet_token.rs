@@ -62,8 +62,9 @@ mod tests {
     use token::ft::FToken;
 
     use crate::{
-        wallet_init::WalletInit, wallet_security::WalletSecurity,
-        wallet_storage::StorageOperations, wallet_token::TokenManagement, Wallet, WalletConfig,
+        wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
+        wallet_storage::StorageOperations, wallet_token::TokenManagement, SecretKeyParams, Wallet,
+        WalletConfig,
     };
 
     const PASSWORD: &[u8] = b"Test_password";
@@ -104,13 +105,15 @@ mod tests {
 
         // Create wallet
         let mut wallet = Wallet::from_sk(
-            &sk,
-            "Test Token Account".to_string(),
-            &proof,
+            SecretKeyParams {
+                sk,
+                proof,
+                wallet_name: "Test Token Account".to_string(),
+                biometric_type: AuthMethod::None,
+                provider_index: 0,
+            },
             wallet_config,
-            "Token Test Wallet".to_string(),
-            Default::default(),
-            0,
+            vec![],
         )
         .unwrap();
 
@@ -192,13 +195,15 @@ mod tests {
         };
 
         let mut wallet = Wallet::from_sk(
-            &sk,
-            "Multi Token Account".to_string(),
-            &proof,
+            SecretKeyParams {
+                sk,
+                proof,
+                wallet_name: "Test Token Account".to_string(),
+                biometric_type: AuthMethod::None,
+                provider_index: 0,
+            },
             wallet_config,
-            "Multi Token Test Wallet".to_string(),
-            Default::default(),
-            0,
+            vec![],
         )
         .unwrap();
 
@@ -296,13 +301,15 @@ mod tests {
         };
 
         let mut wallet = Wallet::from_sk(
-            &sk,
-            "Remove Token Test Account".to_string(),
-            &proof,
+            SecretKeyParams {
+                sk,
+                proof,
+                wallet_name: "Test Token Account".to_string(),
+                biometric_type: AuthMethod::None,
+                provider_index: 0,
+            },
             wallet_config,
-            "Remove Token Test Wallet".to_string(),
-            Default::default(),
-            0,
+            vec![],
         )
         .unwrap();
 

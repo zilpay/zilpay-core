@@ -63,7 +63,7 @@ impl KeyPair {
         Ok((pub_key, secret_key))
     }
 
-    pub fn from_secret_key(sk: &SecretKey) -> Result<Self> {
+    pub fn from_secret_key(sk: SecretKey) -> Result<Self> {
         let secret_key: K256SecretKey =
             K256SecretKey::from_slice(sk.as_ref()).or(Err(KeyPairError::InvalidSecretKey))?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
@@ -75,10 +75,10 @@ impl KeyPair {
 
         match sk {
             SecretKey::Secp256k1Keccak256Ethereum(sk) => {
-                Ok(KeyPair::Secp256k1Keccak256Ethereum((pub_key, *sk)))
+                Ok(KeyPair::Secp256k1Keccak256Ethereum((pub_key, sk)))
             }
             SecretKey::Secp256k1Sha256Zilliqa(sk) => {
-                Ok(KeyPair::Secp256k1Sha256Zilliqa((pub_key, *sk)))
+                Ok(KeyPair::Secp256k1Sha256Zilliqa((pub_key, sk)))
             }
         }
     }

@@ -170,16 +170,19 @@ mod tests {
             settings: Default::default(),
         };
 
-        let mut wallet = Wallet::from_bip39_words(Bip39Params {
-            proof: &proof,
-            mnemonic: &mnemonic,
-            passphrase: PASSPHRASE,
-            indexes: &indexes,
-            config: wallet_config,
-            wallet_name: "Select Account Test Wallet".to_string(),
-            biometric_type: AuthMethod::Biometric,
-            provider_index: 0,
-        })
+        let mut wallet = Wallet::from_bip39_words(
+            Bip39Params {
+                proof,
+                mnemonic: &mnemonic,
+                passphrase: PASSPHRASE,
+                indexes: &indexes,
+                wallet_name: "Select Account Test Wallet".to_string(),
+                biometric_type: AuthMethod::Biometric,
+                provider_index: 0,
+            },
+            wallet_config,
+            vec![],
+        )
         .unwrap();
 
         // Test 1: Initial state should have account 0 selected

@@ -58,7 +58,7 @@ impl WalletCrypto for Wallet {
                 let sk = SecretKey::from_bytes(sk_bytes.into())
                     .map_err(WalletErrors::FailParseSKBytes)?;
                 let keypair =
-                    KeyPair::from_secret_key(&sk).map_err(WalletErrors::FailToCreateKeyPair)?;
+                    KeyPair::from_secret_key(sk).map_err(WalletErrors::FailToCreateKeyPair)?;
 
                 Ok(keypair)
             }
