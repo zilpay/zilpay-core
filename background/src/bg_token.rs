@@ -128,5 +128,7 @@ mod tests_background {
         assert_eq!(meta.provider_index, 0);
         assert!(!meta.default);
         assert!(!meta.native);
+
+        assert!(meta.balances.contains_key(&0));
     }
 }
