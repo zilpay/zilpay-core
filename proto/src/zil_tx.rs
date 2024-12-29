@@ -17,6 +17,10 @@ pub fn version_from_chainid(chain_id: u16) -> u32 {
     ((chain_id as u32) << 16) | 0x0001
 }
 
+pub fn chainid_from_version(version: u32) -> u16 {
+    (version >> 16) as u16
+}
+
 pub fn encode_zilliqa_transaction(txn: &ZILTransactionRequest, pub_key: &PubKey) -> Vec<u8> {
     let oneof8 = (!txn.code.is_empty()).then_some(Code::Code(txn.code.clone().into_bytes()));
     let oneof9 = (!txn.data.is_empty()).then_some(Data::Data(txn.data.clone().into_bytes()));
@@ -167,4 +171,19 @@ pub struct ZILTransactionReceipt {
     pub data: String,
     pub signature: String,
     pub priority: bool,
+}
+
+#[cfg(test)]
+mod tests_tx_encode {
+    use super::*;
+
+    const CHAIN_ID: u16 = 42;
+
+    #[test]
+    fn test_chainid_version() {
+        let version = version_from_chainid(CHAIN_ID);
+        assert_eq!(version, 2752513);
+        let chain_id = chainid_from_version(version);
+        assert_eq!(chain_id, CHAIN_ID);
+    }
 }

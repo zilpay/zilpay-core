@@ -1,15 +1,12 @@
-use crate::keypair::KeyPair;
-use crate::pubkey::PubKey;
-use crate::signature::Signature;
-use crate::zil_tx::{
-    encode_zilliqa_transaction, version_from_chainid, ZILTransactionReceipt, ZILTransactionRequest,
-};
 use alloy::consensus::TxEnvelope;
 use alloy::network::TransactionBuilder;
 use alloy::rpc::types::TransactionRequest as ETHTransactionRequest;
-use config::sha::SHA512_SIZE;
 use crypto::schnorr::sign as zil_sign;
 use k256::SecretKey as K256SecretKey;
+use proto::keypair::KeyPair;
+use proto::zil_tx::{
+    encode_zilliqa_transaction, version_from_chainid, ZILTransactionReceipt, ZILTransactionRequest,
+};
 use zil_errors::keypair::KeyPairError;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -22,31 +19,6 @@ pub enum TransactionReceipt {
 pub enum TransactionRequest {
     Zilliqa(ZILTransactionRequest),  // ZILLIQA
     Ethereum(ETHTransactionRequest), // Ethereum
-}
-
-impl TransactionReceipt {
-    pub fn verify(&self) -> bool {
-        match self {
-            Self::Zilliqa(tx) => {
-                let pub_key = match PubKey::from_hex(&tx.pub_key) {
-                    Ok(pk) => pk,
-                    Err(_) => return false,
-                };
-                let sig_bytes: [u8; SHA512_SIZE] = hex::decode(&tx.signature)
-                    .unwrap_or_default()
-                    .try_into()
-                    .unwrap_or([0u8; SHA512_SIZE]);
-                let sig = Signature::SchnorrSecp256k1Sha256(sig_bytes);
-                // TODO: make convert bytes.
-                // let bytes = encode_zilliqa_transaction(tx, &pub_key);
-
-                // sig.verify(&bytes, &pub_key).unwrap_or(false)
-                //
-                false
-            }
-            Self::Ethereum(tx) => unreachable!(),
-        }
-    }
 }
 
 impl TransactionRequest {
