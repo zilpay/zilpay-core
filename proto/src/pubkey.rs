@@ -19,10 +19,13 @@ pub enum PubKey {
 }
 
 impl PubKey {
-    pub fn from_hex(hex_str: &str) -> Result<Self> {
-        let clean_hex = hex_str.strip_prefix("0x").unwrap_or(hex_str);
+    pub fn from_33_bytes_zil_hex(value: &str) -> Result<Self> {
+        let pk_bytes: [u8; PUB_KEY_SIZE] = hex::decode(value)
+            .map_err(|_| PubKeyError::InvalidHex)?
+            .try_into()
+            .map_err(|_| PubKeyError::InvalidHex)?;
 
-        Self::from_str(clean_hex)
+        Ok(Self::Secp256k1Sha256Zilliqa(pk_bytes))
     }
 }
 
@@ -42,6 +45,10 @@ impl PubKey {
             PubKey::Secp256k1Bitcoin(_) => Err(PubKeyError::NotImpl),
             PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
         }
+    }
+
+    pub fn as_hex_str(&self) -> String {
+        hex::encode(self.as_bytes())
     }
 
     pub fn as_bytes(&self) -> [u8; PUB_KEY_SIZE] {

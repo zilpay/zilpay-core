@@ -15,4 +15,5 @@ pub mod session;
 pub mod settings;
 pub mod storage;
 pub mod token;
+pub mod tx;
 pub mod wallet;

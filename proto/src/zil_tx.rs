@@ -10,6 +10,7 @@ use crate::{
     zq1_proto::{Code, Data, Nonce, ProtoTransactionCoreInfo},
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use zil_errors::address::AddressError;
 
 pub const EVM_GAS_PER_SCILLA_GAS: u64 = 420;
 
@@ -22,14 +23,14 @@ pub fn chainid_from_version(version: u32) -> u16 {
 }
 
 pub fn encode_zilliqa_transaction(txn: &ZILTransactionRequest, pub_key: &PubKey) -> Vec<u8> {
-    let oneof8 = (!txn.code.is_empty()).then_some(Code::Code(txn.code.clone().into_bytes()));
-    let oneof9 = (!txn.data.is_empty()).then_some(Data::Data(txn.data.clone().into_bytes()));
+    let oneof8 = (!txn.code.is_empty()).then(|| Code::Code(txn.code.as_bytes().to_vec()));
+    let oneof9 = (!txn.data.is_empty()).then(|| Data::Data(txn.data.as_bytes().to_vec()));
     let proto = ProtoTransactionCoreInfo {
         version: version_from_chainid(txn.chain_id),
         toaddr: txn.to_addr.addr_bytes().to_vec(),
         senderpubkey: Some(pub_key.as_ref().to_vec().into()),
-        amount: Some((txn.amount).to_be_bytes().to_vec().into()),
-        gasprice: Some((txn.gas_price).to_be_bytes().to_vec().into()),
+        amount: Some(txn.amount.to_be_bytes().to_vec().into()),
+        gasprice: Some(txn.gas_price.to_be_bytes().to_vec().into()),
         gaslimit: txn.gas_limit.0,
         oneof2: Some(Nonce::Nonce(txn.nonce)),
         oneof8,
@@ -173,11 +174,31 @@ pub struct ZILTransactionReceipt {
     pub priority: bool,
 }
 
+impl TryFrom<ZILTransactionReceipt> for ZILTransactionRequest {
+    type Error = AddressError;
+
+    fn try_from(receipt: ZILTransactionReceipt) -> Result<Self, Self::Error> {
+        Ok(Self {
+            chain_id: chainid_from_version(receipt.version),
+            nonce: receipt.nonce,
+            gas_price: receipt.gas_price,
+            gas_limit: receipt.gas_limit,
+            to_addr: Address::from_zil_base16(&receipt.to_addr)?,
+            amount: receipt.amount,
+            code: receipt.code,
+            data: receipt.data,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests_tx_encode {
+    use crate::{keypair::KeyPair, secret_key::SecretKey};
+
     use super::*;
 
     const CHAIN_ID: u16 = 42;
+    const SHOULD_BE_BYTES: &str = "088180a80110011a14ebd8b370dddb636faf641040d2181c55190840fb22230a2103150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da2a120a100000000000000000000000000000000032120a100000000000000000000000000000000038a08d06";
 
     #[test]
     fn test_chainid_version() {
@@ -185,5 +206,48 @@ mod tests_tx_encode {
         assert_eq!(version, 2752513);
         let chain_id = chainid_from_version(version);
         assert_eq!(chain_id, CHAIN_ID);
+    }
+
+    #[test]
+    fn test_encode_zilliqa_transaction() {
+        let sk = SecretKey::from_str(
+            "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04",
+        )
+        .unwrap();
+        let key_pair = KeyPair::from_secret_key(sk).unwrap();
+        let zil_addr = key_pair.get_addr().unwrap();
+        let zil_pub_key = key_pair.get_pubkey().unwrap();
+        let tx_req = ZILTransactionRequest {
+            chain_id: CHAIN_ID,
+            nonce: 1,
+            gas_price: ZilAmount::from_amount(2000),
+            gas_limit: ScillaGas(100000),
+            to_addr: zil_addr,
+            amount: ZilAmount::from_amount(1),
+            code: String::with_capacity(0),
+            data: String::with_capacity(0),
+        };
+        let tx_bytes = encode_zilliqa_transaction(&tx_req, &zil_pub_key);
+
+        assert_eq!(hex::encode(&tx_bytes), SHOULD_BE_BYTES);
+
+        let tx_recipt = ZILTransactionReceipt {
+            version: version_from_chainid(CHAIN_ID),
+            nonce: tx_req.nonce,
+            gas_price: tx_req.gas_price,
+            gas_limit: tx_req.gas_limit,
+            to_addr: tx_req.to_addr.get_zil_base16().unwrap(),
+            amount: tx_req.amount,
+            pub_key: zil_pub_key.as_hex_str(),
+            code: tx_req.code.clone(),
+            data: tx_req.data.clone(),
+            signature: hex::encode(tx_bytes),
+            priority: false,
+        };
+        let restored_req_tx: ZILTransactionRequest = tx_recipt.try_into().unwrap();
+        let tx_bytes = encode_zilliqa_transaction(&restored_req_tx, &zil_pub_key);
+
+        assert_eq!(hex::encode(&tx_bytes), SHOULD_BE_BYTES);
+        assert_eq!(&restored_req_tx, &tx_req);
     }
 }

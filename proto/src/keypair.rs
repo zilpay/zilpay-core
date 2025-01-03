@@ -186,7 +186,7 @@ impl KeyPair {
         Ok(is_verify)
     }
 
-    pub async fn sign_tx(&self, tx: &TransactionRequest) -> Result<TransactionReceipt> {
+    pub async fn sign_tx(&self, tx: TransactionRequest) -> Result<TransactionReceipt> {
         tx.sign(self).await
     }
 

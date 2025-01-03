@@ -14,7 +14,7 @@ pub trait WalletTransaction {
     /// Signs a blockchain transaction request
     async fn sign_transaction(
         &self,
-        tx: &TransactionRequest,
+        tx: TransactionRequest,
         account_index: usize,
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
@@ -27,7 +27,7 @@ impl WalletTransaction for Wallet {
 
     async fn sign_transaction(
         &self,
-        tx: &TransactionRequest,
+        tx: TransactionRequest,
         account_index: usize,
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,

@@ -1,6 +1,6 @@
 use alloy::signers::k256;
 use alloy::signers::Signature as EthersSignature;
-use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA256_SIZE, SHA512_SIZE};
+use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA512_SIZE};
 use crypto::schnorr;
 use k256::ecdsa::Signature as SchnorrSignature;
 use k256::PublicKey as K256PublicKey;
@@ -17,6 +17,13 @@ pub enum Signature {
 }
 
 impl Signature {
+    pub fn from_hex(value: &str) -> Result<Self> {
+        let bytes =
+            hex::decode(value).map_err(|_| SignatureError::InvalidHexString(value.to_string()))?;
+
+        bytes.as_slice().try_into()
+    }
+
     pub fn verify(&self, msg_bytes: &[u8], pk: &PubKey) -> Result<bool> {
         match self {
             Signature::SchnorrSecp256k1Sha256(sig) => {
@@ -49,7 +56,7 @@ impl TryFrom<&[u8]> for Signature {
     type Error = SignatureError;
 
     fn try_from(sig_bytes: &[u8]) -> Result<Self> {
-        if sig_bytes.len() == SHA256_SIZE {
+        if sig_bytes.len() == SHA512_SIZE {
             let buf: [u8; SHA512_SIZE] = sig_bytes
                 .try_into()
                 .or(Err(SignatureError::InvalidLength))?;

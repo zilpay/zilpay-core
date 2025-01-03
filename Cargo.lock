@@ -2931,6 +2931,7 @@ dependencies = [
  "hex",
  "hmac",
  "k256",
+ "mockito",
  "prost",
  "rand",
  "rand_chacha",
@@ -2938,6 +2939,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tokio",
  "zil_errors",
 ]
 

@@ -7,10 +7,10 @@ use crate::zil_tx::{
 use alloy::consensus::TxEnvelope;
 use alloy::network::TransactionBuilder;
 use alloy::rpc::types::TransactionRequest as ETHTransactionRequest;
-use config::sha::SHA512_SIZE;
 use crypto::schnorr::sign as zil_sign;
 use k256::SecretKey as K256SecretKey;
 use zil_errors::keypair::KeyPairError;
+use zil_errors::tx::TransactionErrors;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TransactionReceipt {
@@ -25,58 +25,49 @@ pub enum TransactionRequest {
 }
 
 impl TransactionReceipt {
-    pub fn verify(&self) -> bool {
+    pub fn verify(&self) -> Result<bool, TransactionErrors> {
         match self {
             Self::Zilliqa(tx) => {
-                let pub_key = match PubKey::from_hex(&tx.pub_key) {
-                    Ok(pk) => pk,
-                    Err(_) => return false,
-                };
-                let sig_bytes: [u8; SHA512_SIZE] = hex::decode(&tx.signature)
-                    .unwrap_or_default()
-                    .try_into()
-                    .unwrap_or([0u8; SHA512_SIZE]);
-                let sig = Signature::SchnorrSecp256k1Sha256(sig_bytes);
-                // TODO: make convert bytes.
-                // let bytes = encode_zilliqa_transaction(tx, &pub_key);
+                let pub_key = PubKey::from_33_bytes_zil_hex(&tx.pub_key)?;
+                let sig: Signature = Signature::from_hex(&tx.signature)?;
+                let req_tx: ZILTransactionRequest = tx.clone().try_into()?;
+                let bytes = encode_zilliqa_transaction(&req_tx, &pub_key);
+                let verify = sig.verify(&bytes, &pub_key)?;
 
-                // sig.verify(&bytes, &pub_key).unwrap_or(false)
-                //
-                false
+                Ok(verify)
             }
-            Self::Ethereum(tx) => unreachable!(),
+
+            Self::Ethereum(_tx) => unreachable!(),
         }
     }
 }
 
 impl TransactionRequest {
-    pub async fn sign(&self, keypair: &KeyPair) -> Result<TransactionReceipt, KeyPairError> {
+    pub async fn sign(self, keypair: &KeyPair) -> Result<TransactionReceipt, KeyPairError> {
         match self {
             TransactionRequest::Zilliqa(tx) => {
                 let pub_key = keypair.get_pubkey()?;
-                let bytes = encode_zilliqa_transaction(tx, &pub_key);
-                let secret_key = keypair
-                    .get_secretkey()?
-                    .to_bytes()
-                    .map_err(KeyPairError::SecretKeyError)?;
-                let secret_key = K256SecretKey::from_slice(&secret_key)
+                let pub_key_hex = pub_key.as_hex_str();
+                let bytes = encode_zilliqa_transaction(&tx, &pub_key);
+                let secret_key = K256SecretKey::from_slice(&keypair.get_sk_bytes())
                     .or(Err(KeyPairError::InvalidSecretKey))?;
                 let signature = zil_sign(&bytes, &secret_key)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
                 let signature = hex::encode(signature.to_bytes());
-                let to_addr = tx.to_addr.to_eth_checksummed()?;
+                // let to_addr = tx.to_addr.to_eth_checksummed()?; // TODO: maybe need change to zil base16
+                let to_addr = tx.to_addr.get_zil_base16()?;
 
                 Ok(TransactionReceipt::Zilliqa(ZILTransactionReceipt {
                     signature,
                     to_addr,
-                    pub_key: hex::encode(pub_key.as_bytes()),
+                    pub_key: pub_key_hex,
                     version: version_from_chainid(tx.chain_id),
                     nonce: tx.nonce,
                     gas_price: tx.gas_price,
                     gas_limit: tx.gas_limit,
                     amount: tx.amount,
-                    code: tx.code.clone(),
-                    data: tx.data.clone(),
+                    code: tx.code,
+                    data: tx.data,
                     priority: false, // TODO: no more use in ZILLiqa chain
                 }))
             }
@@ -98,5 +89,38 @@ impl TransactionRequest {
             Self::Zilliqa(tx) => serde_json::to_string(tx),
             Self::Ethereum(tx) => serde_json::to_string(tx),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_tx {
+    use super::*;
+    use crate::{
+        keypair::KeyPair,
+        zil_tx::{ScillaGas, ZilAmount},
+    };
+    use tokio;
+
+    const CHAIN_ID: u16 = 42;
+
+    #[tokio::test]
+    async fn test_sign_verify_zil_tx() {
+        let key_pair = KeyPair::gen_sha256().unwrap();
+        let zil_addr = key_pair.get_addr().unwrap();
+        let tx_req = TransactionRequest::Zilliqa(ZILTransactionRequest {
+            chain_id: CHAIN_ID,
+            nonce: 1,
+            gas_price: ZilAmount::from_amount(2000),
+            gas_limit: ScillaGas(100000),
+            to_addr: zil_addr,
+            amount: ZilAmount::from_amount(1),
+            code: String::with_capacity(0),
+            data: String::with_capacity(0),
+        });
+        let tx_res = tx_req.sign(&key_pair).await.unwrap();
+        let veify = tx_res.verify();
+
+        assert!(veify.is_ok());
+        assert!(veify.unwrap());
     }
 }
