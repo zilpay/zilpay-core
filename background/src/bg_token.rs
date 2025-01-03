@@ -70,7 +70,7 @@ impl TokensManagement for Background {
 }
 
 #[cfg(test)]
-mod tests_background {
+mod tests_background_tokens {
     use std::collections::HashMap;
 
     use super::*;

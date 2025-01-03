@@ -2,7 +2,8 @@ use thiserror::Error;
 
 use crate::{
     cipher::CipherErrors, keychain::KeyChainErrors, keypair::KeyPairError, network::NetworkErrors,
-    session::SessionErrors, storage::LocalStorageError, wallet::WalletErrors,
+    session::SessionErrors, storage::LocalStorageError, tx::TransactionErrors,
+    wallet::WalletErrors,
 };
 
 #[derive(Debug, Error, PartialEq)]
@@ -75,11 +76,23 @@ pub enum BackgroundError {
 
     #[error("wallet error: {0}")]
     WalletError(WalletErrors),
+
+    #[error("TransactionErrors error: {0}")]
+    TransactionErrors(TransactionErrors),
+
+    #[error("unable verify transaction")]
+    TransactionInvalidSig,
 }
 
 impl From<LocalStorageError> for BackgroundError {
     fn from(error: LocalStorageError) -> Self {
         BackgroundError::LocalStorageError(error)
+    }
+}
+
+impl From<TransactionErrors> for BackgroundError {
+    fn from(error: TransactionErrors) -> Self {
+        BackgroundError::TransactionErrors(error)
     }
 }
 

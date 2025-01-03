@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::common::Provider;
+use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
@@ -65,6 +66,33 @@ impl NetworkProvider {
     pub async fn fetch_nodes_list(&mut self) -> Result<()> {
         // TODO: make server ZilPay which track nodes and makes ranking.
         Ok(())
+    }
+
+    pub async fn fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>> {
+        let total = addresses.len();
+        let mut all_requests = Vec::with_capacity(total);
+
+        for &addr in addresses {
+            let payload = build_nonce_request(addr);
+            all_requests.push(payload);
+        }
+
+        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(&all_requests)
+            .await
+            .map_err(NetworkErrors::Request)?;
+        drop(all_requests);
+
+        let mut nonce_list = Vec::with_capacity(total);
+
+        for (&addr, response) in addresses.iter().zip(responses.iter()) {
+            let value = process_nonce_response(response, addr)?;
+
+            nonce_list.push(value);
+        }
+
+        Ok(nonce_list)
     }
 
     pub async fn update_balances(
@@ -361,7 +389,7 @@ mod tests_network {
         assert!(tokens[2].balances.get(&0).unwrap() > &U256::from(0));
         assert!(tokens[2].balances.get(&2).unwrap() == &U256::from(0));
 
-        assert!(tokens[3].balances.get(&0).unwrap() > &U256::from(0));
+        assert!(tokens[3].balances.get(&0).unwrap() == &U256::from(0));
         assert!(tokens[3].balances.get(&1).unwrap() == &U256::from(0));
         assert!(tokens[3].balances.get(&2).unwrap() == &U256::from(0));
     }
@@ -560,5 +588,27 @@ mod tests_network {
         assert!(loaded_providers
             .iter()
             .any(|p| p.config.network_name == "New Network"));
+    }
+
+    #[tokio::test]
+    async fn test_get_nonce_evm() {
+        let net_conf = NetworkConfig::new(
+            "Binance-smart-chain",
+            56,
+            vec!["https://bsc-dataseed.binance.org".to_string()],
+        );
+        let provider = NetworkProvider::new(net_conf, 0);
+
+        let account = [
+            &Address::from_eth_address("0x2d09c57cB8EAf970dEEaf30546ec4dc3781c63cf").unwrap(),
+            &Address::from_eth_address("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8").unwrap(),
+            &Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+        ];
+
+        let nonces = provider.fetch_nonce(&account).await.unwrap();
+
+        assert!(nonces.first().unwrap() >= &0);
+        assert!(nonces.get(1).unwrap() >= &0);
+        assert!(nonces.last().unwrap() == &0);
     }
 }

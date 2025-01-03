@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use zil_errors::keypair::KeyPairError;
 use zil_errors::tx::TransactionErrors;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
 pub enum TransactionReceipt {
     Zilliqa(ZILTransactionReceipt), // ZILLIQA
     Ethereum(TxEnvelope),           // Ethereum
