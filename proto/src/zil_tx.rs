@@ -169,10 +169,14 @@ pub struct ZILTransactionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZILTransactionReceipt {
     // meta fields
+    #[serde(skip_serializing)]
     pub hash: Option<String>,
+    #[serde(skip_serializing)]
     pub icon: Option<String>,
+    #[serde(skip_serializing)]
     pub title: Option<String>,
     // amount, decimals, symbol
+    #[serde(skip_serializing)]
     pub token_info: Option<(U256, u8, String)>,
 
     pub version: u32,

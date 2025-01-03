@@ -7,7 +7,6 @@ use rpc::{
     zil_interfaces::ResultRes,
 };
 use serde_json::{json, Value};
-use zil_errors::network::NetworkErrors;
 
 pub fn build_nonce_request(address: &Address) -> Value {
     match address {
@@ -34,20 +33,6 @@ pub fn build_nonce_request(address: &Address) -> Value {
 }
 
 pub fn process_nonce_response(response: &ResultRes<Value>, address_type: &Address) -> Result<u64> {
-    if let Some(error) = &response.error {
-        let error_msg = format!(
-            "JSON-RPC error (code: {}): {}{}",
-            error.code,
-            error.message,
-            error
-                .data
-                .as_ref()
-                .map(|d| format!(", data: {}", d))
-                .unwrap_or_default()
-        );
-        return Err(NetworkErrors::RPCError(error_msg));
-    }
-
     match address_type {
         Address::Secp256k1Sha256Zilliqa(_) => Ok(response
             .result

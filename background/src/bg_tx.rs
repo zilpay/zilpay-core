@@ -11,7 +11,7 @@ use crate::Background;
 pub trait TransactionsManagement {
     type Error;
 
-    async fn broadcast_signed_transaction<'a>(
+    async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
         txns: &'a [TransactionReceipt],
@@ -22,7 +22,7 @@ pub trait TransactionsManagement {
 impl TransactionsManagement for Background {
     type Error = BackgroundError;
 
-    async fn broadcast_signed_transaction<'a>(
+    async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
         txns: &'a [TransactionReceipt],
@@ -49,17 +49,21 @@ impl TransactionsManagement for Background {
 #[cfg(test)]
 mod tests_background_transactions {
     use super::*;
-    use crate::{
-        bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
-    };
+    use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
+    use cipher::argon2;
     use crypto::bip49::Bip49DerivationPath;
-    use proto::zil_tx::ZILTransactionRequest;
+    use proto::{
+        address::Address,
+        zil_tx::{ScillaGas, ZILTransactionRequest, ZilAmount},
+    };
     use rand::Rng;
     use rpc::network_config::NetworkConfig;
     use token::ft::FToken;
     use tokio;
+    use wallet::wallet_crypto::WalletCrypto;
 
     const PASSWORD: &str = "TEst password";
+    const ONE_ZIL: u128 = 1_000_000_000_000u128;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -70,9 +74,9 @@ mod tests_background_transactions {
 
     fn gen_zil_net_conf() -> NetworkConfig {
         NetworkConfig::new(
-            "Zilliqa",
-            32770,
-            vec!["https://api.zq2-protomainnet.zilliqa.com".to_string()],
+            "Zilliqa(testnet)",
+            333,
+            vec!["https://dev-api.zilliqa.com".to_string()],
         )
     }
 
@@ -82,8 +86,10 @@ mod tests_background_transactions {
 
         bg.add_provider(gen_zil_net_conf()).unwrap();
 
-        let words = Background::gen_bip39(24).unwrap();
+        let words = "future slot favorite conduct please organ trick seek goat easy chapter proud"
+            .to_string();
         let accounts = [(Bip49DerivationPath::Zilliqa(0), "ZIL Acc 0".to_string())];
+        let device_indicators = [String::from("5435h"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: PASSWORD,
@@ -94,30 +100,49 @@ mod tests_background_transactions {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("5435h"), String::from("0000")],
+            device_indicators: &device_indicators,
             ftokens: vec![FToken::zil(0)],
         })
         .unwrap();
+        let provider = bg.get_provider(0).unwrap();
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let addresses: Vec<&Address> = wallet.data.accounts.iter().map(|v| &v.addr).collect();
+        let nonce = *bg
+            .get_provider(0)
+            .unwrap()
+            .fetch_nonce(&addresses)
+            .await
+            .unwrap()
+            .first()
+            .unwrap();
 
-        // let nonce = {
-        //     let bal_payload = vec![ZilliqaJsonRPC::build_payload(
-        //         json!([bal_addr]),
-        //         ZilMethods::GetBalance,
-        //     )];
-        //     let resvec: Vec<ResultRes<GetBalanceRes>> = zil.req(&bal_payload).await.unwrap();
-        //     println!("Bal {0:?}", resvec[0]);
-        //     resvec[0].result.as_ref().map_or(0, |v| v.nonce)
-        // };
+        let txn = TransactionRequest::Zilliqa(ZILTransactionRequest {
+            title: None,
+            icon: None,
+            token_info: None,
+            nonce: nonce + 1,
+            chain_id: provider.config.chain_id as u16,
+            gas_price: ZilAmount::from_raw(2000000000),
+            gas_limit: ScillaGas(1000),
+            to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
+                .unwrap(),
+            amount: ZilAmount::from_raw(1), // in QA
+            code: String::new(),
+            data: String::new(),
+        });
 
-        // let txn = TransactionRequest::Zilliqa(ZILTransactionRequest {
-        //     nonce: nonce + 1,
-        //     chain_id: CHAIN_ID,
-        //     gas_price: ZilAmount::from_raw(2000000000),
-        //     gas_limit: ScillaGas(1000),
-        //     to_addr: keypairs[1].get_addr().unwrap(),
-        //     amount: ZilAmount::from_raw(ONE_ZIL),
-        //     code: String::new(),
-        //     data: String::new(),
-        // });
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            PASSWORD.as_bytes(),
+            &device_indicator,
+            &wallet.data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+        let txn = txn.sign(&keypair).await.unwrap();
+        let txns = vec![txn];
+
+        bg.broadcast_signed_transactions(0, &txns).await.unwrap();
     }
 }
