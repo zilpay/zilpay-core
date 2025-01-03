@@ -55,8 +55,7 @@ impl TransactionRequest {
                 let signature = zil_sign(&bytes, &secret_key)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
                 let signature = hex::encode(signature.to_bytes());
-                // let to_addr = tx.to_addr.to_eth_checksummed()?; // TODO: maybe need change to zil base16
-                let to_addr = tx.to_addr.get_zil_base16()?;
+                let to_addr = tx.to_addr.get_zil_check_sum_addr()?;
 
                 Ok(TransactionReceipt::Zilliqa(ZILTransactionReceipt {
                     hash: None,

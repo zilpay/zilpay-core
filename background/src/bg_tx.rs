@@ -1,8 +1,11 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
 use proto::tx::{TransactionReceipt, TransactionRequest};
-use rpc::{methods::ZilMethods, network_config::NetworkConfig, provider::RpcProvider};
-use serde_json::json;
+use rpc::{
+    common::JsonRPC, methods::ZilMethods, network_config::NetworkConfig, provider::RpcProvider,
+    zil_interfaces::ResultRes,
+};
+use serde_json::{json, Value};
 use zil_errors::background::BackgroundError;
 
 use crate::Background;
@@ -27,20 +30,34 @@ impl TransactionsManagement for Background {
         wallet_index: usize,
         txns: &'a [TransactionReceipt],
     ) -> Result<&'a [TransactionReceipt]> {
+        let build_payload = RpcProvider::<NetworkConfig>::build_payload;
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let provider = self.get_provider(wallet.data.provider_index)?;
+        let total = txns.len();
+        let mut all_requests = Vec::with_capacity(total);
 
         for tx in txns {
             // TODO: add check if right pubkey
             if !tx.verify()? {
                 return Err(BackgroundError::TransactionInvalidSig);
             }
+
+            match tx {
+                TransactionReceipt::Zilliqa(zil) => {
+                    let payload = build_payload(json!([zil]), ZilMethods::CreateTransaction);
+
+                    all_requests.push(payload);
+                }
+                TransactionReceipt::Ethereum(_eth) => {
+                    unreachable!()
+                }
+            }
         }
 
-        let build_payload = RpcProvider::<NetworkConfig>::build_payload;
-        let payloads = build_payload(json!(txns), ZilMethods::CreateTransaction);
+        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&provider.config);
+        let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await;
 
-        dbg!(payloads);
+        dbg!(responses);
 
         Ok(txns)
     }
@@ -63,7 +80,6 @@ mod tests_background_transactions {
     use wallet::wallet_crypto::WalletCrypto;
 
     const PASSWORD: &str = "TEst password";
-    const ONE_ZIL: u128 = 1_000_000_000_000u128;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
