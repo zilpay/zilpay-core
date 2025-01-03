@@ -5,4 +5,8 @@ edition = "2021"
 
 [dependencies]
 serde.workspace = true
+alloy.workspace = true
+
+proto = { path = "../proto" }
+zil_errors = { path = "../zil_errors" }
 

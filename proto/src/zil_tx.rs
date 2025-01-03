@@ -9,6 +9,7 @@ use crate::{
     address::Address,
     zq1_proto::{Code, Data, Nonce, ProtoTransactionCoreInfo},
 };
+use alloy::primitives::U256;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use zil_errors::address::AddressError;
 
@@ -116,6 +117,10 @@ impl ZilAmount {
         self.0.checked_mul(10u128.pow(6)).expect("amount overflow")
     }
 
+    pub fn get_256(self) -> U256 {
+        U256::from(self.0)
+    }
+
     /// Return the memory representation of this amount as a big-endian byte array.
     pub fn to_be_bytes(self) -> [u8; 16] {
         self.0.to_be_bytes()
@@ -145,6 +150,12 @@ impl<'de> Deserialize<'de> for ZilAmount {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZILTransactionRequest {
+    // meta fields
+    pub icon: Option<String>,
+    pub title: Option<String>,
+    // amount, decimals, symbol
+    pub token_info: Option<(U256, u8, String)>,
+
     pub chain_id: u16,
     pub nonce: u64,
     pub gas_price: ZilAmount,
@@ -157,6 +168,13 @@ pub struct ZILTransactionRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZILTransactionReceipt {
+    // meta fields
+    pub hash: Option<String>,
+    pub icon: Option<String>,
+    pub title: Option<String>,
+    // amount, decimals, symbol
+    pub token_info: Option<(U256, u8, String)>,
+
     pub version: u32,
     pub nonce: u64,
     #[serde(default, rename = "gasPrice")]
@@ -179,6 +197,9 @@ impl TryFrom<ZILTransactionReceipt> for ZILTransactionRequest {
 
     fn try_from(receipt: ZILTransactionReceipt) -> Result<Self, Self::Error> {
         Ok(Self {
+            icon: None,
+            title: None,
+            token_info: None,
             chain_id: chainid_from_version(receipt.version),
             nonce: receipt.nonce,
             gas_price: receipt.gas_price,
@@ -218,6 +239,9 @@ mod tests_tx_encode {
         let zil_addr = key_pair.get_addr().unwrap();
         let zil_pub_key = key_pair.get_pubkey().unwrap();
         let tx_req = ZILTransactionRequest {
+            icon: None,
+            title: None,
+            token_info: None,
             chain_id: CHAIN_ID,
             nonce: 1,
             gas_price: ZilAmount::from_amount(2000),
@@ -232,6 +256,10 @@ mod tests_tx_encode {
         assert_eq!(hex::encode(&tx_bytes), SHOULD_BE_BYTES);
 
         let tx_recipt = ZILTransactionReceipt {
+            icon: tx_req.icon.clone(),
+            title: tx_req.title.clone(),
+            token_info: tx_req.token_info.clone(),
+            hash: None,
             version: version_from_chainid(CHAIN_ID),
             nonce: tx_req.nonce,
             gas_price: tx_req.gas_price,

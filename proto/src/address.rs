@@ -21,6 +21,8 @@ pub enum Address {
 }
 
 impl Address {
+    pub const ZERO: [u8; ADDR_LEN] = [0u8; ADDR_LEN];
+
     pub fn from_zil_base16(addr: &str) -> Result<Self> {
         let addr = from_zil_base16(addr).ok_or(AddressError::InvalidBase16Address)?;
 

@@ -67,7 +67,7 @@ impl TokenManagement for Wallet {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests_wallet_tokens {
     use std::sync::Arc;
 
     use alloy::primitives::map::HashMap;

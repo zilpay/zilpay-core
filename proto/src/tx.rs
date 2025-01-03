@@ -13,13 +13,13 @@ use serde::{Deserialize, Serialize};
 use zil_errors::keypair::KeyPairError;
 use zil_errors::tx::TransactionErrors;
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransactionReceipt {
     Zilliqa(ZILTransactionReceipt), // ZILLIQA
     Ethereum(TxEnvelope),           // Ethereum
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Eq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
 pub enum TransactionRequest {
     Zilliqa(ZILTransactionRequest),  // ZILLIQA
     Ethereum(ETHTransactionRequest), // Ethereum
@@ -59,6 +59,10 @@ impl TransactionRequest {
                 let to_addr = tx.to_addr.get_zil_base16()?;
 
                 Ok(TransactionReceipt::Zilliqa(ZILTransactionReceipt {
+                    hash: None,
+                    title: tx.title.clone(),
+                    icon: tx.icon.clone(),
+                    token_info: tx.token_info.clone(),
                     signature,
                     to_addr,
                     pub_key: pub_key_hex,
@@ -110,6 +114,9 @@ mod tests_tx {
         let zil_addr = key_pair.get_addr().unwrap();
         let tx_req = TransactionRequest::Zilliqa(ZILTransactionRequest {
             chain_id: CHAIN_ID,
+            icon: None,
+            title: None,
+            token_info: None,
             nonce: 1,
             gas_price: ZilAmount::from_amount(2000),
             gas_limit: ScillaGas(100000),
