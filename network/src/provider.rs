@@ -611,4 +611,23 @@ mod tests_network {
         assert!(nonces.get(1).unwrap() >= &0);
         assert!(nonces.last().unwrap() == &0);
     }
+
+    #[tokio::test]
+    async fn test_get_nonce_scilla() {
+        let net_conf =
+            NetworkConfig::new("Zilliqa", 1, vec!["https://api.zilliqa.com".to_string()]);
+        let provider = NetworkProvider::new(net_conf, 0);
+
+        let account = [
+            &Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap(),
+            &Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap(),
+            &Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
+        ];
+
+        let nonces = provider.fetch_nonce(&account).await.unwrap();
+
+        assert!(nonces.first().unwrap() >= &0);
+        assert!(nonces.get(1).unwrap() >= &0);
+        assert!(nonces.last().unwrap() == &0);
+    }
 }

@@ -49,15 +49,12 @@ pub fn process_nonce_response(response: &ResultRes<Value>, address_type: &Addres
     }
 
     match address_type {
-        Address::Secp256k1Sha256Zilliqa(_) => Ok(0u64),
-        // response
-        //     .result
-        //     .as_ref()
-        //     .and_then(|v| v.get("nonce"))
-        //     .and_then(|v| v.as_str())
-        //     .ok_or_else(|| TokenError::ABIError("Invalid nonce format".to_string()))?
-        //     .parse()
-        //     .map_err(|_| TokenError::ABIError("Invalid nonce value".to_string())),
+        Address::Secp256k1Sha256Zilliqa(_) => Ok(response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("nonce"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or_default()),
         Address::Secp256k1Keccak256Ethereum(_) => Ok(response
             .result
             .as_ref()
