@@ -9,16 +9,17 @@ use alloy::network::TransactionBuilder;
 use alloy::rpc::types::TransactionRequest as ETHTransactionRequest;
 use crypto::schnorr::sign as zil_sign;
 use k256::SecretKey as K256SecretKey;
+use serde::{Deserialize, Serialize};
 use zil_errors::keypair::KeyPairError;
 use zil_errors::tx::TransactionErrors;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransactionReceipt {
     Zilliqa(ZILTransactionReceipt), // ZILLIQA
     Ethereum(TxEnvelope),           // Ethereum
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Eq)]
 pub enum TransactionRequest {
     Zilliqa(ZILTransactionRequest),  // ZILLIQA
     Ethereum(ETHTransactionRequest), // Ethereum

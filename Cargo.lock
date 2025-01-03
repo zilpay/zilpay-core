@@ -4236,6 +4236,7 @@ dependencies = [
  "config",
  "crypto",
  "hex",
+ "history",
  "network",
  "proto",
  "rand",

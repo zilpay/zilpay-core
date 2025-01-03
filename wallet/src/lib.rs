@@ -3,6 +3,7 @@ use std::sync::Arc;
 use cipher::argon2::{derive_key, Argon2Seed};
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
+use history::transaction::HistoricalTransaction;
 use proto::pubkey::PubKey;
 
 use bip39::Mnemonic;
@@ -10,6 +11,7 @@ use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use crypto::bip49::Bip49DerivationPath;
 use proto::secret_key::SecretKey;
+use proto::tx::TransactionRequest;
 use settings::wallet_settings::WalletSettings;
 use storage::LocalStorage;
 use token::ft::FToken;
@@ -58,6 +60,8 @@ pub struct Wallet {
     storage: Arc<LocalStorage>,
     pub data: WalletData,
     pub ftokens: Vec<FToken>,
+    pub request_txns: Vec<TransactionRequest>,
+    pub history: Vec<HistoricalTransaction>,
 }
 
 impl Wallet {

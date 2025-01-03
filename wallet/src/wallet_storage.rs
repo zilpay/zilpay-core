@@ -45,9 +45,13 @@ impl StorageOperations for Wallet {
         let data = storage.get(key)?;
         let data = WalletData::from_bytes(&data)?;
         let ftokens = Vec::with_capacity(0);
+        let request_txns = Vec::with_capacity(0);
+        let history = Vec::with_capacity(0);
 
         Ok(Self {
             storage,
+            history,
+            request_txns,
             data,
             ftokens,
         })

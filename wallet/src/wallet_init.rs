@@ -86,7 +86,12 @@ impl WalletInit for Wallet {
             provider_index: params.provider_index,
         };
 
+        let request_txns = Vec::with_capacity(0);
+        let history = Vec::with_capacity(0);
+
         Ok(Self {
+            history,
+            request_txns,
             ftokens,
             storage: config.storage,
             data,
@@ -143,7 +148,12 @@ impl WalletInit for Wallet {
             provider_index: params.provider_index,
         };
 
+        let request_txns = Vec::with_capacity(0);
+        let history = Vec::with_capacity(0);
+
         Ok(Self {
+            request_txns,
+            history,
             ftokens,
             storage: config.storage,
             data,
@@ -202,8 +212,13 @@ impl WalletInit for Wallet {
             provider_index: params.provider_index,
         };
 
+        let request_txns = Vec::with_capacity(0);
+        let history = Vec::with_capacity(0);
+
         Ok(Self {
+            history,
             ftokens,
+            request_txns,
             storage: config.storage,
             data,
         })

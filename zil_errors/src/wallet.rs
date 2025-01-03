@@ -24,8 +24,11 @@ pub enum WalletErrors {
     #[error("fail create argon2: {0}")]
     ArgonCipherErrors(CipherErrors),
 
-    #[error("Token doesn't extistsL {0}")]
+    #[error("Token doesn't extists: {0}")]
     TokenNotExists(usize),
+
+    #[error("request tx doesn't extists: {0}")]
+    TxNotExists(usize),
 
     #[error("Token is default flag: {0}")]
     DefaultTokenRemove(usize),
