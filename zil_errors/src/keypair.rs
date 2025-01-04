@@ -2,10 +2,11 @@ use crate::{
     address::AddressError,
     bip32::Bip329Errors,
     crypto::{SchorrError, SignatureError},
+    tx::TransactionErrors,
 };
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum KeyPairError {
     #[error("Fail to sign transaction: {0}")]
     FailToSignTx(String),
@@ -45,9 +46,12 @@ pub enum KeyPairError {
 
     #[error("Secret Key error: {0}")]
     SecretKeyError(SecretKeyError),
+
+    #[error("Transaction error: {0}")]
+    TransactionErrors(String),
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum SecretKeyError {
     #[error("Secret key slice error")]
     SecretKeySliceError,
@@ -62,7 +66,7 @@ pub enum SecretKeyError {
     InvalidKeyType,
 }
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum PubKeyError {
     #[error("Invalid VerifyingKey {0}")]
     InvalidVerifyingKey(String),

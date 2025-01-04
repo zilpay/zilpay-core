@@ -187,7 +187,9 @@ impl KeyPair {
     }
 
     pub async fn sign_tx(&self, tx: TransactionRequest) -> Result<TransactionReceipt> {
-        tx.sign(self).await
+        tx.sign(self)
+            .await
+            .map_err(|e| KeyPairError::TransactionErrors(e.to_string()))
     }
 
     pub fn to_bytes(&self) -> Result<[u8; KEYPAIR_BYTES_SIZE]> {

@@ -37,7 +37,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
     fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
         match receipt {
             TransactionReceipt::Zilliqa(zil_receipt) => Ok(HistoricalTransaction {
-                id: zil_receipt.hash.unwrap_or_default(),
+                id: zil_receipt.metadata.hash.unwrap_or_default(),
                 amount: zil_receipt.amount.get_256(),
                 sender: zil_receipt.pub_key.clone(),
                 recipient: zil_receipt.to_addr,
@@ -46,12 +46,17 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 confirmed: false,
                 timestamp: 0,
                 fee: zil_receipt.gas_price.get() * (zil_receipt.gas_limit.0 as u128),
-                icon: zil_receipt.icon.unwrap_or_else(|| "zilliqa".to_string()),
+                icon: zil_receipt
+                    .metadata
+                    .icon
+                    .unwrap_or_else(|| "zilliqa".to_string()),
                 title: zil_receipt
+                    .metadata
                     .title
                     .unwrap_or_else(|| "Zilliqa Transaction".to_string()),
                 nonce: zil_receipt.nonce,
                 token_info: zil_receipt
+                    .metadata
                     .token_info
                     .map(|(value, decimals, symbol)| TokenInfo {
                         value,

@@ -5,7 +5,7 @@ use crate::{
 };
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum AccountErrors {
     #[error("Failed to get address from public key: {0}")]
     PubKeyError(PubKeyError),

@@ -1,6 +1,10 @@
 use thiserror::Error;
 
-use crate::{address::AddressError, crypto::SignatureError, keypair::PubKeyError};
+use crate::{
+    address::AddressError,
+    crypto::SignatureError,
+    keypair::{KeyPairError, PubKeyError},
+};
 
 #[derive(Debug, Error, PartialEq)]
 pub enum TransactionErrors {
@@ -15,11 +19,20 @@ pub enum TransactionErrors {
 
     #[error("Invalid tx hash")]
     InvalidTxHash,
+
+    #[error("KeyPair error: {0}")]
+    KeyPairError(KeyPairError),
 }
 
 impl From<PubKeyError> for TransactionErrors {
     fn from(error: PubKeyError) -> Self {
         TransactionErrors::PubKeyError(error)
+    }
+}
+
+impl From<KeyPairError> for TransactionErrors {
+    fn from(error: KeyPairError) -> Self {
+        TransactionErrors::KeyPairError(error)
     }
 }
 

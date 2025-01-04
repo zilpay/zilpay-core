@@ -1,7 +1,7 @@
 use crate::keypair::PubKeyError;
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum SignatureError {
     #[error("Invalid signature length")]
     InvalidLength,

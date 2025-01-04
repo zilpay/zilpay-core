@@ -46,8 +46,8 @@ pub fn process_tx_response(response: &ResultRes<Value>, tx: &mut TransactionRece
                     .and_then(|v| v.as_str())
                     .ok_or(TransactionErrors::InvalidTxHash)?;
 
-                zil.hash = Some(tx_id.to_string());
-                zil.info = Some(info.to_string());
+                zil.metadata.hash = Some(tx_id.to_string());
+                zil.metadata.info = Some(info.to_string());
 
                 Ok(())
             } else {

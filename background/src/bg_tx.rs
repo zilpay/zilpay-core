@@ -104,9 +104,7 @@ mod tests_background_transactions {
             .unwrap();
 
         let txn = TransactionRequest::Zilliqa(ZILTransactionRequest {
-            title: None,
-            icon: None,
-            token_info: None,
+            metadata: Default::default(),
             nonce: nonce + 1,
             chain_id: provider.config.chain_id as u16,
             gas_price: ZilAmount::from_raw(2000000000),
