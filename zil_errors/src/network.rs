@@ -1,7 +1,7 @@
-use crate::{rpc::RpcError, storage::LocalStorageError, token::TokenError};
+use crate::{rpc::RpcError, storage::LocalStorageError, token::TokenError, tx::TransactionErrors};
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum NetworkErrors {
     #[error("jsonRPC: {0}")]
     RPCError(String),
@@ -27,8 +27,17 @@ pub enum NetworkErrors {
     #[error("Invalid response: {0}")]
     InvalidResponse(RpcError),
 
+    #[error("Transaction Error: {0}")]
+    TransactionErrors(TransactionErrors),
+
     #[error("Parse response error")]
     ResponseParseError,
+}
+
+impl From<TransactionErrors> for NetworkErrors {
+    fn from(error: TransactionErrors) -> Self {
+        NetworkErrors::TransactionErrors(error)
+    }
 }
 
 impl From<TokenError> for NetworkErrors {

@@ -6,3 +6,4 @@ pub mod common;
 pub mod nonce_parser;
 pub mod provider;
 pub mod rates;
+pub mod tx_parse;

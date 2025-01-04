@@ -12,6 +12,9 @@ pub enum TransactionErrors {
 
     #[error("AddressError error: {0}")]
     AddressError(AddressError),
+
+    #[error("Invalid tx hash")]
+    InvalidTxHash,
 }
 
 impl From<PubKeyError> for TransactionErrors {

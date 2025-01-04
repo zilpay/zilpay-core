@@ -3,10 +3,12 @@ use std::sync::Arc;
 
 use crate::common::Provider;
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
+use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
 use proto::address::Address;
+use proto::tx::TransactionReceipt;
 use rpc::common::JsonRPC;
 use rpc::network_config::NetworkConfig;
 use rpc::provider::RpcProvider;
@@ -20,6 +22,7 @@ use token::ft_parse::{
 };
 use zil_errors::network::NetworkErrors;
 use zil_errors::token::TokenError;
+use zil_errors::tx::TransactionErrors;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NetworkProvider {
@@ -68,6 +71,34 @@ impl NetworkProvider {
         Ok(())
     }
 
+    pub async fn broadcast_signed_transactions(
+        &self,
+        mut txns: Vec<TransactionReceipt>,
+    ) -> Result<Vec<TransactionReceipt>> {
+        let total = txns.len();
+        let mut all_requests = Vec::with_capacity(total);
+
+        for tx in &txns {
+            if !tx.verify()? {
+                return Err(TransactionErrors::SignatureError(
+                    zil_errors::crypto::SignatureError::InvalidLength,
+                ))?;
+            }
+
+            all_requests.push(build_tx_request(tx));
+        }
+
+        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
+        let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await?;
+        drop(all_requests);
+
+        for (tx, response) in txns.iter_mut().zip(responses.iter()) {
+            process_tx_response(response, tx)?;
+        }
+
+        Ok(txns)
+    }
+
     pub async fn fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>> {
         let total = addresses.len();
         let mut all_requests = Vec::with_capacity(total);
@@ -78,10 +109,7 @@ impl NetworkProvider {
         }
 
         let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
-        let responses = provider
-            .req::<Vec<ResultRes<Value>>>(&all_requests)
-            .await
-            .map_err(NetworkErrors::Request)?;
+        let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await?;
         drop(all_requests);
 
         let mut nonce_list = Vec::with_capacity(total);

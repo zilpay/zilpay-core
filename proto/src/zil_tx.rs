@@ -172,6 +172,8 @@ pub struct ZILTransactionReceipt {
     #[serde(skip_serializing)]
     pub hash: Option<String>,
     #[serde(skip_serializing)]
+    pub info: Option<String>,
+    #[serde(skip_serializing)]
     pub icon: Option<String>,
     #[serde(skip_serializing)]
     pub title: Option<String>,
@@ -260,6 +262,7 @@ mod tests_tx_encode {
         assert_eq!(hex::encode(&tx_bytes), SHOULD_BE_BYTES);
 
         let tx_recipt = ZILTransactionReceipt {
+            info: None,
             icon: tx_req.icon.clone(),
             title: tx_req.title.clone(),
             token_info: tx_req.token_info.clone(),

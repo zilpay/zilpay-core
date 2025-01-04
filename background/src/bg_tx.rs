@@ -1,11 +1,6 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
-use proto::tx::{TransactionReceipt, TransactionRequest};
-use rpc::{
-    common::JsonRPC, methods::ZilMethods, network_config::NetworkConfig, provider::RpcProvider,
-    zil_interfaces::ResultRes,
-};
-use serde_json::{json, Value};
+use proto::tx::TransactionReceipt;
 use zil_errors::background::BackgroundError;
 
 use crate::Background;
@@ -17,8 +12,8 @@ pub trait TransactionsManagement {
     async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
-        txns: &'a [TransactionReceipt],
-    ) -> std::result::Result<&'a [TransactionReceipt], Self::Error>;
+        txns: Vec<TransactionReceipt>,
+    ) -> std::result::Result<Vec<TransactionReceipt>, Self::Error>;
 }
 
 #[async_trait]
@@ -28,36 +23,11 @@ impl TransactionsManagement for Background {
     async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
-        txns: &'a [TransactionReceipt],
-    ) -> Result<&'a [TransactionReceipt]> {
-        let build_payload = RpcProvider::<NetworkConfig>::build_payload;
+        txns: Vec<TransactionReceipt>,
+    ) -> Result<Vec<TransactionReceipt>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let provider = self.get_provider(wallet.data.provider_index)?;
-        let total = txns.len();
-        let mut all_requests = Vec::with_capacity(total);
-
-        for tx in txns {
-            // TODO: add check if right pubkey
-            if !tx.verify()? {
-                return Err(BackgroundError::TransactionInvalidSig);
-            }
-
-            match tx {
-                TransactionReceipt::Zilliqa(zil) => {
-                    let payload = build_payload(json!([zil]), ZilMethods::CreateTransaction);
-
-                    all_requests.push(payload);
-                }
-                TransactionReceipt::Ethereum(_eth) => {
-                    unreachable!()
-                }
-            }
-        }
-
-        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&provider.config);
-        let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await;
-
-        dbg!(responses);
+        let txns = provider.broadcast_signed_transactions(txns).await?;
 
         Ok(txns)
     }
@@ -71,6 +41,7 @@ mod tests_background_transactions {
     use crypto::bip49::Bip49DerivationPath;
     use proto::{
         address::Address,
+        tx::TransactionRequest,
         zil_tx::{ScillaGas, ZILTransactionRequest, ZilAmount},
     };
     use rand::Rng;
@@ -159,6 +130,12 @@ mod tests_background_transactions {
         let txn = txn.sign(&keypair).await.unwrap();
         let txns = vec![txn];
 
-        bg.broadcast_signed_transactions(0, &txns).await.unwrap();
+        let txns = bg.broadcast_signed_transactions(0, txns).await.unwrap();
+
+        assert_eq!(txns.len(), 1);
+
+        for tx in txns {
+            assert!(tx.hash().is_some());
+        }
     }
 }

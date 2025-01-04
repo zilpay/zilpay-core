@@ -41,6 +41,14 @@ impl TransactionReceipt {
             Self::Ethereum(_tx) => unreachable!(),
         }
     }
+
+    #[inline]
+    pub fn hash(&self) -> Option<&str> {
+        match self {
+            Self::Zilliqa(tx) => tx.hash.as_deref(),
+            Self::Ethereum(_tx) => todo!(),
+        }
+    }
 }
 
 impl TransactionRequest {
@@ -58,6 +66,7 @@ impl TransactionRequest {
                 let to_addr = tx.to_addr.get_zil_check_sum_addr()?;
 
                 Ok(TransactionReceipt::Zilliqa(ZILTransactionReceipt {
+                    info: None,
                     hash: None,
                     title: tx.title.clone(),
                     icon: tx.icon.clone(),
