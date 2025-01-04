@@ -19,6 +19,7 @@ pub struct TransactionMetadata {
     pub info: Option<String>,
     pub icon: Option<String>,
     pub title: Option<String>,
+    pub signer: Option<PubKey>,
     pub token_info: Option<(U256, u8, String)>,
 }
 
@@ -48,7 +49,20 @@ impl TransactionReceipt {
                 Ok(verify)
             }
 
-            Self::Ethereum((_tx, _meta)) => unreachable!(),
+            Self::Ethereum((tx, metadata)) => {
+                let pub_key = metadata
+                    .signer
+                    .as_ref()
+                    .ok_or(KeyPairError::InvalidPublicKey)?;
+
+                if let Ok(signer) = tx.recover_signer() {
+                    let addr = pub_key.get_addr()?.to_alloy_addr();
+
+                    Ok(addr == signer)
+                } else {
+                    Ok(false)
+                }
+            }
         }
     }
 
@@ -104,7 +118,7 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Zilliqa((tx, metadata)))
             }
-            TransactionRequest::Ethereum((tx, meta)) => {
+            TransactionRequest::Ethereum((tx, mut metadata)) => {
                 let wallet = keypair.get_local_eth_wallet()?;
                 let tx_envelope = tx
                     .clone()
@@ -112,7 +126,9 @@ impl TransactionRequest {
                     .await
                     .map_err(|e| KeyPairError::FailToSignTx(e.to_string()))?;
 
-                Ok(TransactionReceipt::Ethereum((tx_envelope, meta)))
+                metadata.signer = Some(keypair.get_pubkey()?);
+
+                Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
             }
         }
     }
@@ -121,7 +137,12 @@ impl TransactionRequest {
 #[cfg(test)]
 mod tests_tx {
     use super::*;
-    use crate::keypair::KeyPair;
+    use crate::{address::Address, keypair::KeyPair};
+    use alloy::{
+        consensus::BlobTransactionSidecar,
+        primitives::B256,
+        rpc::types::{AccessList, AccessListItem, Authorization},
+    };
     use tokio;
 
     const CHAIN_ID: u16 = 42;
@@ -146,5 +167,140 @@ mod tests_tx {
 
         assert!(veify.is_ok());
         assert!(veify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sign_verify_eth_tx_eip1559() {
+        let key_pair = KeyPair::gen_keccak256().unwrap();
+        let eth_addr =
+            Address::from_eth_address("0x70997970c51812dc3a010c7d01b50e0d17dc79c8").unwrap();
+
+        let max_prio_fee = 987;
+        let eip1559_request = ETHTransactionRequest {
+            to: Some(eth_addr.to_alloy_addr().into()),
+            max_fee_per_gas: Some(1234),
+            max_priority_fee_per_gas: Some(max_prio_fee),
+            nonce: Some(57),
+            gas: Some(123456),
+            ..Default::default()
+        };
+        let tx_req = TransactionRequest::Ethereum((eip1559_request, Default::default()));
+        let tx_res = tx_req.sign(&key_pair).await.unwrap();
+        let veify = tx_res.verify();
+
+        assert!(veify.is_ok());
+        assert!(veify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sign_verify_eth_tx_eip2930() {
+        let key_pair = KeyPair::gen_keccak256().unwrap();
+        let eth_addr =
+            Address::from_eth_address("0x70997970c51812dc3a010c7d01b50e0d17dc79c8").unwrap();
+
+        let access_list = AccessList(vec![AccessListItem {
+            address: eth_addr.to_alloy_addr(),
+            storage_keys: vec![B256::from([1u8; 32])],
+        }]);
+
+        let eip2930_request = ETHTransactionRequest {
+            to: Some(eth_addr.to_alloy_addr().into()),
+            gas_price: Some(1234),
+            nonce: Some(57),
+            gas: Some(123456),
+            chain_id: Some(1),
+            access_list: Some(access_list),
+            transaction_type: Some(1),
+            ..Default::default()
+        };
+        let tx_req = TransactionRequest::Ethereum((eip2930_request, Default::default()));
+        let tx_res = tx_req.sign(&key_pair).await.unwrap();
+        let verify = tx_res.verify();
+
+        assert!(verify.is_ok());
+        assert!(verify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sign_verify_eth_tx_eip4844() {
+        let key_pair = KeyPair::gen_keccak256().unwrap();
+        let eth_addr =
+            Address::from_eth_address("0x70997970c51812dc3a010c7d01b50e0d17dc79c8").unwrap();
+
+        let storage_key = B256::from([2u8; 32]);
+        let versioned_hash = B256::from([3u8; 32]);
+
+        let access_list = AccessList(vec![AccessListItem {
+            address: eth_addr.to_alloy_addr(),
+            storage_keys: vec![storage_key],
+        }]);
+
+        let blob_versioned_hashes = vec![versioned_hash];
+
+        let sidecar = BlobTransactionSidecar {
+            blobs: vec![[0u8; 131072].into()],
+            commitments: vec![[0u8; 48].into()],
+            proofs: vec![[0u8; 48].into()],
+        };
+
+        let eip4844_request = ETHTransactionRequest {
+            to: Some(eth_addr.to_alloy_addr().into()),
+            max_fee_per_gas: Some(1234),
+            max_priority_fee_per_gas: Some(987),
+            max_fee_per_blob_gas: Some(100000),
+            nonce: Some(57),
+            gas: Some(123456),
+            chain_id: Some(1),
+            access_list: Some(access_list),
+            blob_versioned_hashes: Some(blob_versioned_hashes),
+            transaction_type: Some(3),
+            sidecar: Some(sidecar),
+            ..Default::default()
+        };
+        let tx_req = TransactionRequest::Ethereum((eip4844_request, Default::default()));
+        let tx_res = tx_req.sign(&key_pair).await.unwrap();
+        let verify = tx_res.verify();
+
+        assert!(verify.is_ok());
+        assert!(verify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sign_verify_eth_tx_eip7702() {
+        let key_pair = KeyPair::gen_keccak256().unwrap();
+        let eth_addr =
+            Address::from_eth_address("0x70997970c51812dc3a010c7d01b50e0d17dc79c8").unwrap();
+
+        let access_list = AccessList(vec![AccessListItem {
+            address: eth_addr.to_alloy_addr(),
+            storage_keys: vec![B256::from([5u8; 32])],
+        }]);
+
+        let auth = Authorization {
+            chain_id: 1,
+            address: eth_addr.to_alloy_addr(),
+            nonce: 1u64,
+        };
+        let auth_sig = alloy::primitives::PrimitiveSignature::test_signature();
+        let authorization_list = vec![auth.into_signed(auth_sig)];
+
+        let eip7702_request = ETHTransactionRequest {
+            to: Some(eth_addr.to_alloy_addr().into()),
+            max_fee_per_gas: Some(1234),
+            max_priority_fee_per_gas: Some(987),
+            nonce: Some(57),
+            gas: Some(123456),
+            chain_id: Some(1),
+            access_list: Some(access_list),
+            authorization_list: Some(authorization_list),
+            transaction_type: Some(4),
+            ..Default::default()
+        };
+        let tx_req = TransactionRequest::Ethereum((eip7702_request, Default::default()));
+        let tx_res = tx_req.sign(&key_pair).await.unwrap();
+        let verify = tx_res.verify();
+
+        assert!(verify.is_ok());
+        assert!(verify.unwrap());
     }
 }

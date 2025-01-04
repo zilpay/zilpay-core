@@ -263,6 +263,7 @@ mod tests_wallet_transactions {
         for index in 0..NUMBER_TXNS {
             let token = wallet.ftokens.first().unwrap();
             let metadata = TransactionMetadata {
+                signer: None,
                 hash: None,
                 info: None,
                 title: None,
@@ -307,7 +308,6 @@ mod tests_wallet_transactions {
             assert!(transaction_receipt.verify().unwrap());
 
             transaction_receipt.get_mut_metadata().hash = Some(String::with_capacity(0));
-
             wallet.history.push(transaction_receipt.try_into().unwrap());
         }
 
