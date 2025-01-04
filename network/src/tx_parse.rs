@@ -9,10 +9,10 @@ use zil_errors::{network::NetworkErrors, tx::TransactionErrors};
 
 pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
     match tx {
-        TransactionReceipt::Zilliqa(zil) => {
+        TransactionReceipt::Zilliqa((zil, _)) => {
             RpcProvider::<NetworkConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
         }
-        TransactionReceipt::Ethereum(_eth) => {
+        TransactionReceipt::Ethereum((_eth, _)) => {
             todo!()
         }
     }
@@ -35,7 +35,7 @@ pub fn process_tx_response(response: &ResultRes<Value>, tx: &mut TransactionRece
     }
 
     match tx {
-        TransactionReceipt::Zilliqa(zil) => {
+        TransactionReceipt::Zilliqa((_zil, metadata)) => {
             if let Some(result) = &response.result {
                 let info = result
                     .get("Info")
@@ -46,8 +46,8 @@ pub fn process_tx_response(response: &ResultRes<Value>, tx: &mut TransactionRece
                     .and_then(|v| v.as_str())
                     .ok_or(TransactionErrors::InvalidTxHash)?;
 
-                zil.metadata.hash = Some(tx_id.to_string());
-                zil.metadata.info = Some(info.to_string());
+                metadata.hash = Some(tx_id.to_string());
+                metadata.info = Some(info.to_string());
 
                 Ok(())
             } else {

@@ -1,20 +1,9 @@
 use crate::{address::Address, zq1_proto::chainid_from_version};
-use alloy::primitives::U256;
 use config::{address::ADDR_LEN, key::PUB_KEY_SIZE, sha::SHA512_SIZE};
 use serde::{Deserialize, Serialize, Serializer};
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct ZILTransactionMetadata {
-    pub hash: Option<String>,
-    pub info: Option<String>,
-    pub icon: Option<String>,
-    pub title: Option<String>,
-    pub token_info: Option<(U256, u8, String)>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ZILTransactionRequest {
-    pub metadata: ZILTransactionMetadata,
     pub chain_id: u16,
     pub nonce: u64,
     pub gas_price: u128,
@@ -27,7 +16,6 @@ pub struct ZILTransactionRequest {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ZILTransactionReceipt {
-    pub metadata: ZILTransactionMetadata,
     pub version: u32,
     pub nonce: u64,
     pub gas_price: [u8; std::mem::size_of::<u128>()],
@@ -83,7 +71,6 @@ impl Serialize for ZILTransactionReceipt {
 impl From<ZILTransactionReceipt> for ZILTransactionRequest {
     fn from(receipt: ZILTransactionReceipt) -> Self {
         Self {
-            metadata: receipt.metadata,
             chain_id: chainid_from_version(receipt.version),
             nonce: receipt.nonce,
             gas_price: u128::from_be_bytes(receipt.gas_price),
@@ -99,7 +86,6 @@ impl From<ZILTransactionReceipt> for ZILTransactionRequest {
 impl From<&ZILTransactionReceipt> for ZILTransactionRequest {
     fn from(receipt: &ZILTransactionReceipt) -> Self {
         Self {
-            metadata: receipt.metadata.clone(),
             chain_id: chainid_from_version(receipt.version),
             nonce: receipt.nonce,
             gas_price: u128::from_be_bytes(receipt.gas_price),
@@ -138,7 +124,6 @@ mod tests_tx_encode {
         let zil_pub_key = key_pair.get_pubkey().unwrap();
 
         let tx_req = ZILTransactionRequest {
-            metadata: Default::default(),
             chain_id: CHAIN_ID,
             nonce: 1,
             gas_price: 2000 / 10u128.pow(6),
@@ -152,16 +137,7 @@ mod tests_tx_encode {
         let tx_bytes = create_proto_tx(&tx_req, &zil_pub_key).encode_proto_bytes();
         assert_eq!(hex::encode(&tx_bytes), SHOULD_BE_BYTES);
 
-        let metadata = ZILTransactionMetadata {
-            hash: None,
-            info: None,
-            icon: tx_req.metadata.icon.clone(),
-            title: tx_req.metadata.title.clone(),
-            token_info: tx_req.metadata.token_info.clone(),
-        };
-
         let tx_receipt = ZILTransactionReceipt {
-            metadata,
             version: version_from_chainid(CHAIN_ID),
             nonce: tx_req.nonce,
             gas_price: tx_req.gas_price.to_be_bytes(),

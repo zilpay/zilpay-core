@@ -138,13 +138,9 @@ impl WalletTransaction for Wallet {
             .request_txns
             .get(req_tx_index)
             .ok_or(WalletErrors::TransactionRequestNotExists(req_tx_index))?;
-
         let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
-        keypair
-            .sign_tx(req_tx.clone())
-            .await
-            .map_err(WalletErrors::FailToSignTransaction)
+        Ok(req_tx.clone().sign(&keypair).await?)
     }
 
     #[inline]
@@ -172,8 +168,8 @@ mod tests_wallet_transactions {
     use proto::{
         address::Address,
         keypair::KeyPair,
-        tx::TransactionRequest,
-        zil_tx::{ZILTransactionMetadata, ZILTransactionRequest},
+        tx::{TransactionMetadata, TransactionRequest},
+        zil_tx::ZILTransactionRequest,
     };
     use rand::Rng;
     use settings::wallet_settings::WalletSettings;
@@ -266,14 +262,14 @@ mod tests_wallet_transactions {
         const NUMBER_TXNS: usize = 10;
         for index in 0..NUMBER_TXNS {
             let token = wallet.ftokens.first().unwrap();
-            let tx_req = TransactionRequest::Zilliqa(ZILTransactionRequest {
-                metadata: ZILTransactionMetadata {
-                    hash: None,
-                    info: None,
-                    title: None,
-                    icon: None,
-                    token_info: Some((U256::ZERO, token.decimals, token.symbol.clone())),
-                },
+            let metadata = TransactionMetadata {
+                hash: None,
+                info: None,
+                title: None,
+                icon: None,
+                token_info: Some((U256::ZERO, token.decimals, token.symbol.clone())),
+            };
+            let zil_tx = ZILTransactionRequest {
                 chain_id: 42,
                 nonce: index as u64,
                 gas_price: 2000 * 10u128.pow(6),
@@ -282,7 +278,8 @@ mod tests_wallet_transactions {
                 amount: 10u128.pow(12),
                 code: Vec::with_capacity(0),
                 data: Vec::with_capacity(0),
-            });
+            };
+            let tx_req = TransactionRequest::Zilliqa((zil_tx, metadata));
 
             wallet.add_request_transaction(tx_req).unwrap();
         }
@@ -302,12 +299,14 @@ mod tests_wallet_transactions {
         assert_eq!(wallet.request_txns.len(), NUMBER_TXNS);
 
         for index in 0..NUMBER_TXNS {
-            let transaction_receipt = wallet
+            let mut transaction_receipt = wallet
                 .sign_transaction(index, 0, &argon_seed, None)
                 .await
                 .unwrap();
 
             assert!(transaction_receipt.verify().unwrap());
+
+            transaction_receipt.get_mut_metadata().hash = Some(String::with_capacity(0));
 
             wallet.history.push(transaction_receipt.try_into().unwrap());
         }

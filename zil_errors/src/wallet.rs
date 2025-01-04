@@ -4,6 +4,7 @@ use crate::{
     keychain::KeyChainErrors,
     keypair::{KeyPairError, SecretKeyError},
     storage::LocalStorageError,
+    tx::TransactionErrors,
 };
 use thiserror::Error;
 
@@ -62,9 +63,6 @@ pub enum WalletErrors {
 
     #[error("Fail to verify sig error: {0}")]
     FailVerifySig(KeyPairError),
-
-    #[error("Failt to sign transaction: {0}")]
-    FailToSignTransaction(KeyPairError),
 
     #[error("Fail to sign mesage: {0}")]
     FailSignMessage(KeyPairError),
@@ -132,10 +130,19 @@ pub enum WalletErrors {
 
     #[error("Proof does not match")]
     ProofNotMatch,
+
+    #[error("Transaction Error: {0}")]
+    TransactionErrors(TransactionErrors),
 }
 
 impl From<LocalStorageError> for WalletErrors {
     fn from(error: LocalStorageError) -> Self {
         WalletErrors::LocalStorageError(error)
+    }
+}
+
+impl From<TransactionErrors> for WalletErrors {
+    fn from(error: TransactionErrors) -> Self {
+        WalletErrors::TransactionErrors(error)
     }
 }

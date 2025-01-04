@@ -25,8 +25,8 @@ pub struct HistoricalTransaction {
     pub confirmed: bool,
     pub timestamp: u64,
     pub fee: u128, // in native token
-    pub icon: String,
-    pub title: String,
+    pub icon: Option<String>,
+    pub title: Option<String>,
     pub nonce: u64,
     pub token_info: Option<TokenInfo>,
 }
@@ -36,8 +36,8 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
 
     fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
         match receipt {
-            TransactionReceipt::Zilliqa(zil_receipt) => Ok(HistoricalTransaction {
-                id: zil_receipt.metadata.hash.unwrap_or_default(),
+            TransactionReceipt::Zilliqa((zil_receipt, metadata)) => Ok(HistoricalTransaction {
+                id: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
                 amount: U256::from(u128::from_be_bytes(zil_receipt.amount)),
                 sender: PubKey::Secp256k1Sha256Zilliqa(zil_receipt.pub_key)
                     .get_addr()?
@@ -48,17 +48,10 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 confirmed: false,
                 timestamp: 0,
                 fee: u128::from_be_bytes(zil_receipt.gas_price) * (zil_receipt.gas_limit as u128),
-                icon: zil_receipt
-                    .metadata
-                    .icon
-                    .unwrap_or_else(|| "zilliqa".to_string()),
-                title: zil_receipt
-                    .metadata
-                    .title
-                    .unwrap_or_else(|| "Zilliqa Transaction".to_string()),
+                icon: metadata.icon,
+                title: metadata.title,
                 nonce: zil_receipt.nonce,
-                token_info: zil_receipt
-                    .metadata
+                token_info: metadata
                     .token_info
                     .map(|(value, decimals, symbol)| TokenInfo {
                         value,
@@ -66,9 +59,9 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                         decimals,
                     }),
             }),
-            TransactionReceipt::Ethereum(tx) => {
+            TransactionReceipt::Ethereum((tx, metadata)) => {
                 Ok(HistoricalTransaction {
-                    id: tx.tx_hash().to_string(),
+                    id: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
                     amount: tx.value(),
                     sender: tx.recover_signer().unwrap_or_default().to_string(),
                     recipient: match tx.kind() {
@@ -82,10 +75,16 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     status: TransactionStatus::Pending, // TODO: detect from eth tx.
                     confirmed: false,
                     timestamp: 0,
-                    icon: String::new(),  // TODO: make wrapper for tx.
-                    title: String::new(), // TODO: make a wrapper for tx evm
+                    icon: metadata.icon,
+                    title: metadata.title,
                     nonce: tx.nonce(),
-                    token_info: None, // TODO: make a wrapper for tx evm
+                    token_info: metadata
+                        .token_info
+                        .map(|(value, decimals, symbol)| TokenInfo {
+                            value,
+                            symbol,
+                            decimals,
+                        }),
                 })
             }
         }

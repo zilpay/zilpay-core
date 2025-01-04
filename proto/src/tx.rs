@@ -5,6 +5,7 @@ use crate::zil_tx::{ZILTransactionReceipt, ZILTransactionRequest};
 use crate::zq1_proto::{create_proto_tx, version_from_chainid};
 use alloy::consensus::TxEnvelope;
 use alloy::network::TransactionBuilder;
+use alloy::primitives::U256;
 use alloy::rpc::types::TransactionRequest as ETHTransactionRequest;
 use crypto::schnorr::sign as zil_sign;
 use k256::SecretKey as K256SecretKey;
@@ -12,22 +13,33 @@ use serde::{Deserialize, Serialize};
 use zil_errors::keypair::KeyPairError;
 use zil_errors::tx::TransactionErrors;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub enum TransactionReceipt {
-    Zilliqa(ZILTransactionReceipt), // ZILLIQA
-    Ethereum(TxEnvelope),           // Ethereum
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct TransactionMetadata {
+    pub hash: Option<String>,
+    pub info: Option<String>,
+    pub icon: Option<String>,
+    pub title: Option<String>,
+    pub token_info: Option<(U256, u8, String)>,
 }
 
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub enum TransactionReceipt {
+    Zilliqa((ZILTransactionReceipt, TransactionMetadata)), // ZILLIQA
+    Ethereum((TxEnvelope, TransactionMetadata)),           // Ethereum
+}
+
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TransactionRequest {
-    Zilliqa(ZILTransactionRequest),  // ZILLIQA
-    Ethereum(ETHTransactionRequest), // Ethereum
+    Zilliqa((ZILTransactionRequest, TransactionMetadata)), // ZILLIQA
+    Ethereum((ETHTransactionRequest, TransactionMetadata)), // Ethereum
 }
 
 impl TransactionReceipt {
     pub fn verify(&self) -> Result<bool, TransactionErrors> {
         match self {
-            Self::Zilliqa(tx) => {
+            Self::Zilliqa((tx, _meta)) => {
                 let pub_key = PubKey::Secp256k1Sha256Zilliqa(tx.pub_key);
                 let sig: Signature = Signature::SchnorrSecp256k1Sha256(tx.signature);
                 let bytes = create_proto_tx(&tx.into(), &pub_key).encode_proto_bytes();
@@ -36,15 +48,31 @@ impl TransactionReceipt {
                 Ok(verify)
             }
 
-            Self::Ethereum(_tx) => unreachable!(),
+            Self::Ethereum((_tx, _meta)) => unreachable!(),
         }
     }
 
     #[inline]
     pub fn hash(&self) -> Option<&str> {
         match self {
-            Self::Zilliqa(tx) => tx.metadata.hash.as_deref(),
-            Self::Ethereum(_tx) => todo!(),
+            Self::Zilliqa((_tx, metadata)) => metadata.hash.as_deref(),
+            Self::Ethereum((_tx, meta)) => meta.hash.as_deref(),
+        }
+    }
+
+    #[inline]
+    pub fn get_mut_metadata(&mut self) -> &mut TransactionMetadata {
+        match self {
+            Self::Zilliqa((_tx, ref mut metadata)) => metadata,
+            Self::Ethereum((_tx, ref mut metadata)) => metadata,
+        }
+    }
+
+    #[inline]
+    pub fn get_metadata(&self) -> &TransactionMetadata {
+        match self {
+            Self::Zilliqa((_tx, ref metadata)) => metadata,
+            Self::Ethereum((_tx, ref metadata)) => metadata,
         }
     }
 }
@@ -52,7 +80,7 @@ impl TransactionReceipt {
 impl TransactionRequest {
     pub async fn sign(self, keypair: &KeyPair) -> Result<TransactionReceipt, TransactionErrors> {
         match self {
-            TransactionRequest::Zilliqa(tx) => {
+            TransactionRequest::Zilliqa((tx, metadata)) => {
                 let pub_key = keypair.get_pubkey()?;
                 let bytes = create_proto_tx(&tx, &pub_key).encode_proto_bytes();
                 let secret_key = K256SecretKey::from_slice(&keypair.get_sk_bytes())
@@ -60,9 +88,7 @@ impl TransactionRequest {
                 let signature = zil_sign(&bytes, &secret_key)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
                 let signature = signature.to_bytes().into();
-
-                Ok(TransactionReceipt::Zilliqa(ZILTransactionReceipt {
-                    metadata: tx.metadata,
+                let tx = ZILTransactionReceipt {
                     signature,
                     to_addr: *tx.to_addr.addr_bytes(),
                     pub_key: pub_key.as_bytes(),
@@ -74,9 +100,11 @@ impl TransactionRequest {
                     code: tx.code,
                     data: tx.data,
                     priority: false,
-                }))
+                };
+
+                Ok(TransactionReceipt::Zilliqa((tx, metadata)))
             }
-            TransactionRequest::Ethereum(tx) => {
+            TransactionRequest::Ethereum((tx, meta)) => {
                 let wallet = keypair.get_local_eth_wallet()?;
                 let tx_envelope = tx
                     .clone()
@@ -84,15 +112,8 @@ impl TransactionRequest {
                     .await
                     .map_err(|e| KeyPairError::FailToSignTx(e.to_string()))?;
 
-                Ok(TransactionReceipt::Ethereum(tx_envelope))
+                Ok(TransactionReceipt::Ethereum((tx_envelope, meta)))
             }
-        }
-    }
-
-    pub fn json(&self) -> Result<String, serde_json::Error> {
-        match self {
-            Self::Zilliqa(tx) => serde_json::to_string(tx),
-            Self::Ethereum(tx) => serde_json::to_string(tx),
         }
     }
 }
@@ -109,8 +130,7 @@ mod tests_tx {
     async fn test_sign_verify_zil_tx() {
         let key_pair = KeyPair::gen_sha256().unwrap();
         let zil_addr = key_pair.get_addr().unwrap();
-        let tx_req = TransactionRequest::Zilliqa(ZILTransactionRequest {
-            metadata: Default::default(),
+        let zil_tx = ZILTransactionRequest {
             chain_id: CHAIN_ID,
             nonce: 1,
             gas_price: 2000 * 10u128.pow(6),
@@ -119,9 +139,8 @@ mod tests_tx {
             amount: 10u128.pow(12),
             code: Vec::with_capacity(0),
             data: Vec::with_capacity(0),
-        });
-
-        dbg!(&tx_req);
+        };
+        let tx_req = TransactionRequest::Zilliqa((zil_tx, Default::default()));
         let tx_res = tx_req.sign(&key_pair).await.unwrap();
         let veify = tx_res.verify();
 

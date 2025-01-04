@@ -98,9 +98,7 @@ mod tests_background_transactions {
             .unwrap()
             .first()
             .unwrap();
-
-        let txn = TransactionRequest::Zilliqa(ZILTransactionRequest {
-            metadata: Default::default(),
+        let zil_tx = ZILTransactionRequest {
             nonce: nonce + 1,
             chain_id: provider.config.chain_id as u16,
             gas_price: 2000000000,
@@ -110,7 +108,8 @@ mod tests_background_transactions {
             amount: 1, // in QA
             code: Vec::with_capacity(0),
             data: Vec::with_capacity(0),
-        });
+        };
+        let txn = TransactionRequest::Zilliqa((zil_tx, Default::default()));
 
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(

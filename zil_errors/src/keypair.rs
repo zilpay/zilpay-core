@@ -2,7 +2,6 @@ use crate::{
     address::AddressError,
     bip32::Bip329Errors,
     crypto::{SchorrError, SignatureError},
-    tx::TransactionErrors,
 };
 use thiserror::Error;
 
