@@ -173,7 +173,7 @@ mod tests_wallet_transactions {
         address::Address,
         keypair::KeyPair,
         tx::TransactionRequest,
-        zil_tx::{ScillaGas, ZILTransactionRequest, ZilAmount},
+        zil_tx::{ZILTransactionMetadata, ZILTransactionRequest},
     };
     use rand::Rng;
     use settings::wallet_settings::WalletSettings;
@@ -267,17 +267,21 @@ mod tests_wallet_transactions {
         for index in 0..NUMBER_TXNS {
             let token = wallet.ftokens.first().unwrap();
             let tx_req = TransactionRequest::Zilliqa(ZILTransactionRequest {
-                title: None,
-                icon: None,
-                token_info: Some((U256::ZERO, token.decimals, token.symbol.clone())),
+                metadata: ZILTransactionMetadata {
+                    hash: None,
+                    info: None,
+                    title: None,
+                    icon: None,
+                    token_info: Some((U256::ZERO, token.decimals, token.symbol.clone())),
+                },
                 chain_id: 42,
                 nonce: index as u64,
-                gas_price: ZilAmount::from_amount(2000),
-                gas_limit: ScillaGas(100000),
+                gas_price: 2000 * 10u128.pow(6),
+                gas_limit: 100000,
                 to_addr: zil_addr.clone(),
-                amount: ZilAmount::from_amount(1),
-                code: String::with_capacity(0),
-                data: String::with_capacity(0),
+                amount: 10u128.pow(12),
+                code: Vec::with_capacity(0),
+                data: Vec::with_capacity(0),
             });
 
             wallet.add_request_transaction(tx_req).unwrap();

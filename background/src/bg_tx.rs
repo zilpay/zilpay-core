@@ -39,11 +39,7 @@ mod tests_background_transactions {
     use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
     use cipher::argon2;
     use crypto::bip49::Bip49DerivationPath;
-    use proto::{
-        address::Address,
-        tx::TransactionRequest,
-        zil_tx::{ScillaGas, ZILTransactionRequest, ZilAmount},
-    };
+    use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
     use rpc::network_config::NetworkConfig;
     use token::ft::FToken;
@@ -107,13 +103,13 @@ mod tests_background_transactions {
             metadata: Default::default(),
             nonce: nonce + 1,
             chain_id: provider.config.chain_id as u16,
-            gas_price: ZilAmount::from_raw(2000000000),
-            gas_limit: ScillaGas(1000),
+            gas_price: 2000000000,
+            gas_limit: 1000,
             to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
                 .unwrap(),
-            amount: ZilAmount::from_raw(1), // in QA
-            code: String::new(),
-            data: String::new(),
+            amount: 1, // in QA
+            code: Vec::with_capacity(0),
+            data: Vec::with_capacity(0),
         });
 
         let device_indicator = device_indicators.join(":");

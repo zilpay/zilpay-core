@@ -120,6 +120,8 @@ mod tests_tx {
             code: Vec::with_capacity(0),
             data: Vec::with_capacity(0),
         });
+
+        dbg!(&tx_req);
         let tx_res = tx_req.sign(&key_pair).await.unwrap();
         let veify = tx_res.verify();
 

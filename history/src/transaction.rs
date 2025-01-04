@@ -3,7 +3,7 @@ use alloy::{
     consensus::Transaction,
     primitives::{TxKind, U256},
 };
-use proto::{address::Address, tx::TransactionReceipt};
+use proto::{address::Address, pubkey::PubKey, tx::TransactionReceipt};
 use serde::{Deserialize, Serialize};
 use zil_errors::tx::TransactionErrors;
 
@@ -38,14 +38,16 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
         match receipt {
             TransactionReceipt::Zilliqa(zil_receipt) => Ok(HistoricalTransaction {
                 id: zil_receipt.metadata.hash.unwrap_or_default(),
-                amount: zil_receipt.amount.get_256(),
-                sender: zil_receipt.pub_key.clone(),
-                recipient: zil_receipt.to_addr,
+                amount: U256::from(u128::from_be_bytes(zil_receipt.amount)),
+                sender: PubKey::Secp256k1Sha256Zilliqa(zil_receipt.pub_key)
+                    .get_addr()?
+                    .auto_format(),
+                recipient: Address::Secp256k1Sha256Zilliqa(zil_receipt.to_addr).auto_format(),
                 teg: None,
                 status: TransactionStatus::Pending,
                 confirmed: false,
                 timestamp: 0,
-                fee: zil_receipt.gas_price.get() * (zil_receipt.gas_limit.0 as u128),
+                fee: u128::from_be_bytes(zil_receipt.gas_price) * (zil_receipt.gas_limit as u128),
                 icon: zil_receipt
                     .metadata
                     .icon
