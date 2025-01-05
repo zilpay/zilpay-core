@@ -48,7 +48,7 @@ impl Address {
         let bytes: [u8; ADDR_LEN] = addr
             .as_slice()
             .try_into()
-            .map_err(|_| AddressError::InvalidETHAddress(String::new()))?;
+            .map_err(|_| AddressError::InvalidETHAddress(addr.to_string()))?;
 
         Ok(Self::Secp256k1Keccak256Ethereum(bytes))
     }

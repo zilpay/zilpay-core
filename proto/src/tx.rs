@@ -1,3 +1,4 @@
+use crate::address::Address;
 use crate::keypair::KeyPair;
 use crate::pubkey::PubKey;
 use crate::signature::Signature;
@@ -5,13 +6,14 @@ use crate::zil_tx::{ZILTransactionReceipt, ZILTransactionRequest};
 use crate::zq1_proto::{create_proto_tx, version_from_chainid};
 use alloy::consensus::TxEnvelope;
 use alloy::network::TransactionBuilder;
-use alloy::primitives::U256;
-use alloy::rpc::types::TransactionRequest as ETHTransactionRequest;
+use alloy::primitives::{TxKind, U256};
 use crypto::schnorr::sign as zil_sign;
 use k256::SecretKey as K256SecretKey;
 use serde::{Deserialize, Serialize};
 use zil_errors::keypair::KeyPairError;
 use zil_errors::tx::TransactionErrors;
+
+pub type ETHTransactionRequest = alloy::rpc::types::eth::request::TransactionRequest;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TransactionMetadata {
@@ -130,6 +132,22 @@ impl TransactionRequest {
                 metadata.signer = Some(keypair.get_pubkey()?);
 
                 Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
+            }
+        }
+    }
+
+    pub fn to(&self) -> Address {
+        match self {
+            TransactionRequest::Zilliqa((tx, _)) => tx.to_addr.clone(),
+            TransactionRequest::Ethereum((tx, _)) => {
+                if let Some(tx_kind) = tx.to {
+                    match tx_kind {
+                        TxKind::Call(addr) => Address::from_eth_address(&addr.to_string()).unwrap(),
+                        TxKind::Create => Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+                    }
+                } else {
+                    Address::Secp256k1Keccak256Ethereum(Address::ZERO)
+                }
             }
         }
     }
