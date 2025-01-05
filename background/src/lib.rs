@@ -36,15 +36,13 @@ pub struct BackgroundSKParams<'a> {
     pub ftokens: Vec<FToken>,
 }
 
-pub struct BackgroundLedgerParams<'a> {
-    pub password: &'a str,
+pub struct BackgroundLedgerParams {
     pub ledger_id: Vec<u8>,
     pub pub_key: PubKey,
     pub wallet_name: String,
     pub account_name: String,
     pub wallet_index: usize,
     pub biometric_type: AuthMethod,
-    pub device_indicators: &'a [String],
     pub wallet_settings: WalletSettings,
     pub provider_index: usize,
     pub ftokens: Vec<FToken>,
