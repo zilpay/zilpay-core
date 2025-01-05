@@ -2,6 +2,7 @@ pub use background;
 pub use config;
 pub use crypto;
 pub use proto;
+pub use rpc;
 pub use settings;
 pub use token;
 pub use wallet;
