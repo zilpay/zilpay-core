@@ -1,6 +1,6 @@
 use crate::status::TransactionStatus;
 use alloy::{
-    consensus::Transaction,
+    consensus::{Transaction, TxType},
     primitives::{TxKind, U256},
 };
 use proto::{address::Address, pubkey::PubKey, tx::TransactionReceipt};
@@ -22,7 +22,7 @@ pub struct HistoricalTransaction {
     pub recipient: String,
     pub teg: Option<String>,
     pub status: TransactionStatus,
-    pub confirmed: bool,
+    pub confirmed: Option<u128>,
     pub timestamp: u64,
     pub fee: u128, // in native token
     pub icon: Option<String>,
@@ -45,7 +45,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 recipient: Address::Secp256k1Sha256Zilliqa(zil_receipt.to_addr).auto_format(),
                 teg: None,
                 status: TransactionStatus::Pending,
-                confirmed: false,
+                confirmed: None,
                 timestamp: 0,
                 fee: u128::from_be_bytes(zil_receipt.gas_price) * (zil_receipt.gas_limit as u128),
                 icon: metadata.icon,
@@ -60,6 +60,17 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     }),
             }),
             TransactionReceipt::Ethereum((tx, metadata)) => {
+                let effective_gas_price = match tx.tx_type() {
+                    TxType::Legacy | TxType::Eip2930 => tx.gas_price().unwrap_or_default(),
+                    TxType::Eip1559 | TxType::Eip4844 | TxType::Eip7702 => {
+                        let max_fee = tx.max_fee_per_gas();
+                        let priority_fee = tx.max_priority_fee_per_gas().unwrap_or_default();
+                        max_fee.min(priority_fee)
+                    }
+                };
+
+                let fee = effective_gas_price * tx.gas_limit() as u128;
+
                 Ok(HistoricalTransaction {
                     id: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
                     amount: tx.value(),
@@ -70,10 +81,10 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                             Address::Secp256k1Keccak256Ethereum(Address::ZERO).auto_format()
                         }
                     },
-                    fee: 0, // TODO: calc gas fee for all EIPs.
+                    fee,
                     teg: None,
-                    status: TransactionStatus::Pending, // TODO: detect from eth tx.
-                    confirmed: false,
+                    status: TransactionStatus::Pending,
+                    confirmed: None,
                     timestamp: 0,
                     icon: metadata.icon,
                     title: metadata.title,
