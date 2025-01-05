@@ -39,7 +39,7 @@ settings = { path = "./settings" }
 config = { path = "./config" }
 token = { path = "./token" }
 proto = { path = "./proto" }
-rpc = { path = "../rpc" }
+rpc = { path = "./rpc" }
 
 [workspace.dependencies]
 async-trait = "0.1.83"
