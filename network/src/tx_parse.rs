@@ -1,7 +1,10 @@
 use crate::Result;
+use alloy::{eips::eip2718::Encodable2718, hex};
 use proto::tx::TransactionReceipt;
 use rpc::{
-    methods::ZilMethods, network_config::NetworkConfig, provider::RpcProvider,
+    methods::{EvmMethods, ZilMethods},
+    network_config::NetworkConfig,
+    provider::RpcProvider,
     zil_interfaces::ResultRes,
 };
 use serde_json::{json, Value};
@@ -12,8 +15,15 @@ pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
         TransactionReceipt::Zilliqa((zil, _)) => {
             RpcProvider::<NetworkConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
         }
-        TransactionReceipt::Ethereum((_eth, _)) => {
-            todo!()
+        TransactionReceipt::Ethereum((eth, _)) => {
+            let mut encoded = Vec::with_capacity(eth.eip2718_encoded_length());
+            eth.encode_2718(&mut encoded);
+            let hex_tx = format!("0x{}", hex::encode(encoded));
+
+            RpcProvider::<NetworkConfig>::build_payload(
+                json!([hex_tx]),
+                EvmMethods::SendRawTransaction,
+            )
         }
     }
 }
@@ -54,8 +64,19 @@ pub fn process_tx_response(response: &ResultRes<Value>, tx: &mut TransactionRece
                 Err(NetworkErrors::RPCError("Invlid response".to_string()))
             }
         }
-        TransactionReceipt::Ethereum(_eth) => {
-            todo!()
+        TransactionReceipt::Ethereum((_eth, metadata)) => {
+            if let Some(result) = &response.result {
+                let hash = result
+                    .as_str()
+                    .map(|v| v.trim_start_matches("0x").to_string())
+                    .ok_or(TransactionErrors::InvalidTxHash)?;
+
+                metadata.hash = Some(hash);
+
+                Ok(())
+            } else {
+                Err(NetworkErrors::RPCError("Invlid response".to_string()))
+            }
         }
     }
 }
