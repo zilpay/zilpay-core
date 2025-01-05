@@ -263,6 +263,7 @@ mod tests_wallet_transactions {
         for index in 0..NUMBER_TXNS {
             let token = wallet.ftokens.first().unwrap();
             let metadata = TransactionMetadata {
+                provider_index: 0,
                 signer: None,
                 hash: None,
                 info: None,

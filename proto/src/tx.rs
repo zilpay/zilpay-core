@@ -15,6 +15,7 @@ use zil_errors::tx::TransactionErrors;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TransactionMetadata {
+    pub provider_index: usize,
     pub hash: Option<String>,
     pub info: Option<String>,
     pub icon: Option<String>,
