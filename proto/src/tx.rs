@@ -277,7 +277,7 @@ mod tests_tx {
         }]);
 
         let auth = Authorization {
-            chain_id: 1,
+            chain_id: U256::from(1),
             address: eth_addr.to_alloy_addr(),
             nonce: 1u64,
         };
