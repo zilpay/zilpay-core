@@ -37,6 +37,7 @@ crypto = { path = "./crypto" }
 wallet = { path = "./wallet" }
 settings = { path = "./settings" }
 config = { path = "./config" }
+token = { path = "./token" }
 proto = { path = "./proto" }
 
 [workspace.dependencies]

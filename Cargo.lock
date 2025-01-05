@@ -4778,6 +4778,7 @@ dependencies = [
  "mockito",
  "proto",
  "settings",
+ "token",
  "wallet",
  "zil_errors",
  "zilpay",
