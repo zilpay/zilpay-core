@@ -14,3 +14,4 @@ pub type U256 = alloy::primitives::U256;
 pub type AlloyAddress = alloy::primitives::Address;
 pub type AlloyAccessListItem = alloy::rpc::types::AccessListItem;
 pub type AlloyAccessList = alloy::rpc::types::AccessList;
+pub type AlloyTxKind = alloy::primitives::TxKind;
