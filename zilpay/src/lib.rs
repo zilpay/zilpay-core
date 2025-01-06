@@ -1,6 +1,7 @@
 pub use background;
 pub use config;
 pub use crypto;
+pub use history;
 pub use proto;
 pub use rpc;
 pub use settings;

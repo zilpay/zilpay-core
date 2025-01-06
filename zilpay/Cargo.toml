@@ -13,3 +13,4 @@ token = { path = "../token" }
 settings = { path = "../settings" }
 config = { path = "../config" }
 proto = { path = "../proto" }
+history = { path = "../history" }
