@@ -1,4 +1,5 @@
 pub use background;
+pub use cipher;
 pub use config;
 pub use crypto;
 pub use history;

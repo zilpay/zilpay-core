@@ -4764,6 +4764,7 @@ name = "zilpay"
 version = "0.1.0"
 dependencies = [
  "background",
+ "cipher 0.1.0",
  "config",
  "crypto",
  "history",
@@ -4780,6 +4781,7 @@ name = "zilpay_core"
 version = "0.1.0"
 dependencies = [
  "background",
+ "cipher 0.1.0",
  "config",
  "crypto",
  "history",

@@ -7,6 +7,7 @@ edition = "2021"
 zil_errors = { path = "../zil_errors" }
 background = { path = "../background" }
 crypto = { path = "../crypto" }
+cipher = { path = "../cipher" }
 rpc = { path = "../rpc" }
 wallet = { path = "../wallet" }
 token = { path = "../token" }

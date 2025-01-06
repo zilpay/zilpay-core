@@ -41,6 +41,7 @@ token = { path = "./token" }
 proto = { path = "./proto" }
 history = { path = "./history" }
 rpc = { path = "./rpc" }
+cipher = { path = "./cipher" }
 
 [workspace.dependencies]
 async-trait = "0.1.83"
