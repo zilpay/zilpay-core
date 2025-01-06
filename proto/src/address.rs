@@ -9,7 +9,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
-use config::address::ADDR_LEN;
+use config::address::{ADDR_LEN, HRP};
 use zil_errors::address::AddressError;
 
 type Result<T> = std::result::Result<T, AddressError>;
@@ -35,6 +35,29 @@ impl Address {
             Address::Secp256k1Sha256Zilliqa(_) => self.get_bech32().unwrap_or_default(),
             Address::Secp256k1Keccak256Ethereum(_) => self.to_eth_checksummed().unwrap_or_default(),
         }
+    }
+
+    pub fn from_str_hex(addr: &str) -> Result<Self> {
+        if addr.starts_with(HRP) {
+            return Self::from_zil_bech32(addr);
+        }
+
+        if addr.starts_with("0x") {
+            return Self::from_eth_address(addr);
+        }
+
+        let bytes = hex::decode(addr).map_err(|_| AddressError::InvalidHex)?;
+        if bytes.len() != ADDR_LEN {
+            return Err(AddressError::InvalidLength);
+        }
+
+        let eth_addr = format!("0x{}", addr);
+        if let Ok(addr) = Self::from_eth_address(&eth_addr) {
+            return Ok(addr);
+        }
+
+        let zil_addr = format!("0x{}", addr);
+        Self::from_zil_base16(&zil_addr)
     }
 
     pub fn from_zil_bech32(addr: &str) -> Result<Self> {
