@@ -15,3 +15,4 @@ pub type AlloyAddress = alloy::primitives::Address;
 pub type AlloyAccessListItem = alloy::rpc::types::AccessListItem;
 pub type AlloyAccessList = alloy::rpc::types::AccessList;
 pub type AlloyTxKind = alloy::primitives::TxKind;
+pub type AlloyBytes = alloy::primitives::Bytes;
