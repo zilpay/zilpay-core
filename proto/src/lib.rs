@@ -11,3 +11,4 @@ pub mod zil_tx;
 pub mod zq1_proto;
 
 pub type U256 = alloy::primitives::U256;
+pub type AlloyAddress = alloy::primitives::Address;
