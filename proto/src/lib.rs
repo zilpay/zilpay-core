@@ -9,3 +9,5 @@ pub mod tx;
 pub mod zil_address;
 pub mod zil_tx;
 pub mod zq1_proto;
+
+pub type U256 = alloy::primitives::U256;
