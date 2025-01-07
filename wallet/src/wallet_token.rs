@@ -1,42 +1,36 @@
-use crate::{Result, Wallet, WalletAddrType};
+use crate::{wallet_storage::StorageOperations, Result, Wallet, WalletAddrType};
 use config::storage::FTOKENS_DB_KEY;
-use token::ft::FToken;
 use errors::wallet::WalletErrors;
+use token::ft::FToken;
 
 /// Token handling operations
 pub trait TokenManagement {
     type Error;
 
-    /// Registers a new fungible token in the wallet
-    fn add_ftoken(&mut self, token: FToken) -> std::result::Result<(), Self::Error>;
-
-    /// Removes a fungible token from the wallet
-    fn remove_ftoken(&mut self, index: usize) -> std::result::Result<(), Self::Error>;
-
+    fn add_ftoken(&self, token: FToken) -> std::result::Result<(), Self::Error>;
+    fn remove_ftoken(&self, index: usize) -> std::result::Result<(), Self::Error>;
     fn get_token_db_key(key: &WalletAddrType) -> Vec<u8>;
 }
 
 impl TokenManagement for Wallet {
     type Error = WalletErrors;
 
-    fn add_ftoken(&mut self, token: FToken) -> Result<()> {
-        if self.ftokens.iter().any(|t| t.addr == token.addr) {
+    fn add_ftoken(&self, token: FToken) -> Result<()> {
+        let mut ftokens = self.get_ftokens()?;
+
+        if ftokens.iter().any(|t| t.addr == token.addr) {
             return Err(WalletErrors::TokenAlreadyExists(token.addr.auto_format()));
         }
 
-        self.ftokens.push(token);
-
-        let bytes = bincode::serialize(&self.ftokens)
-            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
-
-        self.storage.set(FTOKENS_DB_KEY, &bytes)?;
-        self.storage.flush()?;
+        ftokens.push(token);
+        self.save_ftokens(&ftokens)?;
 
         Ok(())
     }
 
-    fn remove_ftoken(&mut self, index: usize) -> Result<()> {
-        let mb_token = self.ftokens.get(index);
+    fn remove_ftoken(&self, index: usize) -> Result<()> {
+        let mut ftokens = self.get_ftokens()?;
+        let mb_token = ftokens.get(index);
 
         if mb_token.is_none() {
             return Err(WalletErrors::TokenNotExists(index));
@@ -48,14 +42,8 @@ impl TokenManagement for Wallet {
             }
         }
 
-        self.ftokens.remove(index);
-
-        let ftokens: Vec<&FToken> = self.ftokens.iter().filter(|token| !token.default).collect();
-        let bytes = bincode::serialize(&ftokens)
-            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
-
-        self.storage.set(FTOKENS_DB_KEY, &bytes)?;
-        self.storage.flush()?;
+        ftokens.remove(index);
+        self.save_ftokens(&ftokens)?;
 
         Ok(())
     }
@@ -76,12 +64,12 @@ mod tests_wallet_tokens {
         address::ADDR_LEN,
         cipher::{PROOF_SALT, PROOF_SIZE},
     };
+    use errors::wallet::WalletErrors;
     use proto::{address::Address, keypair::KeyPair};
     use rand::Rng;
     use settings::wallet_settings::WalletSettings;
     use storage::LocalStorage;
     use token::ft::FToken;
-    use errors::wallet::WalletErrors;
 
     use crate::{
         wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
@@ -140,7 +128,7 @@ mod tests_wallet_tokens {
         };
 
         // Create wallet
-        let mut wallet = Wallet::from_sk(
+        let wallet = Wallet::from_sk(
             SecretKeyParams {
                 sk,
                 proof,
@@ -152,11 +140,12 @@ mod tests_wallet_tokens {
             vec![gen_bsc_token()],
         )
         .unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
 
         // Verify initial state - should only have default ETH token
-        assert_eq!(wallet.ftokens.len(), 1);
-        assert!(wallet.ftokens[0].default);
-        assert_eq!(wallet.ftokens[0].symbol, "BSC");
+        assert_eq!(ftokens.len(), 1);
+        assert!(ftokens[0].default);
+        assert_eq!(ftokens[0].symbol, "BSC");
 
         // Create custom token
         let custom_token = FToken {
@@ -173,38 +162,35 @@ mod tests_wallet_tokens {
 
         // Add custom token
         wallet.add_ftoken(custom_token.clone()).unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
 
         // Verify token was added
-        assert_eq!(wallet.ftokens.len(), 2);
-        assert_eq!(wallet.ftokens[1].symbol, "TST");
-        assert!(!wallet.ftokens[1].default);
+        assert_eq!(ftokens.len(), 2);
+        assert_eq!(ftokens[1].symbol, "TST");
+        assert!(!ftokens[1].default);
 
         // Save wallet state
-        let wallet_addr = wallet.data.wallet_address;
-        wallet.save_to_storage().unwrap();
+        let wallet_addr = wallet.wallet_address;
 
         // Create new wallet instance from storage
-        let mut loaded_wallet =
-            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-
-        // Before unlock - should have empty token list
-        assert_eq!(loaded_wallet.ftokens.len(), 0);
+        let loaded_wallet = Wallet::init_wallet(wallet_addr, Arc::clone(&storage)).unwrap();
+        let ftokens = loaded_wallet.get_ftokens().unwrap();
 
         // Unlock wallet - should restore tokens
         loaded_wallet.unlock(&argon_seed).unwrap();
 
         // Verify tokens were restored correctly
-        assert_eq!(loaded_wallet.ftokens.len(), 2);
+        assert_eq!(ftokens.len(), 2);
 
         // Verify default token
-        assert!(loaded_wallet.ftokens[0].default);
-        assert_eq!(loaded_wallet.ftokens[0].symbol, "BSC");
+        assert!(ftokens[0].default);
+        assert_eq!(ftokens[0].symbol, "BSC");
 
         // Verify custom token
-        assert!(!loaded_wallet.ftokens[1].default);
-        assert_eq!(loaded_wallet.ftokens[1].symbol, "TST");
-        assert_eq!(loaded_wallet.ftokens[1].addr, custom_token.addr);
-        assert_eq!(loaded_wallet.ftokens[1].decimals, custom_token.decimals);
+        assert!(!ftokens[1].default);
+        assert_eq!(ftokens[1].symbol, "TST");
+        assert_eq!(ftokens[1].addr, custom_token.addr);
+        assert_eq!(ftokens[1].decimals, custom_token.decimals);
     }
 
     #[test]
@@ -280,38 +266,40 @@ mod tests_wallet_tokens {
             tokens.clone(),
         )
         .unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
 
         // Verify all tokens were added (1 default + 3 custom)
-        assert_eq!(wallet.ftokens.len(), 4);
+        assert_eq!(ftokens.len(), 4);
 
         // Save and reload wallet
-        let wallet_addr = wallet.data.wallet_address;
+        let wallet_addr = wallet.wallet_address;
 
-        wallet.save_to_storage().unwrap();
         drop(wallet);
 
-        let mut loaded_wallet =
-            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        let loaded_wallet = Wallet::init_wallet(wallet_addr, Arc::clone(&storage)).unwrap();
+
         loaded_wallet.unlock(&argon_seed).unwrap();
 
+        let ftokens = loaded_wallet.get_ftokens().unwrap();
+
         // Verify all tokens were restored
-        assert_eq!(loaded_wallet.ftokens.len(), 4);
+        assert_eq!(ftokens.len(), 4);
 
         // Verify default token
-        assert!(loaded_wallet.ftokens[0].default);
-        assert_eq!(loaded_wallet.ftokens[0].symbol, "BSC");
+        assert!(ftokens[0].default);
+        assert_eq!(ftokens[0].symbol, "BSC");
 
         // Verify custom tokens
         for (i, token) in tokens.iter().enumerate() {
-            assert_eq!(loaded_wallet.ftokens[i].name, token.name);
-            assert_eq!(loaded_wallet.ftokens[i].symbol, token.symbol);
-            assert_eq!(loaded_wallet.ftokens[i].decimals, token.decimals);
-            assert_eq!(loaded_wallet.ftokens[i].addr, token.addr);
+            assert_eq!(ftokens[i].name, token.name);
+            assert_eq!(ftokens[i].symbol, token.symbol);
+            assert_eq!(ftokens[i].decimals, token.decimals);
+            assert_eq!(ftokens[i].addr, token.addr);
 
             if i == 0 {
-                assert!(loaded_wallet.ftokens[i].default);
+                assert!(ftokens[i].default);
             } else {
-                assert!(!loaded_wallet.ftokens[i].default);
+                assert!(!ftokens[i].default);
             }
         }
     }
@@ -339,7 +327,7 @@ mod tests_wallet_tokens {
             storage: Arc::clone(&storage),
         };
 
-        let mut wallet = Wallet::from_sk(
+        let wallet = Wallet::from_sk(
             SecretKeyParams {
                 sk,
                 proof,
@@ -395,53 +383,55 @@ mod tests_wallet_tokens {
             wallet.add_ftoken(token.clone()).unwrap();
         }
 
+        let ftokens = wallet.get_ftokens().unwrap();
+
         // Initial state should have 4 tokens (1 default + 3 custom)
-        assert_eq!(wallet.ftokens.len(), 4);
-        assert!(wallet.ftokens[0].default); // Default ETH token
-        assert_eq!(wallet.ftokens[1].symbol, "TK1");
-        assert_eq!(wallet.ftokens[2].symbol, "TK2");
-        assert_eq!(wallet.ftokens[3].symbol, "TK3");
+        assert_eq!(ftokens.len(), tokens.len());
+        assert!(ftokens[0].default); // Default ETH token
+        assert_eq!(ftokens[1].symbol, "TK1");
+        assert_eq!(ftokens[2].symbol, "TK2");
+        assert_eq!(ftokens[3].symbol, "TK3");
 
         // Try to remove a custom token (Token 2)
         wallet.remove_ftoken(2).unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
 
         // Should now have 3 tokens (1 default + 2 custom)
-        assert_eq!(wallet.ftokens.len(), 3);
-        assert!(wallet.ftokens[0].default); // Default ETH token should still be first
-        assert_eq!(wallet.ftokens[1].symbol, "TK1");
-        assert_eq!(wallet.ftokens[2].symbol, "TK3"); // TK2 should be gone
+        assert_eq!(ftokens.len(), 3);
+        assert!(ftokens[0].default); // Default ETH token should still be first
+        assert_eq!(ftokens[1].symbol, "TK1");
+        assert_eq!(ftokens[2].symbol, "TK3"); // TK2 should be gone
 
         // Save and reload wallet to verify persistence
-        let wallet_addr = wallet.data.wallet_address;
-        wallet.save_to_storage().unwrap();
+        let wallet_addr = wallet.wallet_address;
 
-        let mut loaded_wallet =
-            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        let loaded_wallet = Wallet::init_wallet(wallet_addr, Arc::clone(&storage)).unwrap();
+
         loaded_wallet.unlock(&argon_seed).unwrap();
 
-        // Verify state after reload
-        assert_eq!(loaded_wallet.ftokens.len(), 3);
-        assert!(loaded_wallet.ftokens[0].default);
-        assert_eq!(loaded_wallet.ftokens[1].symbol, "TK1");
-        assert_eq!(loaded_wallet.ftokens[2].symbol, "TK3");
+        let ftokens = loaded_wallet.get_ftokens().unwrap();
+
+        assert_eq!(ftokens.len(), 3);
+        assert!(ftokens[0].default);
+        assert_eq!(ftokens[1].symbol, "TK1");
+        assert_eq!(ftokens[2].symbol, "TK3");
 
         // Try to remove default token (should still work but token will be restored on reload)
         assert_eq!(
-            wallet.remove_ftoken(0),
+            loaded_wallet.remove_ftoken(0),
             Err(WalletErrors::DefaultTokenRemove(0))
         );
 
-        // Save and reload again
-        wallet.save_to_storage().unwrap();
-        let mut loaded_wallet2 =
-            Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
+        let loaded_wallet2 = Wallet::init_wallet(wallet_addr, Arc::clone(&storage)).unwrap();
         loaded_wallet2.unlock(&argon_seed).unwrap();
 
+        let ftokens = loaded_wallet.get_ftokens().unwrap();
+
         // Default token should be restored
-        assert_eq!(loaded_wallet2.ftokens.len(), 3);
-        assert!(loaded_wallet2.ftokens[0].default);
-        assert_eq!(loaded_wallet2.ftokens[0].symbol, "BSC");
-        assert_eq!(loaded_wallet2.ftokens[1].symbol, "TK1");
-        assert_eq!(loaded_wallet2.ftokens[2].symbol, "TK3");
+        assert_eq!(ftokens.len(), 3);
+        assert!(ftokens[0].default);
+        assert_eq!(ftokens[0].symbol, "BSC");
+        assert_eq!(ftokens[1].symbol, "TK1");
+        assert_eq!(ftokens[2].symbol, "TK3");
     }
 }

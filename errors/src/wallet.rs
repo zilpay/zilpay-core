@@ -6,6 +6,7 @@ use crate::{
     storage::LocalStorageError,
     tx::TransactionErrors,
 };
+use bincode::ErrorKind;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -42,18 +43,6 @@ pub enum WalletErrors {
 
     #[error("Try encrypt secret key error")]
     TryEncryptSecretKeyError,
-
-    #[error("fail create keychain: {0}")]
-    KeyChainError(KeyChainErrors),
-
-    #[error("Decrypt keychain error: {0}")]
-    DecryptKeyChainErrors(#[from] KeyChainErrors),
-
-    #[error("Encrypt keychain error: {0}")]
-    EncryptKeyChainErrors(KeyChainErrors),
-
-    #[error("Keychain make cipher proof error: {0}")]
-    KeyChainMakeCipherProofError(KeyChainErrors),
 
     #[error("Keychain failed to get proof")]
     KeyChainFailToGetProof,
@@ -110,9 +99,6 @@ pub enum WalletErrors {
     #[error("Fail to serialize wallet data error: {0}")]
     FailToSerializeWalletData(String),
 
-    #[error("Failed to serialize token data error: {0}")]
-    TokenSerdeError(String),
-
     #[error("LocalStorage error: {0}")]
     LocalStorageError(LocalStorageError),
 
@@ -133,11 +119,29 @@ pub enum WalletErrors {
 
     #[error("Transaction Error: {0}")]
     TransactionErrors(TransactionErrors),
+
+    #[error("Bincode Error: {0}")]
+    BincodeError(String),
+
+    #[error("KeyChain Error: {0}")]
+    KeyChainError(KeyChainErrors),
 }
 
 impl From<LocalStorageError> for WalletErrors {
     fn from(error: LocalStorageError) -> Self {
         WalletErrors::LocalStorageError(error)
+    }
+}
+
+impl From<KeyChainErrors> for WalletErrors {
+    fn from(error: KeyChainErrors) -> Self {
+        WalletErrors::KeyChainError(error)
+    }
+}
+
+impl From<Box<ErrorKind>> for WalletErrors {
+    fn from(error: Box<ErrorKind>) -> Self {
+        WalletErrors::BincodeError(error.to_string())
     }
 }
 

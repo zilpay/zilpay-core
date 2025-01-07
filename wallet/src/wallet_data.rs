@@ -1,7 +1,7 @@
-use crate::{account::Account, wallet_types::WalletTypes, WalletAddrType};
+use crate::{account::Account, wallet_types::WalletTypes};
+use errors::wallet::WalletErrors;
 use serde::{Deserialize, Serialize};
 use settings::wallet_settings::WalletSettings;
-use errors::wallet::WalletErrors;
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum AuthMethod {
@@ -43,7 +43,6 @@ pub struct WalletData {
     pub wallet_type: WalletTypes,
     pub settings: WalletSettings,
     pub wallet_name: String,
-    pub wallet_address: WalletAddrType,
     pub accounts: Vec<Account>,
     pub selected_account: usize,
     pub biometric_type: AuthMethod,

@@ -1,7 +1,8 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
-use proto::tx::TransactionReceipt;
 use errors::background::BackgroundError;
+use proto::tx::TransactionReceipt;
+use wallet::wallet_storage::StorageOperations;
 
 use crate::Background;
 
@@ -26,7 +27,8 @@ impl TransactionsManagement for Background {
         txns: Vec<TransactionReceipt>,
     ) -> Result<Vec<TransactionReceipt>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
-        let provider = self.get_provider(wallet.data.provider_index)?;
+        let data = wallet.get_wallet_data()?;
+        let provider = self.get_provider(data.provider_index)?;
         let txns = provider.broadcast_signed_transactions(txns).await?;
 
         Ok(txns)
@@ -117,7 +119,8 @@ mod tests_background_transactions {
         .unwrap();
         let provider = bg.get_provider(0).unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
-        let addresses: Vec<&Address> = wallet.data.accounts.iter().map(|v| &v.addr).collect();
+        let data = wallet.get_wallet_data().unwrap();
+        let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
         let nonce = *bg
             .get_provider(0)
             .unwrap()
@@ -143,7 +146,7 @@ mod tests_background_transactions {
         let argon_seed = argon2::derive_key(
             PASSWORD.as_bytes(),
             &device_indicator,
-            &wallet.data.settings.argon_params.into_config(),
+            &data.settings.argon_params.into_config(),
         )
         .unwrap();
 
@@ -184,7 +187,8 @@ mod tests_background_transactions {
 
         let provider = bg.get_provider(0).unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
-        let addresses: Vec<&Address> = wallet.data.accounts.iter().map(|v| &v.addr).collect();
+        let data = wallet.get_wallet_data().unwrap();
+        let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
         let nonce = *bg
             .get_provider(0)
             .unwrap()
@@ -211,7 +215,7 @@ mod tests_background_transactions {
         let argon_seed = argon2::derive_key(
             PASSWORD.as_bytes(),
             &device_indicator,
-            &wallet.data.settings.argon_params.into_config(),
+            &data.settings.argon_params.into_config(),
         )
         .unwrap();
 

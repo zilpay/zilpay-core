@@ -1,9 +1,9 @@
 use alloy::primitives::U256;
 use config::address::ADDR_LEN;
+use errors::wallet::WalletErrors;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use errors::wallet::WalletErrors;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FToken {
@@ -20,15 +20,13 @@ pub struct FToken {
 
 impl FToken {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self, WalletErrors> {
-        let decoded: Self = bincode::deserialize(encoded)
-            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+        let decoded: Self = bincode::deserialize(encoded)?;
 
         Ok(decoded)
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, WalletErrors> {
-        let encoded: Vec<u8> =
-            bincode::serialize(&self).map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+        let encoded: Vec<u8> = bincode::serialize(&self)?;
 
         Ok(encoded)
     }

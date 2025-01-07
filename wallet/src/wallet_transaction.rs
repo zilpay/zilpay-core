@@ -1,9 +1,9 @@
-use crate::{Result, WalletAddrType};
+use crate::{wallet_storage::StorageOperations, Result, WalletAddrType};
 use async_trait::async_trait;
 use cipher::argon2::Argon2Seed;
 use config::storage::{HISTORY_TXNS_DB_KEY, REQ_TXNS_DB_KEY};
-use proto::tx::{TransactionReceipt, TransactionRequest};
 use errors::wallet::WalletErrors;
+use proto::tx::{TransactionReceipt, TransactionRequest};
 
 use crate::{wallet_crypto::WalletCrypto, Wallet};
 
@@ -21,19 +21,13 @@ pub trait WalletTransaction {
         passphrase: Option<&str>,
     ) -> std::result::Result<TransactionReceipt, Self::Error>;
 
-    fn update_request_transactions(&self) -> std::result::Result<(), Self::Error>;
-    fn update_history(&self) -> std::result::Result<(), Self::Error>;
-
     fn add_request_transaction(
-        &mut self,
+        &self,
         tx: TransactionRequest,
     ) -> std::result::Result<(), Self::Error>;
-    fn remove_request_transaction(&mut self, index: usize) -> std::result::Result<(), Self::Error>;
-    fn clear_request_transaction(&mut self) -> std::result::Result<(), Self::Error>;
+    fn remove_request_transaction(&self, index: usize) -> std::result::Result<(), Self::Error>;
+    fn clear_request_transaction(&self) -> std::result::Result<(), Self::Error>;
     fn clear_history(&mut self) -> std::result::Result<(), Self::Error>;
-
-    fn sync_request_transactions(&mut self) -> std::result::Result<(), Self::Error>;
-    fn sync_history_transactions(&mut self) -> std::result::Result<(), Self::Error>;
 
     fn get_db_history_key(key: &WalletAddrType) -> Vec<u8>;
     fn get_db_request_transactions_key(key: &WalletAddrType) -> Vec<u8>;
@@ -43,86 +37,51 @@ pub trait WalletTransaction {
 impl WalletTransaction for Wallet {
     type Error = WalletErrors;
 
-    #[inline]
-    fn update_request_transactions(&self) -> Result<()> {
-        let key = Self::get_db_request_transactions_key(&self.data.wallet_address);
-        let bytes = bincode::serialize(&self.request_txns)
-            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
+    fn add_request_transaction(&self, tx: TransactionRequest) -> Result<()> {
+        let mut request_txns = self.get_request_txns()?;
 
-        self.storage.set(&key, &bytes)?;
-        self.storage.flush()?;
+        request_txns.push(tx);
+        self.save_request_txns(&request_txns)?;
 
         Ok(())
     }
 
-    #[inline]
-    fn update_history(&self) -> Result<()> {
-        let key = Self::get_db_history_key(&self.data.wallet_address);
-        let bytes = bincode::serialize(&self.history)
-            .map_err(|e| WalletErrors::TokenSerdeError(e.to_string()))?;
-
-        self.storage.set(&key, &bytes)?;
-        self.storage.flush()?;
-
-        Ok(())
-    }
-
-    fn add_request_transaction(&mut self, tx: TransactionRequest) -> Result<()> {
-        self.request_txns.push(tx);
-        self.update_request_transactions()?;
-
-        Ok(())
-    }
-
-    fn remove_request_transaction(&mut self, index: usize) -> Result<()> {
-        let mb_token = self.request_txns.get(index);
+    fn remove_request_transaction(&self, index: usize) -> Result<()> {
+        let mut request_txns = self.get_request_txns()?;
+        let mb_token = request_txns.get(index);
 
         if mb_token.is_none() {
             return Err(WalletErrors::TxNotExists(index));
         }
 
-        self.request_txns.remove(index);
-        self.update_request_transactions()?;
+        request_txns.remove(index);
+        self.save_request_txns(&request_txns)?;
 
         Ok(())
     }
 
-    fn clear_request_transaction(&mut self) -> Result<()> {
-        if self.request_txns.is_empty() {
+    fn clear_request_transaction(&self) -> Result<()> {
+        let mut request_txns = self.get_request_txns()?;
+
+        if request_txns.is_empty() {
             return Ok(());
         }
 
-        self.request_txns = Vec::with_capacity(0);
-        self.update_request_transactions()?;
+        request_txns = Vec::with_capacity(0);
+        self.save_request_txns(&request_txns)?;
 
         Ok(())
     }
 
     fn clear_history(&mut self) -> Result<()> {
-        if self.history.is_empty() {
+        let mut history = self.get_history()?;
+
+        if history.is_empty() {
             return Ok(());
         }
 
-        self.history = Vec::with_capacity(0);
-        self.update_history()?;
-
-        Ok(())
-    }
-
-    fn sync_request_transactions(&mut self) -> Result<()> {
-        let key = Self::get_db_request_transactions_key(&self.data.wallet_address);
-        let request_transactions = self.storage.get(&key)?;
-
-        self.request_txns = bincode::deserialize(&request_transactions).unwrap_or_default();
-
-        Ok(())
-    }
-
-    fn sync_history_transactions(&mut self) -> Result<()> {
-        let key = Self::get_db_history_key(&self.data.wallet_address);
-        let history = self.storage.get(&key)?;
-
-        self.history = bincode::deserialize(&history).unwrap_or_default();
+        history = Vec::with_capacity(0);
+        self.save_history(&history)?;
 
         Ok(())
     }
@@ -134,8 +93,8 @@ impl WalletTransaction for Wallet {
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
     ) -> Result<TransactionReceipt> {
-        let req_tx = self
-            .request_txns
+        let request_txns = self.get_request_txns()?;
+        let req_tx = request_txns
             .get(req_tx_index)
             .ok_or(WalletErrors::TransactionRequestNotExists(req_tx_index))?;
         let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
@@ -252,16 +211,15 @@ mod tests_wallet_transactions {
     #[tokio::test]
     async fn test_add_req_txns() {
         let (storage, _dir) = setup_test_storage();
-        let (mut wallet, argon_seed) = setup_wallet(Arc::clone(&storage));
-
-        wallet.save_to_storage().unwrap();
+        let (wallet, argon_seed) = setup_wallet(Arc::clone(&storage));
 
         let key_pair = KeyPair::gen_sha256().unwrap();
         let zil_addr = key_pair.get_addr().unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
 
         const NUMBER_TXNS: usize = 10;
         for index in 0..NUMBER_TXNS {
-            let token = wallet.ftokens.first().unwrap();
+            let token = ftokens.first().unwrap();
             let metadata = TransactionMetadata {
                 provider_index: 0,
                 signer: None,
@@ -286,19 +244,20 @@ mod tests_wallet_transactions {
             wallet.add_request_transaction(tx_req).unwrap();
         }
 
-        assert_eq!(wallet.request_txns.len(), NUMBER_TXNS);
+        let request_txns = wallet.get_request_txns().unwrap();
 
-        let wallet_addr = wallet.data.wallet_address;
+        assert_eq!(request_txns.len(), NUMBER_TXNS);
 
-        drop(wallet);
+        let wallet_addr = wallet.wallet_address;
+        let wallet = Wallet::init_wallet(wallet_addr, Arc::clone(&storage)).unwrap();
 
-        let mut wallet = Wallet::load_from_storage(&wallet_addr, Arc::clone(&storage)).unwrap();
-
-        assert_eq!(wallet.request_txns.len(), 0);
+        let request_txns = wallet.get_request_txns().unwrap();
 
         wallet.unlock(&argon_seed).unwrap();
 
-        assert_eq!(wallet.request_txns.len(), NUMBER_TXNS);
+        assert_eq!(request_txns.len(), NUMBER_TXNS);
+
+        let mut history = wallet.get_history().unwrap();
 
         for index in 0..NUMBER_TXNS {
             let mut transaction_receipt = wallet
@@ -309,23 +268,23 @@ mod tests_wallet_transactions {
             assert!(transaction_receipt.verify().unwrap());
 
             transaction_receipt.get_mut_metadata().hash = Some(String::with_capacity(0));
-            wallet.history.push(transaction_receipt.try_into().unwrap());
+            history.push(transaction_receipt.try_into().unwrap());
         }
 
-        wallet.update_history().unwrap();
+        wallet.save_history(&history).unwrap();
         wallet.clear_request_transaction().unwrap();
 
-        assert_eq!(wallet.request_txns.len(), 0);
-        assert_eq!(wallet.history.len(), NUMBER_TXNS);
+        let history = wallet.get_history().unwrap();
+        let request_txns = wallet.get_request_txns().unwrap();
+
+        assert_eq!(request_txns.len(), 0);
+        assert_eq!(history.len(), NUMBER_TXNS);
 
         drop(wallet);
 
-        let mut wallet = Wallet::load_from_storage(&wallet_addr, storage).unwrap();
+        let wallet = Wallet::init_wallet(wallet_addr, storage).unwrap();
+        let history = wallet.get_history().unwrap();
 
-        assert_eq!(wallet.history.len(), 0);
-
-        wallet.unlock(&argon_seed).unwrap();
-
-        assert_eq!(wallet.history.len(), NUMBER_TXNS);
+        assert_eq!(history.len(), NUMBER_TXNS);
     }
 }

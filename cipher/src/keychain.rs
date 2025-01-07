@@ -155,9 +155,9 @@ mod tests {
 
     use super::{CipherOrders, KeyChain};
     use config::cipher::PROOF_SIZE;
+    use errors::{cipher::AesGCMErrors, keychain::KeyChainErrors};
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
-    use errors::{cipher::AesGCMErrors, keychain::KeyChainErrors};
 
     #[test]
     fn test_init_keychain() {

@@ -1,14 +1,14 @@
 pub use bip39::{Language, Mnemonic};
 
 use crypto::bip49::Bip49DerivationPath;
+use errors::background::BackgroundError;
 use network::provider::NetworkProvider;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
 use settings::{common_settings::CommonSettings, wallet_settings::WalletSettings};
 use std::sync::Arc;
 use storage::LocalStorage;
 use token::ft::FToken;
-use wallet::{wallet_data::AuthMethod, Wallet, WalletAddrType};
-use errors::background::BackgroundError;
+use wallet::{wallet_data::AuthMethod, Wallet};
 
 pub type Result<T> = std::result::Result<T, BackgroundError>;
 
@@ -51,7 +51,6 @@ pub struct BackgroundLedgerParams {
 pub struct Background {
     storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
-    pub indicators: Vec<WalletAddrType>,
     pub settings: CommonSettings,
     pub providers: Vec<NetworkProvider>,
 }

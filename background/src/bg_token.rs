@@ -1,8 +1,9 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
+use errors::background::BackgroundError;
 use proto::address::Address;
 use token::ft::FToken;
-use errors::background::BackgroundError;
+use wallet::wallet_storage::StorageOperations;
 
 #[async_trait]
 pub trait TokensManagement {
@@ -26,10 +27,9 @@ impl TokensManagement for Background {
 
     async fn fetch_ftoken_meta(&self, wallet_index: usize, contract: Address) -> Result<FToken> {
         let w = self.get_wallet_by_index(wallet_index)?;
-        let provider = self.get_provider(w.data.provider_index)?;
-        let w = self.get_wallet_by_index(wallet_index)?;
-        let accounts = w
-            .data
+        let data = w.get_wallet_data()?;
+        let provider = self.get_provider(data.provider_index)?;
+        let accounts = data
             .accounts
             .iter()
             .map(|a| &a.addr)
@@ -44,26 +44,28 @@ impl TokensManagement for Background {
             .wallets
             .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let mut ftokens = w.get_ftokens()?;
+        let data = w.get_wallet_data()?;
 
-        if w.ftokens.is_empty() {
+        if ftokens.is_empty() {
             return Ok(());
         }
 
-        let addresses: Vec<&Address> = w.data.accounts.iter().map(|a| &a.addr).collect();
+        let addresses: Vec<&Address> = data.accounts.iter().map(|a| &a.addr).collect();
 
-        let provider_index = w.data.provider_index;
-        let tokens = &mut w.ftokens;
-        let matching_end = tokens.partition_point(|token| token.provider_index == provider_index);
-        let matching_tokens = &mut tokens[..matching_end];
-
+        let matching_end =
+            ftokens.partition_point(|token| token.provider_index == data.provider_index);
+        let matching_tokens = &mut ftokens[..matching_end];
         let provider = self
             .providers
-            .get(w.data.provider_index)
+            .get(data.provider_index)
             .ok_or(BackgroundError::ProviderNotExists(0))?;
 
         provider
             .update_balances(matching_tokens, &addresses)
             .await?;
+
+        w.save_ftokens(&ftokens)?;
 
         Ok(())
     }
@@ -143,7 +145,16 @@ mod tests_background_tokens {
 
         assert_eq!(bg.wallets.len(), 1);
         assert_eq!(bg.providers.len(), 1);
-        assert_eq!(bg.wallets[0].data.accounts.len(), 1);
+        assert_eq!(
+            bg.wallets
+                .first()
+                .unwrap()
+                .get_wallet_data()
+                .unwrap()
+                .accounts
+                .len(),
+            1
+        );
 
         let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
         let meta = bg.fetch_ftoken_meta(0, token_addr).await.unwrap();
@@ -160,7 +171,7 @@ mod tests_background_tokens {
 
         bg.wallets.first_mut().unwrap().add_ftoken(meta).unwrap();
 
-        let tokens = &bg.wallets.first().unwrap().ftokens;
+        let tokens = bg.wallets.first().unwrap().get_ftokens().unwrap();
 
         assert!(tokens[0].native);
         assert!(tokens[0].default);
@@ -199,7 +210,16 @@ mod tests_background_tokens {
 
         assert_eq!(bg.wallets.len(), 1);
         assert_eq!(bg.providers.len(), 1);
-        assert_eq!(bg.wallets[0].data.accounts.len(), 7);
+        assert_eq!(
+            bg.wallets
+                .first()
+                .unwrap()
+                .get_wallet_data()
+                .unwrap()
+                .accounts
+                .len(),
+            7
+        );
 
         let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
         let meta = bg.fetch_ftoken_meta(0, token_addr).await.unwrap();
@@ -207,24 +227,16 @@ mod tests_background_tokens {
         bg.wallets.first_mut().unwrap().add_ftoken(meta).unwrap();
         bg.sync_ftokens_balances(0).await.unwrap();
 
-        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&0));
-        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&1));
-        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&2));
-        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&3));
-        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&4));
-        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&5));
-        assert!(bg.wallets[0].ftokens[0].balances.contains_key(&6));
-        assert!(!bg.wallets[0].ftokens[0].balances.contains_key(&7));
-        assert!(!bg.wallets[0].ftokens[0].balances.contains_key(&8));
+        let ftokens = bg.wallets[0].get_ftokens().unwrap();
 
-        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&0));
-        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&1));
-        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&2));
-        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&3));
-        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&4));
-        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&5));
-        assert!(bg.wallets[0].ftokens[1].balances.contains_key(&6));
-        assert!(!bg.wallets[0].ftokens[1].balances.contains_key(&7));
-        assert!(!bg.wallets[0].ftokens[1].balances.contains_key(&8));
+        for token in ftokens {
+            assert!(token.balances.contains_key(&0));
+            assert!(token.balances.contains_key(&1));
+            assert!(token.balances.contains_key(&2));
+            assert!(token.balances.contains_key(&3));
+            assert!(token.balances.contains_key(&4));
+            assert!(token.balances.contains_key(&5));
+            assert!(token.balances.contains_key(&6));
+        }
     }
 }

@@ -1,8 +1,8 @@
-use crate::{wallet_types::WalletTypes, Result, Wallet};
+use crate::{wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet};
 use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
-use proto::{keypair::KeyPair, secret_key::SecretKey, signature::Signature};
 use errors::wallet::WalletErrors;
+use proto::{keypair::KeyPair, secret_key::SecretKey, signature::Signature};
 
 /// Cryptographic operations for wallet security
 pub trait WalletCrypto {
@@ -41,20 +41,18 @@ impl WalletCrypto for Wallet {
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
     ) -> Result<KeyPair> {
-        let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
+        let keychain = KeyChain::from_seed(seed_bytes)?;
+        let data = self.get_wallet_data()?;
 
-        match self.data.wallet_type {
+        match data.wallet_type {
             WalletTypes::SecretKey => {
-                let account = self
-                    .data
+                let account = data
                     .accounts
                     .get(account_index)
                     .ok_or(WalletErrors::FailToGetAccount(account_index))?;
                 let storage_key = usize::to_le_bytes(account.account_type.value());
                 let cipher_sk = self.storage.get(&storage_key)?;
-                let sk_bytes = keychain
-                    .decrypt(cipher_sk, &self.data.settings.cipher_orders)
-                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
+                let sk_bytes = keychain.decrypt(cipher_sk, &data.settings.cipher_orders)?;
                 let sk = SecretKey::from_bytes(sk_bytes.into())
                     .map_err(WalletErrors::FailParseSKBytes)?;
                 let keypair =
@@ -67,8 +65,7 @@ impl WalletCrypto for Wallet {
                     return Err(WalletErrors::PassphraseIsNone);
                 }
 
-                let account = self
-                    .data
+                let account = data
                     .accounts
                     .get(account_index)
                     .ok_or(WalletErrors::FailToGetAccount(account_index))?;
@@ -85,15 +82,15 @@ impl WalletCrypto for Wallet {
     }
 
     fn reveal_mnemonic(&self, seed_bytes: &Argon2Seed) -> Result<Mnemonic> {
-        match self.data.wallet_type {
+        let data = self.get_wallet_data()?;
+
+        match data.wallet_type {
             WalletTypes::SecretPhrase((key, _)) => {
                 let keychain =
                     KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
                 let storage_key = usize::to_le_bytes(key);
                 let cipher_entropy = self.storage.get(&storage_key)?;
-                let entropy = keychain
-                    .decrypt(cipher_entropy, &self.data.settings.cipher_orders)
-                    .map_err(WalletErrors::DecryptKeyChainErrors)?;
+                let entropy = keychain.decrypt(cipher_entropy, &data.settings.cipher_orders)?;
                 // TODO: add more Languages
                 let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
                     .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;

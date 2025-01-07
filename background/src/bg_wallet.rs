@@ -8,6 +8,7 @@ use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::SHA512_SIZE,
 };
+use errors::background::BackgroundError;
 use session::{decrypt_session, encrypt_session};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
@@ -16,7 +17,6 @@ use wallet::{
     wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
     SecretKeyParams, Wallet, WalletConfig,
 };
-use errors::background::BackgroundError;
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
 
@@ -86,11 +86,12 @@ impl WalletManagement for Background {
             .wallets
             .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let data = wallet.get_wallet_data().unwrap();
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             password.as_bytes(),
             &device_indicator,
-            &wallet.data.settings.argon_params.into_config(),
+            &data.settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonPasswordHashError)?;
 
@@ -109,15 +110,15 @@ impl WalletManagement for Background {
             .wallets
             .get_mut(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
-
+        let data = wallet.get_wallet_data().unwrap();
         let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.data.wallet_address, device_indicators);
+            create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
 
         let seed_bytes = decrypt_session(
             &wallet_device_indicators,
             session_cipher,
-            &wallet.data.settings.cipher_orders,
-            &wallet.data.settings.argon_params.into_config(),
+            &data.settings.cipher_orders,
+            &data.settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::DecryptSessionError)?;
 
@@ -166,26 +167,26 @@ impl WalletManagement for Background {
             wallet_config,
             params.ftokens,
         )?;
+        let data = wallet.get_wallet_data().unwrap();
         let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.data.wallet_address, params.device_indicators);
+            create_wallet_device_indicator(&wallet.wallet_address, params.device_indicators);
 
-        let session = if wallet.data.biometric_type == AuthMethod::None {
+        let session = if data.biometric_type == AuthMethod::None {
             Vec::with_capacity(0)
         } else {
             encrypt_session(
                 &wallet_device_indicators,
                 &argon_seed,
-                &wallet.data.settings.cipher_orders,
-                &wallet.data.settings.argon_params.into_config(),
+                &data.settings.cipher_orders,
+                &data.settings.argon_params.into_config(),
             )
             .map_err(BackgroundError::CreateSessionError)?
         };
+        let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
-        wallet.save_to_storage()?;
-
-        self.indicators.push(wallet.data.wallet_address);
+        indicators.push(wallet.wallet_address);
         self.wallets.push(wallet);
-        self.save_indicators()?;
+        self.save_indicators(indicators)?;
         self.storage.flush()?;
 
         Ok(session)
@@ -201,9 +202,13 @@ impl WalletManagement for Background {
             return Err(BackgroundError::ProviderNotExists(params.provider_index));
         }
 
-        if self.wallets.iter().any(
-            |w| matches!(&w.data.wallet_type, WalletTypes::Ledger(id) if id == &params.ledger_id),
-        ) {
+        if self.wallets.iter().any(|w| {
+            if let Ok(data) = w.get_wallet_data() {
+                matches!(data.wallet_type, WalletTypes::Ledger(id) if id == params.ledger_id)
+            } else {
+                false
+            }
+        }) {
             return Err(BackgroundError::LedgerIdExists(
                 String::from_utf8(params.ledger_id).unwrap_or_default(),
             ));
@@ -244,23 +249,21 @@ impl WalletManagement for Background {
             wallet_config,
             params.ftokens,
         )?;
-
+        let data = wallet.get_wallet_data()?;
         let device_indicators =
-            create_wallet_device_indicator(&wallet.data.wallet_address, device_indicators);
+            create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
         let session = encrypt_session(
             &device_indicators,
             &argon_seed,
             options,
-            &wallet.data.settings.argon_params.into_config(),
+            &data.settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::CreateSessionError)?;
+        let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
-        wallet.save_to_storage()?;
-
-        self.indicators.push(wallet.data.wallet_address);
+        indicators.push(wallet.wallet_address);
         self.wallets.push(wallet);
-        self.save_indicators()?;
-        self.storage.flush()?;
+        self.save_indicators(indicators)?;
 
         Ok(session)
     }
@@ -303,26 +306,26 @@ impl WalletManagement for Background {
             wallet_config,
             params.ftokens,
         )?;
+        let data = wallet.get_wallet_data()?;
 
         let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.data.wallet_address, params.device_indicators);
-        let session = if wallet.data.biometric_type == AuthMethod::None {
+            create_wallet_device_indicator(&wallet.wallet_address, params.device_indicators);
+        let session = if data.biometric_type == AuthMethod::None {
             Vec::new()
         } else {
             encrypt_session(
                 &wallet_device_indicators,
                 &argon_seed,
                 options,
-                &wallet.data.settings.argon_params.into_config(),
+                &data.settings.argon_params.into_config(),
             )
             .map_err(BackgroundError::CreateSessionError)?
         };
+        let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
-        wallet.save_to_storage()?;
-        self.indicators.push(wallet.data.wallet_address);
+        indicators.push(wallet.wallet_address);
         self.wallets.push(wallet);
-        self.save_indicators()?;
-        self.storage.flush()?;
+        self.save_indicators(indicators)?;
 
         Ok(session)
     }

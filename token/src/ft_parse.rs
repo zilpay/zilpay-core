@@ -6,6 +6,7 @@ use alloy::{
     primitives::U256,
 };
 use config::abi::ERC20_ABI;
+use errors::{network::NetworkErrors, token::TokenError};
 use proto::address::Address;
 use rpc::{
     methods::{EvmMethods, ZilMethods},
@@ -14,7 +15,6 @@ use rpc::{
     zil_interfaces::{GetTokenInitItem, ResultRes},
 };
 use serde_json::{json, Value};
-use errors::{network::NetworkErrors, token::TokenError};
 
 trait ResponseValidator {
     fn validate(&self) -> Result<&Self>;

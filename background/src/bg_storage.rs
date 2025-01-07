@@ -5,11 +5,11 @@ use config::{
     sha::SHA256_SIZE,
     storage::{GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY},
 };
+use errors::background::BackgroundError;
 use network::{common::Provider, provider::NetworkProvider};
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use wallet::{wallet_storage::StorageOperations, Wallet};
-use errors::background::BackgroundError;
 
 use crate::Background;
 
@@ -17,17 +17,15 @@ use crate::Background;
 pub trait StorageManagement {
     type Error;
 
-    /// Initializes storage from a given path
     fn from_storage_path(path: &str) -> std::result::Result<Self, Self::Error>
     where
         Self: Sized;
-
     fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings;
-
-    /// Saves current indicators state
-    fn save_indicators(&self) -> std::result::Result<(), Self::Error>;
-
-    /// Saves current settings to storage
+    fn get_indicators(storage: Arc<LocalStorage>) -> Vec<[u8; SHA256_SIZE]>;
+    fn save_indicators(
+        &self,
+        indicators: Vec<[u8; SHA256_SIZE]>,
+    ) -> std::result::Result<(), Self::Error>;
     fn save_settings(&self) -> std::result::Result<(), Self::Error>;
 }
 
@@ -44,11 +42,8 @@ impl StorageManagement for Background {
         bincode::deserialize(&bytes).unwrap_or(CommonSettings::default())
     }
 
-    fn from_storage_path(path: &str) -> Result<Self> {
-        let storage = LocalStorage::from(path)?;
-        let storage = Arc::new(storage);
-        // TODO: check old storage from first ZilPay version if indicators is empty
-        let indicators = storage
+    fn get_indicators(storage: Arc<LocalStorage>) -> Vec<[u8; SHA256_SIZE]> {
+        storage
             .get(INDICATORS_DB_KEY)
             .unwrap_or_default()
             .chunks(SHA256_SIZE)
@@ -57,14 +52,21 @@ impl StorageManagement for Background {
                 array.copy_from_slice(chunk);
                 array
             })
-            .collect::<Vec<[u8; SHA256_SIZE]>>();
+            .collect::<Vec<[u8; SHA256_SIZE]>>()
+    }
+
+    fn from_storage_path(path: &str) -> Result<Self> {
+        let storage = LocalStorage::from(path)?;
+        let storage = Arc::new(storage);
+        // TODO: check old storage from first ZilPay version if indicators is empty
+        let indicators = Self::get_indicators(Arc::clone(&storage));
         let mut wallets = Vec::with_capacity(indicators.len());
         let settings = Self::load_global_settings(Arc::clone(&storage));
         let providers: Vec<NetworkProvider> =
             NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         for addr in &indicators {
-            let w = Wallet::load_from_storage(addr, Arc::clone(&storage))?;
+            let w = Wallet::init_wallet(*addr, Arc::clone(&storage))?;
 
             wallets.push(w);
         }
@@ -73,7 +75,6 @@ impl StorageManagement for Background {
             providers,
             storage,
             wallets,
-            indicators,
             settings,
         })
     }
@@ -88,14 +89,14 @@ impl StorageManagement for Background {
         Ok(())
     }
 
-    fn save_indicators(&self) -> Result<()> {
-        let bytes: Vec<u8> = self
-            .indicators
+    fn save_indicators(&self, indicators: Vec<[u8; SHA256_SIZE]>) -> Result<()> {
+        let bytes: Vec<u8> = indicators
             .iter()
             .flat_map(|array| array.iter().cloned())
             .collect();
 
         self.storage.set(INDICATORS_DB_KEY, &bytes)?;
+        self.storage.flush()?;
 
         Ok(())
     }
@@ -148,12 +149,12 @@ mod tests_background {
 
         assert_eq!(bg.wallets.len(), 1);
 
-        let wallet_address = bg.wallets[0].data.wallet_address;
+        let wallet_address = bg.wallets.first().unwrap().wallet_address;
 
         drop(bg);
 
         let bg = Background::from_storage_path(&dir).unwrap();
 
-        assert_eq!(bg.wallets[0].data.wallet_address, wallet_address);
+        assert_eq!(bg.wallets.first().unwrap().wallet_address, wallet_address);
     }
 }
