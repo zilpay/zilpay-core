@@ -6,7 +6,7 @@ use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
 use crypto::bip49::Bip49DerivationPath;
 use proto::pubkey::PubKey;
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 /// Account management functionalities
 pub trait AccountManagement {
@@ -134,7 +134,7 @@ mod tests {
     use rand::Rng;
     use std::sync::Arc;
     use storage::LocalStorage;
-    use zil_errors::wallet::WalletErrors;
+    use errors::wallet::WalletErrors;
 
     const MNEMONIC_STR: &str =
         "green process gate doctor slide whip priority shrug diamond crumble average help";

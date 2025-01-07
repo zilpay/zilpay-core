@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 background = { path = "../background" }
 crypto = { path = "../crypto" }
 cipher = { path = "../cipher" }

@@ -6,7 +6,7 @@ use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
 use serde::{Deserialize, Serialize};
-use zil_errors::account::AccountErrors;
+use errors::account::AccountErrors;
 
 type Result<T> = std::result::Result<T, AccountErrors>;
 

@@ -1,6 +1,6 @@
 use argon2::{self, Config, Variant, Version};
 use config::argon::{APP_ID, KEY_SIZE, WALLET_SALT};
-use zil_errors::cipher::CipherErrors;
+use errors::cipher::CipherErrors;
 
 type Result<T> = std::result::Result<T, CipherErrors>;
 pub type Argon2Seed = [u8; KEY_SIZE];

@@ -4,7 +4,7 @@ use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA512_SIZE};
 use crypto::schnorr;
 use k256::ecdsa::Signature as SchnorrSignature;
 use k256::PublicKey as K256PublicKey;
-use zil_errors::crypto::SignatureError;
+use errors::crypto::SignatureError;
 
 use crate::pubkey::PubKey;
 

@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fmt::Debug;
-use zil_errors::rpc::RpcError;
+use errors::rpc::RpcError;
 
 use crate::common::{JsonRPC, NetworkConfigTrait, Result, RpcMethod};
 

@@ -3,7 +3,7 @@ use config::address::ADDR_LEN;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FToken {

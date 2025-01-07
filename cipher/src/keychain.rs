@@ -7,11 +7,11 @@ use crate::{
 use argon2::Config as Argon2Config;
 use config::argon::KEY_SIZE;
 use config::sha::SHA256_SIZE;
+use errors::keychain::KeyChainErrors;
 use ntrulp::{
     key::{priv_key::PrivKey, pub_key::PubKey},
     params::params::{PUBLICKEYS_BYTES, SECRETKEYS_BYTES},
 };
-use zil_errors::keychain::KeyChainErrors;
 
 pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
 
@@ -157,7 +157,7 @@ mod tests {
     use config::cipher::PROOF_SIZE;
     use rand::{RngCore, SeedableRng};
     use rand_chacha::ChaCha20Rng;
-    use zil_errors::{cipher::AesGCMErrors, keychain::KeyChainErrors};
+    use errors::{cipher::AesGCMErrors, keychain::KeyChainErrors};
 
     #[test]
     fn test_init_keychain() {

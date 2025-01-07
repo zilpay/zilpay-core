@@ -24,14 +24,14 @@ members = [
   "settings",
   "storage",
   "wallet",
-  "zil_errors",
+  "errors",
   "rpc",
   "zilpay", "token", "history",
 ]
 
 [dependencies]
 zilpay = { path = "./zilpay" }
-zil_errors = { path = "./zil_errors" }
+errors = { path = "./errors" }
 background = { path = "./background" }
 crypto = { path = "./crypto" }
 wallet = { path = "./wallet" }

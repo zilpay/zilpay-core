@@ -2,7 +2,7 @@ use alloy::primitives::U256;
 use bech32::{Bech32, Hrp};
 use config::address::{ADDR_LEN, HRP};
 use sha2::{Digest, Sha256};
-use zil_errors::address::AddressError;
+use errors::address::AddressError;
 
 type Result<T> = std::result::Result<T, AddressError>;
 

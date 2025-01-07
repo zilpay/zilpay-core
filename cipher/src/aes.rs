@@ -2,7 +2,7 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
-use zil_errors::cipher::AesGCMErrors;
+use errors::cipher::AesGCMErrors;
 
 type Result<T> = std::result::Result<T, AesGCMErrors>;
 pub type AESKey = [u8; AES_GCM_KEY_SIZE];

@@ -1,4 +1,4 @@
-use zil_errors::token::TokenError;
+use errors::token::TokenError;
 
 pub type Result<T> = std::result::Result<T, TokenError>;
 

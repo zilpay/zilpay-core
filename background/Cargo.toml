@@ -15,7 +15,7 @@ bip39.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 wallet = { path = "../wallet" }
 rpc = { path = "../rpc" }
 token = { path = "../token" }

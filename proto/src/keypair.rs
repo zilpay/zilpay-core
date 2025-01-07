@@ -18,7 +18,7 @@ use crate::{
 use super::secret_key::SecretKey;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use zil_errors::keypair::KeyPairError;
+use errors::keypair::KeyPairError;
 
 // One byte for enum type
 pub const KEYPAIR_BYTES_SIZE: usize = PUB_KEY_SIZE + SECRET_KEY_SIZE + 1;

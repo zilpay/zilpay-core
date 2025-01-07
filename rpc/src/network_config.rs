@@ -1,5 +1,5 @@
+use errors::rpc::RpcError;
 use serde::{Deserialize, Serialize};
-use zil_errors::rpc::RpcError;
 
 use crate::common::{NetworkConfigTrait, Result};
 

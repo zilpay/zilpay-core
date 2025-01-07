@@ -3,8 +3,8 @@ pub mod data_warp;
 use config::storage::STORAGE_VERSION;
 use data_warp::DataWarp;
 use directories::ProjectDirs;
+use errors::storage::LocalStorageError;
 use sled::{Db, IVec};
-use zil_errors::storage::LocalStorageError;
 
 type Result<T> = std::result::Result<T, LocalStorageError>;
 

@@ -7,6 +7,6 @@ edition = "2021"
 serde_json.workspace = true
 serde.workspace = true
 rust-argon2.workspace = true
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 config = { path = "../config" }
 cipher = { path = "../cipher" }

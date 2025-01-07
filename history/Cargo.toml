@@ -8,5 +8,5 @@ serde.workspace = true
 alloy.workspace = true
 
 proto = { path = "../proto" }
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 

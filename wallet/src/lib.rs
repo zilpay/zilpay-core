@@ -16,7 +16,7 @@ use settings::wallet_settings::WalletSettings;
 use storage::LocalStorage;
 use token::ft::FToken;
 use wallet_data::{AuthMethod, WalletData};
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 pub type WalletAddrType = [u8; SHA256_SIZE];
 pub type Result<T> = std::result::Result<T, WalletErrors>;

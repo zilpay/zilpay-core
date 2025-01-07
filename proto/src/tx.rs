@@ -10,8 +10,8 @@ use alloy::primitives::{TxKind, U256};
 use crypto::schnorr::sign as zil_sign;
 use k256::SecretKey as K256SecretKey;
 use serde::{Deserialize, Serialize};
-use zil_errors::keypair::KeyPairError;
-use zil_errors::tx::TransactionErrors;
+use errors::keypair::KeyPairError;
+use errors::tx::TransactionErrors;
 
 pub type ETHTransactionRequest = alloy::rpc::types::eth::request::TransactionRequest;
 

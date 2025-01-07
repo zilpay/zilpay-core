@@ -2,7 +2,7 @@ use crate::Result;
 use async_trait::async_trait;
 use config::storage::CURRENCIES_RATES_DB_KEY;
 use serde_json::{json, Value};
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::Background;
 

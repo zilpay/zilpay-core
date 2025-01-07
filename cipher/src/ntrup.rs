@@ -1,4 +1,5 @@
 use config::sha::{SHA256_SIZE, SHA512_SIZE};
+use errors::ntru::NTRULPCipherErrors;
 use ntrulp::{
     key::{priv_key::PrivKey, pub_key::PubKey},
     ntru,
@@ -8,7 +9,6 @@ use ntrulp::{
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::sync::Arc;
-use zil_errors::ntru::NTRULPCipherErrors;
 
 type Result<T> = std::result::Result<T, NTRULPCipherErrors>;
 

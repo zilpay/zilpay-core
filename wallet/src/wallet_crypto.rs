@@ -2,7 +2,7 @@ use crate::{wallet_types::WalletTypes, Result, Wallet};
 use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
 use proto::{keypair::KeyPair, secret_key::SecretKey, signature::Signature};
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 /// Cryptographic operations for wallet security
 pub trait WalletCrypto {

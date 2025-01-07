@@ -1,4 +1,4 @@
-use zil_errors::network::NetworkErrors;
+use errors::network::NetworkErrors;
 
 pub type Result<T> = std::result::Result<T, NetworkErrors>;
 

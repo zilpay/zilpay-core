@@ -10,7 +10,7 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
 use config::address::{ADDR_LEN, HRP};
-use zil_errors::address::AddressError;
+use errors::address::AddressError;
 
 type Result<T> = std::result::Result<T, AddressError>;
 

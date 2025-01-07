@@ -1,7 +1,7 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
 use proto::tx::TransactionReceipt;
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::Background;
 

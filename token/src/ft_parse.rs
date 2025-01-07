@@ -14,7 +14,7 @@ use rpc::{
     zil_interfaces::{GetTokenInitItem, ResultRes},
 };
 use serde_json::{json, Value};
-use zil_errors::{network::NetworkErrors, token::TokenError};
+use errors::{network::NetworkErrors, token::TokenError};
 
 trait ResponseValidator {
     fn validate(&self) -> Result<&Self>;

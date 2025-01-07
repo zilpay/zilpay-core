@@ -6,7 +6,7 @@ use k256::{
 };
 use sha2::Sha512;
 use std::str::FromStr;
-use zil_errors::bip32::Bip329Errors;
+use errors::bip32::Bip329Errors;
 
 const HARDENED_BIT: u32 = 1 << 31;
 const BITCOIN_SEED: &[u8] = b"Bitcoin seed";

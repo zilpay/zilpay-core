@@ -1,8 +1,8 @@
 use async_trait::async_trait;
+use errors::rpc::RpcError;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fmt::Debug;
-use zil_errors::rpc::RpcError;
 
 pub type Result<T> = std::result::Result<T, RpcError>;
 

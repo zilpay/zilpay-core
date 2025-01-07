@@ -7,6 +7,6 @@ edition = "2021"
 rand_chacha.workspace = true
 rand.workspace = true
 rust-argon2.workspace = true
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 cipher = { path = "../cipher" }
 config = { path = "../config" }

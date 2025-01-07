@@ -9,7 +9,7 @@ use network::{common::Provider, provider::NetworkProvider};
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use wallet::{wallet_storage::StorageOperations, Wallet};
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::Background;
 

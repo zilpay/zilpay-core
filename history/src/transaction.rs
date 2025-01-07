@@ -3,9 +3,9 @@ use alloy::{
     consensus::{Transaction, TxType},
     primitives::{TxKind, U256},
 };
+use errors::tx::TransactionErrors;
 use proto::{address::Address, pubkey::PubKey, tx::TransactionReceipt};
 use serde::{Deserialize, Serialize};
-use zil_errors::tx::TransactionErrors;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TokenInfo {

@@ -16,7 +16,7 @@ tokio.workspace = true
 async-trait.workspace = true
 
 network = { path = "../network" }
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 config = { path = "../config" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }

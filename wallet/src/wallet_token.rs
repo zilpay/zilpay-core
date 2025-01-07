@@ -1,7 +1,7 @@
 use crate::{Result, Wallet, WalletAddrType};
 use config::storage::FTOKENS_DB_KEY;
 use token::ft::FToken;
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 /// Token handling operations
 pub trait TokenManagement {
@@ -81,7 +81,7 @@ mod tests_wallet_tokens {
     use settings::wallet_settings::WalletSettings;
     use storage::LocalStorage;
     use token::ft::FToken;
-    use zil_errors::wallet::WalletErrors;
+    use errors::wallet::WalletErrors;
 
     use crate::{
         wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,

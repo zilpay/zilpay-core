@@ -1,7 +1,7 @@
 use crate::Result;
 
 use config::storage::CONNECTIONS_LIST_DB_KEY;
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::{connections::Connection, Background};
 
@@ -85,7 +85,7 @@ impl ConnectionManagement for Background {
 #[cfg(test)]
 mod tests_background {
     use rand::Rng;
-    use zil_errors::background::BackgroundError;
+    use errors::background::BackgroundError;
 
     use crate::bg_connections::ConnectionManagement;
     use crate::bg_storage::StorageManagement;

@@ -5,7 +5,7 @@ use settings::{
     notifications::{NotificationState, Notifications},
     theme::Theme,
 };
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::Background;
 

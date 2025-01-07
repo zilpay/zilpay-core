@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use zil_errors::token::TokenError;
+use errors::token::TokenError;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ResultRes<T> {

@@ -2,7 +2,7 @@ use crate::{Background, Result};
 use network::{common::Provider, provider::NetworkProvider};
 use rpc::network_config::NetworkConfig;
 use std::sync::Arc;
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 pub trait ProvidersManagement {
     type Error;

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use storage::LocalStorage;
 use token::ft::FToken;
 use wallet::{wallet_data::AuthMethod, Wallet, WalletAddrType};
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 pub type Result<T> = std::result::Result<T, BackgroundError>;
 

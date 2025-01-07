@@ -7,6 +7,10 @@ use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
+use errors::crypto::SignatureError;
+use errors::network::NetworkErrors;
+use errors::token::TokenError;
+use errors::tx::TransactionErrors;
 use proto::address::Address;
 use proto::tx::TransactionReceipt;
 use rpc::common::JsonRPC;
@@ -20,9 +24,6 @@ use token::ft_parse::{
     build_token_requests, process_eth_balance_response, process_eth_metadata_response,
     process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
 };
-use zil_errors::network::NetworkErrors;
-use zil_errors::token::TokenError;
-use zil_errors::tx::TransactionErrors;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NetworkProvider {
@@ -81,7 +82,7 @@ impl NetworkProvider {
         for tx in &txns {
             if !tx.verify()? {
                 return Err(TransactionErrors::SignatureError(
-                    zil_errors::crypto::SignatureError::InvalidLength,
+                    SignatureError::InvalidLength,
                 ))?;
             }
 

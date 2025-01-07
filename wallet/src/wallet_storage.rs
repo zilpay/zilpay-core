@@ -8,7 +8,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
 use storage::LocalStorage;
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 /// Storage operations for secure data persistence
 pub trait StorageOperations {

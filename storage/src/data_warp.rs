@@ -1,6 +1,6 @@
+use errors::storage::LocalStorageError;
 use std::borrow::Cow;
 use std::mem::size_of;
-use zil_errors::storage::LocalStorageError;
 
 type Result<T> = std::result::Result<T, LocalStorageError>;
 

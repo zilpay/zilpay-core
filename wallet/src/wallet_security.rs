@@ -1,6 +1,6 @@
 use crate::{wallet_token::TokenManagement, wallet_transaction::WalletTransaction, Result};
 use cipher::argon2::Argon2Seed;
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 use crate::Wallet;
 

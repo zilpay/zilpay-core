@@ -8,7 +8,7 @@ use rpc::{
     zil_interfaces::ResultRes,
 };
 use serde_json::{json, Value};
-use zil_errors::{network::NetworkErrors, tx::TransactionErrors};
+use errors::{network::NetworkErrors, tx::TransactionErrors};
 
 pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
     match tx {

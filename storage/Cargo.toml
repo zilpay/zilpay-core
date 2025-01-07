@@ -7,5 +7,5 @@ edition = "2021"
 hex.workspace = true
 sled.workspace = true
 directories.workspace = true
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 config = { path = "../config" }

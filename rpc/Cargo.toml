@@ -12,7 +12,7 @@ hex.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 config = { path = "../config" }
 
 [dev-dependencies]

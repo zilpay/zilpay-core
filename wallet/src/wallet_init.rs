@@ -8,7 +8,7 @@ use config::{
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use token::ft::FToken;
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 use crate::{wallet_storage::StorageOperations, Bip39Params, LedgerParams, WalletConfig};
 
@@ -239,7 +239,7 @@ mod tests {
     use proto::keypair::KeyPair;
     use rand::Rng;
     use storage::LocalStorage;
-    use zil_errors::wallet::WalletErrors;
+    use errors::wallet::WalletErrors;
 
     use crate::{
         wallet_crypto::WalletCrypto, wallet_data::AuthMethod, wallet_init::WalletInit,

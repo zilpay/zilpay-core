@@ -16,7 +16,7 @@ use wallet::{
     wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
     SecretKeyParams, Wallet, WalletConfig,
 };
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
 

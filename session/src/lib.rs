@@ -1,7 +1,7 @@
 use ::argon2::Config as Argon2Config;
 use cipher::{argon2, keychain::KeyChain, options::CipherOrders};
 use config::argon::{KEY_SIZE, SESSION_SALT};
-use zil_errors::session::SessionErrors;
+use errors::session::SessionErrors;
 
 /// Encrypts a seed using device-specific fingerprint and layered encryption
 ///

@@ -11,5 +11,5 @@ bincode.workspace = true
 
 proto = { path = "../proto" }
 config = { path = "../config" }
-zil_errors = { path = "../zil_errors" }
+errors = { path = "../errors" }
 rpc = { path = "../rpc" }

@@ -2,7 +2,7 @@ use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Backg
 use async_trait::async_trait;
 use proto::address::Address;
 use token::ft::FToken;
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 #[async_trait]
 pub trait TokensManagement {

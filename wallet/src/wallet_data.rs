@@ -1,7 +1,7 @@
 use crate::{account::Account, wallet_types::WalletTypes, WalletAddrType};
 use serde::{Deserialize, Serialize};
 use settings::wallet_settings::WalletSettings;
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub enum AuthMethod {

@@ -1,5 +1,5 @@
 use config::storage::ADDRESS_BOOK_DB_KEY;
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::book::AddressBookEntry;
 use crate::{Background, Result};

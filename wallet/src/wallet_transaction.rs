@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use cipher::argon2::Argon2Seed;
 use config::storage::{HISTORY_TXNS_DB_KEY, REQ_TXNS_DB_KEY};
 use proto::tx::{TransactionReceipt, TransactionRequest};
-use zil_errors::wallet::WalletErrors;
+use errors::wallet::WalletErrors;
 
 use crate::{wallet_crypto::WalletCrypto, Wallet};
 

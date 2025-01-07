@@ -1,6 +1,6 @@
+use errors::cipher::CipherErrors;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
-use zil_errors::cipher::CipherErrors;
 
 type Result<T> = std::result::Result<T, CipherErrors>;
 

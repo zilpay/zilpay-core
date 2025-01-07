@@ -3,7 +3,7 @@ use bip39::{Language, Mnemonic};
 use proto::keypair::KeyPair;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use zil_errors::background::BackgroundError;
+use errors::background::BackgroundError;
 
 use crate::Background;
 
@@ -71,7 +71,7 @@ mod tests_background {
     use crate::{bg_crypto::CryptoOperations, Background};
     use bip39::Language;
     use config::key::{PUB_KEY_SIZE, SECRET_KEY_SIZE};
-    use zil_errors::background::BackgroundError;
+    use errors::background::BackgroundError;
 
     #[test]
     fn test_bip39_words_exists() {
