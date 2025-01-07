@@ -1,3 +1,4 @@
+use bincode::ErrorKind;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -20,6 +21,12 @@ pub enum RpcError {
     #[error("Duplicate node: {0}")]
     DuplicateNode(String),
 
-    #[error("Invlid config serde error: {0}")]
-    SerdeFail(String),
+    #[error("")]
+    BincodeError(String),
+}
+
+impl From<Box<ErrorKind>> for RpcError {
+    fn from(value: Box<ErrorKind>) -> Self {
+        RpcError::BincodeError(value.to_string())
+    }
 }

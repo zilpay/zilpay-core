@@ -4754,6 +4754,7 @@ dependencies = [
 name = "zil_errors"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "ntrulp",
  "rust-argon2",
  "thiserror 1.0.69",

@@ -15,8 +15,7 @@ pub struct NetworkConfig {
 
 impl NetworkConfig {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
-        let decoded: Self =
-            bincode::deserialize(encoded).map_err(|e| RpcError::SerdeFail(e.to_string()))?;
+        let decoded: Self = bincode::deserialize(encoded)?;
 
         Ok(decoded)
     }
@@ -33,8 +32,7 @@ impl NetworkConfig {
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let encoded: Vec<u8> =
-            bincode::serialize(&self).map_err(|e| RpcError::SerdeFail(e.to_string()))?;
+        let encoded: Vec<u8> = bincode::serialize(&self)?;
 
         Ok(encoded)
     }

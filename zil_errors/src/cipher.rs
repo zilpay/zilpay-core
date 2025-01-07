@@ -16,6 +16,7 @@ pub enum CipherErrors {
 pub enum AesGCMErrors {
     #[error("Encryption error: {0}")]
     EncryptError(String),
+
     #[error("Decryption error: {0}")]
     DecryptError(String),
 }
