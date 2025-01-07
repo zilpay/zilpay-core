@@ -1,3 +1,4 @@
+use crypto::bip49::ETH_PATH;
 use errors::rpc::RpcError;
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +12,7 @@ pub struct NetworkConfig {
     pub urls: Vec<String>,
     pub explorer_urls: Vec<String>,
     pub default: bool,
+    pub bip49_path: String,
 }
 
 impl NetworkConfig {
@@ -22,6 +24,7 @@ impl NetworkConfig {
 
     pub fn new(network_name: impl Into<String>, chain_id: u64, urls: Vec<String>) -> Self {
         Self {
+            bip49_path: ETH_PATH.to_string(),
             fallback_enabled: true,
             network_name: network_name.into(),
             chain_id,

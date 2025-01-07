@@ -3215,6 +3215,7 @@ dependencies = [
  "async-trait",
  "bincode",
  "config",
+ "crypto",
  "errors",
  "hex",
  "mockito",

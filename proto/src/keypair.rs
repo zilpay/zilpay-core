@@ -16,9 +16,9 @@ use crate::{
 };
 
 use super::secret_key::SecretKey;
+use errors::keypair::KeyPairError;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use errors::keypair::KeyPairError;
 
 // One byte for enum type
 pub const KEYPAIR_BYTES_SIZE: usize = PUB_KEY_SIZE + SECRET_KEY_SIZE + 1;
@@ -235,6 +235,7 @@ impl KeyPair {
 #[cfg(test)]
 mod tests {
     use bip39::Mnemonic;
+    use crypto::bip49::{ETH_PATH, ZIL_PATH};
 
     use super::*;
     use std::borrow::Cow;
@@ -363,8 +364,8 @@ mod tests {
         let index = 0;
         let seed = m.to_seed("");
 
-        let zil_path = Bip49DerivationPath::Zilliqa(index);
-        let eth_path = Bip49DerivationPath::Ethereum(index);
+        let zil_path = Bip49DerivationPath::Zilliqa((index, ZIL_PATH));
+        let eth_path = Bip49DerivationPath::Ethereum((index, ETH_PATH));
 
         assert_eq!(
             [

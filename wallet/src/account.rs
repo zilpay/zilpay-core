@@ -1,12 +1,12 @@
 use crate::account_type::AccountType;
 use config::sha::SHA512_SIZE;
 use crypto::bip49::Bip49DerivationPath;
+use errors::account::AccountErrors;
 use proto::address::Address;
 use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
 use serde::{Deserialize, Serialize};
-use errors::account::AccountErrors;
 
 type Result<T> = std::result::Result<T, AccountErrors>;
 
@@ -71,19 +71,6 @@ impl Account {
         })
     }
 
-    pub fn get_bip49(&self) -> Result<Bip49DerivationPath> {
-        match &self.account_type {
-            AccountType::Bip39HD(v) => match &self.pub_key {
-                PubKey::Secp256k1Sha256Zilliqa(_) => Ok(Bip49DerivationPath::Zilliqa(*v)),
-                PubKey::Secp256k1Keccak256Ethereum(_) => Ok(Bip49DerivationPath::Ethereum(*v)),
-                _ => Err(AccountErrors::InvalidPubKeyType),
-            },
-            _ => Err(AccountErrors::InvalidAccountType(
-                self.account_type.to_string(),
-            )),
-        }
-    }
-
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let encoded: Vec<u8> = bincode::serialize(&self)
             .map_err(|e| AccountErrors::AccountSerdeError(e.to_string()))?;
@@ -97,6 +84,7 @@ mod tests {
     use super::*;
     use bip39::Mnemonic;
     use config::address::ADDR_LEN;
+    use crypto::bip49::ZIL_PATH;
     use rand::RngCore;
 
     #[test]
@@ -133,7 +121,7 @@ mod tests {
             "green process gate doctor slide whip priority shrug diamond crumble average help";
         let name = "Account 0";
         let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
-        let bip49 = Bip49DerivationPath::Zilliqa(0);
+        let bip49 = Bip49DerivationPath::Zilliqa((0, ZIL_PATH));
         let seed = m.to_seed("");
         let acc = Account::from_hd(&seed, name.to_owned(), &bip49).unwrap();
 

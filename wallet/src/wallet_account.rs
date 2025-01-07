@@ -125,7 +125,7 @@ mod tests {
         keychain::KeyChain,
     };
     use config::cipher::PROOF_SIZE;
-    use crypto::bip49::Bip49DerivationPath;
+    use crypto::bip49::{Bip49DerivationPath, ZIL_PATH};
     use errors::wallet::WalletErrors;
     use rand::Rng;
     use std::sync::Arc;
@@ -156,7 +156,12 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
 
         // Create wallet with 3 accounts
-        let indexes = [0, 1, 2].map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
+        let indexes = [0, 1, 2].map(|i| {
+            (
+                Bip49DerivationPath::Zilliqa((i, ZIL_PATH)),
+                format!("account {i}"),
+            )
+        });
 
         let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {

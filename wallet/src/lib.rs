@@ -48,7 +48,7 @@ pub struct Bip39Params<'a> {
     pub proof: [u8; KEY_SIZE],
     pub mnemonic: &'a Mnemonic,
     pub passphrase: &'a str,
-    pub indexes: &'a [(Bip49DerivationPath, String)],
+    pub indexes: &'a [(Bip49DerivationPath<'a>, String)],
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub provider_index: usize,
