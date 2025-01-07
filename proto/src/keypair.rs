@@ -105,6 +105,9 @@ impl KeyPair {
             Bip49DerivationPath::Ethereum(_) => {
                 Ok(Self::Secp256k1Keccak256Ethereum((pub_key, secret_key)))
             }
+            _ => {
+                todo!()
+            }
         }
     }
 

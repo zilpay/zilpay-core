@@ -1,8 +1,8 @@
 use async_trait::async_trait;
+use errors::rpc::RpcError;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fmt::Debug;
-use errors::rpc::RpcError;
 
 use crate::common::{JsonRPC, NetworkConfigTrait, Result, RpcMethod};
 
@@ -91,17 +91,22 @@ mod tests {
     use super::*;
     use crate::{
         methods::{EvmMethods, ZilMethods},
-        network_config::NetworkConfig,
+        network_config::{Bip44Network, NetworkConfig},
         zil_interfaces::{GetBalanceRes, ResultRes},
     };
+    use crypto::bip49::{ETH_PATH, ZIL_PATH};
     use serde_json::json;
 
     const ZERO_ADDR: &str = "0000000000000000000000000000000000000000";
 
     #[tokio::test]
     async fn test_get_balance_scilla() {
-        let net_conf =
-            NetworkConfig::new("Zilliqa", 1, vec!["https://api.zilliqa.com".to_string()]);
+        let net_conf = NetworkConfig::new(
+            "Zilliqa",
+            1,
+            vec!["https://api.zilliqa.com".to_string()],
+            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+        );
         let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
         let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(
             json!([ZERO_ADDR]),
@@ -121,6 +126,7 @@ mod tests {
             "Binance-smart-chain",
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
+            Bip44Network::Evm(ETH_PATH.to_string()),
         );
         let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
         let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(

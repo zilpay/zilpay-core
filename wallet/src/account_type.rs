@@ -1,6 +1,6 @@
+use errors::account::AccountErrors;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use errors::account::AccountErrors;
 
 type Result<T> = std::result::Result<T, AccountErrors>;
 

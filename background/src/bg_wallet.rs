@@ -341,9 +341,9 @@ impl WalletManagement for Background {
 mod tests_background {
     use super::*;
     use crate::{bg_crypto::CryptoOperations, bg_provider::ProvidersManagement};
-    use crypto::bip49::Bip49DerivationPath;
+    use crypto::bip49::{Bip49DerivationPath, ETH_PATH, ZIL_PATH};
     use rand::Rng;
-    use rpc::network_config::NetworkConfig;
+    use rpc::network_config::{Bip44Network, NetworkConfig};
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -361,10 +361,15 @@ mod tests_background {
         let password = "test_password";
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [(
-            Bip49DerivationPath::Zilliqa(0),
+            Bip49DerivationPath::Zilliqa((0, ZIL_PATH)),
             "Zilliqa wallet".to_string(),
         )];
-        let net_conf = NetworkConfig::new("", 0, vec!["".to_string()]);
+        let net_conf = NetworkConfig::new(
+            "",
+            0,
+            vec!["".to_string()],
+            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+        );
 
         bg.add_provider(net_conf).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -389,8 +394,14 @@ mod tests_background {
         let words = Background::gen_bip39(24).unwrap();
         let password = "newPassowrd";
         let accounts = [
-            (Bip49DerivationPath::Ethereum(1), "Eth Wallet".to_string()),
-            (Bip49DerivationPath::Ethereum(2), "account 1".to_string()),
+            (
+                Bip49DerivationPath::Ethereum((1, ETH_PATH)),
+                "Eth Wallet".to_string(),
+            ),
+            (
+                Bip49DerivationPath::Ethereum((2, ETH_PATH)),
+                "account 1".to_string(),
+            ),
         ];
 
         bg.add_bip39_wallet(BackgroundBip39Params {

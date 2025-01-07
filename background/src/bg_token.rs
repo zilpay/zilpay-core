@@ -1,6 +1,6 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
-use errors::background::BackgroundError;
+use errors::{background::BackgroundError, wallet::WalletErrors};
 use proto::address::Address;
 use token::ft::FToken;
 use wallet::wallet_storage::StorageOperations;
@@ -28,12 +28,13 @@ impl TokensManagement for Background {
     async fn fetch_ftoken_meta(&self, wallet_index: usize, contract: Address) -> Result<FToken> {
         let w = self.get_wallet_by_index(wallet_index)?;
         let data = w.get_wallet_data()?;
-        let provider = self.get_provider(data.provider_index)?;
         let accounts = data
             .accounts
             .iter()
             .map(|a| &a.addr)
             .collect::<Vec<&Address>>();
+        let selected = &data.accounts[data.selected_account];
+        let provider = self.get_provider(selected.provider_index)?;
         let token_meta = provider.ftoken_meta(contract, &accounts).await?;
 
         Ok(token_meta)
@@ -51,14 +52,18 @@ impl TokensManagement for Background {
             return Ok(());
         }
 
+        let selected_account = data
+            .accounts
+            .get(data.selected_account)
+            .ok_or(WalletErrors::FailToGetAccount(data.selected_account))?;
         let addresses: Vec<&Address> = data.accounts.iter().map(|a| &a.addr).collect();
 
-        let matching_end =
-            ftokens.partition_point(|token| token.provider_index == data.provider_index);
+        let matching_end = ftokens
+            .partition_point(|token| token.provider_index == selected_account.provider_index);
         let matching_tokens = &mut ftokens[..matching_end];
         let provider = self
             .providers
-            .get(data.provider_index)
+            .get(selected_account.provider_index)
             .ok_or(BackgroundError::ProviderNotExists(0))?;
 
         provider
@@ -80,9 +85,9 @@ mod tests_background_tokens {
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
     };
     use config::address::ADDR_LEN;
-    use crypto::bip49::Bip49DerivationPath;
+    use crypto::bip49::{Bip49DerivationPath, ETH_PATH};
     use rand::Rng;
-    use rpc::network_config::NetworkConfig;
+    use rpc::network_config::{Bip44Network, NetworkConfig};
     use tokio;
     use wallet::wallet_token::TokenManagement;
 
@@ -101,6 +106,7 @@ mod tests_background_tokens {
             "Binance-smart-chain",
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
+            Bip44Network::Evm(ETH_PATH.to_string()),
         )
     }
 
@@ -124,7 +130,7 @@ mod tests_background_tokens {
 
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [(
-            Bip49DerivationPath::Ethereum(0),
+            Bip49DerivationPath::Ethereum((0, ETH_PATH)),
             "Bsc account 1".to_string(),
         )];
 
@@ -184,13 +190,34 @@ mod tests_background_tokens {
 
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [
-            (Bip49DerivationPath::Ethereum(0), "account 0".to_string()),
-            (Bip49DerivationPath::Ethereum(1), "account 1".to_string()),
-            (Bip49DerivationPath::Ethereum(2), "account 2".to_string()),
-            (Bip49DerivationPath::Ethereum(3), "account 3".to_string()),
-            (Bip49DerivationPath::Ethereum(4), "account 4".to_string()),
-            (Bip49DerivationPath::Ethereum(5), "account 5".to_string()),
-            (Bip49DerivationPath::Ethereum(6), "account 6".to_string()),
+            (
+                Bip49DerivationPath::Ethereum((0, ETH_PATH)),
+                "account 0".to_string(),
+            ),
+            (
+                Bip49DerivationPath::Ethereum((1, ETH_PATH)),
+                "account 1".to_string(),
+            ),
+            (
+                Bip49DerivationPath::Ethereum((2, ETH_PATH)),
+                "account 2".to_string(),
+            ),
+            (
+                Bip49DerivationPath::Ethereum((3, ETH_PATH)),
+                "account 3".to_string(),
+            ),
+            (
+                Bip49DerivationPath::Ethereum((4, ETH_PATH)),
+                "account 4".to_string(),
+            ),
+            (
+                Bip49DerivationPath::Ethereum((5, ETH_PATH)),
+                "account 5".to_string(),
+            ),
+            (
+                Bip49DerivationPath::Ethereum((6, ETH_PATH)),
+                "account 6".to_string(),
+            ),
         ];
 
         bg.add_provider(gen_net_conf()).unwrap();

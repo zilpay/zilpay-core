@@ -115,8 +115,9 @@ impl StorageOperations for Wallet {
     }
 
     fn save_wallet_data(&self, data: WalletData) -> Result<()> {
-        self.storage
-            .set(self.wallet_address.as_slice(), &data.to_bytes()?)?;
+        let bytes = bincode::serialize(&data)?;
+
+        self.storage.set(&self.wallet_address, &bytes)?;
         self.storage.flush()?;
 
         Ok(())
@@ -164,7 +165,6 @@ mod tests_wallet_storage {
         wallet_types::WalletTypes,
     };
     use config::sha::SHA256_SIZE;
-    use history::transaction::HistoricalTransaction;
     use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
     use settings::wallet_settings::WalletSettings;
     use std::sync::Arc;
@@ -183,7 +183,7 @@ mod tests_wallet_storage {
     #[test]
     fn test_init_wallet() {
         let (wallet_address, storage) = setup();
-        let wallet = Wallet::init_wallet(wallet_address.clone(), storage.clone());
+        let wallet = Wallet::init_wallet(wallet_address, storage.clone());
         assert!(wallet.is_ok());
 
         let wallet = wallet.unwrap();
@@ -218,7 +218,6 @@ mod tests_wallet_storage {
             accounts: Vec::new(),
             selected_account: 0,
             biometric_type: AuthMethod::None,
-            provider_index: 0,
         };
 
         // Test saving wallet data

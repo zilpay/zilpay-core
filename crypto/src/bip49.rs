@@ -5,6 +5,8 @@ pub const ETH_PATH: &str = "m/44'/60'/0'/0/";
 pub enum Bip49DerivationPath<'a> {
     Zilliqa((usize, &'a str)),
     Ethereum((usize, &'a str)),
+    Bitcoin((usize, &'a str)),
+    Solana((usize, &'a str)),
 }
 
 impl<'a> Bip49DerivationPath<'a> {
@@ -12,6 +14,8 @@ impl<'a> Bip49DerivationPath<'a> {
         match self {
             Bip49DerivationPath::Zilliqa((index, path)) => format!("{}{}", path, index),
             Bip49DerivationPath::Ethereum((index, path)) => format!("{}{}", path, index),
+            Bip49DerivationPath::Bitcoin((index, path)) => format!("{}{}", path, index),
+            Bip49DerivationPath::Solana((index, path)) => format!("{}{}", path, index),
         }
     }
 
@@ -19,6 +23,8 @@ impl<'a> Bip49DerivationPath<'a> {
         match self {
             Bip49DerivationPath::Zilliqa((i, _)) => *i,
             Bip49DerivationPath::Ethereum((i, _)) => *i,
+            Bip49DerivationPath::Bitcoin((i, _)) => *i,
+            Bip49DerivationPath::Solana((i, _)) => *i,
         }
     }
 }

@@ -1,28 +1,25 @@
+use std::sync::Arc;
+
 use crate::{wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet};
 use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
 use errors::wallet::WalletErrors;
+use network::{common::Provider, provider::NetworkProvider};
 use proto::{keypair::KeyPair, secret_key::SecretKey, signature::Signature};
 
-/// Cryptographic operations for wallet security
 pub trait WalletCrypto {
     type Error;
 
-    /// Retrieves the keypair for a specific account index
     fn reveal_keypair(
         &self,
         account_index: usize,
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
     ) -> std::result::Result<KeyPair, Self::Error>;
-
-    /// Retrieves the BIP39 mnemonic phrase
     fn reveal_mnemonic(
         &self,
         seed_bytes: &Argon2Seed,
     ) -> std::result::Result<Mnemonic, Self::Error>;
-
-    /// Signs a message using the specified account
     fn sign_message(
         &self,
         msg: &[u8],
@@ -53,10 +50,8 @@ impl WalletCrypto for Wallet {
                 let storage_key = usize::to_le_bytes(account.account_type.value());
                 let cipher_sk = self.storage.get(&storage_key)?;
                 let sk_bytes = keychain.decrypt(cipher_sk, &data.settings.cipher_orders)?;
-                let sk = SecretKey::from_bytes(sk_bytes.into())
-                    .map_err(WalletErrors::FailParseSKBytes)?;
-                let keypair =
-                    KeyPair::from_secret_key(sk).map_err(WalletErrors::FailToCreateKeyPair)?;
+                let sk = SecretKey::from_bytes(sk_bytes.into())?;
+                let keypair = KeyPair::from_secret_key(sk)?;
 
                 Ok(keypair)
             }
@@ -69,11 +64,15 @@ impl WalletCrypto for Wallet {
                     .accounts
                     .get(account_index)
                     .ok_or(WalletErrors::FailToGetAccount(account_index))?;
+                let providers = NetworkProvider::load_network_configs(Arc::clone(&self.storage));
+                let provider = providers
+                    .get(account.provider_index)
+                    .ok_or(WalletErrors::ProviderNotExist(account_index))?;
                 let m = self.reveal_mnemonic(seed_bytes)?;
                 let seed = m.to_seed(passphrase.unwrap_or(""));
-                let bip49 = account.get_bip49().map_err(WalletErrors::InvalidBip49)?;
-                let keypair = KeyPair::from_bip39_seed(&seed, &bip49)
-                    .map_err(WalletErrors::FailToCreateKeyPair)?;
+                let hd_index = account.account_type.value();
+                let bip49 = provider.get_bip49(hd_index);
+                let keypair = KeyPair::from_bip39_seed(&seed, &bip49)?;
 
                 Ok(keypair)
             }
@@ -109,12 +108,8 @@ impl WalletCrypto for Wallet {
         passphrase: Option<&str>,
     ) -> Result<Signature> {
         let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
-        let sig = keypair
-            .sign_message(msg)
-            .map_err(WalletErrors::FailSignMessage)?;
-        let vrify = keypair
-            .verify_sig(msg, &sig)
-            .map_err(WalletErrors::FailVerifySig)?;
+        let sig = keypair.sign_message(msg)?;
+        let vrify = keypair.verify_sig(msg, &sig)?;
 
         if !vrify {
             return Err(WalletErrors::InvalidVerifySig);

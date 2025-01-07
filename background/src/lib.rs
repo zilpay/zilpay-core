@@ -20,7 +20,7 @@ pub struct BackgroundBip39Params<'a> {
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub wallet_settings: WalletSettings,
-    pub accounts: &'a [(Bip49DerivationPath, String)],
+    pub accounts: &'a [(Bip49DerivationPath<'a>, String)],
     pub provider: usize,
     pub ftokens: Vec<FToken>,
 }

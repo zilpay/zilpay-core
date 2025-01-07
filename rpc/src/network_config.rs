@@ -1,10 +1,17 @@
-use crypto::bip49::ETH_PATH;
 use errors::rpc::RpcError;
 use serde::{Deserialize, Serialize};
 
 use crate::common::{NetworkConfigTrait, Result};
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub enum Bip44Network {
+    Evm(String),
+    Bitcoin(String),
+    Solana(String),
+    Zilliqa(String),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct NetworkConfig {
     pub network_name: String,
     pub chain_id: u64,
@@ -12,7 +19,7 @@ pub struct NetworkConfig {
     pub urls: Vec<String>,
     pub explorer_urls: Vec<String>,
     pub default: bool,
-    pub bip49_path: String,
+    pub bip49: Bip44Network,
 }
 
 impl NetworkConfig {
@@ -22,9 +29,14 @@ impl NetworkConfig {
         Ok(decoded)
     }
 
-    pub fn new(network_name: impl Into<String>, chain_id: u64, urls: Vec<String>) -> Self {
+    pub fn new(
+        network_name: impl Into<String>,
+        chain_id: u64,
+        urls: Vec<String>,
+        bip49: Bip44Network,
+    ) -> Self {
         Self {
-            bip49_path: ETH_PATH.to_string(),
+            bip49,
             fallback_enabled: true,
             network_name: network_name.into(),
             chain_id,
@@ -135,10 +147,17 @@ impl NetworkConfigTrait for NetworkConfig {
 
 #[cfg(test)]
 mod tests_network_config {
+    use crypto::bip49::ETH_PATH;
+
     use super::*;
 
     fn setup_config() -> NetworkConfig {
-        NetworkConfig::new("test_network", 1, vec!["http://default.com".to_string()])
+        NetworkConfig::new(
+            "test_network",
+            1,
+            vec!["http://default.com".to_string()],
+            Bip44Network::Evm(ETH_PATH.to_string()),
+        )
     }
 
     #[test]
@@ -199,6 +218,7 @@ mod tests_network_config {
                 "http://second.com".to_string(),
                 "http://third.com".to_string(),
             ],
+            Bip44Network::Evm(ETH_PATH.to_string()),
         );
 
         // Test removing default node (should fail)
@@ -225,6 +245,7 @@ mod tests_network_config {
                 "http://third.com".to_string(),
                 "http://fourth.com".to_string(),
             ],
+            Bip44Network::Evm(ETH_PATH.to_string()),
         );
 
         // Test empty indexes

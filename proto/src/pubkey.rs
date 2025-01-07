@@ -1,9 +1,9 @@
 use config::address::ADDR_LEN;
 use config::key::PUB_KEY_SIZE;
+use errors::keypair::PubKeyError;
 use k256::PublicKey as K256PublicKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
-use errors::keypair::PubKeyError;
 
 use crate::address::Address;
 use crate::zil_address::from_zil_pub_key;

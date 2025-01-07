@@ -28,7 +28,8 @@ impl TransactionsManagement for Background {
     ) -> Result<Vec<TransactionReceipt>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let provider = self.get_provider(data.provider_index)?;
+        let selected_account = &data.accounts[data.selected_account];
+        let provider = self.get_provider(selected_account.provider_index)?;
         let txns = provider.broadcast_signed_transactions(txns).await?;
 
         Ok(txns)
@@ -41,10 +42,10 @@ mod tests_background_transactions {
     use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
     use cipher::argon2;
-    use crypto::bip49::Bip49DerivationPath;
+    use crypto::bip49::{Bip49DerivationPath, ETH_PATH, ZIL_PATH};
     use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
-    use rpc::network_config::NetworkConfig;
+    use rpc::network_config::{Bip44Network, NetworkConfig};
     use token::ft::FToken;
     use tokio;
     use wallet::wallet_crypto::WalletCrypto;
@@ -65,6 +66,7 @@ mod tests_background_transactions {
             "Zilliqa(testnet)",
             333,
             vec!["https://dev-api.zilliqa.com".to_string()],
+            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
         )
     }
 
@@ -78,6 +80,7 @@ mod tests_background_transactions {
                 "http://data-seed-prebsc-1-s2.binance.org:8545/".to_string(),
                 "https://bsctestapi.terminet.io/rpc".to_string(),
             ],
+            Bip44Network::Evm(ETH_PATH.to_string()),
         )
     }
 
@@ -101,7 +104,10 @@ mod tests_background_transactions {
 
         bg.add_provider(gen_zil_net_conf()).unwrap();
 
-        let accounts = [(Bip49DerivationPath::Zilliqa(0), "ZIL Acc 0".to_string())];
+        let accounts = [(
+            Bip49DerivationPath::Zilliqa((0, ZIL_PATH)),
+            "ZIL Acc 0".to_string(),
+        )];
         let device_indicators = [String::from("5435h"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -168,7 +174,10 @@ mod tests_background_transactions {
         let (mut bg, _dir) = setup_test_background();
 
         bg.add_provider(gen_bsc_net_conf()).unwrap();
-        let accounts = [(Bip49DerivationPath::Ethereum(0), "BSC Acc 0".to_string())];
+        let accounts = [(
+            Bip49DerivationPath::Ethereum((0, ETH_PATH)),
+            "BSC Acc 0".to_string(),
+        )];
         let device_indicators = [String::from("testbnb"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {

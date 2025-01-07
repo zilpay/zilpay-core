@@ -1,5 +1,8 @@
 use crate::{
-    account, wallet_data::WalletData, wallet_types::WalletTypes, Result, SecretKeyParams, Wallet,
+    account::{self, Account},
+    wallet_data::WalletData,
+    wallet_types::WalletTypes,
+    Result, SecretKeyParams, Wallet,
 };
 use config::{
     sha::SHA256_SIZE,
@@ -65,12 +68,12 @@ impl WalletInit for Wallet {
         hasher.update(&params.ledger_id);
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
-        let account = account::Account::from_ledger(
-            &params.pub_key,
+        let account = Account::from_ledger(
+            params.pub_key,
             params.account_name,
             params.wallet_index,
-        )
-        .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
+            params.provider_index,
+        )?;
 
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
@@ -81,7 +84,6 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
-            provider_index: params.provider_index,
         };
         let wallet = Self {
             storage: config.storage,
@@ -124,12 +126,12 @@ impl WalletInit for Wallet {
 
         let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
         // SecretKey may stores only one account.
-        let account = account::Account::from_secret_key(
+        let account = Account::from_secret_key(
             params.sk,
             params.wallet_name.to_owned(),
             cipher_entropy_key,
-        )
-        .or(Err(WalletErrors::InvalidSecretKeyAccount))?;
+            params.provider_index,
+        )?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
             wallet_name: params.wallet_name,
@@ -139,7 +141,6 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::SecretKey,
             selected_account: params.provider_index,
-            provider_index: params.provider_index,
         };
         let wallet = Self {
             storage: config.storage,
@@ -181,8 +182,12 @@ impl WalletInit for Wallet {
 
         for index in params.indexes {
             let (bip49, name) = index;
-            let hd_account = account::Account::from_hd(&mnemonic_seed, name.to_owned(), bip49)
-                .or(Err(WalletErrors::InvalidBip39Account))?;
+            let hd_account = Account::from_hd(
+                &mnemonic_seed,
+                name.to_owned(),
+                bip49,
+                params.provider_index,
+            )?;
 
             accounts.push(hd_account);
         }
@@ -198,7 +203,6 @@ impl WalletInit for Wallet {
                 !params.passphrase.is_empty(),
             )),
             selected_account: 0,
-            provider_index: params.provider_index,
         };
         let wallet = Self {
             storage: config.storage,
@@ -222,7 +226,7 @@ mod tests {
         keychain::KeyChain,
     };
     use config::{argon::KEY_SIZE, cipher::PROOF_SIZE};
-    use crypto::bip49::Bip49DerivationPath;
+    use crypto::bip49::{Bip49DerivationPath, ZIL_PATH};
     use errors::wallet::WalletErrors;
     use proto::keypair::KeyPair;
     use rand::Rng;
@@ -256,8 +260,12 @@ mod tests {
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic =
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
-        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-            .map(|i| (Bip49DerivationPath::Zilliqa(i), format!("account {i}")));
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
+            (
+                Bip49DerivationPath::Zilliqa((i, ZIL_PATH)),
+                format!("account {i}"),
+            )
+        });
         let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,

@@ -76,7 +76,7 @@ mod tests_providers {
     use crate::bg_storage::StorageManagement;
 
     use super::*;
-    use crypto::bip49::Bip49DerivationPath;
+    use crypto::bip49::ETH_PATH;
     use rand::Rng;
     use rpc::network_config::NetworkConfig;
 
@@ -95,7 +95,7 @@ mod tests_providers {
             chain_id: 1,
             explorer_urls: Vec::new(),
             default,
-            bip49_path: Bip49DerivationPath::ETH_PATH.to_string(),
+            bip49: rpc::network_config::Bip44Network::Evm(ETH_PATH.to_string()),
         }
     }
 

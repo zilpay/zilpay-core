@@ -16,35 +16,47 @@ pub struct Account {
     pub account_type: AccountType,
     pub addr: Address,
     pub pub_key: PubKey,
+    pub provider_index: usize,
 }
 
 impl Account {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
-        let decoded: Self = bincode::deserialize(encoded)
-            .map_err(|e| AccountErrors::AccountSerdeError(e.to_string()))?;
+        let decoded: Self = bincode::deserialize(encoded)?;
 
         Ok(decoded)
     }
 
-    pub fn from_ledger(pub_key: &PubKey, name: String, index: usize) -> Result<Self> {
-        let addr = pub_key.get_addr().map_err(AccountErrors::PubKeyError)?;
+    pub fn from_ledger(
+        pub_key: PubKey,
+        name: String,
+        index: usize,
+        provider_index: usize,
+    ) -> Result<Self> {
+        let addr = pub_key.get_addr()?;
         let account_type = AccountType::Ledger(index);
 
         Ok(Self {
+            provider_index,
             account_type,
             addr,
             name,
-            pub_key: pub_key.to_owned(),
+            pub_key,
         })
     }
 
-    pub fn from_secret_key(sk: SecretKey, name: String, key: usize) -> Result<Self> {
-        let keypair = KeyPair::from_secret_key(sk).map_err(AccountErrors::InvalidSecretKeyBytes)?;
-        let pub_key = keypair.get_pubkey().map_err(AccountErrors::InvalidPubKey)?;
-        let addr = keypair.get_addr().map_err(AccountErrors::InvalidAddress)?;
-        let account_type = AccountType::PrivateKey(key);
+    pub fn from_secret_key(
+        sk: SecretKey,
+        name: String,
+        storage_key: usize,
+        provider_index: usize,
+    ) -> Result<Self> {
+        let keypair = KeyPair::from_secret_key(sk)?;
+        let pub_key = keypair.get_pubkey()?;
+        let addr = keypair.get_addr()?;
+        let account_type = AccountType::PrivateKey(storage_key);
 
         Ok(Self {
+            provider_index,
             account_type,
             addr,
             pub_key,
@@ -56,14 +68,15 @@ impl Account {
         mnemonic_seed: &[u8; SHA512_SIZE],
         name: String,
         bip49: &Bip49DerivationPath,
+        provider_index: usize,
     ) -> Result<Self> {
-        let keypair =
-            KeyPair::from_bip39_seed(mnemonic_seed, bip49).map_err(AccountErrors::InvalidSeed)?;
-        let pub_key = keypair.get_pubkey().map_err(AccountErrors::InvalidPubKey)?;
-        let addr = keypair.get_addr().map_err(AccountErrors::InvalidAddress)?;
+        let keypair = KeyPair::from_bip39_seed(mnemonic_seed, bip49)?;
+        let pub_key = keypair.get_pubkey()?;
+        let addr = keypair.get_addr()?;
         let account_type = AccountType::Bip39HD(bip49.get_index());
 
         Ok(Self {
+            provider_index,
             account_type,
             addr,
             pub_key,
@@ -72,8 +85,7 @@ impl Account {
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let encoded: Vec<u8> = bincode::serialize(&self)
-            .map_err(|e| AccountErrors::AccountSerdeError(e.to_string()))?;
+        let encoded: Vec<u8> = bincode::serialize(&self)?;
 
         Ok(encoded)
     }
@@ -95,7 +107,7 @@ mod tests {
             .parse()
             .unwrap();
         let name = "Account 0";
-        let acc = Account::from_secret_key(sk, name.to_string(), 0).unwrap();
+        let acc = Account::from_secret_key(sk, name.to_string(), 0, 0).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
@@ -123,7 +135,7 @@ mod tests {
         let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
         let bip49 = Bip49DerivationPath::Zilliqa((0, ZIL_PATH));
         let seed = m.to_seed("");
-        let acc = Account::from_hd(&seed, name.to_owned(), &bip49).unwrap();
+        let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];

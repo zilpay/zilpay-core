@@ -17,9 +17,6 @@ pub enum WalletErrors {
     #[error("Invalid account index: {0}. Selected index must be less than number of accounts")]
     InvalidAccountIndex(usize),
 
-    #[error("Invalid Ledger account: {0}")]
-    InvalidLedgerAccount(AccountErrors),
-
     #[error("Account with index ({0}) already exists")]
     ExistsAccount(usize),
 
@@ -50,33 +47,11 @@ pub enum WalletErrors {
     #[error("Invalid signature verify")]
     InvalidVerifySig,
 
-    #[error("Fail to verify sig error: {0}")]
-    FailVerifySig(KeyPairError),
-
-    #[error("Fail to sign mesage: {0}")]
-    FailSignMessage(KeyPairError),
-
-    #[error("Fail to load key pair form seed: {0}")]
-    FailToCreateKeyPair(KeyPairError),
-
-    // Secret key related errors
-    #[error("Fail convert bytes to sk: {0}")]
-    FailParseSKBytes(SecretKeyError),
-
     #[error("Fail to get SK bytes: {0}")]
     FailToGetSKBytes(SecretKeyError),
 
-    #[error("Invalid secret key account")]
-    InvalidSecretKeyAccount,
-
-    #[error("Invalid bip49: {0}")]
-    InvalidBip49(AccountErrors),
-
     #[error("BIP39 not valid: {0}")]
     Bip39NotValid(String),
-
-    #[error("Invalid BIP39 account")]
-    InvalidBip39Account,
 
     #[error("passphrase is None")]
     PassphraseIsNone,
@@ -87,17 +62,14 @@ pub enum WalletErrors {
     #[error("Fail to get account by index: {0}")]
     FailToGetAccount(usize),
 
+    #[error("fail to find provider with index: {0}")]
+    ProviderNotExist(usize),
+
     #[error("Mnemonic error: {0}")]
     MnemonicError(String),
 
     #[error("Invalid account type")]
     InvalidAccountType,
-
-    #[error("Fail to deserialize wallet data error: {0}")]
-    FailToDeserializeWalletData(String),
-
-    #[error("Fail to serialize wallet data error: {0}")]
-    FailToSerializeWalletData(String),
 
     #[error("LocalStorage error: {0}")]
     LocalStorageError(LocalStorageError),
@@ -125,11 +97,38 @@ pub enum WalletErrors {
 
     #[error("KeyChain Error: {0}")]
     KeyChainError(KeyChainErrors),
+
+    #[error("Account Error: {0}")]
+    AccountErrors(AccountErrors),
+
+    #[error("SecretKey Error: {0}")]
+    SecretKeyError(SecretKeyError),
+
+    #[error("KeyPair Error: {0}")]
+    KeyPairError(KeyPairError),
 }
 
 impl From<LocalStorageError> for WalletErrors {
     fn from(error: LocalStorageError) -> Self {
         WalletErrors::LocalStorageError(error)
+    }
+}
+
+impl From<KeyPairError> for WalletErrors {
+    fn from(error: KeyPairError) -> Self {
+        WalletErrors::KeyPairError(error)
+    }
+}
+
+impl From<AccountErrors> for WalletErrors {
+    fn from(error: AccountErrors) -> Self {
+        WalletErrors::AccountErrors(error)
+    }
+}
+
+impl From<SecretKeyError> for WalletErrors {
+    fn from(error: SecretKeyError) -> Self {
+        WalletErrors::SecretKeyError(error)
     }
 }
 

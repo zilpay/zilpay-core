@@ -1,5 +1,4 @@
 use crate::{account::Account, wallet_types::WalletTypes};
-use errors::wallet::WalletErrors;
 use serde::{Deserialize, Serialize};
 use settings::wallet_settings::WalletSettings;
 
@@ -46,17 +45,4 @@ pub struct WalletData {
     pub accounts: Vec<Account>,
     pub selected_account: usize,
     pub biometric_type: AuthMethod,
-    pub provider_index: usize,
-}
-
-impl WalletData {
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, WalletErrors> {
-        bincode::deserialize(bytes)
-            .map_err(|e| WalletErrors::FailToDeserializeWalletData(e.to_string()))
-    }
-
-    pub fn to_bytes(&self) -> Result<Vec<u8>, WalletErrors> {
-        bincode::serialize(&self)
-            .map_err(|e| WalletErrors::FailToSerializeWalletData(e.to_string()))
-    }
 }

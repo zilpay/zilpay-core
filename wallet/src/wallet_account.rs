@@ -1,5 +1,5 @@
 use crate::{
-    account, account_type::AccountType, wallet_storage::StorageOperations,
+    account::Account, account_type::AccountType, wallet_storage::StorageOperations,
     wallet_types::WalletTypes, Result, Wallet,
 };
 use bip39::Mnemonic;
@@ -12,10 +12,11 @@ pub trait AccountManagement {
     type Error;
 
     fn add_ledger_account(
-        &mut self,
+        &self,
         name: String,
-        pub_key: &PubKey,
+        pub_key: PubKey,
         index: usize,
+        provider_index: usize,
     ) -> std::result::Result<(), Self::Error>;
     fn add_next_bip39_account(
         &mut self,
@@ -23,6 +24,7 @@ pub trait AccountManagement {
         bip49: &Bip49DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
+        provider_index: usize,
     ) -> std::result::Result<(), Self::Error>;
     fn select_account(&mut self, account_index: usize) -> std::result::Result<(), Self::Error>;
 }
@@ -30,7 +32,13 @@ pub trait AccountManagement {
 impl AccountManagement for Wallet {
     type Error = WalletErrors;
 
-    fn add_ledger_account(&mut self, name: String, pub_key: &PubKey, index: usize) -> Result<()> {
+    fn add_ledger_account(
+        &self,
+        name: String,
+        pub_key: PubKey,
+        index: usize,
+        provider_index: usize,
+    ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
         let has_account = data
             .accounts
@@ -45,8 +53,7 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::ExistsAccount(index));
         }
 
-        let ledger_account = account::Account::from_ledger(pub_key, name, index)
-            .map_err(WalletErrors::InvalidLedgerAccount)?;
+        let ledger_account = Account::from_ledger(pub_key, name, index, provider_index)?;
 
         data.accounts.push(ledger_account);
         self.save_wallet_data(data)?;
@@ -60,6 +67,7 @@ impl AccountManagement for Wallet {
         bip49: &Bip49DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
+        provider_index: usize,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
 
@@ -83,8 +91,7 @@ impl AccountManagement for Wallet {
                     return Err(WalletErrors::ExistsAccount(bip49.get_index()));
                 }
 
-                let hd_account = account::Account::from_hd(&mnemonic_seed, name.to_owned(), bip49)
-                    .or(Err(WalletErrors::InvalidBip39Account))?;
+                let hd_account = Account::from_hd(&mnemonic_seed, name, bip49, provider_index)?;
 
                 data.accounts.push(hd_account);
                 self.save_wallet_data(data)?;
