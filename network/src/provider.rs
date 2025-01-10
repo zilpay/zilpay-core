@@ -35,10 +35,10 @@ pub struct NetworkProvider {
 impl NetworkProvider {
     pub fn get_bip49(&self, index: usize) -> Bip49DerivationPath {
         match &self.config.bip49 {
-            Bip44Network::Evm(path) => Bip49DerivationPath::Ethereum((index, path)),
-            Bip44Network::Bitcoin(path) => Bip49DerivationPath::Bitcoin((index, path)),
-            Bip44Network::Solana(path) => Bip49DerivationPath::Solana((index, path)),
-            Bip44Network::Zilliqa(path) => Bip49DerivationPath::Zilliqa((index, path)),
+            Bip44Network::Evm(path) => Bip49DerivationPath::Ethereum((index, path.clone())),
+            Bip44Network::Bitcoin(path) => Bip49DerivationPath::Bitcoin((index, path.clone())),
+            Bip44Network::Solana(path) => Bip49DerivationPath::Solana((index, path.clone())),
+            Bip44Network::Zilliqa(path) => Bip49DerivationPath::Zilliqa((index, path.clone())),
         }
     }
 }

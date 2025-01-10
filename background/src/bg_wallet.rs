@@ -361,7 +361,7 @@ mod tests_background {
         let password = "test_password";
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [(
-            Bip49DerivationPath::Zilliqa((0, ZIL_PATH)),
+            Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string())),
             "Zilliqa wallet".to_string(),
         )];
         let net_conf = NetworkConfig::new(
@@ -395,11 +395,11 @@ mod tests_background {
         let password = "newPassowrd";
         let accounts = [
             (
-                Bip49DerivationPath::Ethereum((1, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((1, ETH_PATH.to_string())),
                 "Eth Wallet".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((2, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((2, ETH_PATH.to_string())),
                 "account 1".to_string(),
             ),
         ];

@@ -133,7 +133,7 @@ mod tests {
             "green process gate doctor slide whip priority shrug diamond crumble average help";
         let name = "Account 0";
         let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
-        let bip49 = Bip49DerivationPath::Zilliqa((0, ZIL_PATH));
+        let bip49 = Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string()));
         let seed = m.to_seed("");
         let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0).unwrap();
 

@@ -367,8 +367,8 @@ mod tests {
         let index = 0;
         let seed = m.to_seed("");
 
-        let zil_path = Bip49DerivationPath::Zilliqa((index, ZIL_PATH));
-        let eth_path = Bip49DerivationPath::Ethereum((index, ETH_PATH));
+        let zil_path = Bip49DerivationPath::Zilliqa((index, ZIL_PATH.to_string()));
+        let eth_path = Bip49DerivationPath::Ethereum((index, ETH_PATH.to_string()));
 
         assert_eq!(
             [

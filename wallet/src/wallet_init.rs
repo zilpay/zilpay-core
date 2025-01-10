@@ -262,7 +262,7 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
             (
-                Bip49DerivationPath::Zilliqa((i, ZIL_PATH)),
+                Bip49DerivationPath::Zilliqa((i, ZIL_PATH.to_string())),
                 format!("account {i}"),
             )
         });

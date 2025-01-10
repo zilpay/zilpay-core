@@ -19,7 +19,7 @@ pub trait AccountManagement {
         provider_index: usize,
     ) -> std::result::Result<(), Self::Error>;
     fn add_next_bip39_account(
-        &mut self,
+        &self,
         name: String,
         bip49: &Bip49DerivationPath,
         passphrase: &str,
@@ -62,7 +62,7 @@ impl AccountManagement for Wallet {
     }
 
     fn add_next_bip39_account(
-        &mut self,
+        &self,
         name: String,
         bip49: &Bip49DerivationPath,
         passphrase: &str,
@@ -165,7 +165,7 @@ mod tests {
         // Create wallet with 3 accounts
         let indexes = [0, 1, 2].map(|i| {
             (
-                Bip49DerivationPath::Zilliqa((i, ZIL_PATH)),
+                Bip49DerivationPath::Zilliqa((i, ZIL_PATH.to_string())),
                 format!("account {i}"),
             )
         });

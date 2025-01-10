@@ -105,7 +105,7 @@ mod tests_background_transactions {
         bg.add_provider(gen_zil_net_conf()).unwrap();
 
         let accounts = [(
-            Bip49DerivationPath::Zilliqa((0, ZIL_PATH)),
+            Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string())),
             "ZIL Acc 0".to_string(),
         )];
         let device_indicators = [String::from("5435h"), String::from("0000")];
@@ -175,7 +175,7 @@ mod tests_background_transactions {
 
         bg.add_provider(gen_bsc_net_conf()).unwrap();
         let accounts = [(
-            Bip49DerivationPath::Ethereum((0, ETH_PATH)),
+            Bip49DerivationPath::Ethereum((0, ETH_PATH.to_string())),
             "BSC Acc 0".to_string(),
         )];
         let device_indicators = [String::from("testbnb"), String::from("0000")];

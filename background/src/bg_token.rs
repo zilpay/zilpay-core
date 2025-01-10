@@ -130,7 +130,7 @@ mod tests_background_tokens {
 
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [(
-            Bip49DerivationPath::Ethereum((0, ETH_PATH)),
+            Bip49DerivationPath::Ethereum((0, ETH_PATH.to_string())),
             "Bsc account 1".to_string(),
         )];
 
@@ -191,31 +191,31 @@ mod tests_background_tokens {
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [
             (
-                Bip49DerivationPath::Ethereum((0, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((0, ETH_PATH.to_string())),
                 "account 0".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((1, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((1, ETH_PATH.to_string())),
                 "account 1".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((2, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((2, ETH_PATH.to_string())),
                 "account 2".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((3, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((3, ETH_PATH.to_string())),
                 "account 3".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((4, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((4, ETH_PATH.to_string())),
                 "account 4".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((5, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((5, ETH_PATH.to_string())),
                 "account 5".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((6, ETH_PATH)),
+                Bip49DerivationPath::Ethereum((6, ETH_PATH.to_string())),
                 "account 6".to_string(),
             ),
         ];

@@ -130,7 +130,7 @@ mod tests_background {
         let password = "test_password";
         let words = Background::gen_bip39(12).unwrap();
         let accounts = [(
-            Bip49DerivationPath::Ethereum((0, ETH_PATH)),
+            Bip49DerivationPath::Ethereum((0, ETH_PATH.to_string())),
             "Name".to_string(),
         )];
         let net_conf = NetworkConfig::new(

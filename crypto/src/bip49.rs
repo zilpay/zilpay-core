@@ -2,14 +2,14 @@ pub const ZIL_PATH: &str = "m/44'/313'/0'/0/";
 pub const ETH_PATH: &str = "m/44'/60'/0'/0/";
 
 #[derive(Debug)]
-pub enum Bip49DerivationPath<'a> {
-    Zilliqa((usize, &'a str)),
-    Ethereum((usize, &'a str)),
-    Bitcoin((usize, &'a str)),
-    Solana((usize, &'a str)),
+pub enum Bip49DerivationPath {
+    Zilliqa((usize, String)),
+    Ethereum((usize, String)),
+    Bitcoin((usize, String)),
+    Solana((usize, String)),
 }
 
-impl<'a> Bip49DerivationPath<'a> {
+impl<'a> Bip49DerivationPath {
     pub fn get_path(&self) -> String {
         match self {
             Bip49DerivationPath::Zilliqa((index, path)) => format!("{}{}", path, index),
