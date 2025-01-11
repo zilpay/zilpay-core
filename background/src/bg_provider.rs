@@ -45,6 +45,14 @@ impl ProvidersManagement for Background {
     }
 
     fn add_provider(&mut self, config: NetworkConfig) -> Result<()> {
+        if self
+            .providers
+            .iter()
+            .any(|p| p.config.chain_id == config.chain_id)
+        {
+            return Err(BackgroundError::ProviderAlreadyExists(config.chain_id));
+        }
+
         let index = self.providers.len();
         let new_provider = NetworkProvider::new(config, index);
 
