@@ -4,6 +4,7 @@ pub use config;
 pub use crypto;
 pub use errors;
 pub use history;
+pub use network;
 pub use proto;
 pub use rpc;
 pub use settings;

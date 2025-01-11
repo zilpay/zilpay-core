@@ -15,3 +15,4 @@ settings = { path = "../settings" }
 config = { path = "../config" }
 proto = { path = "../proto" }
 history = { path = "../history" }
+network = { path = "../network" }

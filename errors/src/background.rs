@@ -17,6 +17,9 @@ pub enum BackgroundError {
     #[error("Provider is not exists with index: {0}")]
     ProviderNotExists(usize),
 
+    #[error("Provider already exists with chainid: {0}")]
+    ProviderAlreadyExists(u64),
+
     #[error("Default provider cannot be removed: {0}")]
     ProviderIsDefault(usize),
 
