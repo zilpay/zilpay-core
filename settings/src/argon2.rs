@@ -1,6 +1,7 @@
 use argon2::{Config, Variant, Version};
 use config::sha::SHA256_SIZE;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ArgonParams {
@@ -18,6 +19,13 @@ impl ArgonParams {
             threads,
             secret,
         }
+    }
+
+    pub fn hash_secret(value: &str) -> [u8; SHA256_SIZE] {
+        let mut hasher = Sha256::new();
+        hasher.update(value.as_bytes());
+        let result = hasher.finalize();
+        result.into()
     }
 
     pub fn into_config(&self) -> Config<'_> {
