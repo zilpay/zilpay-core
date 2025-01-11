@@ -140,7 +140,7 @@ impl WalletInit for Wallet {
             settings: config.settings,
             accounts,
             wallet_type: WalletTypes::SecretKey,
-            selected_account: params.provider_index,
+            selected_account: 0, // for sk account we have only one account.
         };
         let wallet = Self {
             storage: config.storage,
