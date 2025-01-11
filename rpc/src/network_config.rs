@@ -1,4 +1,6 @@
-use errors::rpc::RpcError;
+use std::str::FromStr;
+
+use errors::{network::NetworkErrors, rpc::RpcError};
 use serde::{Deserialize, Serialize};
 
 use crate::common::{NetworkConfigTrait, Result};
@@ -9,6 +11,37 @@ pub enum Bip44Network {
     Bitcoin(String),
     Solana(String),
     Zilliqa(String),
+}
+
+impl std::fmt::Display for Bip44Network {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Bip44Network::Evm(value) => write!(f, "evm:{}", value),
+            Bip44Network::Bitcoin(value) => write!(f, "btc:{}", value),
+            Bip44Network::Solana(value) => write!(f, "sol:{}", value),
+            Bip44Network::Zilliqa(value) => write!(f, "zil:{}", value),
+        }
+    }
+}
+
+impl FromStr for Bip44Network {
+    type Err = NetworkErrors;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split(':').collect();
+        if parts.len() != 2 {
+            return Err(NetworkErrors::InvlaidPathBip49Type);
+        }
+
+        let (network, value) = (parts[0], parts[1].to_string());
+        match network {
+            "evm" => Ok(Bip44Network::Evm(value)),
+            "btc" => Ok(Bip44Network::Bitcoin(value)),
+            "sol" => Ok(Bip44Network::Solana(value)),
+            "zil" => Ok(Bip44Network::Zilliqa(value)),
+            _ => Err(NetworkErrors::InvlaidPathBip49(network.to_string())),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]

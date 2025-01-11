@@ -32,6 +32,12 @@ pub enum NetworkErrors {
 
     #[error("Parse response error")]
     ResponseParseError,
+
+    #[error("Invalid bip49: {0}")]
+    InvlaidPathBip49(String),
+
+    #[error("Invalid bip44Network type")]
+    InvlaidPathBip49Type,
 }
 
 impl From<TransactionErrors> for NetworkErrors {
