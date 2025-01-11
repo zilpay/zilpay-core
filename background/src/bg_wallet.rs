@@ -30,7 +30,7 @@ pub trait WalletManagement {
     /// * `device_indicators` - Device-specific identifiers
     /// * `wallet_index` - Index of the wallet to unlock
     fn unlock_wallet_with_password(
-        &mut self,
+        &self,
         password: &str,
         device_indicators: &[String],
         wallet_index: usize,
@@ -42,7 +42,7 @@ pub trait WalletManagement {
     /// * `device_indicators` - Device-specific identifiers
     /// * `wallet_index` - Index of the wallet to unlock
     fn unlock_wallet_with_session(
-        &mut self,
+        &self,
         session_cipher: Vec<u8>,
         device_indicators: &[String],
         wallet_index: usize,
@@ -77,15 +77,12 @@ impl WalletManagement for Background {
     type Error = BackgroundError;
 
     fn unlock_wallet_with_password(
-        &mut self,
+        &self,
         password: &str,
         device_indicators: &[String],
         wallet_index: usize,
     ) -> Result<[u8; SHA512_SIZE]> {
-        let wallet = self
-            .wallets
-            .get_mut(wallet_index)
-            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
+        let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data().unwrap();
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -101,16 +98,13 @@ impl WalletManagement for Background {
     }
 
     fn unlock_wallet_with_session(
-        &mut self,
+        &self,
         session_cipher: Vec<u8>,
         device_indicators: &[String],
         wallet_index: usize,
     ) -> Result<[u8; SHA512_SIZE]> {
-        let wallet = self
-            .wallets
-            .get_mut(wallet_index)
-            .ok_or(BackgroundError::WalletNotExists(wallet_index))?;
-        let data = wallet.get_wallet_data().unwrap();
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let data = wallet.get_wallet_data()?;
         let wallet_device_indicators =
             create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
 

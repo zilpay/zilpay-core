@@ -10,9 +10,6 @@ pub enum SettingsErrors {
     #[error("Invalid theme code: {0}")]
     InvalidThemeCode(u8),
 
-    #[error("Invalid hash size {0}")]
-    InvalidHashSize(String),
-
     #[error("Invalid hex: {0}")]
     InvalidHex(String),
 
