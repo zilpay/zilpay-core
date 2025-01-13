@@ -52,17 +52,27 @@ impl Cache {
         self.save_downloaded_image(&url_hash, &bytes).await
     }
 
-    pub async fn get_image_bytes(&self, url: &str) -> Result<Vec<u8>> {
+    pub async fn get_image_bytes(&self, url: &str) -> Result<(Vec<u8>, String)> {
         let url_hash = self.hash_url(url);
 
         if let Some(file_name) = self.find_cached_file(&url_hash) {
-            let file_path = self.cache_dir.join(file_name);
-            return fs::read(file_path).map_err(|e| CacheError::ReadFileError(e.to_string()));
+            let file_path = self.cache_dir.join(&file_name);
+            let bytes =
+                fs::read(&file_path).map_err(|e| CacheError::ReadFileError(e.to_string()))?;
+            let extension = file_name
+                .split('.')
+                .last()
+                .ok_or(CacheError::UnknownImageFormat)?
+                .to_string();
+            return Ok((bytes, extension));
         }
 
         let bytes = self.download_image(url).await?;
+        let format = self.detect_image_format(&bytes)?;
+
         self.save_downloaded_image(&url_hash, &bytes).await?;
-        Ok(bytes)
+
+        Ok((bytes, format))
     }
 
     async fn download_image(&self, url: &str) -> Result<Vec<u8>> {
@@ -131,7 +141,8 @@ mod tests_cache {
         let cached_name = cache.get_image_name(url).await.unwrap();
         assert_eq!("0x1331b9c48bc9540.svg", cached_name);
 
-        let bytes = cache.get_image_bytes(url).await.unwrap();
+        let (bytes, format) = cache.get_image_bytes(url).await.unwrap();
         assert!(!bytes.is_empty());
+        assert_eq!("svg", format);
     }
 }
