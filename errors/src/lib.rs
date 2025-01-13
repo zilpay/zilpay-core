@@ -4,6 +4,7 @@ pub mod account;
 pub mod address;
 pub mod background;
 pub mod bip32;
+pub mod cache;
 pub mod cipher;
 pub mod crypto;
 pub mod keychain;
