@@ -9,7 +9,7 @@ pub enum Bip49DerivationPath {
     Solana((usize, String)),
 }
 
-impl<'a> Bip49DerivationPath {
+impl Bip49DerivationPath {
     pub fn get_path(&self) -> String {
         match self {
             Bip49DerivationPath::Zilliqa((index, path)) => format!("{}{}", path, index),

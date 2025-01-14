@@ -1,6 +1,5 @@
 use errors::cache::CacheError;
 use image::guess_format;
-use reqwest;
 use std::collections::hash_map::DefaultHasher;
 use std::fs;
 use std::hash::{Hash, Hasher};

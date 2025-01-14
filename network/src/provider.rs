@@ -26,7 +26,7 @@ use token::ft_parse::{
     process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub struct NetworkProvider {
     pub config: NetworkConfig,
     pub index: usize,
@@ -319,6 +319,8 @@ mod tests_network {
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("BSC"),
+            None,
         );
         let provider = NetworkProvider::new(net_conf, 0);
 
@@ -345,6 +347,8 @@ mod tests_network {
             1,
             vec!["https://api.zilliqa.com".to_string()],
             Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("ZIL"),
+            None,
         );
         let provider = NetworkProvider::new(net_conf, 0);
 
@@ -371,6 +375,8 @@ mod tests_network {
             1,
             vec!["https://api.zilliqa.com".to_string()],
             Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("ZIL"),
+            None,
         );
         let provider = NetworkProvider::new(net_conf, 0);
         let mut tokens = vec![
@@ -542,6 +548,8 @@ mod tests_network {
             1,
             vec!["https://test.network".to_string()],
             Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("TST"),
+            None,
         );
         let providers = vec![NetworkProvider::new(config, 0)];
 
@@ -568,18 +576,24 @@ mod tests_network {
                 1,
                 vec!["https://test1.network".to_string()],
                 Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+                String::from("TST"),
+                None,
             ),
             NetworkConfig::new(
                 "Test Network 2",
                 2,
                 vec!["https://test2.network".to_string()],
                 Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+                String::from("TST"),
+                None,
             ),
             NetworkConfig::new(
                 "Test Network 3",
                 3,
                 vec!["https://test3.network".to_string()],
                 Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+                String::from("TST"),
+                None,
             ),
         ];
         let providers: Vec<NetworkProvider> = configs
@@ -616,6 +630,8 @@ mod tests_network {
                 1,
                 vec!["https://initial.network".to_string()],
                 Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+                String::from("TST"),
+                None,
             ),
             0,
         ));
@@ -630,6 +646,8 @@ mod tests_network {
                 2,
                 vec!["https://new.network".to_string()],
                 Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+                String::from("TST"),
+                None,
             ),
             0,
         ));
@@ -655,6 +673,8 @@ mod tests_network {
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("BSC"),
+            None,
         );
         let provider = NetworkProvider::new(net_conf, 0);
 
@@ -678,6 +698,8 @@ mod tests_network {
             1,
             vec!["https://api.zilliqa.com".to_string()],
             Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("ZIL"),
+            None,
         );
         let provider = NetworkProvider::new(net_conf, 0);
 

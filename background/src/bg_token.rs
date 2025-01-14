@@ -107,6 +107,8 @@ mod tests_background_tokens {
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("BSC"),
+            None,
         )
     }
 

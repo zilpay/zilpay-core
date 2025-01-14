@@ -67,6 +67,8 @@ mod tests_background_transactions {
             333,
             vec!["https://dev-api.zilliqa.com".to_string()],
             Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("ZIL"),
+            None,
         )
     }
 
@@ -81,6 +83,8 @@ mod tests_background_transactions {
                 "https://bsctestapi.terminet.io/rpc".to_string(),
             ],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("BSC"),
+            None,
         )
     }
 

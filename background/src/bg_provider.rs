@@ -104,6 +104,8 @@ mod tests_providers {
             explorer_urls: Vec::new(),
             default,
             bip49: rpc::network_config::Bip44Network::Evm(ETH_PATH.to_string()),
+            token_symbol: String::from("TST"),
+            logo: None,
         }
     }
 
@@ -119,7 +121,10 @@ mod tests_providers {
         assert_eq!(bg.providers[0].config.network_name, "Test Network 1");
 
         // Test adding another provider
-        let config2 = create_test_network_config("Test Network 2", false);
+        let mut config2 = create_test_network_config("Test Network 2", false);
+
+        config2.chain_id = 11;
+
         bg.add_provider(config2.clone()).unwrap();
 
         assert_eq!(bg.providers.len(), 2);
@@ -132,9 +137,12 @@ mod tests_providers {
 
         // Add two providers
         let config1 = create_test_network_config("Test Network 1", false);
-        let config2 = create_test_network_config("Test Network 2", false);
+        let mut config2 = create_test_network_config("Test Network 2", false);
 
         bg.add_provider(config1.clone()).unwrap();
+
+        config2.chain_id = 33;
+
         bg.add_provider(config2.clone()).unwrap();
 
         assert_eq!(bg.providers.len(), 2);
@@ -182,9 +190,11 @@ mod tests_providers {
 
         // Add providers
         let config1 = create_test_network_config("Test Network 1", false);
-        let config2 = create_test_network_config("Test Network 2", false);
+        let mut config2 = create_test_network_config("Test Network 2", false);
 
         bg.add_provider(config1.clone()).unwrap();
+        assert!(bg.add_provider(config2.clone()).is_err());
+        config2.chain_id = 42;
         bg.add_provider(config2.clone()).unwrap();
 
         // Drop the background instance
@@ -204,9 +214,10 @@ mod tests_providers {
 
         // Add initial providers
         let config1 = create_test_network_config("Test Network 1", false);
-        let config2 = create_test_network_config("Test Network 2", false);
+        let mut config2 = create_test_network_config("Test Network 2", false);
 
         bg.add_provider(config1.clone()).unwrap();
+        config2.chain_id = 3243;
         bg.add_provider(config2.clone()).unwrap();
 
         // Modify providers directly and update

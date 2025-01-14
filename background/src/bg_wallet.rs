@@ -363,6 +363,8 @@ mod tests_background {
             0,
             vec!["".to_string()],
             Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("TST"),
+            None,
         );
 
         bg.add_provider(net_conf).unwrap();

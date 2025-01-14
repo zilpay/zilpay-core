@@ -106,6 +106,8 @@ mod tests {
             1,
             vec!["https://api.zilliqa.com".to_string()],
             Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("ZIL"),
+            None,
         );
         let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
         let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(
@@ -127,6 +129,8 @@ mod tests {
             56,
             vec!["https://bsc-dataseed.binance.org".to_string()],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("BSC"),
+            None,
         );
         let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
         let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(

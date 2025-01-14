@@ -44,9 +44,11 @@ impl FromStr for Bip44Network {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct NetworkConfig {
     pub network_name: String,
+    pub token_symbol: String,
+    pub logo: Option<String>,
     pub chain_id: u64,
     pub fallback_enabled: bool,
     pub urls: Vec<String>,
@@ -67,8 +69,12 @@ impl NetworkConfig {
         chain_id: u64,
         urls: Vec<String>,
         bip49: Bip44Network,
+        token_symbol: String,
+        logo: Option<String>,
     ) -> Self {
         Self {
+            token_symbol,
+            logo,
             bip49,
             fallback_enabled: true,
             network_name: network_name.into(),
@@ -190,6 +196,8 @@ mod tests_network_config {
             1,
             vec!["http://default.com".to_string()],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("TST"),
+            None,
         )
     }
 
@@ -252,6 +260,8 @@ mod tests_network_config {
                 "http://third.com".to_string(),
             ],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("TST"),
+            None,
         );
 
         // Test removing default node (should fail)
@@ -279,6 +289,8 @@ mod tests_network_config {
                 "http://fourth.com".to_string(),
             ],
             Bip44Network::Evm(ETH_PATH.to_string()),
+            String::from("TST"),
+            None,
         );
 
         // Test empty indexes
