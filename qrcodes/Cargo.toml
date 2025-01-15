@@ -1,8 +1,9 @@
 [package]
-name = "qrcode"
+name = "qrcodes"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 alloy.workspace = true
 errors = { path = "../errors" }
+fast_qr  = { version = "0.12.7", default-features = false, features = ["svg"] }
