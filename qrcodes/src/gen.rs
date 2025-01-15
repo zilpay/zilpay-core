@@ -24,6 +24,44 @@ pub enum DataModuleShape {
     Circle,
 }
 
+impl From<u8> for EyeShape {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => EyeShape::Square,
+            1 => EyeShape::Circle,
+            _ => EyeShape::Square,
+        }
+    }
+}
+
+impl From<u8> for DataModuleShape {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => DataModuleShape::Square,
+            1 => DataModuleShape::Circle,
+            _ => DataModuleShape::Circle,
+        }
+    }
+}
+
+impl From<EyeShape> for u8 {
+    fn from(value: EyeShape) -> Self {
+        match value {
+            EyeShape::Square => 0,
+            EyeShape::Circle => 1,
+        }
+    }
+}
+
+impl From<DataModuleShape> for u8 {
+    fn from(value: DataModuleShape) -> Self {
+        match value {
+            DataModuleShape::Square => 0,
+            DataModuleShape::Circle => 1,
+        }
+    }
+}
+
 pub fn flutter_to_rgba(color: u32) -> [u8; 4] {
     [
         ((color >> 16) & 0xFF) as u8, // R
