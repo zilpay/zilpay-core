@@ -1,0 +1,8 @@
+[package]
+name = "qrcode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alloy.workspace = true
+errors = { path = "../errors" }
