@@ -16,4 +16,7 @@ pub enum QRCodeError {
 
     #[error("Invalid token address")]
     InvalidTokenAddress,
+
+    #[error("fail to gen qrcode: from data {0}, Error: {0}")]
+    QrcodeGenError(String, String),
 }

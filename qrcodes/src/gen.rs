@@ -1,3 +1,4 @@
+use errors::qrcode::QRCodeError;
 use fast_qr::convert::{svg::SvgBuilder, Builder, Shape};
 use fast_qr::qr::QRBuilder;
 use fast_qr::ECL;
@@ -32,12 +33,11 @@ pub fn flutter_to_rgba(color: u32) -> [u8; 4] {
     ]
 }
 
-pub fn generate_qr(data: &str, config: QrConfig) -> Result<String, fast_qr::convert::ConvertError> {
+pub fn generate_qr(data: &str, config: QrConfig) -> Result<String, QRCodeError> {
     let qr = QRBuilder::new(data)
         .ecl(ECL::H)
-        // .version(Version::V03)
         .build()
-        .unwrap();
+        .map_err(|e| QRCodeError::QrcodeGenError(data.to_string(), e.to_string()))?;
 
     let shape = match config.data_module_shape {
         DataModuleShape::Square => Shape::Square,
