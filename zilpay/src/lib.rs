@@ -7,6 +7,7 @@ pub use errors;
 pub use history;
 pub use network;
 pub use proto;
+pub use qrcodes;
 pub use rpc;
 pub use settings;
 pub use token;

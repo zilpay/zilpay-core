@@ -44,6 +44,7 @@ rpc = { path = "./rpc" }
 cipher = { path = "./cipher" }
 network = { path = "./network" }
 cache = { path = "./cache" }
+qrcodes = { path = "./qrcodes" }
 
 [workspace.dependencies]
 async-trait = "0.1.83"

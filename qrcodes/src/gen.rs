@@ -32,7 +32,7 @@ pub fn flutter_to_rgba(color: u32) -> [u8; 4] {
     ]
 }
 
-fn generate_qr(data: &str, config: QrConfig) -> Result<String, fast_qr::convert::ConvertError> {
+pub fn generate_qr(data: &str, config: QrConfig) -> Result<String, fast_qr::convert::ConvertError> {
     let qr = QRBuilder::new(data)
         .ecl(ECL::H)
         // .version(Version::V03)
