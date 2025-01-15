@@ -15,6 +15,16 @@ impl FromStr for QRcodeScanResult {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let clean_input = input.trim();
+
+        if !clean_input.contains(':') {
+            return Ok(QRcodeScanResult {
+                recipient: clean_input.to_string(),
+                provider: None,
+                token_address: None,
+                amount: None,
+            });
+        }
+
         let (uri, params) = clean_input.split_once('?').unwrap_or((clean_input, ""));
         let parts: Vec<&str> = uri
             .split(|c| c == ':' || c == '/')
@@ -143,5 +153,13 @@ mod tests_qrcode_parse {
             Some("0xdac17f958d2ee523a2206206994597c13d831ec7".to_string())
         );
         assert_eq!(result.amount, Some("1000000".to_string()));
+
+        let result = "0x246C5881E3F109B2aF170F5C773EF969d3da581B"
+            .parse::<QRcodeScanResult>()
+            .unwrap();
+        assert_eq!(
+            result.recipient,
+            "0x246C5881E3F109B2aF170F5C773EF969d3da581B"
+        );
     }
 }
