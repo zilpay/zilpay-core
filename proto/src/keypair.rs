@@ -44,6 +44,21 @@ impl KeyPair {
         Ok(Self::Secp256k1Keccak256Ethereum(keys))
     }
 
+    pub fn from_sk_bytes(
+        sk: [u8; SECRET_KEY_SIZE],
+    ) -> Result<([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])> {
+        let secret_key = K256SecretKey::from_slice(&sk).or(Err(KeyPairError::InvalidEntropy))?;
+        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
+            .public_key()
+            .to_sec1_bytes()
+            .to_vec()
+            .try_into()
+            .or(Err(KeyPairError::InvalidSecretKey))?;
+        let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
+
+        Ok((pub_key, secret_key))
+    }
+
     pub fn gen_keys_bytes() -> Result<([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])> {
         let mut rng = ChaCha20Rng::from_entropy();
         let mut sk_bytes = [0u8; SECRET_KEY_SIZE];
