@@ -71,6 +71,8 @@ pub trait WalletManagement {
     /// Retrieves a wallet by its index
     fn get_wallet_by_index(&self, wallet_index: usize)
         -> std::result::Result<&Wallet, Self::Error>;
+
+    fn delete_wallet(&mut self, wallet_index: usize) -> std::result::Result<(), Self::Error>;
 }
 
 impl WalletManagement for Background {
@@ -329,6 +331,17 @@ impl WalletManagement for Background {
             .get(wallet_index)
             .ok_or(BackgroundError::WalletNotExists(wallet_index))
     }
+
+    fn delete_wallet(&mut self, wallet_index: usize) -> Result<()> {
+        let wallet_address = self.get_wallet_by_index(wallet_index)?.wallet_address;
+        let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
+
+        indicators.retain(|&x| x != wallet_address);
+        self.wallets.retain(|x| x.wallet_address != wallet_address);
+        self.save_indicators(indicators)?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -336,6 +349,7 @@ mod tests_background {
     use super::*;
     use crate::{bg_crypto::CryptoOperations, bg_provider::ProvidersManagement};
     use crypto::bip49::{Bip49DerivationPath, ETH_PATH, ZIL_PATH};
+    use proto::keypair::KeyPair;
     use rand::Rng;
     use rpc::network_config::{Bip44Network, NetworkConfig};
 
@@ -419,5 +433,65 @@ mod tests_background {
         let bg = Background::from_storage_path(&dir).unwrap();
 
         assert_eq!(bg.wallets.len(), 2);
+    }
+
+    #[test]
+    fn test_delete_wallet() {
+        let (mut bg, dir) = setup_test_background();
+
+        let password = "test_password";
+        let words = Background::gen_bip39(24).unwrap();
+        let accounts = [(
+            Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string())),
+            "Zilliqa wallet".to_string(),
+        )];
+        let keypair = KeyPair::gen_sha256().unwrap();
+        let net_conf = NetworkConfig::new(
+            "",
+            0,
+            vec!["".to_string()],
+            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
+            String::from("TST"),
+            None,
+        );
+
+        bg.add_provider(net_conf).unwrap();
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password,
+            provider: 0,
+            mnemonic_str: &words,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![],
+        })
+        .unwrap();
+
+        bg.add_sk_wallet(BackgroundSKParams {
+            secret_key: keypair.get_secretkey().unwrap(),
+            password,
+            provider: 0,
+            wallet_settings: Default::default(),
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![],
+        })
+        .unwrap();
+
+        assert_eq!(bg.wallets.len(), 2);
+
+        assert!(bg.delete_wallet(3).is_err());
+
+        bg.delete_wallet(0).unwrap();
+        assert_eq!(bg.wallets.len(), 1);
+        drop(bg);
+
+        let bg = Background::from_storage_path(&dir).unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
     }
 }

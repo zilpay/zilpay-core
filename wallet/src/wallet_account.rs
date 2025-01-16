@@ -26,7 +26,7 @@ pub trait AccountManagement {
         seed_bytes: &Argon2Seed,
         provider_index: usize,
     ) -> std::result::Result<(), Self::Error>;
-    fn select_account(&mut self, account_index: usize) -> std::result::Result<(), Self::Error>;
+    fn select_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
 }
 
 impl AccountManagement for Wallet {
@@ -102,7 +102,7 @@ impl AccountManagement for Wallet {
         }
     }
 
-    fn select_account(&mut self, account_index: usize) -> Result<()> {
+    fn select_account(&self, account_index: usize) -> Result<()> {
         let mut data = self.get_wallet_data()?;
 
         if data.accounts.is_empty() {
