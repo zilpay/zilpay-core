@@ -3,8 +3,7 @@ use alloy::{
     signers::{local::PrivateKeySigner, SignerSync},
 };
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
-use crypto::bip49::Bip49DerivationPath;
-use crypto::schnorr;
+use crypto::{bip49::DerivationPath, schnorr, slip44};
 use k256::SecretKey as K256SecretKey;
 
 use crate::{
@@ -16,7 +15,7 @@ use crate::{
 };
 
 use super::secret_key::SecretKey;
-use errors::keypair::KeyPairError;
+use errors::{bip32::Bip329Errors, keypair::KeyPairError};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -98,10 +97,7 @@ impl KeyPair {
         }
     }
 
-    pub fn from_bip39_seed(
-        seed: &[u8; BIP39_SEED_SIZE],
-        bip49: &Bip49DerivationPath,
-    ) -> Result<Self> {
+    pub fn from_bip39_seed(seed: &[u8; BIP39_SEED_SIZE], bip49: &DerivationPath) -> Result<Self> {
         let path = bip49.get_path();
         let secret_key =
             derive_private_key(seed, &path).map_err(KeyPairError::ExtendedPrivKeyDeriveError)?;
@@ -113,15 +109,13 @@ impl KeyPair {
             .or(Err(KeyPairError::InvalidSecretKey))?;
         let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
 
-        match bip49 {
-            Bip49DerivationPath::Zilliqa(_) => {
-                Ok(Self::Secp256k1Sha256Zilliqa((pub_key, secret_key)))
-            }
-            Bip49DerivationPath::Ethereum(_) => {
-                Ok(Self::Secp256k1Keccak256Ethereum((pub_key, secret_key)))
-            }
+        match bip49.slip44 {
+            slip44::ZILLIQA => Ok(Self::Secp256k1Sha256Zilliqa((pub_key, secret_key))),
+            slip44::ETHEREUM => Ok(Self::Secp256k1Keccak256Ethereum((pub_key, secret_key))),
             _ => {
-                todo!()
+                return Err(KeyPairError::ExtendedPrivKeyDeriveError(
+                    Bip329Errors::InvalidSlip44(bip49.slip44),
+                ))
             }
         }
     }
@@ -251,11 +245,9 @@ impl KeyPair {
 }
 
 #[cfg(test)]
-mod tests {
-    use bip39::Mnemonic;
-    use crypto::bip49::{ETH_PATH, ZIL_PATH};
-
+mod tests_keypair {
     use super::*;
+    use bip39::Mnemonic;
     use std::borrow::Cow;
 
     fn create_test_keypair(key_type: u8) -> KeyPair {
@@ -312,22 +304,9 @@ mod tests {
     #[test]
     fn test_from_bytes_invalid_key_type() {
         let mut bytes = vec![0u8; KEYPAIR_BYTES_SIZE];
-        bytes[0] = 2; // Invalid key type
+        bytes[0] = 2;
         let result = KeyPair::from_bytes(Cow::Borrowed(&bytes));
         assert!(matches!(result, Err(KeyPairError::InvalidKeyType)));
-    }
-
-    #[test]
-    fn test_roundtrip() {
-        let original = create_test_keypair(0);
-        let bytes = original.to_bytes().unwrap();
-        let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
-        assert_eq!(original, recovered);
-
-        let original = create_test_keypair(1);
-        let bytes = original.to_bytes().unwrap();
-        let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
-        assert_eq!(original, recovered);
     }
 
     #[test]
@@ -365,8 +344,6 @@ mod tests {
 
     #[test]
     fn from_to_bytes() {
-        use crate::keypair::KeyPair;
-
         let key_pair = KeyPair::gen_keccak256().unwrap();
         let bytes = key_pair.to_bytes().unwrap();
         let restored_key_pair = KeyPair::from_bytes(bytes[..].into()).unwrap();
@@ -375,15 +352,11 @@ mod tests {
     }
 
     #[test]
-    fn test_bip39_zil() {
+    fn test_bip39_derivation() {
         let mnemonic_str =
             "green process gate doctor slide whip priority shrug diamond crumble average help";
         let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
-        let index = 0;
         let seed = m.to_seed("");
-
-        let zil_path = Bip49DerivationPath::Zilliqa((index, ZIL_PATH.to_string()));
-        let eth_path = Bip49DerivationPath::Ethereum((index, ETH_PATH.to_string()));
 
         assert_eq!(
             [
@@ -394,6 +367,10 @@ mod tests {
             ],
             seed
         );
+
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0);
+
         let zil_key_pair = KeyPair::from_bip39_seed(&seed, &zil_path).unwrap();
         let eth_key_pair = KeyPair::from_bip39_seed(&seed, &eth_path).unwrap();
 
@@ -434,5 +411,20 @@ mod tests {
             zil_key_pair.get_pubkey().unwrap().to_string(),
             "0003150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
         );
+    }
+
+    #[test]
+    fn test_derivation_path_generation() {
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, 1);
+
+        assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");
+        assert_eq!(zil_path.get_path(), "m/44'/313'/0'/0/1");
+
+        assert_eq!(eth_path.get_base_path(), "m/44'/60'/0'/0/");
+        assert_eq!(zil_path.get_base_path(), "m/44'/313'/0'/0/");
+
+        assert_eq!(eth_path.get_index(), 0);
+        assert_eq!(zil_path.get_index(), 1);
     }
 }
