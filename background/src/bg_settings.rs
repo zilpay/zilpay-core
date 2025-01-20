@@ -1,11 +1,11 @@
 use crate::{bg_storage::StorageManagement, Result};
 
+use errors::background::BackgroundError;
 use settings::{
     locale::Locale,
     notifications::{NotificationState, Notifications},
     theme::Theme,
 };
-use errors::background::BackgroundError;
 
 use crate::Background;
 

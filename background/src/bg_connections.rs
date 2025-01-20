@@ -84,8 +84,8 @@ impl ConnectionManagement for Background {
 
 #[cfg(test)]
 mod tests_background {
-    use rand::Rng;
     use errors::background::BackgroundError;
+    use rand::Rng;
 
     use crate::bg_connections::ConnectionManagement;
     use crate::bg_storage::StorageManagement;

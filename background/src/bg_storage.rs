@@ -6,7 +6,6 @@ use config::{
     storage::{GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY},
 };
 use errors::background::BackgroundError;
-use network::{common::Provider, provider::NetworkProvider};
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use wallet::{wallet_storage::StorageOperations, Wallet};
@@ -62,8 +61,6 @@ impl StorageManagement for Background {
         let indicators = Self::get_indicators(Arc::clone(&storage));
         let mut wallets = Vec::with_capacity(indicators.len());
         let settings = Self::load_global_settings(Arc::clone(&storage));
-        let providers: Vec<NetworkProvider> =
-            NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         for addr in &indicators {
             let w = Wallet::init_wallet(*addr, Arc::clone(&storage))?;
@@ -72,7 +69,6 @@ impl StorageManagement for Background {
         }
 
         Ok(Self {
-            providers,
             storage,
             wallets,
             settings,
@@ -104,21 +100,41 @@ impl StorageManagement for Background {
 
 #[cfg(test)]
 mod tests_background {
+    use super::*;
     use crate::{
         bg_crypto::CryptoOperations, bg_provider::ProvidersManagement, bg_wallet::WalletManagement,
         BackgroundBip39Params,
     };
-
-    use super::*;
-    use crypto::bip49::{Bip49DerivationPath, ETH_PATH};
+    use crypto::{bip49::DerivationPath, slip44};
+    use proto::address::Address;
     use rand::Rng;
-    use rpc::network_config::{Bip44Network, NetworkConfig};
+    use rpc::network_config::{ChainConfig, Explorer};
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let bg = Background::from_storage_path(&dir).unwrap();
         (bg, dir)
+    }
+
+    fn create_test_network_config() -> ChainConfig {
+        ChainConfig {
+            name: "Test Network".to_string(),
+            chain: "TEST".to_string(),
+            icon: String::new(),
+            rpc: vec!["https://test.network".to_string()],
+            features: vec![155, 1559],
+            chain_id: 1,
+            slip_44: slip44::ETHEREUM,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "TestExplorer".to_string(),
+                url: "https://test.explorer".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
+        }
     }
 
     #[test]
@@ -129,23 +145,13 @@ mod tests_background {
 
         let password = "test_password";
         let words = Background::gen_bip39(12).unwrap();
-        let accounts = [(
-            Bip49DerivationPath::Ethereum((0, ETH_PATH.to_string())),
-            "Name".to_string(),
-        )];
-        let net_conf = NetworkConfig::new(
-            "",
-            0,
-            vec!["".to_string()],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("TST"),
-            None,
-        );
+        let accounts = [(DerivationPath::new(slip44::ETHEREUM, 0), "Name".to_string())];
+        let net_conf = create_test_network_config();
 
-        bg.add_provider(net_conf).unwrap();
+        bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            provider: 0,
+            chain_hash: net_conf.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -166,5 +172,58 @@ mod tests_background {
         let bg = Background::from_storage_path(&dir).unwrap();
 
         assert_eq!(bg.wallets.first().unwrap().wallet_address, wallet_address);
+    }
+
+    #[test]
+    fn test_multiple_wallets() {
+        let (mut bg, _) = setup_test_background();
+        let net_conf = create_test_network_config();
+
+        bg.add_provider(net_conf.clone()).unwrap();
+
+        // Add first wallet
+        let words1 = Background::gen_bip39(12).unwrap();
+        let accounts1 = [(
+            DerivationPath::new(slip44::ETHEREUM, 0),
+            "Wallet1".to_string(),
+        )];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: "pass1",
+            chain_hash: net_conf.hash(),
+            mnemonic_str: &words1,
+            accounts: &accounts1,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::from("Wallet1"),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0001")],
+            ftokens: vec![],
+        })
+        .unwrap();
+
+        // Add second wallet
+        let words2 = Background::gen_bip39(12).unwrap();
+        let accounts2 = [(
+            DerivationPath::new(slip44::ETHEREUM, 0),
+            "Wallet2".to_string(),
+        )];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: "pass2",
+            chain_hash: net_conf.hash(),
+            mnemonic_str: &words2,
+            accounts: &accounts2,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::from("Wallet2"),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0002")],
+            ftokens: vec![],
+        })
+        .unwrap();
+
+        assert_eq!(bg.wallets.len(), 2);
+        assert_ne!(bg.wallets[0].wallet_address, bg.wallets[1].wallet_address);
     }
 }

@@ -15,13 +15,10 @@ pub enum BackgroundError {
     NetworkErrors(NetworkErrors),
 
     #[error("Provider is not exists with chain id: {0}")]
-    ProviderNotExists(u128),
+    ProviderNotExists(u64),
 
     #[error("Provider already exists with chainid: {0}")]
-    ProviderAlreadyExists(u128),
-
-    #[error("Default provider cannot be removed: {0}")]
-    ProviderIsDefault(usize),
+    ProviderAlreadyExists(u64),
 
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,

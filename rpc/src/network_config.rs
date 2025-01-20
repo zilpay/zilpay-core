@@ -21,7 +21,7 @@ pub struct ChainConfig {
     pub icon: String,
     pub rpc: Vec<String>,
     pub features: Vec<u16>,
-    pub chain_id: u128,
+    pub chain_id: u64,
     pub slip_44: u32,
     pub ens: Address,
     pub explorers: Vec<Explorer>,
@@ -43,7 +43,7 @@ impl ChainConfig {
         &self.name
     }
 
-    pub fn chain_id(&self) -> u128 {
+    pub fn chain_id(&self) -> u64 {
         self.chain_id
     }
 

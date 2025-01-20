@@ -1,8 +1,7 @@
 pub use bip39::{Language, Mnemonic};
 
-use crypto::bip49::Bip49DerivationPath;
+use crypto::bip49::DerivationPath;
 use errors::background::BackgroundError;
-use network::provider::NetworkProvider;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
 use settings::{common_settings::CommonSettings, wallet_settings::WalletSettings};
 use std::sync::Arc;
@@ -20,8 +19,8 @@ pub struct BackgroundBip39Params<'a> {
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub wallet_settings: WalletSettings,
-    pub accounts: &'a [(Bip49DerivationPath, String)],
-    pub provider: usize,
+    pub accounts: &'a [(DerivationPath, String)],
+    pub chain_hash: u64,
     pub ftokens: Vec<FToken>,
 }
 
@@ -32,7 +31,7 @@ pub struct BackgroundSKParams<'a> {
     pub biometric_type: AuthMethod,
     pub device_indicators: &'a [String],
     pub wallet_settings: WalletSettings,
-    pub provider: usize,
+    pub chain_hash: u64,
     pub ftokens: Vec<FToken>,
 }
 
@@ -44,7 +43,7 @@ pub struct BackgroundLedgerParams {
     pub wallet_index: usize,
     pub biometric_type: AuthMethod,
     pub wallet_settings: WalletSettings,
-    pub provider_index: usize,
+    pub chain_hash: u64,
     pub ftokens: Vec<FToken>,
 }
 
@@ -52,7 +51,6 @@ pub struct Background {
     storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
     pub settings: CommonSettings,
-    pub providers: Vec<NetworkProvider>,
 }
 
 pub mod bg_book;

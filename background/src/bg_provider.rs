@@ -7,14 +7,14 @@ use std::sync::Arc;
 pub trait ProvidersManagement {
     type Error;
 
-    fn get_provider(&self, chain_id: u128) -> std::result::Result<&NetworkProvider, Self::Error>;
-    fn get_mut_provider(
-        &mut self,
-        chain_id: u128,
-    ) -> std::result::Result<&mut NetworkProvider, Self::Error>;
-    fn add_provider(&mut self, config: ChainConfig) -> std::result::Result<(), Self::Error>;
-    fn remvoe_providers(&mut self, index: usize) -> std::result::Result<(), Self::Error>;
-    fn update_providers(&mut self) -> std::result::Result<(), Self::Error>;
+    fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error>;
+    fn get_providers(&self) -> Vec<NetworkProvider>;
+    fn add_provider(&self, config: ChainConfig) -> std::result::Result<(), Self::Error>;
+    fn remvoe_providers(&self, index: usize) -> std::result::Result<(), Self::Error>;
+    fn update_providers(
+        &self,
+        providers: Vec<NetworkProvider>,
+    ) -> std::result::Result<(), Self::Error>;
 }
 
 impl ProvidersManagement for Background {
@@ -23,59 +23,51 @@ impl ProvidersManagement for Background {
     // TODO: add method with rankeing node depends of network
     //
 
-    fn get_mut_provider(
-        &mut self,
-        chain_id: u128,
-    ) -> std::result::Result<&mut NetworkProvider, Self::Error> {
-        self.providers
-            .iter_mut()
-            .find(|p| p.config.chain_id == chain_id)
-            .ok_or(BackgroundError::ProviderNotExists(chain_id))
+    fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error> {
+        self.get_providers()
+            .into_iter()
+            .find(|p| p.config.hash() == chain_hash)
+            .ok_or(BackgroundError::ProviderNotExists(chain_hash))
     }
 
-    fn get_provider(&self, chain_id: u128) -> std::result::Result<&NetworkProvider, Self::Error> {
-        self.providers
-            .iter()
-            .find(|p| p.config.chain_id == chain_id)
-            .ok_or(BackgroundError::ProviderNotExists(chain_id))
+    fn get_providers(&self) -> Vec<NetworkProvider> {
+        NetworkProvider::load_network_configs(Arc::clone(&self.storage))
     }
 
-    fn update_providers(&mut self) -> std::result::Result<(), Self::Error> {
-        NetworkProvider::save_network_configs(&self.providers, Arc::clone(&self.storage))?;
+    fn update_providers(
+        &self,
+        providers: Vec<NetworkProvider>,
+    ) -> std::result::Result<(), Self::Error> {
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&self.storage))?;
 
         Ok(())
     }
 
-    fn add_provider(&mut self, config: ChainConfig) -> Result<()> {
-        if self
-            .providers
-            .iter()
-            .any(|p| p.config.chain_id == config.chain_id)
-        {
+    fn add_provider(&self, config: ChainConfig) -> Result<()> {
+        let hash = config.hash();
+        let mut providers = self.get_providers();
+
+        if providers.iter().any(|p| p.config.hash() == hash) {
             return Err(BackgroundError::ProviderAlreadyExists(config.chain_id));
         }
 
-        let index = self.providers.len();
         let new_provider = NetworkProvider::new(config);
 
-        self.providers.push(new_provider);
-        self.update_providers()?;
+        providers.push(new_provider);
+        self.update_providers(providers)?;
 
         Ok(())
     }
 
-    fn remvoe_providers(&mut self, index: usize) -> Result<()> {
-        let provider = self
-            .providers
-            .get(index)
-            .ok_or(BackgroundError::ProviderNotExists(index))?;
+    fn remvoe_providers(&self, index: usize) -> Result<()> {
+        let mut providers = self.get_providers();
 
-        if provider.config.default {
-            return Err(BackgroundError::ProviderIsDefault(index));
+        if providers.get(index).is_none() {
+            return Err(BackgroundError::ProviderNotExists(index as u64));
         }
 
-        self.providers.remove(index);
-        self.update_providers()?;
+        providers.remove(index);
+        self.update_providers(providers)?;
 
         Ok(())
     }
@@ -83,12 +75,11 @@ impl ProvidersManagement for Background {
 
 #[cfg(test)]
 mod tests_providers {
-    use crate::bg_storage::StorageManagement;
-
     use super::*;
-    use crypto::bip49::ETH_PATH;
+    use crate::bg_storage::StorageManagement;
+    use proto::address::Address;
     use rand::Rng;
-    use rpc::network_config::NetworkConfig;
+    use rpc::network_config::Explorer;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -97,90 +88,79 @@ mod tests_providers {
         (bg, dir)
     }
 
-    fn create_test_network_config(name: &str, default: bool) -> NetworkConfig {
-        NetworkConfig {
-            network_name: name.to_string(),
-            fallback_enabled: false,
-            urls: vec!["http://localhost:8545".to_string()],
-            chain_id: 1,
-            explorer_urls: Vec::new(),
-            default,
-            bip49: rpc::network_config::Bip44Network::Evm(ETH_PATH.to_string()),
-            token_symbol: String::from("TST"),
-            logo: None,
+    fn create_test_network_config(name: &str, chain_id: u64) -> ChainConfig {
+        ChainConfig {
+            name: name.to_string(),
+            chain: "TEST".to_string(),
+            icon: String::new(),
+            rpc: vec!["http://localhost:8545".to_string()],
+            features: vec![155, 1559],
+            chain_id,
+            slip_44: 60,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "TestExplorer".to_string(),
+                url: "https://test.explorer".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
         }
     }
 
     #[test]
     fn test_add_providers() {
-        let (mut bg, _dir) = setup_test_background();
+        let (bg, _dir) = setup_test_background();
 
-        // Test adding a non-default provider
-        let config1 = create_test_network_config("Test Network 1", false);
+        // Test adding a provider
+        let config1 = create_test_network_config("Test Network 1", 1);
         bg.add_provider(config1.clone()).unwrap();
+        let providers = bg.get_providers();
 
-        assert_eq!(bg.providers.len(), 1);
-        assert_eq!(bg.providers[0].config.network_name, "Test Network 1");
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].config.name, "Test Network 1");
 
         // Test adding another provider
-        let mut config2 = create_test_network_config("Test Network 2", false);
-
-        config2.chain_id = 11;
-
+        let config2 = create_test_network_config("Test Network 2", 2);
         bg.add_provider(config2.clone()).unwrap();
+        let providers = bg.get_providers();
 
-        assert_eq!(bg.providers.len(), 2);
-        assert_eq!(bg.providers[1].config.network_name, "Test Network 2");
+        assert_eq!(providers.len(), 2);
+        assert_eq!(providers[1].config.name, "Test Network 2");
     }
 
     #[test]
     fn test_remove_providers() {
-        let (mut bg, _dir) = setup_test_background();
+        let (bg, _dir) = setup_test_background();
 
         // Add two providers
-        let config1 = create_test_network_config("Test Network 1", false);
-        let mut config2 = create_test_network_config("Test Network 2", false);
+        let config1 = create_test_network_config("Test Network 1", 1);
+        let config2 = create_test_network_config("Test Network 2", 2);
 
         bg.add_provider(config1.clone()).unwrap();
-
-        config2.chain_id = 33;
-
         bg.add_provider(config2.clone()).unwrap();
 
-        assert_eq!(bg.providers.len(), 2);
+        let providers = bg.get_providers();
+
+        assert_eq!(providers.len(), 2);
 
         // Remove the second provider
         bg.remvoe_providers(1).unwrap();
+        let providers = bg.get_providers();
 
-        assert_eq!(bg.providers.len(), 1);
-        assert_eq!(bg.providers[0].config.network_name, "Test Network 1");
-    }
-
-    #[test]
-    fn test_remove_default_provider() {
-        let (mut bg, _dir) = setup_test_background();
-
-        // Add a default provider
-        let config = create_test_network_config("Default Network", true);
-        bg.add_provider(config).unwrap();
-
-        // Attempt to remove the default provider
-        let result = bg.remvoe_providers(0);
-
-        assert!(result.is_err());
-        if let Err(error) = result {
-            assert!(matches!(error, BackgroundError::ProviderIsDefault(0)));
-        }
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].config.name, "Test Network 1");
     }
 
     #[test]
     fn test_remove_nonexistent_provider() {
-        let (mut bg, _dir) = setup_test_background();
+        let (bg, _dir) = setup_test_background();
 
         // Attempt to remove a provider when none exist
         let result = bg.remvoe_providers(0);
 
         assert!(result.is_err());
+
         if let Err(error) = result {
             assert!(matches!(error, BackgroundError::ProviderNotExists(0)));
         }
@@ -188,15 +168,13 @@ mod tests_providers {
 
     #[test]
     fn test_persistence() {
-        let (mut bg, dir) = setup_test_background();
+        let (bg, dir) = setup_test_background();
 
         // Add providers
-        let config1 = create_test_network_config("Test Network 1", false);
-        let mut config2 = create_test_network_config("Test Network 2", false);
+        let config1 = create_test_network_config("Test Network 1", 1);
+        let config2 = create_test_network_config("Test Network 2", 2);
 
         bg.add_provider(config1.clone()).unwrap();
-        assert!(bg.add_provider(config2.clone()).is_err());
-        config2.chain_id = 42;
         bg.add_provider(config2.clone()).unwrap();
 
         // Drop the background instance
@@ -204,33 +182,66 @@ mod tests_providers {
 
         // Create new instance and verify providers were persisted
         let bg2 = Background::from_storage_path(&dir).unwrap();
+        let providers = bg2.get_providers();
 
-        assert_eq!(bg2.providers.len(), 2);
-        assert_eq!(bg2.providers[0].config.network_name, "Test Network 1");
-        assert_eq!(bg2.providers[1].config.network_name, "Test Network 2");
+        assert_eq!(providers.len(), 2);
+        assert_eq!(providers[0].config.name, "Test Network 1");
+        assert_eq!(providers[1].config.name, "Test Network 2");
+        assert_eq!(providers[0].config.chain_id, 1);
+        assert_eq!(providers[1].config.chain_id, 2);
     }
 
     #[test]
     fn test_update_providers() {
-        let (mut bg, dir) = setup_test_background();
+        let (bg, dir) = setup_test_background();
 
         // Add initial providers
-        let config1 = create_test_network_config("Test Network 1", false);
-        let mut config2 = create_test_network_config("Test Network 2", false);
+        let config1 = create_test_network_config("Test Network 1", 1);
+        let config2 = create_test_network_config("Test Network 2", 2);
 
         bg.add_provider(config1.clone()).unwrap();
-        config2.chain_id = 3243;
         bg.add_provider(config2.clone()).unwrap();
 
+        let mut providers = bg.get_providers();
+
         // Modify providers directly and update
-        bg.providers[0].config.network_name = "Updated Network 1";
-        bg.update_providers().unwrap();
+        providers[0].config.name = "Updated Network 1".to_string();
+        bg.update_providers(providers).unwrap();
 
         // Verify persistence of update
         drop(bg);
+        Background::from_storage_path(&dir).unwrap();
         let bg2 = Background::from_storage_path(&dir).unwrap();
+        let providers = bg2.get_providers();
 
-        assert_eq!(bg2.providers[0].config.network_name, "Updated Network 1");
-        assert_eq!(bg2.providers[1].config.network_name, "Test Network 2");
+        assert_eq!(providers[0].config.name, "Updated Network 1");
+        assert_eq!(providers[1].config.name, "Test Network 2");
+        assert_eq!(providers[0].config.chain_id, 1);
+        assert_eq!(providers[1].config.chain_id, 2);
+    }
+
+    #[test]
+    fn test_duplicate_chain_id() {
+        let (bg, _dir) = setup_test_background();
+
+        let config1 = create_test_network_config("Test Network 1", 1);
+        let config2 = create_test_network_config("Test Network 2", 1); // Same chain_id
+
+        bg.add_provider(config1).unwrap();
+        assert!(bg.add_provider(config2).is_err()); // Should fail due to duplicate chain_id
+    }
+
+    #[test]
+    fn test_provider_features() {
+        let (bg, _dir) = setup_test_background();
+
+        let mut config = create_test_network_config("Test Network", 1);
+        config.features = vec![155]; // Only EIP-155
+
+        bg.add_provider(config).unwrap();
+        let providers = bg.get_providers();
+
+        assert_eq!(providers[0].config.features.len(), 1);
+        assert!(providers[0].config.features.contains(&155));
     }
 }

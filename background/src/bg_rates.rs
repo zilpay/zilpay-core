@@ -1,8 +1,8 @@
 use crate::Result;
 use async_trait::async_trait;
 use config::storage::CURRENCIES_RATES_DB_KEY;
-use serde_json::{json, Value};
 use errors::background::BackgroundError;
+use serde_json::{json, Value};
 
 use crate::Background;
 

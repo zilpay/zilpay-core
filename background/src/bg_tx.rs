@@ -29,7 +29,7 @@ impl TransactionsManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let selected_account = &data.accounts[data.selected_account];
-        let provider = self.get_provider(selected_account.chain_id)?;
+        let provider = self.get_provider(selected_account.chain_hash)?;
         let txns = provider.broadcast_signed_transactions(txns).await?;
 
         Ok(txns)
@@ -42,10 +42,10 @@ mod tests_background_transactions {
     use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
     use cipher::argon2;
-    use crypto::bip49::{Bip49DerivationPath, ETH_PATH, ZIL_PATH};
+    use crypto::{bip49::DerivationPath, slip44};
     use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
-    use rpc::network_config::{Bip44Network, NetworkConfig};
+    use rpc::network_config::{ChainConfig, Explorer};
     use token::ft::FToken;
     use tokio;
     use wallet::wallet_crypto::WalletCrypto;
@@ -61,31 +61,49 @@ mod tests_background_transactions {
         (bg, dir)
     }
 
-    fn gen_zil_net_conf() -> NetworkConfig {
-        NetworkConfig::new(
-            "Zilliqa(testnet)",
-            333,
-            vec!["https://dev-api.zilliqa.com".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("ZIL"),
-            None,
-        )
+    fn gen_zil_net_conf() -> ChainConfig {
+        ChainConfig {
+            name: "Zilliqa(testnet)".to_string(),
+            chain: "ZIL".to_string(),
+            icon: String::new(),
+            rpc: vec!["https://dev-api.zilliqa.com".to_string()],
+            features: vec![],
+            chain_id: 333,
+            slip_44: slip44::ZILLIQA,
+            ens: Address::Secp256k1Sha256Zilliqa(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "ViewBlock".to_string(),
+                url: "https://viewblock.io/zilliqa".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
+        }
     }
 
-    fn gen_bsc_net_conf() -> NetworkConfig {
-        NetworkConfig::new(
-            "BNB Smart Chain Testnet",
-            97,
-            vec![
+    fn gen_bsc_net_conf() -> ChainConfig {
+        ChainConfig {
+            name: "BNB Smart Chain Testnet".to_string(),
+            chain: "BSC".to_string(),
+            icon: String::new(),
+            rpc: vec![
                 "https://data-seed-prebsc-1-s1.binance.org:8545".to_string(),
                 "https://data-seed-prebsc-2-s1.binance.org:8545/".to_string(),
                 "http://data-seed-prebsc-1-s2.binance.org:8545/".to_string(),
                 "https://bsctestapi.terminet.io/rpc".to_string(),
             ],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("BSC"),
-            None,
-        )
+            features: vec![155, 1559],
+            chain_id: 97,
+            slip_44: slip44::ETHEREUM,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "BscScan".to_string(),
+                url: "https://testnet.bscscan.com".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
+        }
     }
 
     fn gen_bsc_token() -> FToken {
@@ -98,25 +116,26 @@ mod tests_background_transactions {
             balances: Default::default(),
             default: true,
             native: true,
-            provider_index: 0,
+            chain_hash: gen_bsc_net_conf().hash(),
         }
     }
 
     #[tokio::test]
     async fn test_sign_and_send_zil_tx() {
         let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_zil_net_conf();
 
-        bg.add_provider(gen_zil_net_conf()).unwrap();
+        bg.add_provider(net_config.clone()).unwrap();
 
         let accounts = [(
-            Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string())),
+            DerivationPath::new(slip44::ZILLIQA, 0),
             "ZIL Acc 0".to_string(),
         )];
         let device_indicators = [String::from("5435h"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: PASSWORD,
-            provider: 0,
+            chain_hash: net_config.hash(),
             mnemonic_str: WORDS,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -124,16 +143,15 @@ mod tests_background_transactions {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             device_indicators: &device_indicators,
-            ftokens: vec![FToken::zil(0)],
+            ftokens: vec![FToken::zil(net_config.hash())],
         })
         .unwrap();
-        let provider = bg.get_provider(0).unwrap();
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
         let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
-        let nonce = *bg
-            .get_provider(0)
-            .unwrap()
+        let nonce = *provider
             .fetch_nonce(&addresses)
             .await
             .unwrap()
@@ -176,17 +194,18 @@ mod tests_background_transactions {
     #[tokio::test]
     async fn test_sign_and_send_evm_tx() {
         let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_bsc_net_conf();
 
-        bg.add_provider(gen_bsc_net_conf()).unwrap();
+        bg.add_provider(net_config.clone()).unwrap();
         let accounts = [(
-            Bip49DerivationPath::Ethereum((0, ETH_PATH.to_string())),
+            DerivationPath::new(slip44::ETHEREUM, 0),
             "BSC Acc 0".to_string(),
         )];
         let device_indicators = [String::from("testbnb"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: PASSWORD,
-            provider: 0,
+            chain_hash: net_config.hash(),
             mnemonic_str: WORDS,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -198,13 +217,12 @@ mod tests_background_transactions {
         })
         .unwrap();
 
-        let provider = bg.get_provider(0).unwrap();
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
         let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
-        let nonce = *bg
-            .get_provider(0)
-            .unwrap()
+        let nonce = *provider
             .fetch_nonce(&addresses)
             .await
             .unwrap()

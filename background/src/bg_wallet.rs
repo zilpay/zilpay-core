@@ -1,6 +1,6 @@
 use crate::{
-    bg_storage::StorageManagement, device_indicators::create_wallet_device_indicator, Background,
-    BackgroundLedgerParams, Result,
+    bg_provider::ProvidersManagement, bg_storage::StorageManagement,
+    device_indicators::create_wallet_device_indicator, Background, BackgroundLedgerParams, Result,
 };
 use bip39::Mnemonic;
 use cipher::{argon2, keychain::KeyChain};
@@ -124,8 +124,8 @@ impl WalletManagement for Background {
     }
 
     fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
-        if self.providers.get(params.provider).is_none() {
-            return Err(BackgroundError::ProviderNotExists(params.provider));
+        if self.get_provider(params.chain_hash).is_err() {
+            return Err(BackgroundError::ProviderNotExists(params.chain_hash));
         }
 
         let device_indicator = params.device_indicators.join(":");
@@ -158,7 +158,7 @@ impl WalletManagement for Background {
                 indexes: params.accounts,
                 wallet_name: params.wallet_name,
                 biometric_type: params.biometric_type,
-                provider_index: params.provider,
+                chain_hash: params.chain_hash,
             },
             wallet_config,
             params.ftokens,
@@ -194,8 +194,8 @@ impl WalletManagement for Background {
         wallet_settings: WalletSettings,
         device_indicators: &[String],
     ) -> Result<Vec<u8>> {
-        if self.providers.get(params.provider_index).is_none() {
-            return Err(BackgroundError::ProviderNotExists(params.provider_index));
+        if self.get_provider(params.chain_hash).is_err() {
+            return Err(BackgroundError::ProviderNotExists(params.chain_hash));
         }
 
         if self.wallets.iter().any(|w| {
@@ -239,7 +239,7 @@ impl WalletManagement for Background {
                 account_name: params.account_name,
                 wallet_name: params.wallet_name,
                 wallet_index: params.wallet_index,
-                provider_index: params.provider_index,
+                chain_hash: params.chain_hash,
                 biometric_type: params.biometric_type,
             },
             wallet_config,
@@ -265,8 +265,8 @@ impl WalletManagement for Background {
     }
 
     fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
-        if self.providers.get(params.provider).is_none() {
-            return Err(BackgroundError::ProviderNotExists(params.provider));
+        if self.get_provider(params.chain_hash).is_err() {
+            return Err(BackgroundError::ProviderNotExists(params.chain_hash));
         }
 
         // TODO: check this device_indicators is right or not.
@@ -297,7 +297,7 @@ impl WalletManagement for Background {
                 proof,
                 wallet_name: params.wallet_name,
                 biometric_type: params.biometric_type,
-                provider_index: params.provider,
+                chain_hash: params.chain_hash,
             },
             wallet_config,
             params.ftokens,
@@ -350,16 +350,37 @@ impl WalletManagement for Background {
 mod tests_background {
     use super::*;
     use crate::{bg_crypto::CryptoOperations, bg_provider::ProvidersManagement};
-    use crypto::bip49::{Bip49DerivationPath, ETH_PATH, ZIL_PATH};
+    use crypto::{bip49::DerivationPath, slip44};
+    use proto::address::Address;
     use proto::keypair::KeyPair;
     use rand::Rng;
-    use rpc::network_config::{Bip44Network, NetworkConfig};
+    use rpc::network_config::{ChainConfig, Explorer};
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let bg = Background::from_storage_path(&dir).unwrap();
         (bg, dir)
+    }
+
+    fn create_test_net_conf() -> ChainConfig {
+        ChainConfig {
+            name: "Test Network".to_string(),
+            chain: "TEST".to_string(),
+            icon: String::new(),
+            rpc: vec!["https://test.network".to_string()],
+            features: vec![155, 1559],
+            chain_id: 1,
+            slip_44: slip44::ZILLIQA,
+            ens: Address::Secp256k1Sha256Zilliqa(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "TestExplorer".to_string(),
+                url: "https://test.explorer".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
+        }
     }
 
     #[test]
@@ -370,23 +391,16 @@ mod tests_background {
 
         let password = "test_password";
         let words = Background::gen_bip39(24).unwrap();
+        let net_conf = create_test_net_conf();
         let accounts = [(
-            Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string())),
+            DerivationPath::new(slip44::ZILLIQA, 0),
             "Zilliqa wallet".to_string(),
         )];
-        let net_conf = NetworkConfig::new(
-            "",
-            0,
-            vec!["".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("TST"),
-            None,
-        );
 
-        bg.add_provider(net_conf).unwrap();
+        bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            provider: 0,
+            chain_hash: net_conf.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -407,18 +421,18 @@ mod tests_background {
         let password = "newPassowrd";
         let accounts = [
             (
-                Bip49DerivationPath::Ethereum((1, ETH_PATH.to_string())),
+                DerivationPath::new(slip44::ETHEREUM, 1),
                 "Eth Wallet".to_string(),
             ),
             (
-                Bip49DerivationPath::Ethereum((2, ETH_PATH.to_string())),
+                DerivationPath::new(slip44::ETHEREUM, 2),
                 "account 1".to_string(),
             ),
         ];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            provider: 0,
+            chain_hash: net_conf.hash(),
             accounts: &accounts,
             mnemonic_str: &words,
             wallet_settings: Default::default(),
@@ -443,24 +457,17 @@ mod tests_background {
 
         let password = "test_password";
         let words = Background::gen_bip39(24).unwrap();
+        let net_conf = create_test_net_conf();
         let accounts = [(
-            Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string())),
+            DerivationPath::new(slip44::ZILLIQA, 0),
             "Zilliqa wallet".to_string(),
         )];
         let keypair = KeyPair::gen_sha256().unwrap();
-        let net_conf = NetworkConfig::new(
-            "",
-            0,
-            vec!["".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("TST"),
-            None,
-        );
 
-        bg.add_provider(net_conf).unwrap();
+        bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
-            provider: 0,
+            chain_hash: net_conf.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
             wallet_settings: Default::default(),
@@ -475,7 +482,7 @@ mod tests_background {
         bg.add_sk_wallet(BackgroundSKParams {
             secret_key: keypair.get_secretkey().unwrap(),
             password,
-            provider: 0,
+            chain_hash: net_conf.hash(),
             wallet_settings: Default::default(),
             wallet_name: String::new(),
             biometric_type: Default::default(),
