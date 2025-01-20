@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::common::{NetworkConfigTrait, Result};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Explorer {
     pub name: String,
     pub url: String,
@@ -12,7 +12,7 @@ pub struct Explorer {
     pub standard: u16,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ChainConfig {
     pub name: String,
     pub chain: String,

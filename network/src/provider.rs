@@ -7,13 +7,14 @@ use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
-use crypto::bip49::Bip49DerivationPath;
+use crypto::bip49::DerivationPath;
 use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
 use errors::token::TokenError;
 use errors::tx::TransactionErrors;
 use proto::address::Address;
 use proto::tx::TransactionReceipt;
+use rpc::common::JsonRPC;
 use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
@@ -28,17 +29,12 @@ use token::ft_parse::{
 #[derive(Debug, PartialEq)]
 pub struct NetworkProvider {
     pub config: ChainConfig,
-    pub index: usize,
+    pub index: u64,
 }
 
 impl NetworkProvider {
-    pub fn get_bip49(&self, index: usize) -> Bip49DerivationPath {
-        match &self.config.bip49 {
-            Bip44Network::Evm(path) => Bip49DerivationPath::Ethereum((index, path.clone())),
-            Bip44Network::Bitcoin(path) => Bip49DerivationPath::Bitcoin((index, path.clone())),
-            Bip44Network::Solana(path) => Bip49DerivationPath::Solana((index, path.clone())),
-            Bip44Network::Zilliqa(path) => Bip49DerivationPath::Zilliqa((index, path.clone())),
-        }
+    pub fn get_bip49(&self, index: usize) -> DerivationPath {
+        DerivationPath::new(self.config.slip_44, index)
     }
 }
 
@@ -50,12 +46,12 @@ impl Provider for NetworkProvider {
             return Vec::with_capacity(1);
         }
 
-        let configs: Vec<NetworkConfig> =
+        let configs: Vec<ChainConfig> =
             bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
         let mut providers = Vec::with_capacity(configs.len());
 
         for (index, config) in configs.iter().enumerate() {
-            providers.push(NetworkProvider::new(config.to_owned(), index));
+            providers.push(NetworkProvider::new(config.to_owned(), index as u64));
         }
 
         providers
@@ -74,7 +70,7 @@ impl Provider for NetworkProvider {
 }
 
 impl NetworkProvider {
-    pub fn new(config: NetworkConfig, index: usize) -> Self {
+    pub fn new(config: ChainConfig, index: u64) -> Self {
         Self { config, index }
     }
 
@@ -100,7 +96,7 @@ impl NetworkProvider {
             all_requests.push(build_tx_request(tx));
         }
 
-        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await?;
         drop(all_requests);
 
@@ -120,7 +116,7 @@ impl NetworkProvider {
             all_requests.push(payload);
         }
 
-        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await?;
         drop(all_requests);
 
@@ -163,7 +159,7 @@ impl NetworkProvider {
             }
         }
 
-        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let responses = provider
             .req::<Vec<ResultRes<Value>>>(&all_requests)
             .await
@@ -196,7 +192,7 @@ impl NetworkProvider {
 
     pub async fn ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
         let requests = build_token_requests(&contract, accounts, false)?;
-        let provider: RpcProvider<NetworkConfig> = RpcProvider::new(&self.config);
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let responses: Vec<ResultRes<Value>> = provider
             .req(
                 &requests
@@ -299,8 +295,8 @@ mod tests_network {
     use super::*;
     use alloy::primitives::U256;
     use config::address::ADDR_LEN;
-    use crypto::bip49::{ETH_PATH, ZIL_PATH};
     use rand::Rng;
+    use rpc::network_config::Explorer;
     use tokio;
 
     fn setup_temp_storage() -> Arc<LocalStorage> {
@@ -311,16 +307,49 @@ mod tests_network {
         Arc::new(storage)
     }
 
+    fn create_bsc_config() -> ChainConfig {
+        ChainConfig {
+            name: "Binance-smart-chain".to_string(),
+            chain: "BSC".to_string(),
+            icon: String::new(),
+            rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
+            features: vec![155, 1559],
+            chain_id: 56,
+            slip_44: 60,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "BscScan".to_string(),
+                url: "https://bscscan.com".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
+        }
+    }
+
+    fn create_zilliqa_config() -> ChainConfig {
+        ChainConfig {
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            icon: String::new(),
+            rpc: vec!["https://api.zilliqa.com".to_string()],
+            features: vec![],
+            chain_id: 1,
+            slip_44: 313,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "ViewBlock".to_string(),
+                url: "https://viewblock.io/zilliqa".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
+        }
+    }
+
     #[tokio::test]
     async fn test_get_ftoken_meta_bsc() {
-        let net_conf = NetworkConfig::new(
-            "Binance-smart-chain",
-            56,
-            vec!["https://bsc-dataseed.binance.org".to_string()],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("BSC"),
-            None,
-        );
+        let net_conf = create_bsc_config();
         let provider = NetworkProvider::new(net_conf, 0);
 
         let token_addr =
@@ -341,14 +370,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_ftoken_meta_zil_legacy() {
-        let net_conf = NetworkConfig::new(
-            "Zilliqa(Legacy)",
-            1,
-            vec!["https://api.zilliqa.com".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("ZIL"),
-            None,
-        );
+        let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf, 0);
 
         let token_addr =
@@ -369,14 +391,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_update_balance_scilla() {
-        let net_conf = NetworkConfig::new(
-            "Zilliqa(Legacy)",
-            1,
-            vec!["https://api.zilliqa.com".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("ZIL"),
-            None,
-        );
+        let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf, 0);
         let mut tokens = vec![
             FToken::zil(0),
@@ -444,92 +459,6 @@ mod tests_network {
         assert!(tokens[3].balances.get(&2).unwrap() == &U256::from(0));
     }
 
-    // #[tokio::test]
-    // async fn test_update_balance_scilla_evm() {
-    //     let net_conf = NetworkConfig::new(
-    //         "Zilliqa(evm)",
-    //         32770,
-    //         vec!["https://api.zq2-protomainnet.zilliqa.com".to_string()],
-    //     );
-    //     let provider = NetworkProvider::new(net_conf);
-    //     let mut tokens = vec![
-    //         FToken::zil(),
-    //         FToken::eth(),
-    //         FToken {
-    //             name: "ZilPay token".to_string(),
-    //             symbol: "ZLP".to_string(),
-    //             decimals: 18,
-    //             addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
-    //                 .unwrap(),
-    //             native: false,
-    //             logo: None,
-    //             default: false,
-    //             balances: HashMap::new(),
-    //             net_id: provider.get_network_id(),
-    //         },
-    //         FToken {
-    //             name: "Zilliqa-bridged USDT token".to_string(),
-    //             symbol: "zUSDT".to_string(),
-    //             decimals: 6,
-    //             addr: Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy")
-    //                 .unwrap(),
-    //             native: false,
-    //             logo: None,
-    //             default: false,
-    //             balances: HashMap::new(),
-    //             net_id: provider.get_network_id(),
-    //         },
-    //         FToken {
-    //             name: "Zilliqa-bridged USDT token".to_string(),
-    //             symbol: "zUSDT".to_string(),
-    //             decimals: 18,
-    //             native: false,
-    //             addr: Address::from_eth_address("0x2274005778063684fbB1BfA96a2b725dC37D75f9")
-    //                 .unwrap(),
-    //             logo: None,
-    //             default: false,
-    //             balances: HashMap::new(),
-    //             net_id: provider.get_network_id(),
-    //         },
-    //     ];
-    //     let accounts = [
-    //         &Address::from_zil_bech32("zil1xr07v36qa4zeagg4k5tm6ummht0jrwpcu0n55d").unwrap(),
-    //         &Address::from_zil_bech32("zil1uxfzk4n9ef2t3f4c4939ludlvp349uwqdx32xt").unwrap(),
-    //         &Address::from_eth_address("0xe30161F32A019d876F082d9FF13ed451a03A2086").unwrap(),
-    //         &Address::from_eth_address("0x36Eb59A9ec5A7592ded8F66e13fb603f9FD68081").unwrap(),
-    //     ];
-
-    //     provider
-    //         .update_balances(&mut tokens, &accounts)
-    //         .await
-    //         .unwrap();
-
-    //     assert!(tokens[0].balances.contains_key(&0));
-    //     assert!(tokens[0].balances.contains_key(&1));
-    //     assert!(tokens[0].balances.contains_key(&2));
-    //     assert!(tokens[0].balances.contains_key(&3));
-
-    //     assert!(tokens[1].balances.contains_key(&0));
-    //     assert!(tokens[1].balances.contains_key(&1));
-    //     assert!(tokens[1].balances.contains_key(&2));
-    //     assert!(tokens[1].balances.contains_key(&3));
-
-    //     assert!(tokens[2].balances.contains_key(&0));
-    //     assert!(tokens[2].balances.contains_key(&1));
-    //     assert!(tokens[2].balances.contains_key(&2));
-    //     assert!(tokens[2].balances.contains_key(&3));
-
-    //     assert!(tokens[3].balances.contains_key(&0));
-    //     assert!(tokens[3].balances.contains_key(&1));
-    //     assert!(tokens[3].balances.contains_key(&2));
-    //     assert!(tokens[3].balances.contains_key(&3));
-
-    //     assert!(tokens[4].balances.contains_key(&0));
-    //     assert!(tokens[4].balances.contains_key(&1));
-    //     assert!(tokens[4].balances.contains_key(&2));
-    //     assert!(tokens[4].balances.contains_key(&3));
-    // }
-
     #[test]
     fn test_empty_storage() {
         let storage = setup_temp_storage();
@@ -540,16 +469,7 @@ mod tests_network {
     #[test]
     fn test_save_and_load_single_network() {
         let storage = setup_temp_storage();
-
-        // Create a test network config
-        let config = NetworkConfig::new(
-            "Test Network",
-            1,
-            vec!["https://test.network".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("TST"),
-            None,
-        );
+        let config = create_zilliqa_config();
         let providers = vec![NetworkProvider::new(config, 0)];
 
         // Save to storage
@@ -559,9 +479,7 @@ mod tests_network {
         let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         assert_eq!(providers.len(), loaded_providers.len());
-        assert!(loaded_providers
-            .iter()
-            .any(|p| p.config.network_name == "Test Network"));
+        assert!(loaded_providers.iter().any(|p| p.config.name == "Zilliqa"));
         assert!(loaded_providers.iter().any(|p| p.config.chain_id == 1));
     }
 
@@ -569,36 +487,29 @@ mod tests_network {
     fn test_save_and_load_multiple_networks() {
         let storage = setup_temp_storage();
         // Create multiple test network configs
+        let base_config = create_zilliqa_config();
         let configs = [
-            NetworkConfig::new(
-                "Test Network 1",
-                1,
-                vec!["https://test1.network".to_string()],
-                Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-                String::from("TST"),
-                None,
-            ),
-            NetworkConfig::new(
-                "Test Network 2",
-                2,
-                vec!["https://test2.network".to_string()],
-                Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-                String::from("TST"),
-                None,
-            ),
-            NetworkConfig::new(
-                "Test Network 3",
-                3,
-                vec!["https://test3.network".to_string()],
-                Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-                String::from("TST"),
-                None,
-            ),
+            ChainConfig {
+                name: "Test Network 1".to_string(),
+                chain_id: 1,
+                ..base_config.clone()
+            },
+            ChainConfig {
+                name: "Test Network 2".to_string(),
+                chain_id: 2,
+                ..base_config.clone()
+            },
+            ChainConfig {
+                name: "Test Network 3".to_string(),
+                chain_id: 3,
+                ..base_config.clone()
+            },
         ];
+
         let providers: Vec<NetworkProvider> = configs
             .iter()
             .enumerate()
-            .map(|(index, conf)| NetworkProvider::new(conf.clone(), index))
+            .map(|(index, conf)| NetworkProvider::new(conf.clone(), index as u64))
             .collect();
 
         // Save to storage
@@ -619,36 +530,29 @@ mod tests_network {
     #[test]
     fn test_update_networks() {
         let storage = setup_temp_storage();
+        let base_config = create_zilliqa_config();
 
         // Initial network
-        let mut providers = Vec::new();
-
-        providers.push(NetworkProvider::new(
-            NetworkConfig::new(
-                "Initial Network",
-                1,
-                vec!["https://initial.network".to_string()],
-                Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-                String::from("TST"),
-                None,
-            ),
+        let mut providers = vec![NetworkProvider::new(
+            ChainConfig {
+                name: "Initial Network".to_string(),
+                chain_id: 1,
+                ..base_config.clone()
+            },
             0,
-        ));
+        )];
 
         // Save initial state
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
         // Add new network
         providers.push(NetworkProvider::new(
-            NetworkConfig::new(
-                "New Network",
-                2,
-                vec!["https://new.network".to_string()],
-                Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-                String::from("TST"),
-                None,
-            ),
-            0,
+            ChainConfig {
+                name: "New Network".to_string(),
+                chain_id: 2,
+                ..base_config.clone()
+            },
+            1,
         ));
 
         // Update storage
@@ -659,22 +563,15 @@ mod tests_network {
         assert_eq!(loaded_providers.len(), 2);
         assert!(loaded_providers
             .iter()
-            .any(|p| p.config.network_name == "Initial Network"));
+            .any(|p| p.config.name == "Initial Network"));
         assert!(loaded_providers
             .iter()
-            .any(|p| p.config.network_name == "New Network"));
+            .any(|p| p.config.name == "New Network"));
     }
 
     #[tokio::test]
     async fn test_get_nonce_evm() {
-        let net_conf = NetworkConfig::new(
-            "Binance-smart-chain",
-            56,
-            vec!["https://bsc-dataseed.binance.org".to_string()],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("BSC"),
-            None,
-        );
+        let net_conf = create_bsc_config();
         let provider = NetworkProvider::new(net_conf, 0);
 
         let account = [
@@ -692,14 +589,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_nonce_scilla() {
-        let net_conf = NetworkConfig::new(
-            "Zilliqa",
-            1,
-            vec!["https://api.zilliqa.com".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("ZIL"),
-            None,
-        );
+        let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf, 0);
 
         let account = [

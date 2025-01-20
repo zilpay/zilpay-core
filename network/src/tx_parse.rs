@@ -4,7 +4,7 @@ use errors::{network::NetworkErrors, tx::TransactionErrors};
 use proto::tx::TransactionReceipt;
 use rpc::{
     methods::{EvmMethods, ZilMethods},
-    network_config::NetworkConfig,
+    network_config::ChainConfig,
     provider::RpcProvider,
     zil_interfaces::ResultRes,
 };
@@ -13,14 +13,14 @@ use serde_json::{json, Value};
 pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
     match tx {
         TransactionReceipt::Zilliqa((zil, _)) => {
-            RpcProvider::<NetworkConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
+            RpcProvider::<ChainConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
         }
         TransactionReceipt::Ethereum((eth, _)) => {
             let mut encoded = Vec::with_capacity(eth.eip2718_encoded_length());
             eth.encode_2718(&mut encoded);
             let hex_tx = format!("0x{}", hex::encode(encoded));
 
-            RpcProvider::<NetworkConfig>::build_payload(
+            RpcProvider::<ChainConfig>::build_payload(
                 json!([hex_tx]),
                 EvmMethods::SendRawTransaction,
             )
