@@ -41,6 +41,7 @@ pub trait StorageOperations {
     fn get_request_txns(&self) -> std::result::Result<Vec<TransactionRequest>, Self::Error>;
     fn get_history(&self) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
     fn get_ftokens(&self) -> std::result::Result<Vec<FToken>, Self::Error>;
+    fn clear_data(&self) -> std::result::Result<(), Self::Error>;
 }
 
 impl StorageOperations for Wallet {
@@ -51,6 +52,12 @@ impl StorageOperations for Wallet {
             storage,
             wallet_address,
         })
+    }
+
+    fn clear_data(&self) -> Result<()> {
+        self.storage.remove(self.wallet_address.as_slice())?;
+
+        Ok(())
     }
 
     fn get_wallet_data(&self) -> Result<WalletData> {

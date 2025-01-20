@@ -91,6 +91,14 @@ impl LocalStorage {
         Ok(())
     }
 
+    pub fn remove(&self, key: &[u8]) -> Result<()> {
+        self.tree
+            .remove(key)
+            .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;
+
+        Ok(())
+    }
+
     pub fn flush(&self) -> Result<()> {
         self.tree
             .flush()

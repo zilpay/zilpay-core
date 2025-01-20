@@ -89,7 +89,6 @@ impl Wallet {
 pub mod account;
 pub mod account_type;
 pub mod wallet_account;
-pub mod wallet_backup;
 pub mod wallet_crypto;
 pub mod wallet_data;
 pub mod wallet_init;
