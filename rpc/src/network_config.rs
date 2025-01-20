@@ -9,7 +9,7 @@ pub struct Explorer {
     pub name: String,
     pub url: String,
     pub icon: Option<String>,
-    pub standard: String,
+    pub standard: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ pub struct ChainConfig {
     pub chain: String,
     pub icon: String,
     pub rpc: Vec<String>,
-    pub features: Vec<String>,
+    pub features: Vec<u16>,
     pub chain_id: u128,
     pub slip_44: u32,
     pub ens: Address,
@@ -135,7 +135,7 @@ impl Default for Explorer {
             name: String::new(),
             url: String::new(),
             icon: None,
-            standard: String::new(),
+            standard: 0,
         }
     }
 }
@@ -150,7 +150,7 @@ mod tests {
             chain: "TEST".to_string(),
             icon: "test_icon".to_string(),
             rpc: vec!["http://default.com".to_string()],
-            features: vec!["EIP155".to_string()],
+            features: vec![155],
             chain_id: 1,
             slip_44: 60,
             ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
@@ -158,7 +158,7 @@ mod tests {
                 name: "test_explorer".to_string(),
                 url: "https://test.explorer".to_string(),
                 icon: None,
-                standard: "EIP3091".to_string(),
+                standard: 3091,
             }],
             fallback_enabled: true,
         }
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(config.chain_id(), 1);
         assert_eq!(config.default_node(), "http://default.com");
         assert!(config.is_fallback_enabled());
-        assert_eq!(config.features[0], "EIP155");
+        assert_eq!(config.features[0], 155);
         assert_eq!(config.slip_44, 60);
     }
 
@@ -225,7 +225,7 @@ mod tests {
                 "http://second.com".to_string(),
                 "http://third.com".to_string(),
             ],
-            features: vec!["EIP155".to_string()],
+            features: vec![155],
             chain_id: 1,
             slip_44: 60,
             ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
@@ -258,7 +258,7 @@ mod tests {
                 "http://third.com".to_string(),
                 "http://fourth.com".to_string(),
             ],
-            features: vec!["EIP155".to_string()],
+            features: vec![155],
             chain_id: 1,
             slip_44: 60,
             ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
@@ -289,7 +289,7 @@ mod tests {
         assert!(explorer.name.is_empty());
         assert!(explorer.url.is_empty());
         assert!(explorer.icon.is_none());
-        assert!(explorer.standard.is_empty());
+        assert!(explorer.standard == 0);
     }
 
     #[test]
