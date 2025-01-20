@@ -1,6 +1,6 @@
+use errors::wallet::WalletErrors;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use errors::wallet::WalletErrors;
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub enum WalletTypes {

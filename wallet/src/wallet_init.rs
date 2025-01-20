@@ -72,7 +72,7 @@ impl WalletInit for Wallet {
             params.pub_key,
             params.account_name,
             params.wallet_index,
-            params.chain_id,
+            params.chain_hash,
         )?;
 
         let accounts: Vec<account::Account> = vec![account];
@@ -84,7 +84,7 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
-            default_chain_id: params.chain_id,
+            default_chain_hash: params.chain_hash,
         };
         let wallet = Self {
             storage: config.storage,
@@ -131,7 +131,7 @@ impl WalletInit for Wallet {
             params.sk,
             params.wallet_name.to_owned(),
             cipher_entropy_key,
-            params.chain_id,
+            params.chain_hash,
         )?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
@@ -142,7 +142,7 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0, // for sk account we have only one account.
-            default_chain_id: params.chain_id,
+            default_chain_hash: params.chain_hash,
         };
         let wallet = Self {
             storage: config.storage,
@@ -185,7 +185,7 @@ impl WalletInit for Wallet {
         for index in params.indexes {
             let (bip49, name) = index;
             let hd_account =
-                Account::from_hd(&mnemonic_seed, name.to_owned(), bip49, params.chain_id)?;
+                Account::from_hd(&mnemonic_seed, name.to_owned(), bip49, params.chain_hash)?;
 
             accounts.push(hd_account);
         }
@@ -201,7 +201,7 @@ impl WalletInit for Wallet {
                 !params.passphrase.is_empty(),
             )),
             selected_account: 0,
-            default_chain_id: params.chain_id,
+            default_chain_hash: params.chain_hash,
         };
         let wallet = Self {
             storage: config.storage,
@@ -279,7 +279,7 @@ mod tests {
                 indexes: &indexes,
                 wallet_name: "Wllaet name".to_string(),
                 biometric_type: AuthMethod::Biometric,
-                chain_id: 0,
+                chain_hash: 0,
             },
             wallet_config,
             vec![],
@@ -330,7 +330,7 @@ mod tests {
                 proof,
                 wallet_name: name.to_string(),
                 biometric_type: AuthMethod::None,
-                chain_id: 0,
+                chain_hash: 0,
             },
             wallet_config,
             vec![],

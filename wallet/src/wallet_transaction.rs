@@ -148,7 +148,7 @@ mod tests_wallet_transactions {
 
     fn gen_zil_token() -> FToken {
         FToken {
-            provider_index: 0,
+            chain_hash: 0,
             default: true,
             name: "Zilliqa".to_string(),
             symbol: "ZIL".to_string(),
@@ -198,7 +198,7 @@ mod tests_wallet_transactions {
                 proof,
                 wallet_name: "Test ZIlliqa Account".to_string(),
                 biometric_type: AuthMethod::None,
-                provider_index: 0,
+                chain_hash: 0,
             },
             wallet_config,
             vec![gen_zil_token()],

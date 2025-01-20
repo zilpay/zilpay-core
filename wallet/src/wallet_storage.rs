@@ -225,6 +225,7 @@ mod tests_wallet_storage {
             accounts: Vec::new(),
             selected_account: 0,
             biometric_type: AuthMethod::None,
+            default_chain_hash: 0,
         };
 
         // Test saving wallet data

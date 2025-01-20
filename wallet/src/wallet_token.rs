@@ -81,7 +81,7 @@ mod tests_wallet_tokens {
 
     fn gen_bsc_token() -> FToken {
         FToken {
-            provider_index: 0,
+            chain_hash: 0,
             default: true,
             name: "Binance Smart Chain".to_string(),
             symbol: "BSC".to_string(),
@@ -134,7 +134,7 @@ mod tests_wallet_tokens {
                 proof,
                 wallet_name: "Test Token Account".to_string(),
                 biometric_type: AuthMethod::None,
-                provider_index: 0,
+                chain_hash: 0,
             },
             wallet_config,
             vec![gen_bsc_token()],
@@ -157,7 +157,7 @@ mod tests_wallet_tokens {
             default: false,
             native: false,
             balances: HashMap::new(),
-            provider_index: 0,
+            chain_hash: 0,
         };
 
         // Add custom token
@@ -228,7 +228,7 @@ mod tests_wallet_tokens {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -239,7 +239,7 @@ mod tests_wallet_tokens {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -250,7 +250,7 @@ mod tests_wallet_tokens {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
         ];
 
@@ -260,7 +260,7 @@ mod tests_wallet_tokens {
                 proof,
                 wallet_name: "Test Token Account".to_string(),
                 biometric_type: AuthMethod::None,
-                provider_index: 0,
+                chain_hash: 0,
             },
             wallet_config,
             tokens.clone(),
@@ -333,7 +333,7 @@ mod tests_wallet_tokens {
                 proof,
                 wallet_name: "Test Token Account".to_string(),
                 biometric_type: AuthMethod::None,
-                provider_index: 0,
+                chain_hash: 0,
             },
             wallet_config,
             vec![],
@@ -352,7 +352,7 @@ mod tests_wallet_tokens {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
             FToken {
                 name: "Token 2".to_string(),
@@ -363,7 +363,7 @@ mod tests_wallet_tokens {
                 default: false,
                 native: true,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
             FToken {
                 name: "Token 3".to_string(),
@@ -374,7 +374,7 @@ mod tests_wallet_tokens {
                 native: true,
                 default: false,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
         ];
 

@@ -52,7 +52,7 @@ impl AccountManagement for Wallet {
         name: String,
         pub_key: PubKey,
         index: usize,
-        chain_id: u128,
+        chain_hash: u64,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
         let has_account = data
@@ -68,7 +68,7 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::ExistsAccount(index));
         }
 
-        let ledger_account = Account::from_ledger(pub_key, name, index, chain_id)?;
+        let ledger_account = Account::from_ledger(pub_key, name, index, chain_hash)?;
 
         data.accounts.push(ledger_account);
         self.save_wallet_data(data)?;
@@ -82,7 +82,7 @@ impl AccountManagement for Wallet {
         bip49: &DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
-        chain_id: u128,
+        chain_hash: u64,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
 
@@ -106,7 +106,7 @@ impl AccountManagement for Wallet {
                     return Err(WalletErrors::ExistsAccount(bip49.get_index()));
                 }
 
-                let hd_account = Account::from_hd(&mnemonic_seed, name, bip49, chain_id)?;
+                let hd_account = Account::from_hd(&mnemonic_seed, name, bip49, chain_hash)?;
 
                 data.accounts.push(hd_account);
                 self.save_wallet_data(data)?;
