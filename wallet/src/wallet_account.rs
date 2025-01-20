@@ -27,10 +27,24 @@ pub trait AccountManagement {
         provider_index: usize,
     ) -> std::result::Result<(), Self::Error>;
     fn select_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
+    fn delete_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
 }
 
 impl AccountManagement for Wallet {
     type Error = WalletErrors;
+
+    fn delete_account(&self, account_index: usize) -> Result<()> {
+        let mut data = self.get_wallet_data()?;
+
+        if account_index == 0 || data.accounts.get(account_index).is_none() {
+            return Err(WalletErrors::InvalidAccountIndex(account_index));
+        }
+
+        data.accounts.remove(account_index);
+        self.save_wallet_data(data)?;
+
+        Ok(())
+    }
 
     fn add_ledger_account(
         &self,
@@ -177,7 +191,7 @@ mod tests {
             settings: Default::default(),
         };
 
-        let mut wallet = Wallet::from_bip39_words(
+        let wallet = Wallet::from_bip39_words(
             Bip39Params {
                 proof,
                 mnemonic: &mnemonic,
