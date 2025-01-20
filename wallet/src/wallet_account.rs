@@ -40,6 +40,7 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::InvalidAccountIndex(account_index));
         }
 
+        data.selected_account -= 1;
         data.accounts.remove(account_index);
         self.save_wallet_data(data)?;
 
