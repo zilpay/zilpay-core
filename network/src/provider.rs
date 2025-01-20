@@ -29,7 +29,6 @@ use token::ft_parse::{
 #[derive(Debug, PartialEq)]
 pub struct NetworkProvider {
     pub config: ChainConfig,
-    pub index: u64,
 }
 
 impl NetworkProvider {
@@ -50,8 +49,8 @@ impl Provider for NetworkProvider {
             bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
         let mut providers = Vec::with_capacity(configs.len());
 
-        for (index, config) in configs.iter().enumerate() {
-            providers.push(NetworkProvider::new(config.to_owned(), index as u64));
+        for config in configs.iter() {
+            providers.push(NetworkProvider::new(config.to_owned()));
         }
 
         providers
@@ -70,8 +69,8 @@ impl Provider for NetworkProvider {
 }
 
 impl NetworkProvider {
-    pub fn new(config: ChainConfig, index: u64) -> Self {
-        Self { config, index }
+    pub fn new(config: ChainConfig) -> Self {
+        Self { config }
     }
 
     pub async fn fetch_nodes_list(&mut self) -> Result<()> {
@@ -235,7 +234,7 @@ impl NetworkProvider {
                     logo: None,
                     default: false,
                     native: false,
-                    provider_index: self.index,
+                    chain_hash: self.config.hash(),
                 })
             }
             Address::Secp256k1Keccak256Ethereum(_) => {
@@ -283,7 +282,7 @@ impl NetworkProvider {
                     logo: None,
                     default: false,
                     native: false,
-                    provider_index: self.index,
+                    chain_hash: self.config.hash(),
                 })
             }
         }
@@ -350,7 +349,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_ftoken_meta_bsc() {
         let net_conf = create_bsc_config();
-        let provider = NetworkProvider::new(net_conf, 0);
+        let provider = NetworkProvider::new(net_conf);
 
         let token_addr =
             Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
@@ -371,7 +370,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_ftoken_meta_zil_legacy() {
         let net_conf = create_zilliqa_config();
-        let provider = NetworkProvider::new(net_conf, 0);
+        let provider = NetworkProvider::new(net_conf);
 
         let token_addr =
             Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy").unwrap();
@@ -392,7 +391,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_update_balance_scilla() {
         let net_conf = create_zilliqa_config();
-        let provider = NetworkProvider::new(net_conf, 0);
+        let provider = NetworkProvider::new(net_conf);
         let mut tokens = vec![
             FToken::zil(0),
             FToken {
@@ -405,7 +404,7 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
             FToken {
                 name: "Zilliqa-bridged USDT token".to_string(),
@@ -417,7 +416,7 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
             FToken {
                 name: "Zilliqa-bridged ETH token".to_string(),
@@ -429,7 +428,7 @@ mod tests_network {
                 logo: None,
                 default: false,
                 balances: HashMap::new(),
-                provider_index: 0,
+                chain_hash: 0,
             },
         ];
         let accounts = [
@@ -470,7 +469,7 @@ mod tests_network {
     fn test_save_and_load_single_network() {
         let storage = setup_temp_storage();
         let config = create_zilliqa_config();
-        let providers = vec![NetworkProvider::new(config, 0)];
+        let providers = vec![NetworkProvider::new(config)];
 
         // Save to storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
@@ -508,8 +507,7 @@ mod tests_network {
 
         let providers: Vec<NetworkProvider> = configs
             .iter()
-            .enumerate()
-            .map(|(index, conf)| NetworkProvider::new(conf.clone(), index as u64))
+            .map(|conf| NetworkProvider::new(conf.clone()))
             .collect();
 
         // Save to storage
@@ -533,27 +531,21 @@ mod tests_network {
         let base_config = create_zilliqa_config();
 
         // Initial network
-        let mut providers = vec![NetworkProvider::new(
-            ChainConfig {
-                name: "Initial Network".to_string(),
-                chain_id: 1,
-                ..base_config.clone()
-            },
-            0,
-        )];
+        let mut providers = vec![NetworkProvider::new(ChainConfig {
+            name: "Initial Network".to_string(),
+            chain_id: 1,
+            ..base_config.clone()
+        })];
 
         // Save initial state
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
         // Add new network
-        providers.push(NetworkProvider::new(
-            ChainConfig {
-                name: "New Network".to_string(),
-                chain_id: 2,
-                ..base_config.clone()
-            },
-            1,
-        ));
+        providers.push(NetworkProvider::new(ChainConfig {
+            name: "New Network".to_string(),
+            chain_id: 2,
+            ..base_config.clone()
+        }));
 
         // Update storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
@@ -572,7 +564,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_nonce_evm() {
         let net_conf = create_bsc_config();
-        let provider = NetworkProvider::new(net_conf, 0);
+        let provider = NetworkProvider::new(net_conf);
 
         let account = [
             &Address::from_eth_address("0x2d09c57cB8EAf970dEEaf30546ec4dc3781c63cf").unwrap(),
@@ -590,7 +582,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_nonce_scilla() {
         let net_conf = create_zilliqa_config();
-        let provider = NetworkProvider::new(net_conf, 0);
+        let provider = NetworkProvider::new(net_conf);
 
         let account = [
             &Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap(),

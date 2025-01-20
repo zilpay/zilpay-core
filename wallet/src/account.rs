@@ -1,6 +1,6 @@
 use crate::account_type::AccountType;
 use config::sha::SHA512_SIZE;
-use crypto::bip49::Bip49DerivationPath;
+use crypto::bip49::DerivationPath;
 use errors::account::AccountErrors;
 use proto::address::Address;
 use proto::keypair::KeyPair;
@@ -16,7 +16,7 @@ pub struct Account {
     pub account_type: AccountType,
     pub addr: Address,
     pub pub_key: PubKey,
-    pub provider_index: usize,
+    pub chain_hash: u64,
 }
 
 impl Account {
@@ -30,13 +30,13 @@ impl Account {
         pub_key: PubKey,
         name: String,
         index: usize,
-        provider_index: usize,
+        chain_hash: u64,
     ) -> Result<Self> {
         let addr = pub_key.get_addr()?;
         let account_type = AccountType::Ledger(index);
 
         Ok(Self {
-            provider_index,
+            chain_hash,
             account_type,
             addr,
             name,
@@ -48,7 +48,7 @@ impl Account {
         sk: SecretKey,
         name: String,
         storage_key: usize,
-        provider_index: usize,
+        chain_hash: u64,
     ) -> Result<Self> {
         let keypair = KeyPair::from_secret_key(sk)?;
         let pub_key = keypair.get_pubkey()?;
@@ -56,7 +56,7 @@ impl Account {
         let account_type = AccountType::PrivateKey(storage_key);
 
         Ok(Self {
-            provider_index,
+            chain_hash,
             account_type,
             addr,
             pub_key,
@@ -67,8 +67,8 @@ impl Account {
     pub fn from_hd(
         mnemonic_seed: &[u8; SHA512_SIZE],
         name: String,
-        bip49: &Bip49DerivationPath,
-        provider_index: usize,
+        bip49: &DerivationPath,
+        chain_hash: u64,
     ) -> Result<Self> {
         let keypair = KeyPair::from_bip39_seed(mnemonic_seed, bip49)?;
         let pub_key = keypair.get_pubkey()?;
@@ -76,7 +76,7 @@ impl Account {
         let account_type = AccountType::Bip39HD(bip49.get_index());
 
         Ok(Self {
-            provider_index,
+            chain_hash,
             account_type,
             addr,
             pub_key,
@@ -96,7 +96,7 @@ mod tests {
     use super::*;
     use bip39::Mnemonic;
     use config::address::ADDR_LEN;
-    use crypto::bip49::ZIL_PATH;
+    use crypto::slip44;
     use rand::RngCore;
 
     #[test]
@@ -133,7 +133,7 @@ mod tests {
             "green process gate doctor slide whip priority shrug diamond crumble average help";
         let name = "Account 0";
         let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
-        let bip49 = Bip49DerivationPath::Zilliqa((0, ZIL_PATH.to_string()));
+        let bip49 = DerivationPath::new(slip44::ZILLIQA, 0);
         let seed = m.to_seed("");
         let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0).unwrap();
 

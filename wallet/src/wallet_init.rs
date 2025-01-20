@@ -72,7 +72,7 @@ impl WalletInit for Wallet {
             params.pub_key,
             params.account_name,
             params.wallet_index,
-            params.provider_index,
+            params.chain_id,
         )?;
 
         let accounts: Vec<account::Account> = vec![account];
@@ -84,6 +84,7 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
+            default_chain_id: params.chain_id,
         };
         let wallet = Self {
             storage: config.storage,
@@ -130,7 +131,7 @@ impl WalletInit for Wallet {
             params.sk,
             params.wallet_name.to_owned(),
             cipher_entropy_key,
-            params.provider_index,
+            params.chain_id,
         )?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
@@ -141,6 +142,7 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0, // for sk account we have only one account.
+            default_chain_id: params.chain_id,
         };
         let wallet = Self {
             storage: config.storage,
@@ -182,12 +184,8 @@ impl WalletInit for Wallet {
 
         for index in params.indexes {
             let (bip49, name) = index;
-            let hd_account = Account::from_hd(
-                &mnemonic_seed,
-                name.to_owned(),
-                bip49,
-                params.provider_index,
-            )?;
+            let hd_account =
+                Account::from_hd(&mnemonic_seed, name.to_owned(), bip49, params.chain_id)?;
 
             accounts.push(hd_account);
         }
@@ -203,6 +201,7 @@ impl WalletInit for Wallet {
                 !params.passphrase.is_empty(),
             )),
             selected_account: 0,
+            default_chain_id: params.chain_id,
         };
         let wallet = Self {
             storage: config.storage,
@@ -226,7 +225,7 @@ mod tests {
         keychain::KeyChain,
     };
     use config::{argon::KEY_SIZE, cipher::PROOF_SIZE};
-    use crypto::bip49::{Bip49DerivationPath, ZIL_PATH};
+    use crypto::{bip49::DerivationPath, slip44};
     use errors::wallet::WalletErrors;
     use proto::keypair::KeyPair;
     use rand::Rng;
@@ -262,7 +261,7 @@ mod tests {
             Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
             (
-                Bip49DerivationPath::Zilliqa((i, ZIL_PATH.to_string())),
+                DerivationPath::new(slip44::ZILLIQA, i),
                 format!("account {i}"),
             )
         });
@@ -280,7 +279,7 @@ mod tests {
                 indexes: &indexes,
                 wallet_name: "Wllaet name".to_string(),
                 biometric_type: AuthMethod::Biometric,
-                provider_index: 0,
+                chain_id: 0,
             },
             wallet_config,
             vec![],
@@ -331,7 +330,7 @@ mod tests {
                 proof,
                 wallet_name: name.to_string(),
                 biometric_type: AuthMethod::None,
-                provider_index: 0,
+                chain_id: 0,
             },
             wallet_config,
             vec![],

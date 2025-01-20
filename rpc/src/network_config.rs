@@ -1,3 +1,5 @@
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use errors::rpc::RpcError;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
@@ -56,6 +58,15 @@ impl ChainConfig {
 
     pub fn is_fallback_enabled(&self) -> bool {
         self.fallback_enabled
+    }
+
+    pub fn hash(&self) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        self.slip_44.hash(&mut hasher);
+        self.chain_id.hash(&mut hasher);
+        self.chain.hash(&mut hasher);
+
+        hasher.finish()
     }
 }
 

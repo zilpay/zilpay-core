@@ -1,18 +1,18 @@
 use crate::{Background, Result};
 use errors::background::BackgroundError;
 use network::{common::Provider, provider::NetworkProvider};
-use rpc::network_config::NetworkConfig;
+use rpc::network_config::ChainConfig;
 use std::sync::Arc;
 
 pub trait ProvidersManagement {
     type Error;
 
-    fn get_provider(&self, index: usize) -> std::result::Result<&NetworkProvider, Self::Error>;
+    fn get_provider(&self, chain_id: u128) -> std::result::Result<&NetworkProvider, Self::Error>;
     fn get_mut_provider(
         &mut self,
-        index: usize,
+        chain_id: u128,
     ) -> std::result::Result<&mut NetworkProvider, Self::Error>;
-    fn add_provider(&mut self, config: NetworkConfig) -> std::result::Result<(), Self::Error>;
+    fn add_provider(&mut self, config: ChainConfig) -> std::result::Result<(), Self::Error>;
     fn remvoe_providers(&mut self, index: usize) -> std::result::Result<(), Self::Error>;
     fn update_providers(&mut self) -> std::result::Result<(), Self::Error>;
 }
@@ -25,17 +25,19 @@ impl ProvidersManagement for Background {
 
     fn get_mut_provider(
         &mut self,
-        index: usize,
+        chain_id: u128,
     ) -> std::result::Result<&mut NetworkProvider, Self::Error> {
         self.providers
-            .get_mut(index)
-            .ok_or(BackgroundError::ProviderNotExists(index))
+            .iter_mut()
+            .find(|p| p.config.chain_id == chain_id)
+            .ok_or(BackgroundError::ProviderNotExists(chain_id))
     }
 
-    fn get_provider(&self, index: usize) -> std::result::Result<&NetworkProvider, Self::Error> {
+    fn get_provider(&self, chain_id: u128) -> std::result::Result<&NetworkProvider, Self::Error> {
         self.providers
-            .get(index)
-            .ok_or(BackgroundError::ProviderNotExists(index))
+            .iter()
+            .find(|p| p.config.chain_id == chain_id)
+            .ok_or(BackgroundError::ProviderNotExists(chain_id))
     }
 
     fn update_providers(&mut self) -> std::result::Result<(), Self::Error> {
@@ -44,7 +46,7 @@ impl ProvidersManagement for Background {
         Ok(())
     }
 
-    fn add_provider(&mut self, config: NetworkConfig) -> Result<()> {
+    fn add_provider(&mut self, config: ChainConfig) -> Result<()> {
         if self
             .providers
             .iter()
@@ -54,7 +56,7 @@ impl ProvidersManagement for Background {
         }
 
         let index = self.providers.len();
-        let new_provider = NetworkProvider::new(config, index);
+        let new_provider = NetworkProvider::new(config);
 
         self.providers.push(new_provider);
         self.update_providers()?;
@@ -221,7 +223,7 @@ mod tests_providers {
         bg.add_provider(config2.clone()).unwrap();
 
         // Modify providers directly and update
-        bg.providers[0].config.network_name = "Updated Network 1".to_string();
+        bg.providers[0].config.network_name = "Updated Network 1";
         bg.update_providers().unwrap();
 
         // Verify persistence of update

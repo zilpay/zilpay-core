@@ -8,7 +8,7 @@ use proto::pubkey::PubKey;
 use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
-use crypto::bip49::Bip49DerivationPath;
+use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
 use proto::secret_key::SecretKey;
 use settings::wallet_settings::WalletSettings;
@@ -33,7 +33,7 @@ pub struct LedgerParams {
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub provider_index: usize,
+    pub chain_hash: u64,
 }
 
 pub struct SecretKeyParams {
@@ -41,17 +41,17 @@ pub struct SecretKeyParams {
     pub proof: [u8; KEY_SIZE],
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub provider_index: usize,
+    pub chain_hash: u64,
 }
 
 pub struct Bip39Params<'a> {
     pub proof: [u8; KEY_SIZE],
     pub mnemonic: &'a Mnemonic,
     pub passphrase: &'a str,
-    pub indexes: &'a [(Bip49DerivationPath, String)],
+    pub indexes: &'a [(DerivationPath, String)],
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub provider_index: usize,
+    pub chain_hash: u64,
 }
 
 pub struct Wallet {

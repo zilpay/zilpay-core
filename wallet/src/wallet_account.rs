@@ -4,7 +4,7 @@ use crate::{
 };
 use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
-use crypto::bip49::Bip49DerivationPath;
+use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
 use proto::pubkey::PubKey;
 
@@ -16,15 +16,15 @@ pub trait AccountManagement {
         name: String,
         pub_key: PubKey,
         index: usize,
-        provider_index: usize,
+        chain_hash: u64,
     ) -> std::result::Result<(), Self::Error>;
     fn add_next_bip39_account(
         &self,
         name: String,
-        bip49: &Bip49DerivationPath,
+        bip49: &DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
-        provider_index: usize,
+        chain_hash: u64,
     ) -> std::result::Result<(), Self::Error>;
     fn select_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
     fn delete_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
@@ -52,7 +52,7 @@ impl AccountManagement for Wallet {
         name: String,
         pub_key: PubKey,
         index: usize,
-        provider_index: usize,
+        chain_id: u128,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
         let has_account = data
@@ -68,7 +68,7 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::ExistsAccount(index));
         }
 
-        let ledger_account = Account::from_ledger(pub_key, name, index, provider_index)?;
+        let ledger_account = Account::from_ledger(pub_key, name, index, chain_id)?;
 
         data.accounts.push(ledger_account);
         self.save_wallet_data(data)?;
@@ -79,10 +79,10 @@ impl AccountManagement for Wallet {
     fn add_next_bip39_account(
         &self,
         name: String,
-        bip49: &Bip49DerivationPath,
+        bip49: &DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
-        provider_index: usize,
+        chain_id: u128,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
 
@@ -106,7 +106,7 @@ impl AccountManagement for Wallet {
                     return Err(WalletErrors::ExistsAccount(bip49.get_index()));
                 }
 
-                let hd_account = Account::from_hd(&mnemonic_seed, name, bip49, provider_index)?;
+                let hd_account = Account::from_hd(&mnemonic_seed, name, bip49, chain_id)?;
 
                 data.accounts.push(hd_account);
                 self.save_wallet_data(data)?;
@@ -147,7 +147,7 @@ mod tests {
         keychain::KeyChain,
     };
     use config::cipher::PROOF_SIZE;
-    use crypto::bip49::{Bip49DerivationPath, ZIL_PATH};
+    use crypto::{bip49::DerivationPath, slip44};
     use errors::wallet::WalletErrors;
     use rand::Rng;
     use std::sync::Arc;
@@ -180,7 +180,7 @@ mod tests {
         // Create wallet with 3 accounts
         let indexes = [0, 1, 2].map(|i| {
             (
-                Bip49DerivationPath::Zilliqa((i, ZIL_PATH.to_string())),
+                DerivationPath::new(slip44::ZILLIQA, i),
                 format!("account {i}"),
             )
         });
@@ -200,7 +200,7 @@ mod tests {
                 indexes: &indexes,
                 wallet_name: "Select Account Test Wallet".to_string(),
                 biometric_type: AuthMethod::Biometric,
-                provider_index: 0,
+                chain_hash: 0,
             },
             wallet_config,
             vec![],

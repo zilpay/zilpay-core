@@ -14,11 +14,11 @@ pub enum BackgroundError {
     #[error("Fail, network error: {0}")]
     NetworkErrors(NetworkErrors),
 
-    #[error("Provider is not exists with index: {0}")]
-    ProviderNotExists(usize),
+    #[error("Provider is not exists with chain id: {0}")]
+    ProviderNotExists(u128),
 
     #[error("Provider already exists with chainid: {0}")]
-    ProviderAlreadyExists(u64),
+    ProviderAlreadyExists(u128),
 
     #[error("Default provider cannot be removed: {0}")]
     ProviderIsDefault(usize),

@@ -34,7 +34,7 @@ impl TokensManagement for Background {
             .map(|a| &a.addr)
             .collect::<Vec<&Address>>();
         let selected = &data.accounts[data.selected_account];
-        let provider = self.get_provider(selected.provider_index)?;
+        let provider = self.get_provider(selected.chain_id)?;
         let token_meta = provider.ftoken_meta(contract, &accounts).await?;
 
         Ok(token_meta)
@@ -58,12 +58,12 @@ impl TokensManagement for Background {
             .ok_or(WalletErrors::FailToGetAccount(data.selected_account))?;
         let addresses: Vec<&Address> = data.accounts.iter().map(|a| &a.addr).collect();
 
-        let matching_end = ftokens
-            .partition_point(|token| token.provider_index == selected_account.provider_index);
+        let matching_end =
+            ftokens.partition_point(|token| token.provider_index == selected_account.chain_id);
         let matching_tokens = &mut ftokens[..matching_end];
         let provider = self
             .providers
-            .get(selected_account.provider_index)
+            .get(selected_account.chain_id)
             .ok_or(BackgroundError::ProviderNotExists(0))?;
 
         provider

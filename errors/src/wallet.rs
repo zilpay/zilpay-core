@@ -63,7 +63,7 @@ pub enum WalletErrors {
     FailToGetAccount(usize),
 
     #[error("fail to find provider with index: {0}")]
-    ProviderNotExist(usize),
+    ProviderNotExist(u128),
 
     #[error("Mnemonic error: {0}")]
     MnemonicError(String),

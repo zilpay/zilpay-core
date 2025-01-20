@@ -29,7 +29,7 @@ impl TransactionsManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let selected_account = &data.accounts[data.selected_account];
-        let provider = self.get_provider(selected_account.provider_index)?;
+        let provider = self.get_provider(selected_account.chain_id)?;
         let txns = provider.broadcast_signed_transactions(txns).await?;
 
         Ok(txns)

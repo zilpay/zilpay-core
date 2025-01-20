@@ -66,8 +66,9 @@ impl WalletCrypto for Wallet {
                     .ok_or(WalletErrors::FailToGetAccount(account_index))?;
                 let providers = NetworkProvider::load_network_configs(Arc::clone(&self.storage));
                 let provider = providers
-                    .get(account.provider_index)
-                    .ok_or(WalletErrors::ProviderNotExist(account_index))?;
+                    .iter()
+                    .find(|&p| p.config.chain_id == data.default_chain_id)
+                    .ok_or(WalletErrors::ProviderNotExist(data.default_chain_id))?;
                 let m = self.reveal_mnemonic(seed_bytes)?;
                 let seed = m.to_seed(passphrase.unwrap_or(""));
                 let hd_index = account.account_type.value();
