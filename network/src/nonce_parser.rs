@@ -2,7 +2,7 @@ use crate::Result;
 use proto::address::Address;
 use rpc::{
     methods::{EvmMethods, ZilMethods},
-    network_config::NetworkConfig,
+    network_config::ChainConfig,
     provider::RpcProvider,
     zil_interfaces::ResultRes,
 };
@@ -16,7 +16,7 @@ pub fn build_nonce_request(address: &Address) -> Value {
                 .unwrap_or_default() // TODO: maybe never call.
                 .to_lowercase();
 
-            RpcProvider::<NetworkConfig>::build_payload(
+            RpcProvider::<ChainConfig>::build_payload(
                 json!([base16_address]),
                 ZilMethods::GetBalance,
             )
@@ -24,7 +24,7 @@ pub fn build_nonce_request(address: &Address) -> Value {
         Address::Secp256k1Keccak256Ethereum(_) => {
             let eth_address = address.to_eth_checksummed().unwrap_or_default();
 
-            RpcProvider::<NetworkConfig>::build_payload(
+            RpcProvider::<ChainConfig>::build_payload(
                 json!([eth_address, "latest"]),
                 EvmMethods::GetTransactionCount,
             )

@@ -1,5 +1,6 @@
 use crate::Result;
 use alloy::{eips::eip2718::Encodable2718, hex};
+use errors::{network::NetworkErrors, tx::TransactionErrors};
 use proto::tx::TransactionReceipt;
 use rpc::{
     methods::{EvmMethods, ZilMethods},
@@ -8,7 +9,6 @@ use rpc::{
     zil_interfaces::ResultRes,
 };
 use serde_json::{json, Value};
-use errors::{network::NetworkErrors, tx::TransactionErrors};
 
 pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
     match tx {

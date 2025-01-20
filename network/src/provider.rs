@@ -14,8 +14,7 @@ use errors::token::TokenError;
 use errors::tx::TransactionErrors;
 use proto::address::Address;
 use proto::tx::TransactionReceipt;
-use rpc::common::JsonRPC;
-use rpc::network_config::{Bip44Network, NetworkConfig};
+use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
 use serde_json::Value;
@@ -28,7 +27,7 @@ use token::ft_parse::{
 
 #[derive(Debug, PartialEq)]
 pub struct NetworkProvider {
-    pub config: NetworkConfig,
+    pub config: ChainConfig,
     pub index: usize,
 }
 
