@@ -333,9 +333,11 @@ impl WalletManagement for Background {
     }
 
     fn delete_wallet(&mut self, wallet_index: usize) -> Result<()> {
-        let wallet_address = self.get_wallet_by_index(wallet_index)?.wallet_address;
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let wallet_address = wallet.wallet_address;
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
+        wallet.clear_data()?;
         indicators.retain(|&x| x != wallet_address);
         self.wallets.retain(|x| x.wallet_address != wallet_address);
         self.save_indicators(indicators)?;
