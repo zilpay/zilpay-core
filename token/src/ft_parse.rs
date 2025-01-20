@@ -10,7 +10,7 @@ use errors::{network::NetworkErrors, token::TokenError};
 use proto::address::Address;
 use rpc::{
     methods::{EvmMethods, ZilMethods},
-    network_config::NetworkConfig,
+    network_config::ChainConfig,
     provider::RpcProvider,
     zil_interfaces::{GetTokenInitItem, ResultRes},
 };
@@ -135,7 +135,7 @@ fn build_zil_requests<'a>(
         .map_err(TokenError::InvalidContractAddress)?;
     // Add metadata request
     requests.push((
-        RpcProvider::<NetworkConfig>::build_payload(
+        RpcProvider::<ChainConfig>::build_payload(
             json!([base16_contract]),
             ZilMethods::GetSmartContractInit,
         ),
@@ -155,12 +155,12 @@ fn build_zil_requests<'a>(
         };
 
         let request = if native {
-            RpcProvider::<NetworkConfig>::build_payload(
+            RpcProvider::<ChainConfig>::build_payload(
                 json!([base16_account]),
                 ZilMethods::GetBalance,
             )
         } else {
-            RpcProvider::<NetworkConfig>::build_payload(
+            RpcProvider::<ChainConfig>::build_payload(
                 json!([base16_contract, "balances", [base16_account]]),
                 ZilMethods::GetSmartContractSubState,
             )
@@ -178,7 +178,7 @@ fn build_eth_requests<'a>(
     native: bool,
     requests: &mut Vec<(Value, RequestType<'a>)>,
 ) -> Result<()> {
-    let build_payload = RpcProvider::<NetworkConfig>::build_payload;
+    let build_payload = RpcProvider::<ChainConfig>::build_payload;
     let token_addr = contract
         .to_eth_checksummed()
         .map_err(TokenError::InvalidContractAddress)?;

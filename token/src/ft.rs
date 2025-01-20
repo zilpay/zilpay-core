@@ -15,7 +15,7 @@ pub struct FToken {
     pub balances: HashMap<usize, U256>,
     pub default: bool,
     pub native: bool,
-    pub provider_index: usize,
+    pub provider_index: u64,
 }
 
 impl FToken {
@@ -31,7 +31,7 @@ impl FToken {
         Ok(encoded)
     }
 
-    pub fn zil(provider_index: usize) -> Self {
+    pub fn zil(provider_index: u64) -> Self {
         FToken {
             provider_index,
             default: true,
@@ -39,13 +39,13 @@ impl FToken {
             symbol: "ZIL".to_string(),
             decimals: 12,
             addr: Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
-            logo: None, // TODO: add logo
+            logo: None,
             balances: HashMap::new(),
             native: true,
         }
     }
 
-    pub fn zlp(provider_index: usize) -> Self {
+    pub fn zlp(provider_index: u64) -> Self {
         FToken {
             provider_index,
             default: true,
@@ -53,13 +53,13 @@ impl FToken {
             symbol: "ZLP".to_string(),
             decimals: 18,
             addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap(),
-            logo: None, // TODO: add logo
+            logo: None,
             balances: HashMap::new(),
             native: false,
         }
     }
 
-    pub fn eth(provider_index: usize) -> Self {
+    pub fn eth(provider_index: u64) -> Self {
         FToken {
             provider_index,
             default: true,
@@ -67,7 +67,7 @@ impl FToken {
             symbol: "ETH".to_string(),
             decimals: 18,
             addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
-            logo: None, // TODO: add logo
+            logo: None,
             balances: HashMap::new(),
             native: true,
         }
