@@ -1,106 +1,52 @@
-use std::str::FromStr;
-
-use errors::{network::NetworkErrors, rpc::RpcError};
+use errors::rpc::RpcError;
+use proto::address::Address;
 use serde::{Deserialize, Serialize};
 
 use crate::common::{NetworkConfigTrait, Result};
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
-pub enum Bip44Network {
-    Evm(String),
-    Bitcoin(String),
-    Solana(String),
-    Zilliqa(String),
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Explorer {
+    pub name: String,
+    pub url: String,
+    pub icon: Option<String>,
+    pub standard: String,
 }
 
-impl std::fmt::Display for Bip44Network {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Bip44Network::Evm(value) => write!(f, "evm:{}", value),
-            Bip44Network::Bitcoin(value) => write!(f, "btc:{}", value),
-            Bip44Network::Solana(value) => write!(f, "sol:{}", value),
-            Bip44Network::Zilliqa(value) => write!(f, "zil:{}", value),
-        }
-    }
-}
-
-impl FromStr for Bip44Network {
-    type Err = NetworkErrors;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        let parts: Vec<&str> = s.split(':').collect();
-        if parts.len() != 2 {
-            return Err(NetworkErrors::InvlaidPathBip49Type);
-        }
-
-        let (network, value) = (parts[0], parts[1].to_string());
-        match network {
-            "evm" => Ok(Bip44Network::Evm(value)),
-            "btc" => Ok(Bip44Network::Bitcoin(value)),
-            "sol" => Ok(Bip44Network::Solana(value)),
-            "zil" => Ok(Bip44Network::Zilliqa(value)),
-            _ => Err(NetworkErrors::InvlaidPathBip49(network.to_string())),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct NetworkConfig {
-    pub network_name: String,
-    pub token_symbol: String,
-    pub logo: Option<String>,
-    pub chain_id: u64,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChainConfig {
+    pub name: String,
+    pub chain: String,
+    pub icon: String,
+    pub rpc: Vec<String>,
+    pub features: Vec<String>,
+    pub chain_id: u128,
+    pub slip_44: u32,
+    pub ens: Address,
+    pub explorers: Vec<Explorer>,
     pub fallback_enabled: bool,
-    pub urls: Vec<String>,
-    pub explorer_urls: Vec<String>,
-    pub default: bool,
-    pub bip49: Bip44Network,
 }
 
-impl NetworkConfig {
+impl ChainConfig {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
         let decoded: Self = bincode::deserialize(encoded)?;
-
         Ok(decoded)
-    }
-
-    pub fn new(
-        network_name: impl Into<String>,
-        chain_id: u64,
-        urls: Vec<String>,
-        bip49: Bip44Network,
-        token_symbol: String,
-        logo: Option<String>,
-    ) -> Self {
-        Self {
-            token_symbol,
-            logo,
-            bip49,
-            fallback_enabled: true,
-            network_name: network_name.into(),
-            chain_id,
-            urls,
-            default: false,
-            explorer_urls: Vec::with_capacity(1),
-        }
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         let encoded: Vec<u8> = bincode::serialize(&self)?;
-
         Ok(encoded)
     }
 
     pub fn network_name(&self) -> &str {
-        &self.network_name
+        &self.name
     }
 
-    pub fn chain_id(&self) -> u64 {
+    pub fn chain_id(&self) -> u128 {
         self.chain_id
     }
 
     pub fn urls(&self) -> &[String] {
-        &self.urls
+        &self.rpc
     }
 
     pub fn with_fallback(mut self, enabled: bool) -> Self {
@@ -113,15 +59,15 @@ impl NetworkConfig {
     }
 }
 
-impl NetworkConfigTrait for NetworkConfig {
+impl NetworkConfigTrait for ChainConfig {
     fn add_node_group(&mut self, nodes: Vec<String>) -> Result<()> {
         for node in &nodes {
-            if self.urls.contains(node) {
+            if self.rpc.contains(node) {
                 return Err(RpcError::DuplicateNode(node.clone()));
             }
         }
 
-        self.urls.extend(nodes);
+        self.rpc.extend(nodes);
         Ok(())
     }
 
@@ -135,7 +81,7 @@ impl NetworkConfigTrait for NetworkConfig {
         }
 
         if let Some(&max_index) = indexes.iter().max() {
-            if max_index >= self.urls.len() {
+            if max_index >= self.rpc.len() {
                 return Err(RpcError::NodeNotExits(max_index));
             }
         }
@@ -144,20 +90,19 @@ impl NetworkConfigTrait for NetworkConfig {
         sorted_indexes.sort_unstable_by(|a, b| b.cmp(a));
 
         for &index in &sorted_indexes {
-            self.urls.remove(index);
+            self.rpc.remove(index);
         }
 
         Ok(())
     }
 
     fn default_node(&self) -> &str {
-        self.urls().first().map(|s| s.as_str()).unwrap_or_default()
+        self.rpc.first().map(|s| s.as_str()).unwrap_or_default()
     }
 
     fn add_node(&mut self, node: String) -> Result<()> {
-        if !self.urls.contains(&node) {
-            self.urls.push(node);
-
+        if !self.rpc.contains(&node) {
+            self.rpc.push(node);
             Ok(())
         } else {
             Err(RpcError::DuplicateNode(node))
@@ -167,9 +112,9 @@ impl NetworkConfigTrait for NetworkConfig {
     fn remove_node(&mut self, node_index: usize) -> Result<()> {
         match node_index {
             0 => Err(RpcError::DefaultNodeUnremovable),
-            i if i >= self.urls.len() => Err(RpcError::NodeNotExits(i)),
+            i if i >= self.rpc.len() => Err(RpcError::NodeNotExits(i)),
             i => {
-                self.urls.remove(i);
+                self.rpc.remove(i);
                 Ok(())
             }
         }
@@ -177,28 +122,46 @@ impl NetworkConfigTrait for NetworkConfig {
 
     fn nodes(&self) -> &[String] {
         if self.fallback_enabled {
-            &self.urls
+            &self.rpc
         } else {
-            &self.urls[..1]
+            &self.rpc[..1]
+        }
+    }
+}
+
+impl Default for Explorer {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            url: String::new(),
+            icon: None,
+            standard: String::new(),
         }
     }
 }
 
 #[cfg(test)]
-mod tests_network_config {
-    use crypto::bip49::ETH_PATH;
-
+mod tests {
     use super::*;
 
-    fn setup_config() -> NetworkConfig {
-        NetworkConfig::new(
-            "test_network",
-            1,
-            vec!["http://default.com".to_string()],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("TST"),
-            None,
-        )
+    fn setup_config() -> ChainConfig {
+        ChainConfig {
+            name: "test_network".to_string(),
+            chain: "TEST".to_string(),
+            icon: "test_icon".to_string(),
+            rpc: vec!["http://default.com".to_string()],
+            features: vec!["EIP155".to_string()],
+            chain_id: 1,
+            slip_44: 60,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "test_explorer".to_string(),
+                url: "https://test.explorer".to_string(),
+                icon: None,
+                standard: "EIP3091".to_string(),
+            }],
+            fallback_enabled: true,
+        }
     }
 
     #[test]
@@ -208,6 +171,8 @@ mod tests_network_config {
         assert_eq!(config.chain_id(), 1);
         assert_eq!(config.default_node(), "http://default.com");
         assert!(config.is_fallback_enabled());
+        assert_eq!(config.features[0], "EIP155");
+        assert_eq!(config.slip_44, 60);
     }
 
     #[test]
@@ -251,18 +216,22 @@ mod tests_network_config {
 
     #[test]
     fn test_remove_node() {
-        let mut config = NetworkConfig::new(
-            "test",
-            1,
-            vec![
+        let mut config = ChainConfig {
+            name: "test".to_string(),
+            chain: "TEST".to_string(),
+            icon: "test_icon".to_string(),
+            rpc: vec![
                 "http://default.com".to_string(),
                 "http://second.com".to_string(),
                 "http://third.com".to_string(),
             ],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("TST"),
-            None,
-        );
+            features: vec!["EIP155".to_string()],
+            chain_id: 1,
+            slip_44: 60,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: Vec::new(),
+            fallback_enabled: true,
+        };
 
         // Test removing default node (should fail)
         let err = config.remove_node(0).unwrap_err();
@@ -279,48 +248,61 @@ mod tests_network_config {
 
     #[test]
     fn test_remove_node_group() {
-        let mut config = NetworkConfig::new(
-            "test",
-            1,
-            vec![
+        let mut config = ChainConfig {
+            name: "test".to_string(),
+            chain: "TEST".to_string(),
+            icon: "test_icon".to_string(),
+            rpc: vec![
                 "http://default.com".to_string(),
                 "http://second.com".to_string(),
                 "http://third.com".to_string(),
                 "http://fourth.com".to_string(),
             ],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("TST"),
-            None,
-        );
+            features: vec!["EIP155".to_string()],
+            chain_id: 1,
+            slip_44: 60,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: Vec::new(),
+            fallback_enabled: true,
+        };
 
         // Test empty indexes
         assert!(config.remove_node_group(Vec::new()).is_ok());
         assert_eq!(config.urls().len(), 4);
 
         // Test removing multiple nodes
-        assert!(config.remove_node_group([2, 1].to_vec()).is_ok());
+        assert!(config.remove_node_group(vec![2, 1]).is_ok());
         assert_eq!(config.urls().len(), 2);
 
         // Test removing default node (should fail)
-        let err = config.remove_node_group([0, 1].to_vec()).unwrap_err();
+        let err = config.remove_node_group(vec![0, 1]).unwrap_err();
         assert!(matches!(err, RpcError::DefaultNodeUnremovable));
 
         // Test invalid index
-        let err = config.remove_node_group([5].to_vec()).unwrap_err();
+        let err = config.remove_node_group(vec![5]).unwrap_err();
         assert!(matches!(err, RpcError::NodeNotExits(_)));
+    }
 
-        // Test removing nodes in descending order
-        let mut config = setup_config();
-        config
-            .add_node_group(vec![
-                "http://second.com".to_string(),
-                "http://third.com".to_string(),
-                "http://fourth.com".to_string(),
-            ])
-            .unwrap();
+    #[test]
+    fn test_default_explorer() {
+        let explorer = Explorer::default();
+        assert!(explorer.name.is_empty());
+        assert!(explorer.url.is_empty());
+        assert!(explorer.icon.is_none());
+        assert!(explorer.standard.is_empty());
+    }
 
-        assert!(config.remove_node_group([3, 2, 1].to_vec()).is_ok());
-        assert_eq!(config.urls().len(), 1);
-        assert_eq!(config.default_node(), "http://default.com");
+    #[test]
+    fn test_serialization() {
+        let config = setup_config();
+        let bytes = config.to_bytes().unwrap();
+        let deserialized = ChainConfig::from_bytes(&bytes).unwrap();
+
+        assert_eq!(config.name, deserialized.name);
+        assert_eq!(config.chain, deserialized.chain);
+        assert_eq!(config.chain_id, deserialized.chain_id);
+        assert_eq!(config.features, deserialized.features);
+        assert_eq!(config.rpc, deserialized.rpc);
+        assert_eq!(config.explorers.len(), deserialized.explorers.len());
     }
 }

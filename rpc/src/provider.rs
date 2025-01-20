@@ -91,57 +91,118 @@ mod tests {
     use super::*;
     use crate::{
         methods::{EvmMethods, ZilMethods},
-        network_config::{Bip44Network, NetworkConfig},
+        network_config::{ChainConfig, Explorer},
         zil_interfaces::{GetBalanceRes, ResultRes},
     };
-    use crypto::bip49::{ETH_PATH, ZIL_PATH};
+    use proto::address::Address;
     use serde_json::json;
 
     const ZERO_ADDR: &str = "0000000000000000000000000000000000000000";
 
+    fn create_zilliqa_config() -> ChainConfig {
+        ChainConfig {
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            icon: String::new(),
+            rpc: vec!["https://api.zilliqa.com".to_string()],
+            features: vec!["EIP155".to_string()],
+            chain_id: 1,
+            slip_44: 313,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "ViewBlock".to_string(),
+                url: "https://viewblock.io/zilliqa".to_string(),
+                icon: None,
+                standard: "EIP3091".to_string(),
+            }],
+            fallback_enabled: true,
+        }
+    }
+
+    fn create_bsc_config() -> ChainConfig {
+        ChainConfig {
+            name: "Binance Smart Chain".to_string(),
+            chain: "BSC".to_string(),
+            icon: String::new(),
+            rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
+            features: vec!["EIP155".to_string(), "EIP1559".to_string()],
+            chain_id: 56,
+            slip_44: 60,
+            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            explorers: vec![Explorer {
+                name: "bscscan".to_string(),
+                url: "https://bscscan.com".to_string(),
+                icon: None,
+                standard: "EIP3091".to_string(),
+            }],
+            fallback_enabled: true,
+        }
+    }
+
     #[tokio::test]
     async fn test_get_balance_scilla() {
-        let net_conf = NetworkConfig::new(
-            "Zilliqa",
-            1,
-            vec!["https://api.zilliqa.com".to_string()],
-            Bip44Network::Zilliqa(ZIL_PATH.to_string()),
-            String::from("ZIL"),
-            None,
-        );
-        let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
-        let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(
+        let net_conf = create_zilliqa_config();
+        let zil: RpcProvider<ChainConfig> = RpcProvider::new(&net_conf);
+        let payloads = vec![RpcProvider::<ChainConfig>::build_payload(
             json!([ZERO_ADDR]),
             ZilMethods::GetBalance,
         )];
 
         let res: Vec<ResultRes<GetBalanceRes>> = zil.req(&payloads).await.unwrap();
 
-        assert!(res.len() == 1);
+        assert_eq!(res.len(), 1);
         assert!(res[0].result.is_some());
         assert!(res[0].error.is_none());
     }
 
     #[tokio::test]
     async fn test_get_balance_bsc() {
-        let net_conf = NetworkConfig::new(
-            "Binance-smart-chain",
-            56,
-            vec!["https://bsc-dataseed.binance.org".to_string()],
-            Bip44Network::Evm(ETH_PATH.to_string()),
-            String::from("BSC"),
-            None,
-        );
-        let zil: RpcProvider<NetworkConfig> = RpcProvider::new(&net_conf);
-        let payloads = vec![RpcProvider::<NetworkConfig>::build_payload(
+        let net_conf = create_bsc_config();
+        let bsc: RpcProvider<ChainConfig> = RpcProvider::new(&net_conf);
+        let payloads = vec![RpcProvider::<ChainConfig>::build_payload(
             json!(["0x0000000000000000000000000000000000000000", "latest"]),
             EvmMethods::GetBalance,
         )];
 
-        let res: Vec<ResultRes<String>> = zil.req(&payloads).await.unwrap();
+        let res: Vec<ResultRes<String>> = bsc.req(&payloads).await.unwrap();
 
-        assert!(res.len() == 1);
+        assert_eq!(res.len(), 1);
         assert!(res[0].result.is_some());
         assert!(res[0].error.is_none());
+    }
+
+    #[test]
+    fn test_build_payload() {
+        let payload = RpcProvider::<ChainConfig>::build_payload(
+            json!(["param1", "param2"]),
+            EvmMethods::GetBalance,
+        );
+
+        assert_eq!(payload["jsonrpc"], "2.0");
+        assert_eq!(payload["id"], 1);
+        assert_eq!(payload["method"], EvmMethods::GetBalance.as_str());
+        assert!(payload["params"].is_array());
+        assert_eq!(payload["params"][0], "param1");
+        assert_eq!(payload["params"][1], "param2");
+    }
+
+    #[tokio::test]
+    async fn test_network_error_handling() {
+        let mut config = create_bsc_config();
+        // Используем неверный URL для тестирования обработки ошибок
+        config.rpc = vec!["https://invalid.url.com".to_string()];
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&config);
+        let payloads = vec![RpcProvider::<ChainConfig>::build_payload(
+            json!(["0x0000000000000000000000000000000000000000", "latest"]),
+            EvmMethods::GetBalance,
+        )];
+
+        let result: Result<Vec<ResultRes<String>>> = provider.req(&payloads).await;
+        assert!(result.is_err());
+        match result {
+            Err(RpcError::BadRequest) => (),
+            _ => panic!("Expected BadRequest error"),
+        }
     }
 }
