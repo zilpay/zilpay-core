@@ -77,7 +77,6 @@ impl ProvidersManagement for Background {
 mod tests_providers {
     use super::*;
     use crate::bg_storage::StorageManagement;
-    use proto::address::Address;
     use rand::Rng;
     use rpc::network_config::Explorer;
 
@@ -97,7 +96,7 @@ mod tests_providers {
             features: vec![155, 1559],
             chain_id,
             slip_44: 60,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "TestExplorer".to_string(),
                 url: "https://test.explorer".to_string(),

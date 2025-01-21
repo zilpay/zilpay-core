@@ -70,7 +70,7 @@ mod tests_background_transactions {
             features: vec![],
             chain_id: 333,
             slip_44: slip44::ZILLIQA,
-            ens: Address::Secp256k1Sha256Zilliqa(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "ViewBlock".to_string(),
                 url: "https://viewblock.io/zilliqa".to_string(),
@@ -95,7 +95,7 @@ mod tests_background_transactions {
             features: vec![155, 1559],
             chain_id: 97,
             slip_44: slip44::ETHEREUM,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "BscScan".to_string(),
                 url: "https://testnet.bscscan.com".to_string(),
@@ -111,7 +111,7 @@ mod tests_background_transactions {
             name: "BNB Smart Chain Testnet".to_string(),
             symbol: "tBNB".to_string(),
             decimals: 18,
-            addr: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            addr: Address::Secp256k1Sha256Zilliqa(Address::ZERO),
             logo: None,
             balances: Default::default(),
             default: true,

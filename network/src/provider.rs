@@ -315,7 +315,7 @@ mod tests_network {
             features: vec![155, 1559],
             chain_id: 56,
             slip_44: 60,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "BscScan".to_string(),
                 url: "https://bscscan.com".to_string(),
@@ -335,7 +335,7 @@ mod tests_network {
             features: vec![],
             chain_id: 1,
             slip_44: 313,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "ViewBlock".to_string(),
                 url: "https://viewblock.io/zilliqa".to_string(),

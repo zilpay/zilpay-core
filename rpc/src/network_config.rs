@@ -23,7 +23,7 @@ pub struct ChainConfig {
     pub features: Vec<u16>,
     pub chain_id: u64,
     pub slip_44: u32,
-    pub ens: Address,
+    pub ens: Option<Address>,
     pub explorers: Vec<Explorer>,
     pub fallback_enabled: bool,
 }
@@ -164,7 +164,7 @@ mod tests {
             features: vec![155],
             chain_id: 1,
             slip_44: 60,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "test_explorer".to_string(),
                 url: "https://test.explorer".to_string(),
@@ -239,7 +239,7 @@ mod tests {
             features: vec![155],
             chain_id: 1,
             slip_44: 60,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: Vec::new(),
             fallback_enabled: true,
         };
@@ -272,7 +272,7 @@ mod tests {
             features: vec![155],
             chain_id: 1,
             slip_44: 60,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: Vec::new(),
             fallback_enabled: true,
         };

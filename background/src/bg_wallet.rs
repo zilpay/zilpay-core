@@ -351,7 +351,6 @@ mod tests_background {
     use super::*;
     use crate::{bg_crypto::CryptoOperations, bg_provider::ProvidersManagement};
     use crypto::{bip49::DerivationPath, slip44};
-    use proto::address::Address;
     use proto::keypair::KeyPair;
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
@@ -372,7 +371,7 @@ mod tests_background {
             features: vec![155, 1559],
             chain_id: 1,
             slip_44: slip44::ZILLIQA,
-            ens: Address::Secp256k1Sha256Zilliqa(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "TestExplorer".to_string(),
                 url: "https://test.explorer".to_string(),

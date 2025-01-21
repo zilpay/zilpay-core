@@ -94,7 +94,6 @@ mod tests {
         network_config::{ChainConfig, Explorer},
         zil_interfaces::{GetBalanceRes, ResultRes},
     };
-    use proto::address::Address;
     use serde_json::json;
 
     const ZERO_ADDR: &str = "0000000000000000000000000000000000000000";
@@ -108,7 +107,7 @@ mod tests {
             features: vec![155],
             chain_id: 1,
             slip_44: 313,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "ViewBlock".to_string(),
                 url: "https://viewblock.io/zilliqa".to_string(),
@@ -128,7 +127,7 @@ mod tests {
             features: vec![155, 1559],
             chain_id: 56,
             slip_44: 60,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "bscscan".to_string(),
                 url: "https://bscscan.com".to_string(),

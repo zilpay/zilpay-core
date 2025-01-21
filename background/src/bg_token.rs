@@ -107,7 +107,7 @@ mod tests_background_tokens {
             features: vec![155, 1559],
             chain_id: 56,
             slip_44: slip44::ETHEREUM,
-            ens: Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+            ens: None,
             explorers: vec![Explorer {
                 name: "BscScan".to_string(),
                 url: "https://bscscan.com".to_string(),
