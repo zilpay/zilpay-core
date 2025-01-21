@@ -100,6 +100,7 @@ mod tests {
 
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
+            testnet: None,
             name: "Zilliqa".to_string(),
             chain: "ZIL".to_string(),
             short_name: String::new(),
@@ -120,6 +121,7 @@ mod tests {
 
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
+            testnet: None,
             name: "Binance Smart Chain".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),

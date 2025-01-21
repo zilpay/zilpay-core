@@ -23,6 +23,7 @@ pub struct ChainConfig {
     pub features: Vec<u16>,
     pub chain_id: u64,
     pub slip_44: u32,
+    pub testnet: Option<bool>,
     pub ens: Option<Address>,
     pub explorers: Vec<Explorer>,
     pub fallback_enabled: bool,
@@ -157,6 +158,7 @@ mod tests {
 
     fn setup_config() -> ChainConfig {
         ChainConfig {
+            testnet: None,
             name: "test_network".to_string(),
             chain: "TEST".to_string(),
             short_name: "test_icon".to_string(),
@@ -228,6 +230,7 @@ mod tests {
     #[test]
     fn test_remove_node() {
         let mut config = ChainConfig {
+            testnet: None,
             name: "test".to_string(),
             chain: "TEST".to_string(),
             short_name: "test_icon".to_string(),
@@ -260,6 +263,7 @@ mod tests {
     #[test]
     fn test_remove_node_group() {
         let mut config = ChainConfig {
+            testnet: None,
             name: "test".to_string(),
             chain: "TEST".to_string(),
             short_name: "test_icon".to_string(),

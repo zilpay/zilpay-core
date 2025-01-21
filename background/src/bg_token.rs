@@ -100,6 +100,7 @@ mod tests_background_tokens {
 
     fn gen_net_conf() -> ChainConfig {
         ChainConfig {
+            testnet: None,
             name: "Binance Smart Chain".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
