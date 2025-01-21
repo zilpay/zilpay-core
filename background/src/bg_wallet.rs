@@ -366,7 +366,7 @@ mod tests_background {
         ChainConfig {
             name: "Test Network".to_string(),
             chain: "TEST".to_string(),
-            icon: String::new(),
+            short_name: String::new(),
             rpc: vec!["https://test.network".to_string()],
             features: vec![155, 1559],
             chain_id: 1,

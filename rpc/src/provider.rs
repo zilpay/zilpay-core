@@ -102,7 +102,7 @@ mod tests {
         ChainConfig {
             name: "Zilliqa".to_string(),
             chain: "ZIL".to_string(),
-            icon: String::new(),
+            short_name: String::new(),
             rpc: vec!["https://api.zilliqa.com".to_string()],
             features: vec![155],
             chain_id: 1,
@@ -122,7 +122,7 @@ mod tests {
         ChainConfig {
             name: "Binance Smart Chain".to_string(),
             chain: "BSC".to_string(),
-            icon: String::new(),
+            short_name: String::new(),
             rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
             features: vec![155, 1559],
             chain_id: 56,

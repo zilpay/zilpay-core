@@ -65,7 +65,7 @@ mod tests_background_transactions {
         ChainConfig {
             name: "Zilliqa(testnet)".to_string(),
             chain: "ZIL".to_string(),
-            icon: String::new(),
+            short_name: String::new(),
             rpc: vec!["https://dev-api.zilliqa.com".to_string()],
             features: vec![],
             chain_id: 333,
@@ -85,7 +85,7 @@ mod tests_background_transactions {
         ChainConfig {
             name: "BNB Smart Chain Testnet".to_string(),
             chain: "BSC".to_string(),
-            icon: String::new(),
+            short_name: String::new(),
             rpc: vec![
                 "https://data-seed-prebsc-1-s1.binance.org:8545".to_string(),
                 "https://data-seed-prebsc-2-s1.binance.org:8545/".to_string(),

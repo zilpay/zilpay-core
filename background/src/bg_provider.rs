@@ -91,7 +91,7 @@ mod tests_providers {
         ChainConfig {
             name: name.to_string(),
             chain: "TEST".to_string(),
-            icon: String::new(),
+            short_name: String::new(),
             rpc: vec!["http://localhost:8545".to_string()],
             features: vec![155, 1559],
             chain_id,

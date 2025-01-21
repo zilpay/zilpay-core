@@ -18,7 +18,7 @@ pub struct Explorer {
 pub struct ChainConfig {
     pub name: String,
     pub chain: String,
-    pub icon: String,
+    pub short_name: String,
     pub rpc: Vec<String>,
     pub features: Vec<u16>,
     pub chain_id: u64,
@@ -159,7 +159,7 @@ mod tests {
         ChainConfig {
             name: "test_network".to_string(),
             chain: "TEST".to_string(),
-            icon: "test_icon".to_string(),
+            short_name: "test_icon".to_string(),
             rpc: vec!["http://default.com".to_string()],
             features: vec![155],
             chain_id: 1,
@@ -230,7 +230,7 @@ mod tests {
         let mut config = ChainConfig {
             name: "test".to_string(),
             chain: "TEST".to_string(),
-            icon: "test_icon".to_string(),
+            short_name: "test_icon".to_string(),
             rpc: vec![
                 "http://default.com".to_string(),
                 "http://second.com".to_string(),
@@ -262,7 +262,7 @@ mod tests {
         let mut config = ChainConfig {
             name: "test".to_string(),
             chain: "TEST".to_string(),
-            icon: "test_icon".to_string(),
+            short_name: "test_icon".to_string(),
             rpc: vec![
                 "http://default.com".to_string(),
                 "http://second.com".to_string(),
