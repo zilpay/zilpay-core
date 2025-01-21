@@ -9,7 +9,7 @@ pub trait ProvidersManagement {
 
     fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error>;
     fn get_providers(&self) -> Vec<NetworkProvider>;
-    fn add_provider(&self, config: ChainConfig) -> std::result::Result<(), Self::Error>;
+    fn add_provider(&self, config: ChainConfig) -> std::result::Result<u64, Self::Error>;
     fn remvoe_providers(&self, index: usize) -> std::result::Result<(), Self::Error>;
     fn update_providers(
         &self,
@@ -43,7 +43,7 @@ impl ProvidersManagement for Background {
         Ok(())
     }
 
-    fn add_provider(&self, config: ChainConfig) -> Result<()> {
+    fn add_provider(&self, config: ChainConfig) -> Result<u64> {
         let hash = config.hash();
         let mut providers = self.get_providers();
 
@@ -56,7 +56,7 @@ impl ProvidersManagement for Background {
         providers.push(new_provider);
         self.update_providers(providers)?;
 
-        Ok(())
+        Ok(hash)
     }
 
     fn remvoe_providers(&self, index: usize) -> Result<()> {
