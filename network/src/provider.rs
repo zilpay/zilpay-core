@@ -92,8 +92,9 @@ impl NetworkProvider {
             .req::<Vec<ResultRes<String>>>(&[request])
             .await
             .map_err(NetworkErrors::Request)?;
-
-        let price_str = response[0]
+        let price_str = response
+            .first()
+            .ok_or(NetworkErrors::ResponseParseError)?
             .result
             .as_ref()
             .ok_or(NetworkErrors::ResponseParseError)?;

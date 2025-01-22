@@ -190,7 +190,6 @@ mod tests {
     #[tokio::test]
     async fn test_network_error_handling() {
         let mut config = create_bsc_config();
-        // Используем неверный URL для тестирования обработки ошибок
         config.rpc = vec!["https://invalid.url.com".to_string()];
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&config);
