@@ -1,8 +1,12 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
+use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
 use errors::{background::BackgroundError, wallet::WalletErrors};
-use proto::address::Address;
-use token::ft::FToken;
+use proto::{
+    address::Address,
+    tx::{ETHTransactionRequest, TransactionRequest},
+};
+use token::{ft::FToken, ft_parse::generate_erc20_transfer_data};
 use wallet::wallet_storage::StorageOperations;
 
 #[async_trait]
@@ -19,11 +23,71 @@ pub trait TokensManagement {
         &self,
         wallet_index: usize,
     ) -> std::result::Result<(), Self::Error>;
+
+    fn build_token_transfer(
+        &self,
+        token: &FToken,
+        from: Address,
+        to: Address,
+        amount: U256,
+        chain_hash: u64,
+    ) -> std::result::Result<TransactionRequest, Self::Error>;
 }
 
 #[async_trait]
 impl TokensManagement for Background {
     type Error = BackgroundError;
+
+    fn build_token_transfer(
+        &self,
+        token: &FToken,
+        from: Address,
+        to: Address,
+        amount: U256,
+        chain_hash: u64,
+    ) -> Result<TransactionRequest> {
+        let chain = self.get_provider(chain_hash)?;
+        let payment = || ETHTransactionRequest {
+            to: Some(to.to_alloy_addr().into()),
+            value: Some(amount),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(chain.config.chain_id),
+            ..Default::default()
+        };
+        let erc20_transfer = || -> Result<ETHTransactionRequest> {
+            let transfer_data = generate_erc20_transfer_data(&to, amount)?;
+            let token_transfer_request = ETHTransactionRequest {
+                from: Some(from.to_alloy_addr().into()),
+                to: Some(token.addr.to_alloy_addr().into()),
+                value: Some(U256::ZERO),
+                nonce: Some(0),
+                gas: None,
+                chain_id: Some(chain.config.chain_id),
+                input: TransactionInput::new(transfer_data.into()),
+                ..Default::default()
+            };
+
+            Ok(token_transfer_request)
+        };
+
+        match token.addr {
+            Address::Secp256k1Sha256Zilliqa(_) => {
+                let transfer_request = if token.native {
+                    payment()
+                } else {
+                    erc20_transfer()?
+                };
+
+                let txn = TransactionRequest::Ethereum((transfer_request, Default::default()));
+
+                Ok(txn)
+            }
+            Address::Secp256k1Keccak256Ethereum(_) => {
+                todo!()
+            }
+        }
+    }
 
     async fn fetch_ftoken_meta(&self, wallet_index: usize, contract: Address) -> Result<FToken> {
         let w = self.get_wallet_by_index(wallet_index)?;

@@ -17,7 +17,7 @@ pub type ETHTransactionRequest = alloy::rpc::types::eth::request::TransactionReq
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TransactionMetadata {
-    pub provider_index: usize,
+    pub chain_hash: u64,
     pub hash: Option<String>,
     pub info: Option<String>,
     pub icon: Option<String>,
