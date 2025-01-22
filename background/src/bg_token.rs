@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use errors::{background::BackgroundError, wallet::WalletErrors};
 use proto::{
     address::Address,
-    tx::{ETHTransactionRequest, TransactionRequest},
+    tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
 };
 use token::{ft::FToken, ft_parse::generate_erc20_transfer_data};
 use wallet::wallet_storage::StorageOperations;
@@ -72,18 +72,27 @@ impl TokensManagement for Background {
         };
 
         match token.addr {
-            Address::Secp256k1Sha256Zilliqa(_) => {
+            Address::Secp256k1Keccak256Ethereum(_) => {
                 let transfer_request = if token.native {
                     payment()
                 } else {
                     erc20_transfer()?
                 };
+                let metadata = TransactionMetadata {
+                    chain_hash,
+                    hash: None,
+                    info: None,
+                    icon: None,
+                    title: None,
+                    signer: None,
+                    token_info: Some((amount, token.decimals, token.symbol.clone())),
+                };
 
-                let txn = TransactionRequest::Ethereum((transfer_request, Default::default()));
+                let txn = TransactionRequest::Ethereum((transfer_request, metadata));
 
                 Ok(txn)
             }
-            Address::Secp256k1Keccak256Ethereum(_) => {
+            Address::Secp256k1Sha256Zilliqa(_) => {
                 todo!()
             }
         }
