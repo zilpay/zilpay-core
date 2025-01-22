@@ -9,6 +9,9 @@ pub enum NetworkErrors {
     #[error("Failed to make request: {0}")]
     Request(RpcError),
 
+    #[error("EIP{0} is not suporting")]
+    EIPNotSupporting(u16),
+
     #[error("Fail to save/read from storage err: {0}")]
     Storage(LocalStorageError),
 

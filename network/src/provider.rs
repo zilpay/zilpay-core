@@ -80,6 +80,66 @@ impl NetworkProvider {
         Ok(())
     }
 
+    pub async fn get_fee_history(
+        &self,
+        block_count: u64,
+        percentiles: Option<&[f64]>,
+    ) -> Result<(U256, U256)> {
+        const REQUIRED_EIP: u16 = 1559;
+
+        if !self.config.features.contains(&REQUIRED_EIP) {
+            return Err(NetworkErrors::EIPNotSupporting(REQUIRED_EIP));
+        }
+
+        let default_percentiles = [25.0, 50.0, 75.0];
+        let percentiles_to_use = percentiles.unwrap_or(&default_percentiles);
+        let request = RpcProvider::<ChainConfig>::build_payload(
+            json!([block_count, "latest", percentiles_to_use]),
+            EvmMethods::FeeHistory,
+        );
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let response = provider
+            .req::<Vec<ResultRes<Value>>>(&[request])
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let fee_history = response
+            .first()
+            .ok_or(NetworkErrors::ResponseParseError)?
+            .result
+            .as_ref()
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        let base_fee = fee_history
+            .get("baseFeePerGas")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.last())
+            .and_then(|v| v.as_str())
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        let base_fee = U256::from_str_radix(base_fee.trim_start_matches("0x"), 16)
+            .map_err(|_| NetworkErrors::ResponseParseError)?;
+
+        let rewards = fee_history
+            .get("reward")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.last())
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.get(1))
+            .and_then(|v| v.as_str())
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        let priority_fee = U256::from_str_radix(rewards.trim_start_matches("0x"), 16)
+            .map_err(|_| NetworkErrors::ResponseParseError)?;
+
+        let max_fee = base_fee
+            .saturating_mul(U256::from(2))
+            .saturating_add(priority_fee);
+
+        Ok((max_fee, priority_fee))
+    }
+
     pub async fn get_gas_price(&self) -> Result<U256> {
         let method = match self.config.features.contains(&1559) {
             true => EvmMethods::MaxPriorityFeePerGas,
@@ -431,7 +491,7 @@ mod tests_network {
             chain: "BSC".to_string(),
             short_name: String::new(),
             rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
-            features: vec![155, 1559],
+            features: vec![155],
             chain_id: 56,
             slip_44: 60,
             ens: None,
@@ -804,5 +864,54 @@ mod tests_network {
         let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
 
         assert!(estimated_gas > U256::from(0));
+    }
+
+    #[tokio::test]
+    async fn test_get_fee_history_eth() {
+        let net_conf = ChainConfig {
+            testnet: None,
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://cloudflare-eth.com".to_string()],
+            features: vec![155, 1559],
+            chain_id: 56,
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+
+        let (max_fee, priority_fee) = provider.get_fee_history(4, None).await.unwrap();
+        assert!(max_fee > U256::ZERO);
+        assert!(priority_fee > U256::ZERO);
+
+        let custom_percentiles = [10.0, 50.0, 90.0];
+        let (max_fee2, priority_fee2) = provider
+            .get_fee_history(4, Some(&custom_percentiles))
+            .await
+            .unwrap();
+
+        assert!(max_fee2 > U256::ZERO);
+        assert!(priority_fee2 > U256::ZERO);
+        assert!(max_fee > priority_fee);
+        assert!(max_fee2 > priority_fee2);
+
+        let (max_fee_single, priority_fee_single) =
+            provider.get_fee_history(1, None).await.unwrap();
+
+        assert!(max_fee_single > U256::ZERO);
+        assert!(priority_fee_single > U256::ZERO);
+
+        println!("Default (4 blocks):");
+        println!("  max_fee: {}", max_fee);
+        println!("  priority_fee: {}", priority_fee);
+        println!("\nCustom percentiles (4 blocks):");
+        println!("  max_fee: {}", max_fee2);
+        println!("  priority_fee: {}", priority_fee2);
+        println!("\nSingle block:");
+        println!("  max_fee: {}", max_fee_single);
+        println!("  priority_fee: {}", priority_fee_single);
     }
 }
