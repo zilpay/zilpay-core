@@ -591,10 +591,8 @@ mod tests_network {
         let config = create_zilliqa_config();
         let providers = vec![NetworkProvider::new(config)];
 
-        // Save to storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
-        // Load from storage
         let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         assert_eq!(providers.len(), loaded_providers.len());
@@ -605,7 +603,7 @@ mod tests_network {
     #[test]
     fn test_save_and_load_multiple_networks() {
         let storage = setup_temp_storage();
-        // Create multiple test network configs
+
         let base_config = create_zilliqa_config();
         let configs = [
             ChainConfig {
@@ -630,16 +628,13 @@ mod tests_network {
             .map(|conf| NetworkProvider::new(conf.clone()))
             .collect();
 
-        // Save to storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
-        // Load from storage
         let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         assert_eq!(providers.len(), loaded_providers.len());
         assert_eq!(loaded_providers.len(), 3);
 
-        // Verify each network was loaded correctly
         for provider in &loaded_providers {
             assert!(providers.contains(provider));
         }
@@ -650,27 +645,22 @@ mod tests_network {
         let storage = setup_temp_storage();
         let base_config = create_zilliqa_config();
 
-        // Initial network
         let mut providers = vec![NetworkProvider::new(ChainConfig {
             name: "Initial Network".to_string(),
             chain_id: 1,
             ..base_config.clone()
         })];
 
-        // Save initial state
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
-        // Add new network
         providers.push(NetworkProvider::new(ChainConfig {
             name: "New Network".to_string(),
             chain_id: 2,
             ..base_config.clone()
         }));
 
-        // Update storage
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
 
-        // Load and verify
         let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
         assert_eq!(loaded_providers.len(), 2);
         assert!(loaded_providers
