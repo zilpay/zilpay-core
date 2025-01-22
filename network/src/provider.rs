@@ -1,11 +1,13 @@
 use std::collections::HashMap;
+use std::fmt::LowerHex;
 use std::sync::Arc;
 
 use crate::common::Provider;
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
-use alloy::primitives::U256;
+use alloy::hex;
+use alloy::primitives::{TxKind, U256};
 use config::storage::NETWORK_DB_KEY;
 use crypto::bip49::DerivationPath;
 use errors::crypto::SignatureError;
@@ -13,7 +15,7 @@ use errors::network::NetworkErrors;
 use errors::token::TokenError;
 use errors::tx::TransactionErrors;
 use proto::address::Address;
-use proto::tx::TransactionReceipt;
+use proto::tx::{TransactionReceipt, TransactionRequest};
 use rpc::common::JsonRPC;
 use rpc::methods::EvmMethods;
 use rpc::network_config::ChainConfig;
@@ -103,6 +105,80 @@ impl NetworkProvider {
             U256::from_str_radix(hex_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
         } else {
             U256::from_str_radix(price_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
+        }
+    }
+
+    pub async fn estimate_gas(&self, tx: &TransactionRequest) -> Result<U256> {
+        match tx {
+            TransactionRequest::Ethereum((tx, _metadata)) => {
+                let mut tx_object = serde_json::Map::new();
+
+                if let Some(from) = tx.from {
+                    tx_object.insert("from".to_string(), json!(Self::to_hex(&from)));
+                }
+
+                if let Some(to) = &tx.to {
+                    match to {
+                        TxKind::Call(addr) => {
+                            tx_object.insert("to".to_string(), json!(Self::to_hex(addr)));
+                        }
+                        TxKind::Create => {}
+                    }
+                }
+
+                if let Some(value) = tx.value {
+                    tx_object.insert("value".to_string(), json!(Self::to_hex(&value)));
+                }
+
+                if let Some(input) = tx.input.input() {
+                    tx_object.insert(
+                        "data".to_string(),
+                        json!(format!("0x{}", hex::encode(input))),
+                    );
+                }
+
+                if let Some(max_fee) = tx.max_fee_per_gas {
+                    tx_object.insert("maxFeePerGas".to_string(), json!(Self::to_hex(&max_fee)));
+                }
+
+                if let Some(priority_fee) = tx.max_priority_fee_per_gas {
+                    tx_object.insert(
+                        "maxPriorityFeePerGas".to_string(),
+                        json!(Self::to_hex(&priority_fee)),
+                    );
+                }
+
+                if let Some(gas_price) = tx.gas_price {
+                    tx_object.insert("gasPrice".to_string(), json!(Self::to_hex(&gas_price)));
+                }
+
+                let request = RpcProvider::<ChainConfig>::build_payload(
+                    json!([Value::Object(tx_object)]),
+                    EvmMethods::EstimateGas,
+                );
+
+                let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+                let response = provider
+                    .req::<Vec<ResultRes<String>>>(&[request])
+                    .await
+                    .map_err(NetworkErrors::Request)?;
+
+                let gas_str = response
+                    .first()
+                    .ok_or(NetworkErrors::ResponseParseError)?
+                    .result
+                    .as_ref()
+                    .ok_or(NetworkErrors::ResponseParseError)?;
+
+                if let Some(hex_str) = gas_str.strip_prefix("0x") {
+                    U256::from_str_radix(hex_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
+                } else {
+                    U256::from_str_radix(gas_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
+                }
+            }
+            TransactionRequest::Zilliqa(_) => Err(NetworkErrors::RPCError(
+                "Zilliqa network doesn't support gas estimation".to_string(),
+            )),
         }
     }
 
@@ -315,13 +391,19 @@ impl NetworkProvider {
             }
         }
     }
+
+    #[inline]
+    fn to_hex<T: LowerHex>(value: &T) -> String {
+        format!("0x{:x}", value)
+    }
 }
 
 #[cfg(test)]
 mod tests_network {
     use super::*;
-    use alloy::primitives::U256;
+    use alloy::{primitives::U256, rpc::types::TransactionInput};
     use config::address::ADDR_LEN;
+    use proto::tx::ETHTransactionRequest;
     use rand::Rng;
     use rpc::network_config::Explorer;
     use tokio;
@@ -635,5 +717,60 @@ mod tests_network {
         let gas_price = provider.get_gas_price().await.unwrap();
 
         assert_eq!("1000000000", gas_price.to_string());
+    }
+
+    #[tokio::test]
+    async fn test_estimate_gas_payment() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let payment_request = ETHTransactionRequest {
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::from(10u128)),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((payment_request, Default::default()));
+        let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
+
+        assert_eq!("21000", estimated_gas.to_string());
+    }
+
+    #[tokio::test]
+    async fn test_estimate_gas_token_transfer() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let token_address =
+            Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+
+        let transfer_data = hex::decode(
+        "a9059cbb000000000000000000000000246c5881e3f109b2af170f5c773ef969d3da581b0000000000000000000000000000000000000000000000000de0b6b3a7640000"
+    ).unwrap();
+
+        let token_transfer_request = ETHTransactionRequest {
+            to: Some(token_address.to_alloy_addr().into()),
+            value: Some(U256::ZERO), // Для токенов value = 0
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id),
+            input: TransactionInput::new(transfer_data.into()),
+            ..Default::default()
+        };
+
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+        let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
+
+        dbg!(estimated_gas);
     }
 }
