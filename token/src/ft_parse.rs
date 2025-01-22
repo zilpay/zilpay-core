@@ -99,6 +99,21 @@ impl ERC20Helper {
             )
         ))
     }
+
+    pub fn generate_transfer_input(&self, to: &Address, amount: U256) -> Result<String> {
+        let inputs = vec![
+            DynSolValue::Address(to.to_alloy_addr()),
+            DynSolValue::Uint(amount, 256),
+        ];
+
+        self.encode_function_call("transfer", &inputs)
+    }
+}
+
+pub fn generate_erc20_transfer_data(to: &Address, amount: U256) -> Result<String> {
+    let erc20 = ERC20Helper::new()?;
+
+    erc20.generate_transfer_input(to, amount)
 }
 
 pub fn build_token_requests<'a>(
@@ -616,5 +631,17 @@ mod ftoken_tests {
 
             assert!(matches!(result, Err(TokenError::InvalidContractInit)));
         }
+    }
+
+    #[test]
+    fn test_generate_transfer_input() {
+        let to_address = Address::Secp256k1Keccak256Ethereum([1u8; ADDR_LEN]);
+        let amount = U256::from(1000000000000000000u64);
+        let result = generate_erc20_transfer_data(&to_address, amount);
+
+        assert!(result.is_ok());
+        let input_data = result.unwrap();
+
+        assert_eq!(input_data, "0xa9059cbb00000000000000000000000001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000de0b6b3a7640000");
     }
 }
