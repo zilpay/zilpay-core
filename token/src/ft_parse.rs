@@ -40,7 +40,6 @@ impl<T> ResponseValidator for ResultRes<T> {
     }
 }
 
-// Type alias for clarity
 type RequestResult<'a> = std::result::Result<Vec<(Value, RequestType<'a>)>, TokenError>;
 
 #[derive(Debug)]
@@ -88,19 +87,16 @@ impl ERC20Helper {
             })
     }
 
-    fn encode_function_call(&self, name: &str, inputs: &[DynSolValue]) -> Result<String> {
+    fn encode_function_call(&self, name: &str, inputs: &[DynSolValue]) -> Result<Vec<u8>> {
         let func = self.get_function(name)?;
-        Ok(format!(
-            "0x{}",
-            hex::encode(
-                &func
-                    .abi_encode_input(inputs)
-                    .map_err(|e| TokenError::ABIError(e.to_string()))?
-            )
-        ))
+        let bytes = &func
+            .abi_encode_input(inputs)
+            .map_err(|e| TokenError::ABIError(e.to_string()))?;
+
+        Ok(bytes.to_owned())
     }
 
-    pub fn generate_transfer_input(&self, to: &Address, amount: U256) -> Result<String> {
+    pub fn generate_transfer_input(&self, to: &Address, amount: U256) -> Result<Vec<u8>> {
         let inputs = vec![
             DynSolValue::Address(to.to_alloy_addr()),
             DynSolValue::Uint(amount, 256),
@@ -110,7 +106,7 @@ impl ERC20Helper {
     }
 }
 
-pub fn generate_erc20_transfer_data(to: &Address, amount: U256) -> Result<String> {
+pub fn generate_erc20_transfer_data(to: &Address, amount: U256) -> Result<Vec<u8>> {
     let erc20 = ERC20Helper::new()?;
 
     erc20.generate_transfer_input(to, amount)
@@ -199,18 +195,16 @@ fn build_eth_requests<'a>(
         .map_err(TokenError::InvalidContractAddress)?;
     let erc20 = ERC20Helper::new()?;
 
-    // Create a closure for building ETH call payloads
-    let build_eth_call = |data: String| -> Value {
+    let build_eth_call = |data: Vec<u8>| -> Value {
         build_payload(
             json!([{
                 "to": &token_addr,
-                "data": data
+                "data": alloy::hex::encode_prefixed(data)
             }, "latest"]),
             EvmMethods::Call,
         )
     };
 
-    // Add metadata requests
     for field in [
         MetadataField::Name,
         MetadataField::Symbol,
@@ -642,6 +636,6 @@ mod ftoken_tests {
         assert!(result.is_ok());
         let input_data = result.unwrap();
 
-        assert_eq!(input_data, "0xa9059cbb00000000000000000000000001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000de0b6b3a7640000");
+        assert_eq!(alloy::hex::encode_prefixed(input_data), "0xa9059cbb00000000000000000000000001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000de0b6b3a7640000");
     }
 }

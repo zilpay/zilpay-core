@@ -6,7 +6,6 @@ use crate::common::Provider;
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
-use alloy::hex;
 use alloy::primitives::{TxKind, U256};
 use config::storage::NETWORK_DB_KEY;
 use crypto::bip49::DerivationPath;
@@ -101,11 +100,8 @@ impl NetworkProvider {
             .as_ref()
             .ok_or(NetworkErrors::ResponseParseError)?;
 
-        if let Some(hex_str) = price_str.strip_prefix("0x") {
-            U256::from_str_radix(hex_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
-        } else {
-            U256::from_str_radix(price_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
-        }
+        U256::from_str_radix(price_str.trim_start_matches("0x"), 16)
+            .map_err(|_| NetworkErrors::ResponseParseError)
     }
 
     pub async fn estimate_gas(&self, tx: &TransactionRequest) -> Result<U256> {
@@ -127,13 +123,13 @@ impl NetworkProvider {
                 }
 
                 if let Some(value) = tx.value {
-                    tx_object.insert("value".to_string(), json!(Self::to_hex(&value)));
+                    tx_object.insert("value".to_string(), json!(value));
                 }
 
                 if let Some(input) = tx.input.input() {
                     tx_object.insert(
                         "data".to_string(),
-                        json!(format!("0x{}", hex::encode(input))),
+                        json!(alloy::hex::encode_prefixed(input)),
                     );
                 }
 
@@ -162,19 +158,30 @@ impl NetworkProvider {
                     .req::<Vec<ResultRes<String>>>(&[request])
                     .await
                     .map_err(NetworkErrors::Request)?;
+                let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
+
+                if let Some(error) = &response.error {
+                    let error_msg = format!(
+                        "JSON-RPC error (code: {}): {}{}",
+                        error.code,
+                        error.message,
+                        error
+                            .data
+                            .as_ref()
+                            .map(|d| format!(", data: {}", d))
+                            .unwrap_or_default()
+                    );
+
+                    return Err(NetworkErrors::RPCError(error_msg));
+                }
 
                 let gas_str = response
-                    .first()
-                    .ok_or(NetworkErrors::ResponseParseError)?
                     .result
                     .as_ref()
                     .ok_or(NetworkErrors::ResponseParseError)?;
 
-                if let Some(hex_str) = gas_str.strip_prefix("0x") {
-                    U256::from_str_radix(hex_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
-                } else {
-                    U256::from_str_radix(gas_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
-                }
+                U256::from_str_radix(gas_str.trim_start_matches("0x"), 16)
+                    .map_err(|_| NetworkErrors::ResponseParseError)
             }
             TransactionRequest::Zilliqa(_) => Err(NetworkErrors::RPCError(
                 "Zilliqa network doesn't support gas estimation".to_string(),
@@ -406,6 +413,7 @@ mod tests_network {
     use proto::tx::ETHTransactionRequest;
     use rand::Rng;
     use rpc::network_config::Explorer;
+    use token::ft_parse::generate_erc20_transfer_data;
     use tokio;
 
     fn setup_temp_storage() -> Arc<LocalStorage> {
@@ -743,7 +751,7 @@ mod tests_network {
     }
 
     #[tokio::test]
-    async fn test_estimate_gas_token_transfer() {
+    async fn test_estimate_gas_token_transfer_error() {
         let net_conf = create_bsc_config();
         let provider = NetworkProvider::new(net_conf);
 
@@ -751,14 +759,48 @@ mod tests_network {
             Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
-
-        let transfer_data = hex::decode(
-        "a9059cbb000000000000000000000000246c5881e3f109b2af170f5c773ef969d3da581b0000000000000000000000000000000000000000000000000de0b6b3a7640000"
-    ).unwrap();
-
+        let amount = U256::from(1000000000000000000u64);
+        let transfer_data = generate_erc20_transfer_data(&recipient, amount).unwrap();
         let token_transfer_request = ETHTransactionRequest {
+            from: Some(recipient.to_alloy_addr().into()),
             to: Some(token_address.to_alloy_addr().into()),
-            value: Some(U256::ZERO), // Для токенов value = 0
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id),
+            input: TransactionInput::new(transfer_data.into()),
+            ..Default::default()
+        };
+
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+        let estimated_gas = provider.estimate_gas(&tx_request).await;
+
+        assert_eq!(
+            estimated_gas,
+            Err(NetworkErrors::RPCError(
+                "JSON-RPC error (code: -32000): insufficient funds for transfer".to_string()
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_estimate_gas_token_transfer() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let token_address =
+            Address::from_eth_address("0x524bC91Dc82d6b90EF29F76A3ECAaBAffFD490Bc").unwrap();
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let amount = U256::from(100u64);
+        let transfer_data = generate_erc20_transfer_data(&recipient, amount).unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(token_address.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
             max_fee_per_gas: Some(2_000_000_000),
             max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: Some(0),
@@ -771,6 +813,6 @@ mod tests_network {
         let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
         let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
 
-        dbg!(estimated_gas);
+        assert!(estimated_gas > U256::from(0));
     }
 }
