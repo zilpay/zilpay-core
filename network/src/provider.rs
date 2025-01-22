@@ -15,10 +15,11 @@ use errors::tx::TransactionErrors;
 use proto::address::Address;
 use proto::tx::TransactionReceipt;
 use rpc::common::JsonRPC;
+use rpc::methods::EvmMethods;
 use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
-use serde_json::Value;
+use serde_json::{json, Value};
 use storage::LocalStorage;
 use token::ft::FToken;
 use token::ft_parse::{
@@ -76,6 +77,32 @@ impl NetworkProvider {
     pub async fn fetch_nodes_list(&mut self) -> Result<()> {
         // TODO: make server ZilPay which track nodes and makes ranking.
         Ok(())
+    }
+
+    pub async fn get_gas_price(&self) -> Result<U256> {
+        let method = match self.config.features.contains(&1559) {
+            true => EvmMethods::MaxPriorityFeePerGas,
+            false => EvmMethods::GasPrice,
+        };
+
+        let request = RpcProvider::<ChainConfig>::build_payload(json!([]), method);
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let response = provider
+            .req::<Vec<ResultRes<String>>>(&[request])
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let price_str = response[0]
+            .result
+            .as_ref()
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        if let Some(hex_str) = price_str.strip_prefix("0x") {
+            U256::from_str_radix(hex_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
+        } else {
+            U256::from_str_radix(price_str, 16).map_err(|_| NetworkErrors::ResponseParseError)
+        }
     }
 
     pub async fn broadcast_signed_transactions(
@@ -597,5 +624,15 @@ mod tests_network {
         assert!(nonces.first().unwrap() >= &0);
         assert!(nonces.get(1).unwrap() >= &0);
         assert!(nonces.last().unwrap() == &0);
+    }
+
+    #[tokio::test]
+    async fn test_get_gas_price() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let gas_price = provider.get_gas_price().await.unwrap();
+
+        assert_eq!("1000000000", gas_price.to_string());
     }
 }
