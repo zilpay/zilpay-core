@@ -2,6 +2,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::common::Provider;
+use crate::gas_parse::{
+    build_fee_history_request, json_rpc_error, process_parse_fee_history_request, REQUIRED_EIP,
+    SCILLA_EIP,
+};
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
@@ -15,7 +19,7 @@ use errors::tx::TransactionErrors;
 use proto::address::Address;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use rpc::common::JsonRPC;
-use rpc::methods::EvmMethods;
+use rpc::methods::{EvmMethods, ZilMethods};
 use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
@@ -84,77 +88,54 @@ impl NetworkProvider {
         block_count: u64,
         percentiles: Option<&[f64]>,
     ) -> Result<(U256, U256)> {
-        const REQUIRED_EIP: u16 = 1559;
-
         if !self.config.features.contains(&REQUIRED_EIP) {
             return Err(NetworkErrors::EIPNotSupporting(REQUIRED_EIP));
         }
 
         let default_percentiles = [25.0, 50.0, 75.0];
         let percentiles_to_use = percentiles.unwrap_or(&default_percentiles);
-        let request = RpcProvider::<ChainConfig>::build_payload(
-            json!([block_count, "latest", percentiles_to_use]),
-            EvmMethods::FeeHistory,
-        );
+        let request = build_fee_history_request(block_count, percentiles_to_use);
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let response = provider
             .req::<Vec<ResultRes<Value>>>(&[request])
             .await
             .map_err(NetworkErrors::Request)?;
+        let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
 
-        let fee_history = response
-            .first()
-            .ok_or(NetworkErrors::ResponseParseError)?
+        if let Some(error) = &response.error {
+            json_rpc_error(error)?;
+        }
+
+        let result = response
             .result
             .as_ref()
             .ok_or(NetworkErrors::ResponseParseError)?;
 
-        let base_fee = fee_history
-            .get("baseFeePerGas")
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.last())
-            .and_then(|v| v.as_str())
-            .ok_or(NetworkErrors::ResponseParseError)?;
-
-        let base_fee = U256::from_str_radix(base_fee.trim_start_matches("0x"), 16)
-            .map_err(|_| NetworkErrors::ResponseParseError)?;
-
-        let rewards = fee_history
-            .get("reward")
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.last())
-            .and_then(|v| v.as_array())
-            .and_then(|arr| arr.get(1))
-            .and_then(|v| v.as_str())
-            .ok_or(NetworkErrors::ResponseParseError)?;
-
-        let priority_fee = U256::from_str_radix(rewards.trim_start_matches("0x"), 16)
-            .map_err(|_| NetworkErrors::ResponseParseError)?;
-
-        let max_fee = base_fee
-            .saturating_mul(U256::from(2))
-            .saturating_add(priority_fee);
-
-        Ok((max_fee, priority_fee))
+        process_parse_fee_history_request(result)
     }
 
     pub async fn get_gas_price(&self) -> Result<U256> {
-        let method = match self.config.features.contains(&1559) {
-            true => EvmMethods::MaxPriorityFeePerGas,
-            false => EvmMethods::GasPrice,
+        let request = if self.config.features.contains(&SCILLA_EIP) {
+            RpcProvider::<ChainConfig>::build_payload(json!([]), ZilMethods::GetMinimumGasPrice)
+        } else if self.config.features.contains(&REQUIRED_EIP) {
+            RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::MaxPriorityFeePerGas)
+        } else {
+            RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::GasPrice)
         };
-
-        let request = RpcProvider::<ChainConfig>::build_payload(json!([]), method);
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let response = provider
             .req::<Vec<ResultRes<String>>>(&[request])
             .await
             .map_err(NetworkErrors::Request)?;
+        let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
+
+        if let Some(error) = &response.error {
+            json_rpc_error(error)?;
+        }
+
         let price_str = response
-            .first()
-            .ok_or(NetworkErrors::ResponseParseError)?
             .result
             .as_ref()
             .ok_or(NetworkErrors::ResponseParseError)?;
@@ -182,18 +163,7 @@ impl NetworkProvider {
                 let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
 
                 if let Some(error) = &response.error {
-                    let error_msg = format!(
-                        "JSON-RPC error (code: {}): {}{}",
-                        error.code,
-                        error.message,
-                        error
-                            .data
-                            .as_ref()
-                            .map(|d| format!(", data: {}", d))
-                            .unwrap_or_default()
-                    );
-
-                    return Err(NetworkErrors::RPCError(error_msg));
+                    json_rpc_error(error)?;
                 }
 
                 let gas_str = response
