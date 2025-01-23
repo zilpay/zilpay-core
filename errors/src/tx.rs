@@ -14,6 +14,9 @@ pub enum TransactionErrors {
     #[error("InvalidHash")]
     InvalidHash,
 
+    #[error("Invalid transaction convert: {0}")]
+    ConvertTxError(String),
+
     #[error("SignatureError error: {0}")]
     SignatureError(SignatureError),
 

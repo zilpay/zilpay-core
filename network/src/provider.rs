@@ -1,12 +1,11 @@
 use std::collections::HashMap;
-use std::fmt::LowerHex;
 use std::sync::Arc;
 
 use crate::common::Provider;
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
-use alloy::primitives::{TxKind, U256};
+use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
 use crypto::bip49::DerivationPath;
 use errors::crypto::SignatureError;
@@ -167,49 +166,11 @@ impl NetworkProvider {
     pub async fn estimate_gas(&self, tx: &TransactionRequest) -> Result<U256> {
         match tx {
             TransactionRequest::Ethereum((tx, _metadata)) => {
-                let mut tx_object = serde_json::Map::new();
-
-                if let Some(from) = tx.from {
-                    tx_object.insert("from".to_string(), json!(Self::to_hex(&from)));
-                }
-
-                if let Some(to) = &tx.to {
-                    match to {
-                        TxKind::Call(addr) => {
-                            tx_object.insert("to".to_string(), json!(Self::to_hex(addr)));
-                        }
-                        TxKind::Create => {}
-                    }
-                }
-
-                if let Some(value) = tx.value {
-                    tx_object.insert("value".to_string(), json!(value));
-                }
-
-                if let Some(input) = tx.input.input() {
-                    tx_object.insert(
-                        "data".to_string(),
-                        json!(alloy::hex::encode_prefixed(input)),
-                    );
-                }
-
-                if let Some(max_fee) = tx.max_fee_per_gas {
-                    tx_object.insert("maxFeePerGas".to_string(), json!(Self::to_hex(&max_fee)));
-                }
-
-                if let Some(priority_fee) = tx.max_priority_fee_per_gas {
-                    tx_object.insert(
-                        "maxPriorityFeePerGas".to_string(),
-                        json!(Self::to_hex(&priority_fee)),
-                    );
-                }
-
-                if let Some(gas_price) = tx.gas_price {
-                    tx_object.insert("gasPrice".to_string(), json!(Self::to_hex(&gas_price)));
-                }
+                let tx_object = serde_json::to_value(&tx)
+                    .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
 
                 let request = RpcProvider::<ChainConfig>::build_payload(
-                    json!([Value::Object(tx_object)]),
+                    json!([tx_object]),
                     EvmMethods::EstimateGas,
                 );
 
@@ -457,11 +418,6 @@ impl NetworkProvider {
                 })
             }
         }
-    }
-
-    #[inline]
-    fn to_hex<T: LowerHex>(value: &T) -> String {
-        format!("0x{:x}", value)
     }
 }
 
