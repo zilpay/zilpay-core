@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use crate::common::Provider;
 use crate::gas_parse::{
-    build_fee_history_request, json_rpc_error, process_parse_fee_history_request, REQUIRED_EIP,
-    SCILLA_EIP,
+    build_batch_gas_request, build_fee_history_request, json_rpc_error,
+    process_parse_fee_history_request, Gas, GasFeeHistory, REQUIRED_EIP, SCILLA_EIP,
 };
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
@@ -83,11 +83,53 @@ impl NetworkProvider {
         Ok(())
     }
 
+    pub async fn estimate_gas_batch(
+        &self,
+        tx: &TransactionRequest,
+        block_count: u64,
+        percentiles: Option<&[f64]>,
+    ) -> Result<Gas> {
+        let default_percentiles = [25.0, 50.0, 75.0];
+        let percentiles_to_use = percentiles.unwrap_or(&default_percentiles);
+        let requests =
+            build_batch_gas_request(tx, block_count, &percentiles_to_use, &self.config.features)?;
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let response = provider
+            .req::<Vec<ResultRes<Value>>>(&requests)
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let gas_price_response = response
+            .first()
+            .and_then(|res| res.result.as_ref())
+            .and_then(|result| result.as_str())
+            .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
+            .unwrap_or_default();
+        let fee_history_response = response
+            .get(1)
+            .and_then(|res| res.result.as_ref())
+            .and_then(|result| process_parse_fee_history_request(result).ok())
+            .unwrap_or_default();
+        let tx_estimate_gas_response = response
+            .last()
+            .and_then(|res| res.result.as_ref())
+            .and_then(|result| result.as_str())
+            .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
+            .unwrap_or_default();
+
+        Ok(Gas {
+            gas_price: gas_price_response,
+            fee_history: fee_history_response,
+            tx_estimate_gas: tx_estimate_gas_response,
+        })
+    }
+
     pub async fn get_fee_history(
         &self,
         block_count: u64,
         percentiles: Option<&[f64]>,
-    ) -> Result<(U256, U256)> {
+    ) -> Result<GasFeeHistory> {
         if !self.config.features.contains(&REQUIRED_EIP) {
             return Err(NetworkErrors::EIPNotSupporting(REQUIRED_EIP));
         }
@@ -809,35 +851,85 @@ mod tests_network {
         };
         let provider = NetworkProvider::new(net_conf);
 
-        let (max_fee, priority_fee) = provider.get_fee_history(4, None).await.unwrap();
+        let GasFeeHistory {
+            max_fee,
+            priority_fee,
+        } = provider.get_fee_history(4, None).await.unwrap();
         assert!(max_fee > U256::ZERO);
         assert!(priority_fee > U256::ZERO);
 
         let custom_percentiles = [10.0, 50.0, 90.0];
-        let (max_fee2, priority_fee2) = provider
+        let fee2 = provider
             .get_fee_history(4, Some(&custom_percentiles))
             .await
             .unwrap();
 
-        assert!(max_fee2 > U256::ZERO);
-        assert!(priority_fee2 > U256::ZERO);
+        assert!(fee2.max_fee > U256::ZERO);
+        assert!(fee2.priority_fee > U256::ZERO);
         assert!(max_fee > priority_fee);
-        assert!(max_fee2 > priority_fee2);
+        assert!(fee2.max_fee > fee2.priority_fee);
 
-        let (max_fee_single, priority_fee_single) =
-            provider.get_fee_history(1, None).await.unwrap();
+        let single_fee = provider.get_fee_history(1, None).await.unwrap();
 
-        assert!(max_fee_single > U256::ZERO);
-        assert!(priority_fee_single > U256::ZERO);
+        assert!(single_fee.max_fee > U256::ZERO);
+        assert!(single_fee.priority_fee > U256::ZERO);
 
         println!("Default (4 blocks):");
         println!("  max_fee: {}", max_fee);
         println!("  priority_fee: {}", priority_fee);
         println!("\nCustom percentiles (4 blocks):");
-        println!("  max_fee: {}", max_fee2);
-        println!("  priority_fee: {}", priority_fee2);
+        println!("  max_fee: {}", fee2.max_fee);
+        println!("  priority_fee: {}", fee2.priority_fee);
         println!("\nSingle block:");
-        println!("  max_fee: {}", max_fee_single);
-        println!("  priority_fee: {}", priority_fee_single);
+        println!("  max_fee: {}", single_fee.max_fee);
+        println!("  priority_fee: {}", single_fee.priority_fee);
+    }
+
+    #[tokio::test]
+    async fn test_calc_fee_eth_batch() {
+        let net_conf = ChainConfig {
+            testnet: None,
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://cloudflare-eth.com".to_string()],
+            features: vec![155, 1559],
+            chain_id: 56,
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let token_address =
+            Address::from_eth_address("0x524bC91Dc82d6b90EF29F76A3ECAaBAffFD490Bc").unwrap();
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let amount = U256::from(100u64);
+        let transfer_data = generate_erc20_transfer_data(&recipient, amount).unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(token_address.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id),
+            input: TransactionInput::new(transfer_data.into()),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+
+        let fee = provider
+            .estimate_gas_batch(&tx_request, 4, None)
+            .await
+            .unwrap();
+
+        assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.tx_estimate_gas, U256::from(0));
+        assert_ne!(fee.fee_history.max_fee, U256::from(0));
+        assert_ne!(fee.fee_history.priority_fee, U256::from(0));
     }
 }
