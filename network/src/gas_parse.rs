@@ -83,9 +83,14 @@ pub fn build_batch_gas_request(
     } else if features.contains(&REQUIRED_EIP) {
         requests.push(RpcProvider::<ChainConfig>::build_payload(
             json!([]),
-            EvmMethods::GasPrice,
+            EvmMethods::MaxPriorityFeePerGas,
         ));
         requests.push(build_fee_history_request(block_count, percentiles));
+    } else {
+        requests.push(RpcProvider::<ChainConfig>::build_payload(
+            json!([]),
+            EvmMethods::GasPrice,
+        ));
     }
 
     let tx_object =

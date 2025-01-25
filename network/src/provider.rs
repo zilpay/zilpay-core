@@ -841,7 +841,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://cloudflare-eth.com".to_string()],
+            rpc: vec!["https://eth.llamarpc.com".to_string()],
             features: vec![155, 1559],
             chain_id: 56,
             slip_44: 60,
@@ -892,7 +892,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://cloudflare-eth.com".to_string()],
+            rpc: vec!["https://eth.llamarpc.com".to_string()],
             features: vec![155, 1559],
             chain_id: 56,
             slip_44: 60,
@@ -918,6 +918,50 @@ mod tests_network {
             gas: None,
             chain_id: Some(provider.config.chain_id),
             input: TransactionInput::new(transfer_data.into()),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+
+        let fee = provider
+            .estimate_gas_batch(&tx_request, 4, None)
+            .await
+            .unwrap();
+
+        assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.tx_estimate_gas, U256::from(0));
+        assert_ne!(fee.fee_history.max_fee, U256::from(0));
+        assert_ne!(fee.fee_history.priority_fee, U256::from(0));
+    }
+
+    #[tokio::test]
+    async fn test_calc_fee_bsc_batch() {
+        let net_conf = ChainConfig {
+            testnet: None,
+            name: "Smart chain Testnet".to_string(),
+            chain: "BNB".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://data-seed-prebsc-1-s1.binance.org:8545/".to_string()],
+            features: vec![155, 1559],
+            // features: vec![155, 1559],
+            chain_id: 97,
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id),
             ..Default::default()
         };
         let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
