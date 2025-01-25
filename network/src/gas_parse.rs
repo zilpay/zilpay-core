@@ -22,10 +22,12 @@ pub struct Gas {
     pub max_priority_fee: U256,
     pub fee_history: GasFeeHistory,
     pub tx_estimate_gas: U256,
+    pub blob_base_fee: U256,
 }
 
 pub const SCILLA_EIP: u16 = 666;
 pub const EIP1559: u16 = 1559;
+pub const EIP4844: u16 = 4844;
 
 pub fn json_rpc_error(error: &ErrorRes) -> Result<(), NetworkErrors> {
     let error_msg = format!(
@@ -102,6 +104,13 @@ pub fn build_batch_gas_request(
             EvmMethods::MaxPriorityFeePerGas,
         ));
         requests.push(build_fee_history_request(block_count, percentiles));
+    }
+
+    if features.contains(&EIP4844) {
+        requests.push(RpcProvider::<ChainConfig>::build_payload(
+            json!([]),
+            EvmMethods::BlobBaseFee,
+        ));
     }
 
     Ok(requests)

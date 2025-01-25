@@ -72,6 +72,7 @@ pub enum EvmMethods {
     GasPrice,
     MaxPriorityFeePerGas,
     FeeHistory,
+    BlobBaseFee,
 
     // Filter Methods
     NewFilter,
@@ -137,6 +138,7 @@ impl RpcMethod for EvmMethods {
             Self::GasPrice => "eth_gasPrice",
             Self::MaxPriorityFeePerGas => "eth_maxPriorityFeePerGas",
             Self::FeeHistory => "eth_feeHistory",
+            Self::BlobBaseFee => "eth_blobBaseFee",
 
             // Filter Methods
             Self::NewFilter => "eth_newFilter",

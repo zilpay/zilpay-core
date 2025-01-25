@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::common::Provider;
 use crate::gas_parse::{
     build_batch_gas_request, build_fee_history_request, json_rpc_error,
-    process_parse_fee_history_request, Gas, GasFeeHistory, EIP1559, SCILLA_EIP,
+    process_parse_fee_history_request, Gas, GasFeeHistory, EIP1559, EIP4844, SCILLA_EIP,
 };
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
@@ -135,7 +135,19 @@ impl NetworkProvider {
                 (U256::ZERO, GasFeeHistory::default())
             };
 
+        let blob_base_fee = if self.config.features.contains(&EIP4844) {
+            response
+                .first()
+                .and_then(|res| res.result.as_ref())
+                .and_then(|result| result.as_str())
+                .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
+                .unwrap_or_default()
+        } else {
+            U256::ZERO
+        };
+
         Ok(Gas {
+            blob_base_fee,
             max_priority_fee: max_priority_fee_per_gas_response,
             gas_price: gas_price_response,
             fee_history: fee_history_response,
@@ -860,7 +872,7 @@ mod tests_network {
             chain: "ETH".to_string(),
             short_name: String::new(),
             rpc: vec!["https://eth.llamarpc.com".to_string()],
-            features: vec![155, 1559],
+            features: vec![155, 1559, 4844],
             chain_id: 56,
             slip_44: 60,
             ens: None,
@@ -913,7 +925,7 @@ mod tests_network {
             chain: "ETH".to_string(),
             short_name: String::new(),
             rpc: vec!["https://eth.llamarpc.com".to_string()],
-            features: vec![155, 1559],
+            features: vec![155, 1559, 4844],
             chain_id: 56,
             slip_44: 60,
             ens: None,
@@ -950,6 +962,7 @@ mod tests_network {
         assert_ne!(fee.gas_price, U256::from(0));
         assert_ne!(fee.max_priority_fee, U256::from(0));
         assert_ne!(fee.tx_estimate_gas, U256::from(0));
+        assert_ne!(fee.blob_base_fee, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
         assert_ne!(fee.fee_history.priority_fee, U256::from(0));
     }
@@ -962,8 +975,7 @@ mod tests_network {
             chain: "BNB".to_string(),
             short_name: String::new(),
             rpc: vec!["https://data-seed-prebsc-1-s1.binance.org:8545/".to_string()],
-            features: vec![155, 1559],
-            // features: vec![155, 1559],
+            features: vec![155, 1559, 4844],
             chain_id: 97,
             slip_44: 60,
             ens: None,
@@ -993,6 +1005,7 @@ mod tests_network {
             .unwrap();
 
         assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.blob_base_fee, U256::from(0));
         assert_ne!(fee.max_priority_fee, U256::from(0));
         assert_ne!(fee.tx_estimate_gas, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
