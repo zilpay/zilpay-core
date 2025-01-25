@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::common::Provider;
 use crate::gas_parse::{
     build_batch_gas_request, build_fee_history_request, json_rpc_error,
-    process_parse_fee_history_request, Gas, GasFeeHistory, REQUIRED_EIP, SCILLA_EIP,
+    process_parse_fee_history_request, Gas, GasFeeHistory, EIP1559, SCILLA_EIP,
 };
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
@@ -106,19 +106,37 @@ impl NetworkProvider {
             .and_then(|result| result.as_str())
             .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
             .unwrap_or_default();
-        let fee_history_response = response
-            .get(1)
-            .and_then(|res| res.result.as_ref())
-            .and_then(|result| process_parse_fee_history_request(result).ok())
-            .unwrap_or_default();
         let tx_estimate_gas_response = response
-            .last()
+            .get(1)
             .and_then(|res| res.result.as_ref())
             .and_then(|result| result.as_str())
             .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
             .unwrap_or_default();
 
+        let (max_priority_fee_per_gas_response, fee_history_response) =
+            if self.config.features.contains(&EIP1559) {
+                let max_priority_fee_per_gas_response = response
+                    .get(2)
+                    .and_then(|res| res.result.as_ref())
+                    .and_then(|result| result.as_str())
+                    .and_then(|gas_str| {
+                        U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok()
+                    })
+                    .unwrap_or_default();
+
+                let fee_history_response = response
+                    .get(3)
+                    .and_then(|res| res.result.as_ref())
+                    .and_then(|result| process_parse_fee_history_request(result).ok())
+                    .unwrap_or_default();
+
+                (max_priority_fee_per_gas_response, fee_history_response)
+            } else {
+                (U256::ZERO, GasFeeHistory::default())
+            };
+
         Ok(Gas {
+            max_priority_fee: max_priority_fee_per_gas_response,
             gas_price: gas_price_response,
             fee_history: fee_history_response,
             tx_estimate_gas: tx_estimate_gas_response,
@@ -130,8 +148,8 @@ impl NetworkProvider {
         block_count: u64,
         percentiles: Option<&[f64]>,
     ) -> Result<GasFeeHistory> {
-        if !self.config.features.contains(&REQUIRED_EIP) {
-            return Err(NetworkErrors::EIPNotSupporting(REQUIRED_EIP));
+        if !self.config.features.contains(&EIP1559) {
+            return Err(NetworkErrors::EIPNotSupporting(EIP1559));
         }
 
         let default_percentiles = [25.0, 50.0, 75.0];
@@ -160,7 +178,7 @@ impl NetworkProvider {
     pub async fn get_gas_price(&self) -> Result<U256> {
         let request = if self.config.features.contains(&SCILLA_EIP) {
             RpcProvider::<ChainConfig>::build_payload(json!([]), ZilMethods::GetMinimumGasPrice)
-        } else if self.config.features.contains(&REQUIRED_EIP) {
+        } else if self.config.features.contains(&EIP1559) {
             RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::MaxPriorityFeePerGas)
         } else {
             RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::GasPrice)
@@ -854,9 +872,11 @@ mod tests_network {
         let GasFeeHistory {
             max_fee,
             priority_fee,
+            base_fee,
         } = provider.get_fee_history(4, None).await.unwrap();
         assert!(max_fee > U256::ZERO);
         assert!(priority_fee > U256::ZERO);
+        assert!(base_fee > U256::ZERO);
 
         let custom_percentiles = [10.0, 50.0, 90.0];
         let fee2 = provider
@@ -928,6 +948,7 @@ mod tests_network {
             .unwrap();
 
         assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.max_priority_fee, U256::from(0));
         assert_ne!(fee.tx_estimate_gas, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
         assert_ne!(fee.fee_history.priority_fee, U256::from(0));
@@ -972,6 +993,7 @@ mod tests_network {
             .unwrap();
 
         assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.max_priority_fee, U256::from(0));
         assert_ne!(fee.tx_estimate_gas, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
         assert_ne!(fee.fee_history.priority_fee, U256::from(0));

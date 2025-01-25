@@ -13,17 +13,19 @@ use serde_json::{json, Value};
 pub struct GasFeeHistory {
     pub max_fee: U256,
     pub priority_fee: U256,
+    pub base_fee: U256,
 }
 
 #[derive(Debug)]
 pub struct Gas {
     pub gas_price: U256,
+    pub max_priority_fee: U256,
     pub fee_history: GasFeeHistory,
     pub tx_estimate_gas: U256,
 }
 
 pub const SCILLA_EIP: u16 = 666;
-pub const REQUIRED_EIP: u16 = 1559;
+pub const EIP1559: u16 = 1559;
 
 pub fn json_rpc_error(error: &ErrorRes) -> Result<(), NetworkErrors> {
     let error_msg = format!(
@@ -80,12 +82,6 @@ pub fn build_batch_gas_request(
             ZilMethods::GetMinimumGasPrice,
         ));
         return Ok(requests);
-    } else if features.contains(&REQUIRED_EIP) {
-        requests.push(RpcProvider::<ChainConfig>::build_payload(
-            json!([]),
-            EvmMethods::MaxPriorityFeePerGas,
-        ));
-        requests.push(build_fee_history_request(block_count, percentiles));
     } else {
         requests.push(RpcProvider::<ChainConfig>::build_payload(
             json!([]),
@@ -99,6 +95,14 @@ pub fn build_batch_gas_request(
         RpcProvider::<ChainConfig>::build_payload(json!([tx_object]), EvmMethods::EstimateGas);
 
     requests.push(request_estimate_gas);
+
+    if features.contains(&EIP1559) {
+        requests.push(RpcProvider::<ChainConfig>::build_payload(
+            json!([]),
+            EvmMethods::MaxPriorityFeePerGas,
+        ));
+        requests.push(build_fee_history_request(block_count, percentiles));
+    }
 
     Ok(requests)
 }
@@ -130,5 +134,6 @@ pub fn process_parse_fee_history_request(value: &Value) -> Result<GasFeeHistory,
     Ok(GasFeeHistory {
         max_fee,
         priority_fee,
+        base_fee,
     })
 }
