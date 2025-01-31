@@ -1001,6 +1001,7 @@ dependencies = [
  "crypto",
  "errors",
  "hex",
+ "history",
  "mockito",
  "network",
  "proto",

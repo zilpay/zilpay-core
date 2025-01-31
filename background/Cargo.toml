@@ -27,6 +27,7 @@ proto = { path = "../proto" }
 cipher = { path = "../cipher" }
 session = { path = "../session" }
 network = { path = "../network" }
+history = { path = "../history" }
 
 [dev-dependencies]
 mockito = "1.5.0"

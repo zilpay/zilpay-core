@@ -1,6 +1,7 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
-use errors::background::BackgroundError;
+use errors::{background::BackgroundError, tx::TransactionErrors};
+use history::transaction::HistoricalTransaction;
 use proto::tx::TransactionReceipt;
 use wallet::wallet_storage::StorageOperations;
 
@@ -13,8 +14,9 @@ pub trait TransactionsManagement {
     async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
+        account_index: usize,
         txns: Vec<TransactionReceipt>,
-    ) -> std::result::Result<Vec<TransactionReceipt>, Self::Error>;
+    ) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
 }
 
 #[async_trait]
@@ -24,15 +26,27 @@ impl TransactionsManagement for Background {
     async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
+        account_index: usize,
         txns: Vec<TransactionReceipt>,
-    ) -> Result<Vec<TransactionReceipt>> {
+    ) -> Result<Vec<HistoricalTransaction>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let selected_account = &data.accounts[data.selected_account];
+        let selected_account =
+            data.accounts
+                .get(account_index)
+                .ok_or(BackgroundError::WalletError(
+                    errors::wallet::WalletErrors::NotExistsAccount(account_index),
+                ))?;
         let provider = self.get_provider(selected_account.chain_hash)?;
         let txns = provider.broadcast_signed_transactions(txns).await?;
+        let history = txns
+            .into_iter()
+            .map(|receipt| HistoricalTransaction::try_from(receipt))
+            .collect::<std::result::Result<Vec<HistoricalTransaction>, TransactionErrors>>()?;
 
-        Ok(txns)
+        wallet.save_history(&history)?;
+
+        Ok(history)
     }
 }
 
@@ -184,12 +198,12 @@ mod tests_background_transactions {
         let txn = txn.sign(&keypair).await.unwrap();
         let txns = vec![txn];
 
-        let txns = bg.broadcast_signed_transactions(0, txns).await.unwrap();
+        let txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
 
         assert_eq!(txns.len(), 1);
 
         for tx in txns {
-            assert!(tx.hash().is_some());
+            assert!(!tx.id.is_empty());
         }
     }
 
@@ -255,12 +269,12 @@ mod tests_background_transactions {
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn = txn.sign(&keypair).await.unwrap();
         let txns = vec![txn];
-        let txns = bg.broadcast_signed_transactions(0, txns).await.unwrap();
+        let txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
 
         assert_eq!(txns.len(), 1);
 
         for tx in txns {
-            assert!(tx.hash().is_some());
+            assert!(!tx.id.is_empty());
         }
     }
 }

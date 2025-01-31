@@ -20,6 +20,9 @@ pub enum WalletErrors {
     #[error("Account with index ({0}) already exists")]
     ExistsAccount(usize),
 
+    #[error("Account with index ({0}) not exists")]
+    NotExistsAccount(usize),
+
     #[error("fail create argon2: {0}")]
     ArgonCipherErrors(CipherErrors),
 
