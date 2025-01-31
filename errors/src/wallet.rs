@@ -38,9 +38,6 @@ pub enum WalletErrors {
     #[error("This token already exists {0}")]
     TokenAlreadyExists(String),
 
-    #[error("TransactionRequest with index {0} doesn't exists")]
-    TransactionRequestNotExists(usize),
-
     #[error("Try encrypt secret key error")]
     TryEncryptSecretKeyError,
 
