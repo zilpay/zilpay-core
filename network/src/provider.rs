@@ -4,7 +4,8 @@ use std::sync::Arc;
 use crate::common::Provider;
 use crate::gas_parse::{
     build_batch_gas_request, build_fee_history_request, json_rpc_error,
-    process_parse_fee_history_request, Gas, GasFeeHistory, EIP1559, EIP4844, SCILLA_EIP,
+    process_parse_fee_history_request, GasFeeHistory, RequiredTxParams, EIP1559, EIP4844,
+    SCILLA_EIP,
 };
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
@@ -83,16 +84,22 @@ impl NetworkProvider {
         Ok(())
     }
 
-    pub async fn estimate_gas_batch(
+    pub async fn estimate_params_batch(
         &self,
         tx: &TransactionRequest,
+        sender: &Address,
         block_count: u64,
         percentiles: Option<&[f64]>,
-    ) -> Result<Gas> {
+    ) -> Result<RequiredTxParams> {
         let default_percentiles = [25.0, 50.0, 75.0];
         let percentiles_to_use = percentiles.unwrap_or(&default_percentiles);
-        let requests =
-            build_batch_gas_request(tx, block_count, &percentiles_to_use, &self.config.features)?;
+        let requests = build_batch_gas_request(
+            tx,
+            block_count,
+            &percentiles_to_use,
+            &self.config.features,
+            sender,
+        )?;
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let response = provider
@@ -100,23 +107,28 @@ impl NetworkProvider {
             .await
             .map_err(NetworkErrors::Request)?;
 
-        let gas_price_response = response
+        let nonce = response
             .first()
-            .and_then(|res| res.result.as_ref())
-            .and_then(|result| result.as_str())
-            .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
+            .and_then(|res| process_nonce_response(&res, sender).ok())
             .unwrap_or_default();
-        let tx_estimate_gas_response = response
+
+        let gas_price_response = response
             .get(1)
             .and_then(|res| res.result.as_ref())
             .and_then(|result| result.as_str())
-            .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
+            .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+            .unwrap_or_default();
+        let tx_estimate_gas_response = response
+            .get(2)
+            .and_then(|res| res.result.as_ref())
+            .and_then(|result| result.as_str())
+            .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
             .unwrap_or_default();
 
         let (max_priority_fee_per_gas_response, fee_history_response) =
             if self.config.features.contains(&EIP1559) {
                 let max_priority_fee_per_gas_response = response
-                    .get(2)
+                    .get(3)
                     .and_then(|res| res.result.as_ref())
                     .and_then(|result| result.as_str())
                     .and_then(|gas_str| {
@@ -125,7 +137,7 @@ impl NetworkProvider {
                     .unwrap_or_default();
 
                 let fee_history_response = response
-                    .get(3)
+                    .get(4)
                     .and_then(|res| res.result.as_ref())
                     .and_then(|result| process_parse_fee_history_request(result).ok())
                     .unwrap_or_default();
@@ -146,8 +158,9 @@ impl NetworkProvider {
             U256::ZERO
         };
 
-        Ok(Gas {
+        Ok(RequiredTxParams {
             blob_base_fee,
+            nonce,
             max_priority_fee: max_priority_fee_per_gas_response,
             gas_price: gas_price_response,
             fee_history: fee_history_response,
@@ -461,6 +474,15 @@ impl NetworkProvider {
             }
         }
     }
+
+    #[inline]
+    fn parse_str_to_u256(value: &str) -> Option<U256> {
+        if value.starts_with("0x") {
+            U256::from_str_radix(value.trim_start_matches("0x"), 16).ok()
+        } else {
+            U256::from_str_radix(value, 10).ok()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -468,7 +490,7 @@ mod tests_network {
     use super::*;
     use alloy::{primitives::U256, rpc::types::TransactionInput};
     use config::address::ADDR_LEN;
-    use proto::tx::ETHTransactionRequest;
+    use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
     use rpc::network_config::Explorer;
     use token::ft_parse::generate_erc20_transfer_data;
@@ -510,16 +532,11 @@ mod tests_network {
             chain: "ZIL".to_string(),
             short_name: String::new(),
             rpc: vec!["https://api.zilliqa.com".to_string()],
-            features: vec![],
+            features: vec![SCILLA_EIP],
             chain_id: 1,
             slip_44: 313,
             ens: None,
-            explorers: vec![Explorer {
-                name: "ViewBlock".to_string(),
-                url: "https://viewblock.io/zilliqa".to_string(),
-                icon: None,
-                standard: 3091,
-            }],
+            explorers: vec![],
             fallback_enabled: true,
         }
     }
@@ -955,7 +972,7 @@ mod tests_network {
         let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
 
         let fee = provider
-            .estimate_gas_batch(&tx_request, 4, None)
+            .estimate_params_batch(&tx_request, &from, 4, None)
             .await
             .unwrap();
 
@@ -1000,15 +1017,42 @@ mod tests_network {
         let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
 
         let fee = provider
-            .estimate_gas_batch(&tx_request, 4, None)
+            .estimate_params_batch(&tx_request, &from, 4, None)
             .await
             .unwrap();
 
         assert_ne!(fee.gas_price, U256::from(0));
-        assert_ne!(fee.blob_base_fee, U256::from(0));
+        assert_eq!(fee.nonce, 0);
         assert_ne!(fee.max_priority_fee, U256::from(0));
         assert_ne!(fee.tx_estimate_gas, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
         assert_ne!(fee.fee_history.priority_fee, U256::from(0));
+    }
+
+    #[tokio::test]
+    async fn test_get_tx_prams_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let to = Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap();
+        let from = Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap();
+        let zil_tx = ZILTransactionRequest {
+            chain_id: provider.config.chain_id as u16,
+            nonce: 1,
+            gas_price: 2000 * 10u128.pow(6),
+            gas_limit: 100000,
+            to_addr: to,
+            amount: 10u128.pow(12),
+            code: Vec::with_capacity(0),
+            data: Vec::with_capacity(0),
+        };
+        let tx_req = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+        let params = provider
+            .estimate_params_batch(&tx_req, &from, 4, None)
+            .await
+            .unwrap();
+
+        assert_eq!(params.gas_price, U256::from(2000000000));
+        assert_eq!(params.nonce, 66519);
     }
 }

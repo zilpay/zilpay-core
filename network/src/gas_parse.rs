@@ -1,6 +1,6 @@
 use alloy::primitives::U256;
 use errors::{network::NetworkErrors, tx::TransactionErrors};
-use proto::tx::TransactionRequest;
+use proto::{address::Address, tx::TransactionRequest};
 use rpc::{
     methods::{EvmMethods, ZilMethods},
     network_config::ChainConfig,
@@ -8,6 +8,8 @@ use rpc::{
     zil_interfaces::ErrorRes,
 };
 use serde_json::{json, Value};
+
+use crate::nonce_parser::build_nonce_request;
 
 #[derive(Debug, Default)]
 pub struct GasFeeHistory {
@@ -17,12 +19,13 @@ pub struct GasFeeHistory {
 }
 
 #[derive(Debug)]
-pub struct Gas {
+pub struct RequiredTxParams {
     pub gas_price: U256,
     pub max_priority_fee: U256,
     pub fee_history: GasFeeHistory,
     pub tx_estimate_gas: U256,
     pub blob_base_fee: U256,
+    pub nonce: u64,
 }
 
 pub const SCILLA_EIP: u16 = 666;
@@ -75,8 +78,11 @@ pub fn build_batch_gas_request(
     block_count: u64,
     percentiles: &[f64],
     features: &[u16],
+    sender: &Address,
 ) -> Result<Vec<Value>, NetworkErrors> {
-    let mut requests = Vec::with_capacity(3);
+    let mut requests = Vec::with_capacity(4);
+
+    requests.push(build_nonce_request(sender));
 
     if features.contains(&SCILLA_EIP) {
         requests.push(RpcProvider::<ChainConfig>::build_payload(
