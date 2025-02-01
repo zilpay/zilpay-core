@@ -985,6 +985,59 @@ mod tests_network {
     }
 
     #[tokio::test]
+    async fn test_get_tx_params_payment() {
+        let net_conf = ChainConfig {
+            testnet: None,
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://eth.blockrazor.xyz".to_string()],
+            features: vec![155, 1559, 4844],
+            chain_id: 56,
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let recipient =
+            Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let amount = U256::from(100u64);
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(amount),
+            chain_id: Some(provider.config.chain_id),
+            gas: None,
+            nonce: None,
+            transaction_type: Some(0x02),
+            input: TransactionInput::default(),
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            gas_price: None,
+            max_fee_per_blob_gas: None,
+            blob_versioned_hashes: None,
+            sidecar: None,
+            access_list: None,
+            authorization_list: None,
+        };
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+
+        let fee = provider
+            .estimate_params_batch(&tx_request, &from, 4, None)
+            .await
+            .unwrap();
+
+        assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.max_priority_fee, U256::from(0));
+        assert_ne!(fee.tx_estimate_gas, U256::from(0));
+        assert_ne!(fee.blob_base_fee, U256::from(0));
+        assert_ne!(fee.fee_history.max_fee, U256::from(0));
+        assert_ne!(fee.fee_history.priority_fee, U256::from(0));
+    }
+
+    #[tokio::test]
     async fn test_calc_fee_bsc_batch() {
         let net_conf = ChainConfig {
             testnet: None,
