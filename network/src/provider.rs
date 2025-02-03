@@ -993,7 +993,7 @@ mod tests_network {
             short_name: String::new(),
             rpc: vec!["https://eth.blockrazor.xyz".to_string()],
             features: vec![155, 1559, 4844],
-            chain_id: 56,
+            chain_id: 1,
             slip_44: 60,
             ens: None,
             explorers: vec![],
@@ -1031,7 +1031,7 @@ mod tests_network {
 
         assert_ne!(fee.gas_price, U256::from(0));
         assert_ne!(fee.max_priority_fee, U256::from(0));
-        assert_ne!(fee.tx_estimate_gas, U256::from(0));
+        assert_eq!(fee.tx_estimate_gas, U256::from(21000));
         assert_ne!(fee.blob_base_fee, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
         assert_ne!(fee.fee_history.priority_fee, U256::from(0));

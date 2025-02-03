@@ -97,8 +97,13 @@ pub fn build_batch_gas_request(
         ));
     }
 
-    let tx_object =
-        serde_json::to_value(&tx).map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+    let tx_object = match tx {
+        TransactionRequest::Zilliqa(_) => {
+            return Err(TransactionErrors::InvalidTransaction)?;
+        }
+        TransactionRequest::Ethereum((tx, _)) => serde_json::to_value(&tx)
+            .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?,
+    };
     let request_estimate_gas =
         RpcProvider::<ChainConfig>::build_payload(json!([tx_object]), EvmMethods::EstimateGas);
 
