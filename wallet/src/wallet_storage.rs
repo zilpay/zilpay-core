@@ -127,10 +127,17 @@ impl StorageOperations for Wallet {
         &self,
         history: &[HistoricalTransaction],
     ) -> std::result::Result<(), Self::Error> {
-        let history_bytes = bincode::serialize(history)?;
+        let new_history = {
+            let mut db_history = self.get_history()?;
+
+            db_history.extend_from_slice(&history);
+
+            bincode::serialize(&db_history)?
+        };
+
         let history_db_key = Wallet::get_db_history_key(&self.wallet_address);
 
-        self.storage.set(&history_db_key, &history_bytes)?;
+        self.storage.set(&history_db_key, &new_history)?;
         self.storage.flush()?;
 
         Ok(())
