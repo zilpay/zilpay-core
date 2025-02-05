@@ -14,8 +14,8 @@ use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
     wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
-    wallet_storage::StorageOperations, wallet_transaction::WalletTransaction,
-    wallet_types::WalletTypes, Bip39Params, LedgerParams, SecretKeyParams, Wallet, WalletConfig,
+    wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
+    SecretKeyParams, Wallet, WalletConfig,
 };
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
