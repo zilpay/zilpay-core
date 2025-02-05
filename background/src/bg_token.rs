@@ -7,7 +7,7 @@ use proto::{
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
     zil_tx::ZILTransactionRequest,
 };
-use serde_json::{json, Value};
+use serde_json::json;
 use token::{ft::FToken, ft_parse::generate_erc20_transfer_data};
 use wallet::wallet_storage::StorageOperations;
 
@@ -115,7 +115,7 @@ impl TokensManagement for Background {
                         "_tag": "Transfer",
                         "params": [
                             { "vname": "to", "type": "ByStr20", "value": base_16_to },
-                            { "vname": "amount", "type": "Uint128", "value": amount }
+                            { "vname": "amount", "type": "Uint128", "value": amount.to::<u128>() }
                         ]
                     })
                     .to_string();
@@ -125,7 +125,7 @@ impl TokensManagement for Background {
                         gas_price: 2000000000,
                         gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
                         to_addr: to,
-                        amount: amount.to::<u128>(),
+                        amount: 0,
                         code: Vec::with_capacity(0),
                         data: payload.as_bytes().to_vec(),
                     }
