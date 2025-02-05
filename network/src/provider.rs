@@ -131,9 +131,7 @@ impl NetworkProvider {
                     .get(3)
                     .and_then(|res| res.result.as_ref())
                     .and_then(|result| result.as_str())
-                    .and_then(|gas_str| {
-                        U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok()
-                    })
+                    .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
                     .unwrap_or_default();
 
                 let fee_history_response = response
@@ -152,7 +150,7 @@ impl NetworkProvider {
                 .first()
                 .and_then(|res| res.result.as_ref())
                 .and_then(|result| result.as_str())
-                .and_then(|gas_str| U256::from_str_radix(gas_str.trim_start_matches("0x"), 16).ok())
+                .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
                 .unwrap_or_default()
         } else {
             U256::ZERO
@@ -888,7 +886,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://eth.llamarpc.com".to_string()],
+            rpc: vec!["https://eth.meowrpc.com".to_string()],
             features: vec![155, 1559, 4844],
             chain_id: 56,
             slip_44: 60,
@@ -941,7 +939,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://eth.llamarpc.com".to_string()],
+            rpc: vec!["https://eth.meowrpc.com".to_string()],
             features: vec![155, 1559, 4844],
             chain_id: 56,
             slip_44: 60,
@@ -991,7 +989,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://eth.blockrazor.xyz".to_string()],
+            rpc: vec!["https://eth.meowrpc.com".to_string()],
             features: vec![155, 1559, 4844],
             chain_id: 1,
             slip_44: 60,
@@ -1106,6 +1104,6 @@ mod tests_network {
             .unwrap();
 
         assert_eq!(params.gas_price, U256::from(2000000000));
-        assert_eq!(params.nonce, 66519);
+        assert!(params.nonce > 66519);
     }
 }

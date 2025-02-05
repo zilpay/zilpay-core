@@ -84,17 +84,20 @@ pub fn build_batch_gas_request(
 
     requests.push(build_nonce_request(sender));
 
-    if features.contains(&SCILLA_EIP) {
-        requests.push(RpcProvider::<ChainConfig>::build_payload(
-            json!([]),
-            ZilMethods::GetMinimumGasPrice,
-        ));
-        return Ok(requests);
-    } else {
-        requests.push(RpcProvider::<ChainConfig>::build_payload(
-            json!([]),
-            EvmMethods::GasPrice,
-        ));
+    match tx {
+        TransactionRequest::Zilliqa(_) => {
+            requests.push(RpcProvider::<ChainConfig>::build_payload(
+                json!([]),
+                ZilMethods::GetMinimumGasPrice,
+            ));
+            return Ok(requests);
+        }
+        TransactionRequest::Ethereum(_) => {
+            requests.push(RpcProvider::<ChainConfig>::build_payload(
+                json!([]),
+                EvmMethods::GasPrice,
+            ));
+        }
     }
 
     let tx_object = match tx {
