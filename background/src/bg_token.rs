@@ -107,7 +107,10 @@ impl TokensManagement for Background {
                         data: Vec::with_capacity(0),
                     }
                 } else {
-                    let base_16_to = to.get_zil_base16().unwrap_or_default();
+                    let base_16_to = to
+                        .get_zil_check_sum_addr()
+                        .unwrap_or_default()
+                        .to_lowercase();
                     let payload = json!({
                         "_tag": "Transfer",
                         "params": [
