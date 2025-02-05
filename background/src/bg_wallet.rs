@@ -14,8 +14,8 @@ use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
     wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
-    wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
-    SecretKeyParams, Wallet, WalletConfig,
+    wallet_storage::StorageOperations, wallet_transaction::WalletTransaction,
+    wallet_types::WalletTypes, Bip39Params, LedgerParams, SecretKeyParams, Wallet, WalletConfig,
 };
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
@@ -338,6 +338,9 @@ impl WalletManagement for Background {
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
         wallet.clear_data()?;
+        wallet.clear_history()?;
+        wallet.clear_ftokens()?;
+
         indicators.retain(|&x| x != wallet_address);
         self.wallets.retain(|x| x.wallet_address != wallet_address);
         self.save_indicators(indicators)?;
