@@ -45,6 +45,6 @@ pub fn process_nonce_response(response: &ResultRes<Value>, address_type: &Addres
             .as_ref()
             .and_then(|v| v.as_str())
             .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
-            .unwrap()),
+            .unwrap_or_default()),
     }
 }
