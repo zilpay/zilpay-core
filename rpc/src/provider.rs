@@ -50,6 +50,7 @@ where
         let mut k = 0;
 
         for url in self.get_nodes() {
+            k += 1;
             let res = match client
                 .post(url)
                 .timeout(Duration::from_secs(TIME_OUT_SEC))
@@ -62,27 +63,25 @@ where
                     if error == RpcError::BadRequest && k == Self::MAX_ERROR {
                         break;
                     } else if error == RpcError::BadRequest {
-                        k += 1;
                         continue;
                     } else {
                         error = RpcError::BadRequest;
-                        k = 1;
                         continue;
                     }
                 }
             };
 
             match res.json().await {
-                Ok(json) => return Ok(json),
+                Ok(json) => {
+                    return Ok(json);
+                }
                 Err(e) => {
                     if error == RpcError::InvalidJson(e.to_string()) && k == Self::MAX_ERROR {
                         break;
                     } else if error == RpcError::InvalidJson(e.to_string()) {
-                        k += 1;
                         continue;
                     } else {
                         error = RpcError::InvalidJson(e.to_string());
-                        k = 1;
                         continue;
                     }
                 }
@@ -122,6 +121,29 @@ mod tests {
                 icon: None,
                 standard: 3091,
             }],
+            fallback_enabled: true,
+        }
+    }
+
+    fn create_eth_config() -> ChainConfig {
+        ChainConfig {
+            testnet: None,
+            name: "Ethereum Mainnet".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec![
+                "https://rpc.sepolia.org".to_string(),
+                "https://rpc2.sepolia.org".to_string(),
+                "https://rpc.sepolia.online".to_string(),
+                "https://www.sepoliarpc.space".to_string(),
+                "https://rpc.bordel.wtf/sepolia".to_string(),
+                "https://rpc-sepolia.rockx.com".to_string(),
+            ],
+            features: vec![155, 1559],
+            chain_id: 11155111,
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
             fallback_enabled: true,
         }
     }
@@ -211,5 +233,19 @@ mod tests {
             Err(RpcError::BadRequest) => (),
             _ => panic!("Expected BadRequest error"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_network_much_req() {
+        let config = create_eth_config();
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&config);
+        let payloads = vec![RpcProvider::<ChainConfig>::build_payload(
+            json!(["0x246C5881E3F109B2aF170F5C773EF969d3da581B", "latest"]),
+            EvmMethods::GetBalance,
+        )];
+
+        let result: Result<Vec<ResultRes<String>>> = provider.req(&payloads).await;
+
+        dbg!(&result);
     }
 }

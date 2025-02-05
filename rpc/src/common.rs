@@ -23,7 +23,7 @@ pub trait NetworkConfigTrait {
 
 #[async_trait]
 pub trait JsonRPC {
-    const MAX_ERROR: usize = 5;
+    const MAX_ERROR: usize = 10;
 
     fn get_nodes(&self) -> &[String];
 
