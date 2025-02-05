@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use errors::rpc::RpcError;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use std::fmt::Debug;
+use std::{fmt::Debug, time::Duration};
 
 use crate::common::{JsonRPC, NetworkConfigTrait, Result, RpcMethod};
 
@@ -44,12 +44,19 @@ where
     where
         SR: DeserializeOwned + Debug,
     {
+        const TIME_OUT_SEC: u64 = 5;
         let client = reqwest::Client::new();
         let mut error = RpcError::NetworkDown;
         let mut k = 0;
 
         for url in self.get_nodes() {
-            let res = match client.post(url).json(&payloads).send().await {
+            let res = match client
+                .post(url)
+                .timeout(Duration::from_secs(TIME_OUT_SEC))
+                .json(&payloads)
+                .send()
+                .await
+            {
                 Ok(response) => response,
                 Err(_) => {
                     if error == RpcError::BadRequest && k == Self::MAX_ERROR {
