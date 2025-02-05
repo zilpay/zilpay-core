@@ -5,7 +5,9 @@ use errors::{background::BackgroundError, wallet::WalletErrors};
 use proto::{
     address::Address,
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
+    zil_tx::ZILTransactionRequest,
 };
+use serde_json::{json, Value};
 use token::{ft::FToken, ft_parse::generate_erc20_transfer_data};
 use wallet::wallet_storage::StorageOperations;
 
@@ -47,7 +49,7 @@ impl TokensManagement for Background {
         chain_hash: u64,
     ) -> Result<TransactionRequest> {
         let chain = self.get_provider(chain_hash)?;
-        let payment = || ETHTransactionRequest {
+        let erc20_payment = || ETHTransactionRequest {
             to: Some(to.to_alloy_addr().into()),
             value: Some(amount),
             nonce: Some(0),
@@ -70,22 +72,22 @@ impl TokensManagement for Background {
 
             Ok(token_transfer_request)
         };
+        let metadata = TransactionMetadata {
+            chain_hash,
+            hash: None,
+            info: None,
+            icon: None,
+            title: None,
+            signer: None,
+            token_info: Some((amount, token.decimals, token.symbol.clone())),
+        };
 
         match token.addr {
             Address::Secp256k1Keccak256Ethereum(_) => {
                 let transfer_request = if token.native {
-                    payment()
+                    erc20_payment()
                 } else {
                     erc20_transfer()?
-                };
-                let metadata = TransactionMetadata {
-                    chain_hash,
-                    hash: None,
-                    info: None,
-                    icon: None,
-                    title: None,
-                    signer: None,
-                    token_info: Some((amount, token.decimals, token.symbol.clone())),
                 };
 
                 let txn = TransactionRequest::Ethereum((transfer_request, metadata));
@@ -93,7 +95,41 @@ impl TokensManagement for Background {
                 Ok(txn)
             }
             Address::Secp256k1Sha256Zilliqa(_) => {
-                todo!()
+                let transfer_request = if token.native {
+                    ZILTransactionRequest {
+                        nonce: 0,
+                        chain_id: chain.config.chain_id as u16,
+                        gas_price: 2000000000,
+                        gas_limit: 50,
+                        to_addr: to,
+                        amount: amount.to::<u128>(),
+                        code: Vec::with_capacity(0),
+                        data: Vec::with_capacity(0),
+                    }
+                } else {
+                    let base_16_to = to.get_zil_base16().unwrap_or_default();
+                    let payload = json!({
+                        "_tag": "Transfer",
+                        "params": [
+                            { "vname": "to", "type": "ByStr20", "value": base_16_to },
+                            { "vname": "amount", "type": "Uint128", "value": amount }
+                        ]
+                    })
+                    .to_string();
+                    ZILTransactionRequest {
+                        nonce: 0,
+                        chain_id: chain.config.chain_id as u16,
+                        gas_price: 2000000000,
+                        gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
+                        to_addr: to,
+                        amount: amount.to::<u128>(),
+                        code: Vec::with_capacity(0),
+                        data: payload.as_bytes().to_vec(),
+                    }
+                };
+                let txn = TransactionRequest::Zilliqa((transfer_request, metadata));
+
+                Ok(txn)
             }
         }
     }
