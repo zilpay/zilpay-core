@@ -47,13 +47,10 @@ impl ProvidersManagement for Background {
         let hash = config.hash();
         let mut providers = self.get_providers();
 
-        if providers.iter().any(|p| p.config.hash() == hash) {
-            return Err(BackgroundError::ProviderAlreadyExists(config.chain_id));
-        }
-
+        providers.retain(|p| p.config.hash() != hash);
         let new_provider = NetworkProvider::new(config);
-
         providers.push(new_provider);
+
         self.update_providers(providers)?;
 
         Ok(hash)
@@ -225,10 +222,14 @@ mod tests_providers {
         let (bg, _dir) = setup_test_background();
 
         let config1 = create_test_network_config("Test Network 1", 1);
-        let config2 = create_test_network_config("Test Network 2", 1); // Same chain_id
+        let config2 = create_test_network_config("Test Network 2", 1);
 
-        bg.add_provider(config1).unwrap();
-        assert!(bg.add_provider(config2).is_err()); // Should fail due to duplicate chain_id
+        bg.add_provider(config1.clone()).unwrap();
+        assert_eq!(bg.get_providers().len(), 1);
+        assert_eq!(bg.get_provider(config1.hash()).unwrap().config, config1);
+        assert!(bg.add_provider(config2.clone()).is_ok());
+        assert_eq!(bg.get_providers().len(), 1);
+        assert_eq!(bg.get_provider(config2.hash()).unwrap().config, config2);
     }
 
     #[test]

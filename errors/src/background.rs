@@ -17,9 +17,6 @@ pub enum BackgroundError {
     #[error("Provider is not exists with chain id: {0}")]
     ProviderNotExists(u64),
 
-    #[error("Provider already exists with chainid: {0}")]
-    ProviderAlreadyExists(u64),
-
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,
 
