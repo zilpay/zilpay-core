@@ -115,13 +115,13 @@ impl TokensManagement for Background {
                         "_tag": "Transfer",
                         "params": [
                             { "vname": "to", "type": "ByStr20", "value": base_16_to },
-                            { "vname": "amount", "type": "Uint128", "value": amount.to::<u128>() }
+                            { "vname": "amount", "type": "Uint128", "value": amount.to_string() }
                         ]
                     })
                     .to_string();
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: chain.config.chain_id as u16,
+                        chain_id: chain.config.chain_id as u16 - 32768, // problem in chain id ZILLIQA!!!
                         gas_price: 2000000000,
                         gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
                         to_addr: to,

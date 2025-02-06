@@ -45,7 +45,7 @@ impl Serialize for ZILTransactionReceipt {
         let amount = u128::from_be_bytes(self.amount);
 
         state.serialize_field("gasPrice", &gas_price.to_string())?;
-        state.serialize_field("gasLimit", &self.gas_limit)?;
+        state.serialize_field("gasLimit", &self.gas_limit.to_string())?;
         state.serialize_field(
             "toAddr",
             &Address::Secp256k1Sha256Zilliqa(self.to_addr)

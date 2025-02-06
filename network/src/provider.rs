@@ -886,7 +886,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://eth.meowrpc.com".to_string()],
+            rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
             features: vec![155, 1559, 4844],
             chain_id: 56,
             slip_44: 60,
@@ -939,7 +939,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://eth.meowrpc.com".to_string()],
+            rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
             features: vec![155, 1559, 4844],
             chain_id: 56,
             slip_44: 60,
@@ -989,7 +989,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://eth.meowrpc.com".to_string()],
+            rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
             features: vec![155, 1559, 4844],
             chain_id: 1,
             slip_44: 60,
@@ -1053,7 +1053,7 @@ mod tests_network {
         let provider = NetworkProvider::new(net_conf);
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
-        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let from = Address::from_eth_address("0x7b501c7944185130DD4aD73293e8Aa84eFfDcee7").unwrap();
         let token_transfer_request = ETHTransactionRequest {
             from: Some(from.to_alloy_addr().into()),
             to: Some(recipient.to_alloy_addr().into()),
@@ -1071,6 +1071,8 @@ mod tests_network {
             .estimate_params_batch(&tx_request, &from, 4, None)
             .await
             .unwrap();
+
+        dbg!(&fee);
 
         assert_ne!(fee.gas_price, U256::from(0));
         assert_eq!(fee.nonce, 0);
