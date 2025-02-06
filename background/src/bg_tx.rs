@@ -52,6 +52,8 @@ impl TransactionsManagement for Background {
 
 #[cfg(test)]
 mod tests_background_transactions {
+    use core::panic;
+
     use super::*;
     use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
@@ -59,7 +61,7 @@ mod tests_background_transactions {
     use crypto::{bip49::DerivationPath, slip44};
     use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
-    use rpc::network_config::{ChainConfig, Explorer};
+    use rpc::network_config::ChainConfig;
     use token::ft::FToken;
     use tokio;
     use wallet::wallet_crypto::WalletCrypto;
@@ -86,12 +88,7 @@ mod tests_background_transactions {
             chain_id: 333,
             slip_44: slip44::ZILLIQA,
             ens: None,
-            explorers: vec![Explorer {
-                name: "ViewBlock".to_string(),
-                url: "https://viewblock.io/zilliqa".to_string(),
-                icon: None,
-                standard: 3091,
-            }],
+            explorers: vec![],
             fallback_enabled: true,
         }
     }
@@ -112,12 +109,23 @@ mod tests_background_transactions {
             chain_id: 97,
             slip_44: slip44::ETHEREUM,
             ens: None,
-            explorers: vec![Explorer {
-                name: "BscScan".to_string(),
-                url: "https://testnet.bscscan.com".to_string(),
-                icon: None,
-                standard: 3091,
-            }],
+            explorers: vec![],
+            fallback_enabled: true,
+        }
+    }
+
+    fn gen_proto_zil_net_conf() -> ChainConfig {
+        ChainConfig {
+            testnet: None,
+            name: "Proto Zilliqa mainnet".to_string(),
+            chain: "ZIL".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://api.zq2-protomainnet.zilliqa.com".to_string()],
+            features: vec![],
+            chain_id: 32770,
+            slip_44: slip44::ZILLIQA,
+            ens: None,
+            explorers: vec![],
             fallback_enabled: true,
         }
     }
@@ -268,6 +276,85 @@ mod tests_background_transactions {
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn = txn.sign(&keypair).await.unwrap();
+        let txns = vec![txn];
+        let txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+
+        assert_eq!(txns.len(), 1);
+
+        for tx in txns {
+            assert!(!tx.id.is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sign_and_send_zilliqa_evm_tx() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_proto_zil_net_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+        let accounts = [(
+            DerivationPath::new(slip44::ZILLIQA, 0),
+            "ZIL evm acc 0".to_string(),
+        )];
+        let device_indicators = [String::from("testzil"), String::from("0000")];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: WORDS,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "ZIL wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_bsc_token()],
+        })
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let wallet_data = wallet.get_wallet_data().unwrap();
+        let provider = bg.get_provider(wallet_data.default_chain_hash).unwrap();
+        let addresses: Vec<&Address> = wallet_data.accounts.iter().map(|v| &v.addr).collect();
+        let from = addresses.get(wallet_data.selected_account).unwrap();
+
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let transfer_request = ETHTransactionRequest {
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::from(10u128)),
+            nonce: None,
+            chain_id: Some(provider.config.chain_id),
+            ..Default::default()
+        };
+
+        let mut tx_request = TransactionRequest::Ethereum((transfer_request, Default::default()));
+        let fee = provider
+            .estimate_params_batch(&tx_request, from, 4, None)
+            .await
+            .unwrap();
+
+        match tx_request {
+            TransactionRequest::Zilliqa(_) => {
+                panic!("should be evm tx");
+            }
+            TransactionRequest::Ethereum((ref mut tx, _)) => {
+                tx.gas = Some(fee.tx_estimate_gas.to::<u64>());
+                tx.gas_price = Some(fee.gas_price.to::<u128>());
+                tx.nonce = Some(fee.nonce);
+            }
+        }
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            PASSWORD.as_bytes(),
+            &device_indicator,
+            &wallet_data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+        let txn = tx_request.sign(&keypair).await.unwrap();
         let txns = vec![txn];
         let txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
 
