@@ -327,9 +327,9 @@ pub fn process_zil_balance_response(
     response: &ResultRes<Value>,
     account: &Address,
     is_native: bool,
-) -> U256 {
+) -> u128 {
     if response.error.is_some() {
-        return U256::from(0);
+        return 0;
     }
 
     if is_native {
@@ -338,7 +338,7 @@ pub fn process_zil_balance_response(
             .as_ref()
             .and_then(|v| v.get("balance"))
             .and_then(|v| v.as_str())
-            .and_then(|v| v.parse::<U256>().ok())
+            .and_then(|v| v.parse::<u128>().ok())
             .unwrap_or_default();
 
         balance
@@ -346,7 +346,7 @@ pub fn process_zil_balance_response(
         let addr = match account.get_zil_check_sum_addr() {
             Ok(v) => v.to_lowercase(),
             Err(_) => {
-                return U256::ZERO;
+                return 0;
             }
         };
 
@@ -356,7 +356,7 @@ pub fn process_zil_balance_response(
             .and_then(|v| v.get("balances"))
             .and_then(|v| v.get(addr))
             .and_then(|v| v.as_str())
-            .and_then(|v| v.parse::<U256>().ok())
+            .and_then(|v| v.parse::<u128>().ok())
             .unwrap_or_default();
 
         balance
