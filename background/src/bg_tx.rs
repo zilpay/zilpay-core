@@ -52,8 +52,6 @@ impl TransactionsManagement for Background {
 
 #[cfg(test)]
 mod tests_background_transactions {
-    use core::panic;
-
     use super::*;
     use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
@@ -108,22 +106,6 @@ mod tests_background_transactions {
             ],
             features: vec![155, 1559],
             slip_44: slip44::ETHEREUM,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        }
-    }
-
-    fn gen_proto_zil_net_conf() -> ChainConfig {
-        ChainConfig {
-            testnet: None,
-            chain_ids: [32770, 0],
-            name: "Proto Zilliqa mainnet".to_string(),
-            chain: "ZIL".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://api.zq2-protomainnet.zilliqa.com".to_string()],
-            features: vec![],
-            slip_44: slip44::ZILLIQA,
             ens: None,
             explorers: vec![],
             fallback_enabled: true,

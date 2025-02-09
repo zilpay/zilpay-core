@@ -9,7 +9,7 @@ use proto::{
 };
 use serde_json::json;
 use token::{ft::FToken, ft_parse::generate_erc20_transfer_data};
-use wallet::wallet_storage::StorageOperations;
+use wallet::{account::Account, wallet_storage::StorageOperations};
 
 #[async_trait]
 pub trait TokensManagement {
@@ -29,10 +29,9 @@ pub trait TokensManagement {
     fn build_token_transfer(
         &self,
         token: &FToken,
-        from: Address,
+        from: &Account,
         to: Address,
         amount: U256,
-        chain_hash: u64,
     ) -> std::result::Result<TransactionRequest, Self::Error>;
 }
 
@@ -43,29 +42,27 @@ impl TokensManagement for Background {
     fn build_token_transfer(
         &self,
         token: &FToken,
-        from: Address,
+        sender: &Account,
         to: Address,
         amount: U256,
-        chain_hash: u64,
     ) -> Result<TransactionRequest> {
-        let chain = self.get_provider(chain_hash)?;
         let erc20_payment = || ETHTransactionRequest {
             to: Some(to.to_alloy_addr().into()),
             value: Some(amount),
             nonce: Some(0),
             gas: None,
-            chain_id: Some(chain.config.chain_id()),
+            chain_id: Some(sender.chain_id),
             ..Default::default()
         };
         let erc20_transfer = || -> Result<ETHTransactionRequest> {
             let transfer_data = generate_erc20_transfer_data(&to, amount)?;
             let token_transfer_request = ETHTransactionRequest {
-                from: Some(from.to_alloy_addr().into()),
+                from: Some(sender.addr.to_alloy_addr().into()),
                 to: Some(token.addr.to_alloy_addr().into()),
                 value: Some(U256::ZERO),
                 nonce: Some(0),
                 gas: None,
-                chain_id: Some(chain.config.chain_id()),
+                chain_id: Some(sender.chain_id),
                 input: TransactionInput::new(transfer_data.into()),
                 ..Default::default()
             };
@@ -73,15 +70,19 @@ impl TokensManagement for Background {
             Ok(token_transfer_request)
         };
         let metadata = TransactionMetadata {
-            chain_hash,
+            chain_hash: sender.chain_hash,
             hash: None,
             info: None,
             icon: None,
             title: None,
-            signer: None,
+            signer: Some(sender.pub_key.clone()),
             token_info: Some((amount, token.decimals, token.symbol.clone())),
         };
-        let addr = if token.native { &from } else { &token.addr };
+        let addr = if token.native {
+            &sender.addr
+        } else {
+            &token.addr
+        };
 
         match addr {
             Address::Secp256k1Keccak256(_) => {
@@ -99,7 +100,7 @@ impl TokensManagement for Background {
                 let transfer_request = if token.native {
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: chain.config.chain_id() as u16,
+                        chain_id: sender.chain_id as u16,
                         gas_price: 2000000000,
                         gas_limit: 50,
                         to_addr: to,
@@ -122,7 +123,7 @@ impl TokensManagement for Background {
                     .to_string();
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: chain.config.chain_id() as u16,
+                        chain_id: sender.chain_id as u16,
                         gas_price: 2000000000,
                         gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
                         to_addr: to,
