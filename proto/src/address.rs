@@ -105,12 +105,16 @@ impl Address {
         }
     }
 
-    pub fn to_bytes(&self) -> [u8; ADDR_LEN + 1] {
-        let mut result = [0u8; ADDR_LEN + 1];
-        result[0] = match self {
+    pub fn prefix_type(&self) -> u8 {
+        match self {
             Address::Secp256k1Sha256(_) => 0,
             Address::Secp256k1Keccak256(_) => 1,
-        };
+        }
+    }
+
+    pub fn to_bytes(&self) -> [u8; ADDR_LEN + 1] {
+        let mut result = [0u8; ADDR_LEN + 1];
+        result[0] = self.prefix_type();
         result[1..].copy_from_slice(self.as_ref());
         result
     }
