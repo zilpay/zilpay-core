@@ -17,6 +17,8 @@ pub struct Account {
     pub addr: Address,
     pub pub_key: PubKey,
     pub chain_hash: u64,
+    pub chain_id: u64,
+    pub slip_44: u32,
 }
 
 impl Account {
@@ -31,12 +33,16 @@ impl Account {
         name: String,
         index: usize,
         chain_hash: u64,
+        chain_id: u64,
+        slip_44: u32,
     ) -> Result<Self> {
         let addr = pub_key.get_addr()?;
         let account_type = AccountType::Ledger(index);
 
         Ok(Self {
+            slip_44,
             chain_hash,
+            chain_id,
             account_type,
             addr,
             name,
@@ -49,6 +55,8 @@ impl Account {
         name: String,
         storage_key: usize,
         chain_hash: u64,
+        chain_id: u64,
+        slip_44: u32,
     ) -> Result<Self> {
         let keypair = KeyPair::from_secret_key(sk)?;
         let pub_key = keypair.get_pubkey()?;
@@ -57,10 +65,12 @@ impl Account {
 
         Ok(Self {
             chain_hash,
+            chain_id,
             account_type,
             addr,
             pub_key,
             name,
+            slip_44,
         })
     }
 
@@ -69,6 +79,8 @@ impl Account {
         name: String,
         bip49: &DerivationPath,
         chain_hash: u64,
+        chain_id: u64,
+        slip_44: u32,
     ) -> Result<Self> {
         let keypair = KeyPair::from_bip39_seed(mnemonic_seed, bip49)?;
         let pub_key = keypair.get_pubkey()?;
@@ -77,10 +89,12 @@ impl Account {
 
         Ok(Self {
             chain_hash,
+            chain_id,
             account_type,
             addr,
             pub_key,
             name,
+            slip_44,
         })
     }
 
@@ -107,7 +121,7 @@ mod tests {
             .parse()
             .unwrap();
         let name = "Account 0";
-        let acc = Account::from_secret_key(sk, name.to_string(), 0, 0).unwrap();
+        let acc = Account::from_secret_key(sk, name.to_string(), 0, 0, 1, slip44::ZILLIQA).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
@@ -135,7 +149,7 @@ mod tests {
         let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
         let bip49 = DerivationPath::new(slip44::ZILLIQA, 0);
         let seed = m.to_seed("");
-        let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0).unwrap();
+        let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0, 1, slip44::ZILLIQA).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
