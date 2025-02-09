@@ -41,6 +41,9 @@ pub enum NetworkErrors {
 
     #[error("Invalid bip44Network type")]
     InvlaidPathBip49Type,
+
+    #[error("Invlid chain config")]
+    InvlaidChainConfig,
 }
 
 impl From<TransactionErrors> for NetworkErrors {
