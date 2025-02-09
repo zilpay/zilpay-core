@@ -22,7 +22,7 @@ pub struct ChainConfig {
     pub rpc: Vec<String>,
     pub features: Vec<u16>,
     pub chain_id: u64,
-    pub chain_ids: Option<[u64; 2]>,
+    pub chain_ids: Option<Vec<u8>>,
     pub slip_44: u32,
     pub testnet: Option<bool>,
     pub ens: Option<Address>,

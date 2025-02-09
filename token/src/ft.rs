@@ -1,5 +1,4 @@
-use alloy::primitives::U256;
-use config::address::ADDR_LEN;
+use config::{address::ADDR_LEN, sha::SHA256_SIZE};
 use errors::wallet::WalletErrors;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
@@ -12,7 +11,7 @@ pub struct FToken {
     pub decimals: u8,
     pub addr: Address,
     pub logo: Option<String>,
-    pub balances: HashMap<usize, U256>,
+    pub balances: HashMap<usize, [u8; SHA256_SIZE]>,
     pub default: bool,
     pub native: bool,
     pub chain_hash: u64,
