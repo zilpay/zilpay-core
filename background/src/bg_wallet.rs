@@ -9,7 +9,7 @@ use config::{
     sha::SHA512_SIZE,
 };
 use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
-use proto::{address::Address, pubkey::PubKey};
+use proto::pubkey::PubKey;
 use session::{decrypt_session, encrypt_session};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
@@ -155,23 +155,6 @@ impl WalletManagement for Background {
 
         account.addr = account.pub_key.get_addr()?;
         wallet.save_wallet_data(data)?;
-
-        let mut ftokens = wallet.get_ftokens()?;
-
-        ftokens.iter_mut().for_each(|t| {
-            if t.native {
-                match t.addr {
-                    Address::Secp256k1Sha256(addr) => {
-                        t.addr = Address::Secp256k1Keccak256(addr);
-                    }
-                    Address::Secp256k1Keccak256(addr) => {
-                        t.addr = Address::Secp256k1Sha256(addr);
-                    }
-                }
-            }
-        });
-
-        wallet.save_ftokens(&ftokens)?;
 
         Ok(())
     }
