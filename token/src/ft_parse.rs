@@ -554,7 +554,7 @@ mod ftoken_tests {
             };
 
             let balance = process_zil_balance_response(&response, &create_mock_zil_address(), true);
-            assert_eq!(balance, U256::from(100));
+            assert_eq!(balance, 100);
         }
 
         #[test]
@@ -578,7 +578,7 @@ mod ftoken_tests {
             };
 
             let balance = process_zil_balance_response(&response, &account, false);
-            assert_eq!(balance, U256::from(200));
+            assert_eq!(balance, 200);
         }
     }
 

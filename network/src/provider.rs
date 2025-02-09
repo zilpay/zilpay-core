@@ -358,9 +358,10 @@ impl NetworkProvider {
 
                     if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
                     {
-                        tokens[*token_idx]
-                            .balances
-                            .insert(account_index, balance.to_be_bytes());
+                        let mut bytes = [0; SHA256_SIZE];
+                        bytes[..16].copy_from_slice(&balance.to_be_bytes());
+
+                        tokens[*token_idx].balances.insert(account_index, bytes);
                     }
                 }
                 Address::Secp256k1Keccak256(_) => {
@@ -410,7 +411,9 @@ impl NetworkProvider {
                         if let Some(account_index) =
                             accounts.iter().position(|&addr| addr == *account)
                         {
-                            balances.insert(account_index, balance.to_be_bytes());
+                            let mut bytes = [0; SHA256_SIZE];
+                            bytes[..16].copy_from_slice(&balance.to_be_bytes());
+                            balances.insert(account_index, bytes);
                         }
                     }
                 }
