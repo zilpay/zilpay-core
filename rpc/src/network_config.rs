@@ -21,8 +21,7 @@ pub struct ChainConfig {
     pub short_name: String,
     pub rpc: Vec<String>,
     pub features: Vec<u16>,
-    pub chain_id: u64,
-    pub chain_ids: Option<Vec<u8>>,
+    pub chain_ids: [u64; 2],
     pub slip_44: u32,
     pub testnet: Option<bool>,
     pub ens: Option<Address>,
@@ -46,7 +45,7 @@ impl ChainConfig {
     }
 
     pub fn chain_id(&self) -> u64 {
-        self.chain_id
+        self.chain_ids[0]
     }
 
     pub fn urls(&self) -> &[String] {
@@ -65,7 +64,7 @@ impl ChainConfig {
     pub fn hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
         self.slip_44.hash(&mut hasher);
-        self.chain_id.hash(&mut hasher);
+        self.chain_ids.hash(&mut hasher);
         self.chain.hash(&mut hasher);
 
         hasher.finish()
@@ -160,13 +159,12 @@ mod tests {
     fn setup_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "test_network".to_string(),
             chain: "TEST".to_string(),
             short_name: "test_icon".to_string(),
             rpc: vec!["http://default.com".to_string()],
             features: vec![155],
-            chain_id: 1,
             slip_44: 60,
             ens: None,
             explorers: vec![Explorer {
@@ -233,7 +231,7 @@ mod tests {
     fn test_remove_node() {
         let mut config = ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "test".to_string(),
             chain: "TEST".to_string(),
             short_name: "test_icon".to_string(),
@@ -243,7 +241,6 @@ mod tests {
                 "http://third.com".to_string(),
             ],
             features: vec![155],
-            chain_id: 1,
             slip_44: 60,
             ens: None,
             explorers: Vec::new(),
@@ -267,7 +264,7 @@ mod tests {
     fn test_remove_node_group() {
         let mut config = ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "test".to_string(),
             chain: "TEST".to_string(),
             short_name: "test_icon".to_string(),
@@ -278,7 +275,6 @@ mod tests {
                 "http://fourth.com".to_string(),
             ],
             features: vec![155],
-            chain_id: 1,
             slip_44: 60,
             ens: None,
             explorers: Vec::new(),
@@ -319,7 +315,7 @@ mod tests {
 
         assert_eq!(config.name, deserialized.name);
         assert_eq!(config.chain, deserialized.chain);
-        assert_eq!(config.chain_id, deserialized.chain_id);
+        assert_eq!(config.chain_id(), deserialized.chain_id());
         assert_eq!(config.features, deserialized.features);
         assert_eq!(config.rpc, deserialized.rpc);
         assert_eq!(config.explorers.len(), deserialized.explorers.len());
