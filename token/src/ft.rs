@@ -6,35 +6,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum FtokenBalances {
-    U128(u128),
-    U256(U256),
-}
-
-impl FtokenBalances {
-    pub fn get_num(&self) -> U256 {
-        match &self {
-            Self::U128(v) => U256::from(*v),
-            Self::U256(v) => *v,
-        }
-    }
-
-    pub fn to_string(&self) -> String {
-        match &self {
-            Self::U128(v) => v.to_string(),
-            Self::U256(v) => v.to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FToken {
     pub name: String,
     pub symbol: String,
     pub decimals: u8,
     pub addr: Address,
     pub logo: Option<String>,
-    pub balances: HashMap<usize, FtokenBalances>,
+    pub balances: HashMap<usize, U256>,
     pub default: bool,
     pub native: bool,
     pub chain_hash: u64,
