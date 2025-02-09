@@ -67,6 +67,7 @@ mod tests_wallet_tokens {
     use errors::wallet::WalletErrors;
     use proto::{address::Address, keypair::KeyPair};
     use rand::Rng;
+    use rpc::network_config::ChainConfig;
     use settings::wallet_settings::WalletSettings;
     use storage::LocalStorage;
     use token::ft::FToken;
@@ -126,6 +127,7 @@ mod tests_wallet_tokens {
             settings,
             storage: Arc::clone(&storage),
         };
+        let chain_config = ChainConfig::default();
 
         // Create wallet
         let wallet = Wallet::from_sk(
@@ -134,7 +136,7 @@ mod tests_wallet_tokens {
                 proof,
                 wallet_name: "Test Token Account".to_string(),
                 biometric_type: AuthMethod::None,
-                chain_hash: 0,
+                chain_config: &chain_config,
             },
             wallet_config,
             vec![gen_bsc_token()],
@@ -254,13 +256,14 @@ mod tests_wallet_tokens {
             },
         ];
 
+        let chain_config = ChainConfig::default();
         let wallet = Wallet::from_sk(
             SecretKeyParams {
                 sk,
                 proof,
                 wallet_name: "Test Token Account".to_string(),
                 biometric_type: AuthMethod::None,
-                chain_hash: 0,
+                chain_config: &chain_config,
             },
             wallet_config,
             tokens.clone(),
@@ -327,13 +330,14 @@ mod tests_wallet_tokens {
             storage: Arc::clone(&storage),
         };
 
+        let chain_config = ChainConfig::default();
         let wallet = Wallet::from_sk(
             SecretKeyParams {
                 sk,
                 proof,
                 wallet_name: "Test Token Account".to_string(),
                 biometric_type: AuthMethod::None,
-                chain_hash: 0,
+                chain_config: &chain_config,
             },
             wallet_config,
             vec![],

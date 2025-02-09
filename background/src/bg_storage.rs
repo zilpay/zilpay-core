@@ -119,13 +119,12 @@ mod tests_background {
     fn create_test_network_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "Test Network".to_string(),
             chain: "TEST".to_string(),
             short_name: String::new(),
             rpc: vec!["https://test.network".to_string()],
             features: vec![155, 1559],
-            chain_id: 1,
             slip_44: slip44::ETHEREUM,
             ens: None,
             explorers: vec![Explorer {

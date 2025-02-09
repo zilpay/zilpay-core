@@ -11,6 +11,7 @@ use config::sha::SHA256_SIZE;
 use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
 use proto::secret_key::SecretKey;
+use rpc::network_config::ChainConfig;
 use settings::wallet_settings::WalletSettings;
 use storage::LocalStorage;
 use wallet_data::AuthMethod;
@@ -25,7 +26,7 @@ pub struct WalletConfig {
     pub settings: WalletSettings,
 }
 
-pub struct LedgerParams {
+pub struct LedgerParams<'a> {
     pub pub_key: PubKey,
     pub ledger_id: Vec<u8>,
     pub proof: [u8; KEY_SIZE],
@@ -33,15 +34,15 @@ pub struct LedgerParams {
     pub wallet_index: usize,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub chain_hash: u64,
+    pub chain_config: &'a ChainConfig,
 }
 
-pub struct SecretKeyParams {
+pub struct SecretKeyParams<'a> {
     pub sk: SecretKey,
     pub proof: [u8; KEY_SIZE],
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub chain_hash: u64,
+    pub chain_config: &'a ChainConfig,
 }
 
 pub struct Bip39Params<'a> {
@@ -51,7 +52,7 @@ pub struct Bip39Params<'a> {
     pub indexes: &'a [(DerivationPath, String)],
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
-    pub chain_hash: u64,
+    pub chain_config: &'a ChainConfig,
 }
 
 pub struct Wallet {

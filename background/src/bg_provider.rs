@@ -92,8 +92,7 @@ mod tests_providers {
             short_name: String::new(),
             rpc: vec!["http://localhost:8545".to_string()],
             features: vec![155, 1559],
-            chain_id,
-            chain_ids: None,
+            chain_ids: [chain_id, 0],
             slip_44: 60,
             ens: None,
             explorers: vec![Explorer {
@@ -185,8 +184,8 @@ mod tests_providers {
         assert_eq!(providers.len(), 2);
         assert_eq!(providers[0].config.name, "Test Network 1");
         assert_eq!(providers[1].config.name, "Test Network 2");
-        assert_eq!(providers[0].config.chain_id, 1);
-        assert_eq!(providers[1].config.chain_id, 2);
+        assert_eq!(providers[0].config.chain_id(), 1);
+        assert_eq!(providers[1].config.chain_id(), 2);
     }
 
     #[test]
@@ -214,8 +213,8 @@ mod tests_providers {
 
         assert_eq!(providers[0].config.name, "Updated Network 1");
         assert_eq!(providers[1].config.name, "Test Network 2");
-        assert_eq!(providers[0].config.chain_id, 1);
-        assert_eq!(providers[1].config.chain_id, 2);
+        assert_eq!(providers[0].config.chain_id(), 1);
+        assert_eq!(providers[1].config.chain_id(), 2);
     }
 
     #[test]

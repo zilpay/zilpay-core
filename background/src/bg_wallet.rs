@@ -13,7 +13,6 @@ use proto::{address::Address, pubkey::PubKey};
 use session::{decrypt_session, encrypt_session};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
-use token::ft::FToken;
 use wallet::{
     wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
     wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
@@ -175,10 +174,7 @@ impl WalletManagement for Background {
     }
 
     fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
-        if self.get_provider(params.chain_hash).is_err() {
-            return Err(BackgroundError::ProviderNotExists(params.chain_hash));
-        }
-
+        let provider = self.get_provider(params.chain_hash)?;
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             params.password.as_bytes(),
@@ -209,7 +205,7 @@ impl WalletManagement for Background {
                 indexes: params.accounts,
                 wallet_name: params.wallet_name,
                 biometric_type: params.biometric_type,
-                chain_hash: params.chain_hash,
+                chain_config: &provider.config,
             },
             wallet_config,
             params.ftokens,
@@ -245,9 +241,7 @@ impl WalletManagement for Background {
         wallet_settings: WalletSettings,
         device_indicators: &[String],
     ) -> Result<Vec<u8>> {
-        if self.get_provider(params.chain_hash).is_err() {
-            return Err(BackgroundError::ProviderNotExists(params.chain_hash));
-        }
+        let provider = self.get_provider(params.chain_hash)?;
 
         if self.wallets.iter().any(|w| {
             if let Ok(data) = w.get_wallet_data() {
@@ -290,7 +284,7 @@ impl WalletManagement for Background {
                 account_name: params.account_name,
                 wallet_name: params.wallet_name,
                 wallet_index: params.wallet_index,
-                chain_hash: params.chain_hash,
+                chain_config: &provider.config,
                 biometric_type: params.biometric_type,
             },
             wallet_config,
@@ -316,10 +310,7 @@ impl WalletManagement for Background {
     }
 
     fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
-        if self.get_provider(params.chain_hash).is_err() {
-            return Err(BackgroundError::ProviderNotExists(params.chain_hash));
-        }
-
+        let provider = self.get_provider(params.chain_hash)?;
         // TODO: check this device_indicators is right or not.
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -348,7 +339,7 @@ impl WalletManagement for Background {
                 proof,
                 wallet_name: params.wallet_name,
                 biometric_type: params.biometric_type,
-                chain_hash: params.chain_hash,
+                chain_config: &provider.config,
             },
             wallet_config,
             params.ftokens,
@@ -419,13 +410,12 @@ mod tests_background {
     fn create_test_net_conf() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "Test Network".to_string(),
             chain: "TEST".to_string(),
             short_name: String::new(),
             rpc: vec!["https://test.network".to_string()],
             features: vec![155, 1559],
-            chain_id: 1,
             slip_44: slip44::ZILLIQA,
             ens: None,
             explorers: vec![Explorer {

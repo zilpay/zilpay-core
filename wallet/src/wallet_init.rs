@@ -72,7 +72,9 @@ impl WalletInit for Wallet {
             params.pub_key,
             params.account_name,
             params.wallet_index,
-            params.chain_hash,
+            params.chain_config.hash(),
+            params.chain_config.chain_id(),
+            params.chain_config.slip_44,
         )?;
 
         let accounts: Vec<account::Account> = vec![account];
@@ -84,7 +86,7 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
-            default_chain_hash: params.chain_hash,
+            default_chain_hash: params.chain_config.hash(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -131,7 +133,9 @@ impl WalletInit for Wallet {
             params.sk,
             params.wallet_name.to_owned(),
             cipher_entropy_key,
-            params.chain_hash,
+            params.chain_config.hash(),
+            params.chain_config.chain_id(),
+            params.chain_config.slip_44,
         )?;
         let accounts: Vec<account::Account> = vec![account];
         let data = WalletData {
@@ -142,7 +146,7 @@ impl WalletInit for Wallet {
             accounts,
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0, // for sk account we have only one account.
-            default_chain_hash: params.chain_hash,
+            default_chain_hash: params.chain_config.hash(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -184,8 +188,14 @@ impl WalletInit for Wallet {
 
         for index in params.indexes {
             let (bip49, name) = index;
-            let hd_account =
-                Account::from_hd(&mnemonic_seed, name.to_owned(), bip49, params.chain_hash)?;
+            let hd_account = Account::from_hd(
+                &mnemonic_seed,
+                name.to_owned(),
+                bip49,
+                params.chain_config.hash(),
+                params.chain_config.chain_id(),
+                params.chain_config.slip_44,
+            )?;
 
             accounts.push(hd_account);
         }
@@ -201,7 +211,7 @@ impl WalletInit for Wallet {
                 !params.passphrase.is_empty(),
             )),
             selected_account: 0,
-            default_chain_hash: params.chain_hash,
+            default_chain_hash: params.chain_config.hash(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -229,6 +239,7 @@ mod tests {
     use errors::wallet::WalletErrors;
     use proto::keypair::KeyPair;
     use rand::Rng;
+    use rpc::network_config::ChainConfig;
     use storage::LocalStorage;
 
     use crate::{
@@ -271,15 +282,16 @@ mod tests {
             storage: Arc::clone(&storage),
             settings: Default::default(),
         };
+        let chain_config = ChainConfig::default();
         let wallet = Wallet::from_bip39_words(
             Bip39Params {
+                chain_config: &chain_config,
                 proof,
                 mnemonic: &mnemonic,
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "Wllaet name".to_string(),
                 biometric_type: AuthMethod::Biometric,
-                chain_hash: 0,
             },
             wallet_config,
             vec![],
@@ -324,13 +336,14 @@ mod tests {
             storage: Arc::clone(&storage),
             settings: Default::default(),
         };
+        let chain_config = ChainConfig::default();
         let wallet = Wallet::from_sk(
             SecretKeyParams {
                 sk,
                 proof,
                 wallet_name: name.to_string(),
                 biometric_type: AuthMethod::None,
-                chain_hash: 0,
+                chain_config: &chain_config,
             },
             wallet_config,
             vec![],

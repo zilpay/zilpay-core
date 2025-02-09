@@ -107,13 +107,12 @@ mod tests {
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "Zilliqa".to_string(),
             chain: "ZIL".to_string(),
             short_name: String::new(),
             rpc: vec!["https://api.zilliqa.com".to_string()],
             features: vec![155],
-            chain_id: 1,
             slip_44: 313,
             ens: None,
             explorers: vec![Explorer {
@@ -128,7 +127,7 @@ mod tests {
 
     fn create_eth_config() -> ChainConfig {
         ChainConfig {
-            chain_ids: None,
+            chain_ids: [11155111, 0],
             testnet: None,
             name: "Ethereum Mainnet".to_string(),
             chain: "ETH".to_string(),
@@ -142,7 +141,6 @@ mod tests {
                 "https://rpc-sepolia.rockx.com".to_string(),
             ],
             features: vec![155, 1559],
-            chain_id: 11155111,
             slip_44: 60,
             ens: None,
             explorers: vec![],
@@ -153,13 +151,12 @@ mod tests {
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [56, 0],
             name: "Binance Smart Chain".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
             rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
             features: vec![155, 1559],
-            chain_id: 56,
             slip_44: 60,
             ens: None,
             explorers: vec![Explorer {

@@ -14,7 +14,7 @@ pub struct Explorer {
     pub standard: u16,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
 pub struct ChainConfig {
     pub name: String,
     pub chain: String,

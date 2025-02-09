@@ -54,7 +54,7 @@ impl TokensManagement for Background {
             value: Some(amount),
             nonce: Some(0),
             gas: None,
-            chain_id: Some(chain.config.chain_id),
+            chain_id: Some(chain.config.chain_id()),
             ..Default::default()
         };
         let erc20_transfer = || -> Result<ETHTransactionRequest> {
@@ -65,7 +65,7 @@ impl TokensManagement for Background {
                 value: Some(U256::ZERO),
                 nonce: Some(0),
                 gas: None,
-                chain_id: Some(chain.config.chain_id),
+                chain_id: Some(chain.config.chain_id()),
                 input: TransactionInput::new(transfer_data.into()),
                 ..Default::default()
             };
@@ -99,7 +99,7 @@ impl TokensManagement for Background {
                 let transfer_request = if token.native {
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: chain.config.chain_id as u16,
+                        chain_id: chain.config.chain_id() as u16,
                         gas_price: 2000000000,
                         gas_limit: 50,
                         to_addr: to,
@@ -122,7 +122,7 @@ impl TokensManagement for Background {
                     .to_string();
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: chain.config.chain_id as u16,
+                        chain_id: chain.config.chain_id() as u16,
                         gas_price: 2000000000,
                         gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
                         to_addr: to,
@@ -214,13 +214,12 @@ mod tests_background_tokens {
     fn gen_net_conf() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [56, 0],
             name: "Binance Smart Chain".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
             rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
             features: vec![155, 1559],
-            chain_id: 56,
             slip_44: slip44::ETHEREUM,
             ens: None,
             explorers: vec![Explorer {

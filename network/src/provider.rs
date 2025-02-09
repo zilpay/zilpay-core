@@ -507,13 +507,12 @@ mod tests_network {
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [56, 0],
             name: "Binance-smart-chain".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
             rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
             features: vec![155],
-            chain_id: 56,
             slip_44: 60,
             ens: None,
             explorers: vec![Explorer {
@@ -529,13 +528,12 @@ mod tests_network {
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "Zilliqa".to_string(),
             chain: "ZIL".to_string(),
             short_name: String::new(),
             rpc: vec!["https://api.zilliqa.com".to_string()],
             features: vec![SCILLA_EIP],
-            chain_id: 1,
             slip_44: 313,
             ens: None,
             explorers: vec![],
@@ -674,7 +672,7 @@ mod tests_network {
 
         assert_eq!(providers.len(), loaded_providers.len());
         assert!(loaded_providers.iter().any(|p| p.config.name == "Zilliqa"));
-        assert!(loaded_providers.iter().any(|p| p.config.chain_id == 1));
+        assert!(loaded_providers.iter().any(|p| p.config.chain_id() == 1));
     }
 
     #[test]
@@ -685,17 +683,17 @@ mod tests_network {
         let configs = [
             ChainConfig {
                 name: "Test Network 1".to_string(),
-                chain_id: 1,
+                chain_ids: [1, 0],
                 ..base_config.clone()
             },
             ChainConfig {
                 name: "Test Network 2".to_string(),
-                chain_id: 2,
+                chain_ids: [2, 0],
                 ..base_config.clone()
             },
             ChainConfig {
                 name: "Test Network 3".to_string(),
-                chain_id: 3,
+                chain_ids: [3, 0],
                 ..base_config.clone()
             },
         ];
@@ -724,7 +722,7 @@ mod tests_network {
 
         let mut providers = vec![NetworkProvider::new(ChainConfig {
             name: "Initial Network".to_string(),
-            chain_id: 1,
+            chain_ids: [1, 0],
             ..base_config.clone()
         })];
 
@@ -732,7 +730,7 @@ mod tests_network {
 
         providers.push(NetworkProvider::new(ChainConfig {
             name: "New Network".to_string(),
-            chain_id: 2,
+            chain_ids: [2, 0],
             ..base_config.clone()
         }));
 
@@ -808,7 +806,7 @@ mod tests_network {
             max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: Some(0),
             gas: None,
-            chain_id: Some(provider.config.chain_id),
+            chain_id: Some(provider.config.chain_id()),
             ..Default::default()
         };
         let tx_request = TransactionRequest::Ethereum((payment_request, Default::default()));
@@ -836,7 +834,7 @@ mod tests_network {
             max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: Some(0),
             gas: None,
-            chain_id: Some(provider.config.chain_id),
+            chain_id: Some(provider.config.chain_id()),
             input: TransactionInput::new(transfer_data.into()),
             ..Default::default()
         };
@@ -872,7 +870,7 @@ mod tests_network {
             max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: Some(0),
             gas: None,
-            chain_id: Some(provider.config.chain_id),
+            chain_id: Some(provider.config.chain_id()),
             input: TransactionInput::new(transfer_data.into()),
             ..Default::default()
         };
@@ -887,13 +885,12 @@ mod tests_network {
     async fn test_get_fee_history_eth() {
         let net_conf = ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [56, 0],
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
             rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
             features: vec![155, 1559, 4844],
-            chain_id: 56,
             slip_44: 60,
             ens: None,
             explorers: vec![],
@@ -941,13 +938,12 @@ mod tests_network {
     async fn test_calc_fee_eth_batch() {
         let net_conf = ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [56, 0],
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
             rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
             features: vec![155, 1559, 4844],
-            chain_id: 56,
             slip_44: 60,
             ens: None,
             explorers: vec![],
@@ -969,7 +965,7 @@ mod tests_network {
             max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: Some(0),
             gas: None,
-            chain_id: Some(provider.config.chain_id),
+            chain_id: Some(provider.config.chain_id()),
             input: TransactionInput::new(transfer_data.into()),
             ..Default::default()
         };
@@ -992,13 +988,12 @@ mod tests_network {
     async fn test_get_tx_params_payment() {
         let net_conf = ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [1, 0],
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
             rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
             features: vec![155, 1559, 4844],
-            chain_id: 1,
             slip_44: 60,
             ens: None,
             explorers: vec![],
@@ -1013,7 +1008,7 @@ mod tests_network {
             from: Some(from.to_alloy_addr().into()),
             to: Some(recipient.to_alloy_addr().into()),
             value: Some(amount),
-            chain_id: Some(provider.config.chain_id),
+            chain_id: Some(provider.config.chain_id()),
             gas: None,
             nonce: None,
             transaction_type: Some(0x02),
@@ -1046,13 +1041,12 @@ mod tests_network {
     async fn test_calc_fee_bsc_batch() {
         let net_conf = ChainConfig {
             testnet: None,
-            chain_ids: None,
+            chain_ids: [97, 0],
             name: "Smart chain Testnet".to_string(),
             chain: "BNB".to_string(),
             short_name: String::new(),
             rpc: vec!["https://data-seed-prebsc-1-s1.binance.org:8545/".to_string()],
             features: vec![155, 1559, 4844],
-            chain_id: 97,
             slip_44: 60,
             ens: None,
             explorers: vec![],
@@ -1070,7 +1064,7 @@ mod tests_network {
             max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: Some(0),
             gas: None,
-            chain_id: Some(provider.config.chain_id),
+            chain_id: Some(provider.config.chain_id()),
             ..Default::default()
         };
         let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
@@ -1079,8 +1073,6 @@ mod tests_network {
             .estimate_params_batch(&tx_request, &from, 4, None)
             .await
             .unwrap();
-
-        dbg!(&fee);
 
         assert_ne!(fee.gas_price, U256::from(0));
         assert_eq!(fee.nonce, 0);
@@ -1098,7 +1090,7 @@ mod tests_network {
         let to = Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap();
         let from = Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap();
         let zil_tx = ZILTransactionRequest {
-            chain_id: provider.config.chain_id as u16,
+            chain_id: provider.config.chain_id() as u16,
             nonce: 1,
             gas_price: 2000 * 10u128.pow(6),
             gas_limit: 100000,
