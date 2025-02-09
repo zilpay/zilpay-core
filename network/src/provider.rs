@@ -11,7 +11,6 @@ use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{build_tx_request, process_tx_response};
 use crate::Result;
 use alloy::primitives::U256;
-use config::sha::SHA256_SIZE;
 use config::storage::NETWORK_DB_KEY;
 use crypto::bip49::DerivationPath;
 use errors::crypto::SignatureError;
@@ -27,7 +26,7 @@ use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
 use serde_json::{json, Value};
 use storage::LocalStorage;
-use token::ft::FToken;
+use token::ft::{FToken, FtokenBalances};
 use token::ft_parse::{
     build_token_requests, process_eth_balance_response, process_eth_metadata_response,
     process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
@@ -358,10 +357,9 @@ impl NetworkProvider {
 
                     if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
                     {
-                        let mut bytes = [0; SHA256_SIZE];
-                        bytes[..16].copy_from_slice(&balance.to_be_bytes());
-
-                        tokens[*token_idx].balances.insert(account_index, bytes);
+                        tokens[*token_idx]
+                            .balances
+                            .insert(account_index, FtokenBalances::U128(balance));
                     }
                 }
                 Address::Secp256k1Keccak256(_) => {
@@ -371,7 +369,7 @@ impl NetworkProvider {
                     {
                         tokens[*token_idx]
                             .balances
-                            .insert(account_index, balance.to_be_bytes());
+                            .insert(account_index, FtokenBalances::U256(balance));
                     }
                 }
             }
@@ -402,7 +400,7 @@ impl NetworkProvider {
                         .ok_or(TokenError::InvalidContractInit)?,
                 )?;
 
-                let mut balances: HashMap<usize, [u8; SHA256_SIZE]> = HashMap::new();
+                let mut balances: HashMap<usize, FtokenBalances> = HashMap::new();
 
                 for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
                     if let RequestType::Balance(account) = req_type {
@@ -411,9 +409,7 @@ impl NetworkProvider {
                         if let Some(account_index) =
                             accounts.iter().position(|&addr| addr == *account)
                         {
-                            let mut bytes = [0; SHA256_SIZE];
-                            bytes[..16].copy_from_slice(&balance.to_be_bytes());
-                            balances.insert(account_index, bytes);
+                            balances.insert(account_index, FtokenBalances::U128(balance));
                         }
                     }
                 }
@@ -453,7 +449,7 @@ impl NetworkProvider {
                 .parse()
                 .map_err(|_| TokenError::InvalidContractInit)?;
 
-                let mut balances: HashMap<usize, [u8; SHA256_SIZE]> = HashMap::new();
+                let mut balances: HashMap<usize, FtokenBalances> = HashMap::new();
                 for ((_, req_type), response) in requests.iter().zip(responses.iter()).skip(3) {
                     if let RequestType::Balance(account) = req_type {
                         let balance = process_eth_balance_response(response)?;
@@ -461,7 +457,7 @@ impl NetworkProvider {
                         if let Some(account_index) =
                             accounts.iter().position(|&addr| addr == *account)
                         {
-                            balances.insert(account_index, balance.to_be_bytes());
+                            balances.insert(account_index, FtokenBalances::U256(balance));
                         }
                     }
                 }
@@ -562,8 +558,8 @@ mod tests_network {
         ];
         let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
-        assert!(U256::from_be_bytes(*ftoken.balances.get(&0).unwrap()) > U256::from(0));
-        assert!(U256::from_be_bytes(*ftoken.balances.get(&1).unwrap()) == U256::from(0));
+        assert!(ftoken.balances.get(&0).unwrap().get_num() > U256::from(0));
+        assert!(ftoken.balances.get(&1).unwrap().get_num() == U256::from(0));
 
         assert_eq!(&ftoken.name, "Tether USD");
         assert_eq!(&ftoken.symbol, "USDT");
@@ -583,8 +579,8 @@ mod tests_network {
         ];
         let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
-        assert!(U256::from_be_bytes(*ftoken.balances.get(&0).unwrap()) > U256::from(0));
-        assert!(U256::from_be_bytes(*ftoken.balances.get(&1).unwrap()) == U256::from(0));
+        assert!(ftoken.balances.get(&0).unwrap().get_num() > U256::from(0));
+        assert!(ftoken.balances.get(&1).unwrap().get_num() == U256::from(0));
 
         assert_eq!(&ftoken.name, "Zilliqa-bridged USDT token");
         assert_eq!(&ftoken.symbol, "zUSDT");
@@ -645,20 +641,20 @@ mod tests_network {
             .await
             .unwrap();
 
-        assert!(U256::from_be_bytes(*tokens[0].balances.get(&0).unwrap()) > U256::from(0));
-        assert!(U256::from_be_bytes(*tokens[0].balances.get(&1).unwrap()) > U256::from(0));
-        assert!(U256::from_be_bytes(*tokens[0].balances.get(&2).unwrap()) > U256::from(0));
+        assert!(tokens[0].balances.get(&0).unwrap().get_num() > U256::from(0));
+        assert!(tokens[0].balances.get(&1).unwrap().get_num() > U256::from(0));
+        assert!(tokens[0].balances.get(&2).unwrap().get_num() > U256::from(0));
 
-        assert!(U256::from_be_bytes(*tokens[1].balances.get(&0).unwrap()) > U256::from(0));
-        assert!(U256::from_be_bytes(*tokens[1].balances.get(&1).unwrap()) > U256::from(0));
-        assert!(U256::from_be_bytes(*tokens[1].balances.get(&2).unwrap()) == U256::from(0));
+        assert!(tokens[1].balances.get(&0).unwrap().get_num() > U256::from(0));
+        assert!(tokens[1].balances.get(&1).unwrap().get_num() > U256::from(0));
+        assert!(tokens[1].balances.get(&2).unwrap().get_num() == U256::from(0));
 
-        assert!(U256::from_be_bytes(*tokens[2].balances.get(&0).unwrap()) > U256::from(0));
-        assert!(U256::from_be_bytes(*tokens[2].balances.get(&2).unwrap()) == U256::from(0));
+        assert!(tokens[2].balances.get(&0).unwrap().get_num() > U256::from(0));
+        assert!(tokens[2].balances.get(&2).unwrap().get_num() == U256::from(0));
 
-        assert!(U256::from_be_bytes(*tokens[3].balances.get(&0).unwrap()) == U256::from(0));
-        assert!(U256::from_be_bytes(*tokens[3].balances.get(&1).unwrap()) == U256::from(0));
-        assert!(U256::from_be_bytes(*tokens[3].balances.get(&2).unwrap()) == U256::from(0));
+        assert!(tokens[3].balances.get(&0).unwrap().get_num() == U256::from(0));
+        assert!(tokens[3].balances.get(&1).unwrap().get_num() == U256::from(0));
+        assert!(tokens[3].balances.get(&2).unwrap().get_num() == U256::from(0));
     }
 
     #[test]

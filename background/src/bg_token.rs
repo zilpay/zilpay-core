@@ -298,10 +298,7 @@ mod tests_background_tokens {
         assert!(!meta.native);
 
         assert!(meta.balances.contains_key(&0));
-        assert_eq!(
-            U256::from_be_bytes(*meta.balances.get(&0).unwrap()).to::<usize>(),
-            0
-        );
+        assert_eq!(meta.balances.get(&0).unwrap().get_num().to::<usize>(), 0);
 
         bg.wallets.first_mut().unwrap().add_ftoken(meta).unwrap();
 

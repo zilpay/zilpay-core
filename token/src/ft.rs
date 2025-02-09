@@ -1,8 +1,26 @@
-use config::{address::ADDR_LEN, sha::SHA256_SIZE};
+use alloy::primitives::U256;
+use config::address::ADDR_LEN;
 use errors::wallet::WalletErrors;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum FtokenBalances {
+    U64(u64),
+    U128(u128),
+    U256(U256),
+}
+
+impl FtokenBalances {
+    pub fn get_num(&self) -> U256 {
+        match &self {
+            Self::U64(v) => U256::from(*v),
+            Self::U128(v) => U256::from(*v),
+            Self::U256(v) => *v,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FToken {
@@ -11,7 +29,7 @@ pub struct FToken {
     pub decimals: u8,
     pub addr: Address,
     pub logo: Option<String>,
-    pub balances: HashMap<usize, [u8; SHA256_SIZE]>,
+    pub balances: HashMap<usize, FtokenBalances>,
     pub default: bool,
     pub native: bool,
     pub chain_hash: u64,
