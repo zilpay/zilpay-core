@@ -143,10 +143,10 @@ impl TransactionRequest {
                 if let Some(tx_kind) = tx.to {
                     match tx_kind {
                         TxKind::Call(addr) => Address::from_eth_address(&addr.to_string()).unwrap(),
-                        TxKind::Create => Address::Secp256k1Keccak256Ethereum(Address::ZERO),
+                        TxKind::Create => Address::Secp256k1Keccak256(Address::ZERO),
                     }
                 } else {
-                    Address::Secp256k1Keccak256Ethereum(Address::ZERO)
+                    Address::Secp256k1Keccak256(Address::ZERO)
                 }
             }
         }

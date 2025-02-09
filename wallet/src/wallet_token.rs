@@ -86,7 +86,7 @@ mod tests_wallet_tokens {
             name: "Binance Smart Chain".to_string(),
             symbol: "BSC".to_string(),
             decimals: 18,
-            addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+            addr: Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
             logo: None,
             balances: HashMap::new(),
             native: true,

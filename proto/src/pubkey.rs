@@ -64,8 +64,8 @@ impl PubKey {
         let buf = self.get_bytes_addr()?;
 
         match self {
-            PubKey::Secp256k1Keccak256Ethereum(_) => Ok(Address::Secp256k1Keccak256Ethereum(buf)),
-            PubKey::Secp256k1Sha256Zilliqa(_) => Ok(Address::Secp256k1Sha256Zilliqa(buf)),
+            PubKey::Secp256k1Keccak256Ethereum(_) => Ok(Address::Secp256k1Keccak256(buf)),
+            PubKey::Secp256k1Sha256Zilliqa(_) => Ok(Address::Secp256k1Sha256(buf)),
             PubKey::Secp256k1Bitcoin(_) => Err(PubKeyError::NotImpl),
             PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
         }

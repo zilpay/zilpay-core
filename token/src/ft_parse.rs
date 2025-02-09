@@ -118,16 +118,16 @@ pub fn build_token_requests<'a>(
     native: bool,
 ) -> RequestResult<'a> {
     let size = match contract {
-        Address::Secp256k1Sha256Zilliqa(_) => 1 + accounts.len(),
-        Address::Secp256k1Keccak256Ethereum(_) => 3 + accounts.len(),
+        Address::Secp256k1Sha256(_) => 1 + accounts.len(),
+        Address::Secp256k1Keccak256(_) => 3 + accounts.len(),
     };
     let mut requests = Vec::with_capacity(size);
 
     match contract {
-        Address::Secp256k1Sha256Zilliqa(_) => {
+        Address::Secp256k1Sha256(_) => {
             build_zil_requests(contract, accounts, native, &mut requests)?;
         }
-        Address::Secp256k1Keccak256Ethereum(_) => {
+        Address::Secp256k1Keccak256(_) => {
             build_eth_requests(contract, accounts, native, &mut requests)?;
         }
     }
@@ -156,11 +156,11 @@ fn build_zil_requests<'a>(
     // Build balance requests
     for account in accounts {
         let base16_account = match &account {
-            Address::Secp256k1Sha256Zilliqa(_) => &account
+            Address::Secp256k1Sha256(_) => &account
                 .get_zil_check_sum_addr()
                 .map_err(TokenError::InvalidContractAddress)?
                 .to_lowercase(),
-            Address::Secp256k1Keccak256Ethereum(_) => &account
+            Address::Secp256k1Keccak256(_) => &account
                 .to_eth_checksummed()
                 .map_err(TokenError::InvalidContractAddress)?,
         };
@@ -371,7 +371,7 @@ mod ftoken_tests {
     use serde_json::json;
 
     fn create_mock_eth_address() -> Address {
-        Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN])
+        Address::Secp256k1Keccak256([0u8; ADDR_LEN])
     }
 
     fn create_mock_zil_address() -> Address {
@@ -629,7 +629,7 @@ mod ftoken_tests {
 
     #[test]
     fn test_generate_transfer_input() {
-        let to_address = Address::Secp256k1Keccak256Ethereum([1u8; ADDR_LEN]);
+        let to_address = Address::Secp256k1Keccak256([1u8; ADDR_LEN]);
         let amount = U256::from(1000000000000000000u64);
         let result = generate_erc20_transfer_data(&to_address, amount);
 

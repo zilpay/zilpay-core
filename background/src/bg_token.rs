@@ -82,8 +82,8 @@ impl TokensManagement for Background {
             token_info: Some((amount, token.decimals, token.symbol.clone())),
         };
 
-        match token.addr {
-            Address::Secp256k1Keccak256Ethereum(_) => {
+        match from {
+            Address::Secp256k1Keccak256(_) => {
                 let transfer_request = if token.native {
                     erc20_payment()
                 } else {
@@ -94,7 +94,7 @@ impl TokensManagement for Background {
 
                 Ok(txn)
             }
-            Address::Secp256k1Sha256Zilliqa(_) => {
+            Address::Secp256k1Sha256(_) => {
                 let transfer_request = if token.native {
                     ZILTransactionRequest {
                         nonce: 0,
@@ -238,7 +238,7 @@ mod tests_background_tokens {
             name: "Binance Smart Chain".to_string(),
             symbol: "BSC".to_string(),
             decimals: 18,
-            addr: Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+            addr: Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
             logo: None,
             balances: HashMap::new(),
             native: true,

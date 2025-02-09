@@ -135,7 +135,7 @@ mod tests_background_transactions {
             name: "BNB Smart Chain Testnet".to_string(),
             symbol: "tBNB".to_string(),
             decimals: 18,
-            addr: Address::Secp256k1Sha256Zilliqa(Address::ZERO),
+            addr: Address::Secp256k1Sha256(Address::ZERO),
             logo: None,
             balances: Default::default(),
             default: true,

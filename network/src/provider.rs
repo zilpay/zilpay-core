@@ -321,8 +321,8 @@ impl NetworkProvider {
         accounts: &[&Address],
     ) -> Result<()> {
         let total_requests = tokens.iter().fold(0, |acc, token| match token.addr {
-            Address::Secp256k1Sha256Zilliqa(_) => acc + accounts.len(),
-            Address::Secp256k1Keccak256Ethereum(_) => acc + accounts.len(),
+            Address::Secp256k1Sha256(_) => acc + accounts.len(),
+            Address::Secp256k1Keccak256(_) => acc + accounts.len(),
         });
 
         if total_requests == 0 {
@@ -351,7 +351,7 @@ impl NetworkProvider {
 
         for ((token_idx, account), response) in request_mapping.iter().zip(responses.iter()) {
             match tokens[*token_idx].addr {
-                Address::Secp256k1Sha256Zilliqa(_) => {
+                Address::Secp256k1Sha256(_) => {
                     let balance =
                         process_zil_balance_response(response, account, tokens[*token_idx].native);
 
@@ -360,7 +360,7 @@ impl NetworkProvider {
                         tokens[*token_idx].balances.insert(account_index, balance);
                     }
                 }
-                Address::Secp256k1Keccak256Ethereum(_) => {
+                Address::Secp256k1Keccak256(_) => {
                     let balance = process_eth_balance_response(response)?;
 
                     if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
@@ -388,7 +388,7 @@ impl NetworkProvider {
             .map_err(NetworkErrors::Request)?;
 
         match contract {
-            Address::Secp256k1Sha256Zilliqa(_) => {
+            Address::Secp256k1Sha256(_) => {
                 let (name, symbol, decimals) = process_zil_metadata_response(
                     responses[0]
                         .result
@@ -422,7 +422,7 @@ impl NetworkProvider {
                     chain_hash: self.config.hash(),
                 })
             }
-            Address::Secp256k1Keccak256Ethereum(_) => {
+            Address::Secp256k1Keccak256(_) => {
                 let mut metadata_iter = responses.iter();
                 let name = process_eth_metadata_response(
                     metadata_iter
@@ -548,7 +548,7 @@ mod tests_network {
             Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
         let account = [
             &Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap(),
-            &Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+            &Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
         ];
         let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
@@ -569,7 +569,7 @@ mod tests_network {
             Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy").unwrap();
         let account = [
             &Address::from_zil_bech32("zil1gkwt95a67lnpe774lcmz72y6ay4jh2asmmjw6u").unwrap(),
-            &Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
+            &Address::Secp256k1Sha256([0u8; ADDR_LEN]),
         ];
         let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
@@ -752,7 +752,7 @@ mod tests_network {
         let account = [
             &Address::from_eth_address("0x2d09c57cB8EAf970dEEaf30546ec4dc3781c63cf").unwrap(),
             &Address::from_eth_address("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8").unwrap(),
-            &Address::Secp256k1Keccak256Ethereum([0u8; ADDR_LEN]),
+            &Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
         ];
 
         let nonces = provider.fetch_nonce(&account).await.unwrap();
@@ -770,7 +770,7 @@ mod tests_network {
         let account = [
             &Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap(),
             &Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap(),
-            &Address::Secp256k1Sha256Zilliqa([0u8; ADDR_LEN]),
+            &Address::Secp256k1Sha256([0u8; ADDR_LEN]),
         ];
 
         let nonces = provider.fetch_nonce(&account).await.unwrap();

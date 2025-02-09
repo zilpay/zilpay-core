@@ -1,8 +1,8 @@
 use alloy::primitives::U256;
 use bech32::{Bech32, Hrp};
-use config::address::{ADDR_LEN, HRP};
-use sha2::{Digest, Sha256};
+use config::address::{ADDR_LEN, HRP_ZIL};
 use errors::address::AddressError;
+use sha2::{Digest, Sha256};
 
 type Result<T> = std::result::Result<T, AddressError>;
 
@@ -54,15 +54,15 @@ pub fn from_zil_bech32_address(address: &str) -> Result<[u8; ADDR_LEN]> {
     let (hrp, bytes) = bech32::decode(address).map_err(|_| AddressError::InvalidBech32Len)?;
     let bytes: [u8; ADDR_LEN] = bytes.try_into().or(Err(AddressError::InvalidBech32Len))?;
 
-    if hrp.to_string() != HRP {
+    if hrp.to_string() != HRP_ZIL {
         return Err(AddressError::InvalidHRP);
     }
 
     Ok(bytes)
 }
 
-pub fn to_zil_bech32(value: &[u8; ADDR_LEN]) -> Result<String> {
-    let hrp = Hrp::parse(HRP).map_err(|_| AddressError::InvalidHRP)?;
+pub fn to_bech32(hrp: &str, value: &[u8; ADDR_LEN]) -> Result<String> {
+    let hrp = Hrp::parse(hrp).map_err(|_| AddressError::InvalidHRP)?;
 
     bech32::encode::<Bech32>(hrp, value).map_err(|_| AddressError::InvalidBech32Len)
 }
@@ -89,7 +89,7 @@ mod tests {
         let bech32 = "zil1w7f636xqn5vf6n2zrnjmckekw3jkckkpyrd6z8";
         let addr = from_zil_base16("7793a8e8c09d189d4d421ce5bc5b3674656c5ac1").unwrap();
 
-        assert_eq!(bech32, to_zil_bech32(&addr).unwrap());
+        assert_eq!(bech32, to_bech32(HRP_ZIL, &addr).unwrap());
     }
 
     #[test]
@@ -100,7 +100,7 @@ mod tests {
         let addr = from_zil_pub_key(&pubkey).unwrap();
 
         assert_eq!(
-            to_zil_bech32(&addr).unwrap(),
+            to_bech32(HRP_ZIL, &addr).unwrap(),
             "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
         );
     }

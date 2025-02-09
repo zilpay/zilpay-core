@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 
 pub fn build_nonce_request(address: &Address) -> Value {
     match address {
-        Address::Secp256k1Sha256Zilliqa(_) => {
+        Address::Secp256k1Sha256(_) => {
             let base16_address = address
                 .get_zil_check_sum_addr()
                 .unwrap_or_default() // TODO: maybe never call.
@@ -21,7 +21,7 @@ pub fn build_nonce_request(address: &Address) -> Value {
                 ZilMethods::GetBalance,
             )
         }
-        Address::Secp256k1Keccak256Ethereum(_) => {
+        Address::Secp256k1Keccak256(_) => {
             let eth_address = address.to_eth_checksummed().unwrap_or_default();
 
             RpcProvider::<ChainConfig>::build_payload(
@@ -34,13 +34,13 @@ pub fn build_nonce_request(address: &Address) -> Value {
 
 pub fn process_nonce_response(response: &ResultRes<Value>, address_type: &Address) -> Result<u64> {
     match address_type {
-        Address::Secp256k1Sha256Zilliqa(_) => Ok(response
+        Address::Secp256k1Sha256(_) => Ok(response
             .result
             .as_ref()
             .and_then(|v| v.get("nonce"))
             .and_then(|v| v.as_u64())
             .unwrap_or_default()),
-        Address::Secp256k1Keccak256Ethereum(_) => Ok(response
+        Address::Secp256k1Keccak256(_) => Ok(response
             .result
             .as_ref()
             .and_then(|v| v.as_str())

@@ -1,23 +1,22 @@
 use crate::{
     pubkey::PubKey,
     zil_address::{
-        from_zil_base16, from_zil_bech32_address, from_zil_pub_key, to_checksum_address,
-        to_zil_bech32,
+        from_zil_base16, from_zil_bech32_address, from_zil_pub_key, to_bech32, to_checksum_address,
     },
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
-use config::address::{ADDR_LEN, HRP};
+use config::address::{ADDR_LEN, HRP_ZIL};
 use errors::address::AddressError;
 
 type Result<T> = std::result::Result<T, AddressError>;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Address {
-    Secp256k1Sha256Zilliqa([u8; ADDR_LEN]),     // ZILLIQA
-    Secp256k1Keccak256Ethereum([u8; ADDR_LEN]), // Ethereum
+    Secp256k1Sha256([u8; ADDR_LEN]),    // ZILLIQA
+    Secp256k1Keccak256([u8; ADDR_LEN]), // Ethereum
 }
 
 impl Address {
@@ -27,18 +26,18 @@ impl Address {
         let addr = from_zil_base16(addr.trim_start_matches("0x"))
             .ok_or(AddressError::InvalidBase16Address)?;
 
-        Ok(Self::Secp256k1Sha256Zilliqa(addr))
+        Ok(Self::Secp256k1Sha256(addr))
     }
 
     pub fn auto_format(&self) -> String {
         match self {
-            Address::Secp256k1Sha256Zilliqa(_) => self.get_bech32().unwrap_or_default(),
-            Address::Secp256k1Keccak256Ethereum(_) => self.to_eth_checksummed().unwrap_or_default(),
+            Address::Secp256k1Sha256(_) => self.get_zil_bech32().unwrap_or_default(),
+            Address::Secp256k1Keccak256(_) => self.to_eth_checksummed().unwrap_or_default(),
         }
     }
 
     pub fn from_str_hex(addr: &str) -> Result<Self> {
-        if addr.starts_with(HRP) {
+        if addr.starts_with(HRP_ZIL) {
             return Self::from_zil_bech32(addr);
         }
 
@@ -62,7 +61,7 @@ impl Address {
 
     pub fn from_zil_bech32(addr: &str) -> Result<Self> {
         let addr = from_zil_bech32_address(addr)?;
-        Ok(Self::Secp256k1Sha256Zilliqa(addr))
+        Ok(Self::Secp256k1Sha256(addr))
     }
 
     pub fn from_eth_address(addr: &str) -> Result<Self> {
@@ -73,7 +72,7 @@ impl Address {
             .try_into()
             .map_err(|_| AddressError::InvalidETHAddress(addr.to_string()))?;
 
-        Ok(Self::Secp256k1Keccak256Ethereum(bytes))
+        Ok(Self::Secp256k1Keccak256(bytes))
     }
 
     pub fn to_alloy_addr(&self) -> alloy::primitives::Address {
@@ -92,14 +91,14 @@ impl Address {
             PubKey::Secp256k1Sha256Zilliqa(pk) => {
                 let addr = from_zil_pub_key(pk)?;
 
-                Ok(Self::Secp256k1Sha256Zilliqa(addr))
+                Ok(Self::Secp256k1Sha256(addr))
             }
             PubKey::Secp256k1Keccak256Ethereum(pk) => {
                 let k256_pubkey = alloy::signers::k256::ecdsa::VerifyingKey::from_sec1_bytes(pk)
                     .map_err(|e| AddressError::InvalidVerifyingKey(e.to_string()))?;
                 let addr = alloy::primitives::Address::from_public_key(&k256_pubkey);
 
-                Ok(Self::Secp256k1Keccak256Ethereum(addr.into()))
+                Ok(Self::Secp256k1Keccak256(addr.into()))
             }
             PubKey::Secp256k1Bitcoin(_) => Err(AddressError::NotImpl),
             PubKey::Ed25519Solana(_) => Err(AddressError::NotImpl),
@@ -109,8 +108,8 @@ impl Address {
     pub fn to_bytes(&self) -> [u8; ADDR_LEN + 1] {
         let mut result = [0u8; ADDR_LEN + 1];
         result[0] = match self {
-            Address::Secp256k1Sha256Zilliqa(_) => 0,
-            Address::Secp256k1Keccak256Ethereum(_) => 1,
+            Address::Secp256k1Sha256(_) => 0,
+            Address::Secp256k1Keccak256(_) => 1,
         };
         result[1..].copy_from_slice(self.as_ref());
         result
@@ -118,21 +117,20 @@ impl Address {
 
     pub fn addr_bytes(&self) -> &[u8; ADDR_LEN] {
         match self {
-            Address::Secp256k1Sha256Zilliqa(v) => v,
-            Address::Secp256k1Keccak256Ethereum(v) => v,
+            Address::Secp256k1Sha256(v) => v,
+            Address::Secp256k1Keccak256(v) => v,
         }
     }
 
-    pub fn get_bech32(&self) -> Result<String> {
-        match self {
-            Address::Secp256k1Sha256Zilliqa(v) => to_zil_bech32(v),
-            _ => Err(AddressError::InvalidSecp256k1Sha256Type),
-        }
+    pub fn get_zil_bech32(&self) -> Result<String> {
+        let value = self.addr_bytes();
+
+        to_bech32(HRP_ZIL, value)
     }
 
     pub fn get_zil_base16(&self) -> Result<String> {
         match self {
-            Address::Secp256k1Sha256Zilliqa(v) => {
+            Address::Secp256k1Sha256(v) => {
                 let addr = hex::encode(v);
 
                 Ok(addr)
@@ -143,7 +141,7 @@ impl Address {
 
     pub fn get_zil_check_sum_addr(&self) -> Result<String> {
         match self {
-            Address::Secp256k1Sha256Zilliqa(v) => {
+            Address::Secp256k1Sha256(v) => {
                 let addr = hex::encode(v);
 
                 to_checksum_address(&addr)
@@ -156,11 +154,11 @@ impl Address {
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Secp256k1Sha256Zilliqa(bytes) => {
+            Self::Secp256k1Sha256(bytes) => {
                 // unwrap shouldn't execpt
-                write!(f, "{}", to_zil_bech32(bytes).unwrap())
+                write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap())
             }
-            Self::Secp256k1Keccak256Ethereum(bytes) => {
+            Self::Secp256k1Keccak256(bytes) => {
                 let h = alloy::primitives::Address::from_slice(bytes);
                 // TODO: chain id.
                 write!(f, "{}", h.to_checksum(None))
@@ -172,11 +170,11 @@ impl std::fmt::Display for Address {
 impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Secp256k1Sha256Zilliqa(bytes) => {
+            Self::Secp256k1Sha256(bytes) => {
                 // unwrap shouldn't execpt
-                write!(f, "{}", to_zil_bech32(bytes).unwrap())
+                write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap())
             }
-            Self::Secp256k1Keccak256Ethereum(bytes) => {
+            Self::Secp256k1Keccak256(bytes) => {
                 let h = alloy::primitives::Address::from_slice(bytes);
                 // TODO: chain id.
                 write!(f, "{}", h.to_checksum(None))
@@ -188,8 +186,8 @@ impl std::fmt::Debug for Address {
 impl Hash for Address {
     fn hash<H: Hasher>(&self, state: &mut H) {
         match self {
-            Address::Secp256k1Sha256Zilliqa(_) => 0u8.hash(state),
-            Address::Secp256k1Keccak256Ethereum(_) => 1u8.hash(state),
+            Address::Secp256k1Sha256(_) => 0u8.hash(state),
+            Address::Secp256k1Keccak256(_) => 1u8.hash(state),
         }
 
         self.as_ref().hash(state);
@@ -227,8 +225,8 @@ impl FromStr for Address {
         let prefix = data[0];
 
         match prefix {
-            0 => Ok(Address::Secp256k1Sha256Zilliqa(bytes)),
-            1 => Ok(Address::Secp256k1Keccak256Ethereum(bytes)),
+            0 => Ok(Address::Secp256k1Sha256(bytes)),
+            1 => Ok(Address::Secp256k1Keccak256(bytes)),
             _ => Err(AddressError::InvalidKeyType),
         }
     }
@@ -240,8 +238,8 @@ impl From<[u8; ADDR_LEN + 1]> for Address {
         let key_data: [u8; ADDR_LEN] = bytes[1..].try_into().unwrap();
 
         match key_type {
-            0 => Address::Secp256k1Sha256Zilliqa(key_data),
-            1 => Address::Secp256k1Keccak256Ethereum(key_data),
+            0 => Address::Secp256k1Sha256(key_data),
+            1 => Address::Secp256k1Keccak256(key_data),
             _ => panic!("Invalid key type"),
         }
     }
@@ -261,8 +259,8 @@ impl TryFrom<&[u8]> for Address {
             .map_err(|_| AddressError::InvalidLength)?;
 
         match key_type {
-            0 => Ok(Address::Secp256k1Sha256Zilliqa(key_data)),
-            1 => Ok(Address::Secp256k1Keccak256Ethereum(key_data)),
+            0 => Ok(Address::Secp256k1Sha256(key_data)),
+            1 => Ok(Address::Secp256k1Keccak256(key_data)),
             _ => Err(AddressError::InvalidKeyType),
         }
     }
@@ -271,8 +269,8 @@ impl TryFrom<&[u8]> for Address {
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
         match self {
-            Address::Secp256k1Sha256Zilliqa(data) => data,
-            Address::Secp256k1Keccak256Ethereum(data) => data,
+            Address::Secp256k1Sha256(data) => data,
+            Address::Secp256k1Keccak256(data) => data,
         }
     }
 }
@@ -286,8 +284,8 @@ mod tests {
         let zil_data = [1u8; ADDR_LEN];
         let eth_data = [2u8; ADDR_LEN];
 
-        let zil_addr = Address::Secp256k1Sha256Zilliqa(zil_data);
-        let eth_addr = Address::Secp256k1Keccak256Ethereum(eth_data);
+        let zil_addr = Address::Secp256k1Sha256(zil_data);
+        let eth_addr = Address::Secp256k1Keccak256(eth_data);
 
         assert_eq!(zil_addr.as_ref(), &zil_data);
         assert_eq!(eth_addr.as_ref(), &eth_data);
@@ -298,8 +296,8 @@ mod tests {
         let zil_data = [1u8; ADDR_LEN];
         let eth_data = [2u8; ADDR_LEN];
 
-        let zil_addr = Address::Secp256k1Sha256Zilliqa(zil_data);
-        let eth_addr = Address::Secp256k1Keccak256Ethereum(eth_data);
+        let zil_addr = Address::Secp256k1Sha256(zil_data);
+        let eth_addr = Address::Secp256k1Keccak256(eth_data);
 
         let zil_bytes = zil_addr.to_bytes();
         let eth_bytes = eth_addr.to_bytes();
@@ -313,9 +311,9 @@ mod tests {
     #[test]
     fn test_display() {
         let zil_data = [1u8; ADDR_LEN];
-        let zil_addr = Address::Secp256k1Sha256Zilliqa(zil_data);
+        let zil_addr = Address::Secp256k1Sha256(zil_data);
 
-        let expected = to_zil_bech32(&zil_data).unwrap();
+        let expected = to_bech32(HRP_ZIL, &zil_data).unwrap();
         assert_eq!(zil_addr.to_string(), expected);
     }
 
@@ -326,7 +324,7 @@ mod tests {
         zil_bytes[1..].fill(1);
 
         let addr = Address::from(zil_bytes);
-        assert!(matches!(addr, Address::Secp256k1Sha256Zilliqa(_)));
+        assert!(matches!(addr, Address::Secp256k1Sha256(_)));
         assert_eq!(addr.as_ref(), &zil_bytes[1..]);
     }
 
@@ -336,7 +334,7 @@ mod tests {
         zil_slice[1..].fill(1);
 
         let addr = Address::try_from(zil_slice.as_slice()).unwrap();
-        assert!(matches!(addr, Address::Secp256k1Sha256Zilliqa(_)));
+        assert!(matches!(addr, Address::Secp256k1Sha256(_)));
 
         // Test invalid length
         let invalid_slice = vec![0u8; ADDR_LEN];
@@ -356,14 +354,14 @@ mod tests {
     #[test]
     fn test_as_ref() {
         let data = [1u8; ADDR_LEN];
-        let addr = Address::Secp256k1Sha256Zilliqa(data);
+        let addr = Address::Secp256k1Sha256(data);
         assert_eq!(addr.as_ref(), &data);
     }
 
     #[test]
     fn test_roundtrip() {
         let original_data = [1u8; ADDR_LEN];
-        let addr = Address::Secp256k1Sha256Zilliqa(original_data);
+        let addr = Address::Secp256k1Sha256(original_data);
         let bytes = addr.to_bytes();
         let roundtrip_addr = Address::from(bytes);
         assert_eq!(addr, roundtrip_addr);
@@ -397,14 +395,14 @@ mod tests {
         let hex_eth_adr = "0xf06686B5Eb5cAe38c09f12412B729045647E74e3";
         let addr = Address::from_eth_address(hex_eth_adr).unwrap();
 
-        assert!(matches!(addr, Address::Secp256k1Keccak256Ethereum(_)));
+        assert!(matches!(addr, Address::Secp256k1Keccak256(_)));
         assert_eq!(addr.to_eth_checksummed().unwrap(), hex_eth_adr);
         assert!(Address::from_eth_address("0x1234").is_err());
 
         let hex_sha256_type = "0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe";
         let addr = Address::from_eth_address(hex_sha256_type).unwrap();
 
-        assert!(matches!(addr, Address::Secp256k1Keccak256Ethereum(_)));
+        assert!(matches!(addr, Address::Secp256k1Keccak256(_)));
         assert_eq!(addr.to_eth_checksummed().unwrap(), hex_sha256_type);
     }
 

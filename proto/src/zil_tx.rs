@@ -48,7 +48,7 @@ impl Serialize for ZILTransactionReceipt {
         state.serialize_field("gasLimit", &self.gas_limit.to_string())?;
         state.serialize_field(
             "toAddr",
-            &Address::Secp256k1Sha256Zilliqa(self.to_addr)
+            &Address::Secp256k1Sha256(self.to_addr)
                 .get_zil_check_sum_addr()
                 .unwrap_or_default(),
         )?;
@@ -75,7 +75,7 @@ impl From<ZILTransactionReceipt> for ZILTransactionRequest {
             nonce: receipt.nonce,
             gas_price: u128::from_be_bytes(receipt.gas_price),
             gas_limit: receipt.gas_limit,
-            to_addr: Address::Secp256k1Sha256Zilliqa(receipt.to_addr),
+            to_addr: Address::Secp256k1Sha256(receipt.to_addr),
             amount: u128::from_be_bytes(receipt.amount),
             code: receipt.code,
             data: receipt.data,
@@ -90,7 +90,7 @@ impl From<&ZILTransactionReceipt> for ZILTransactionRequest {
             nonce: receipt.nonce,
             gas_price: u128::from_be_bytes(receipt.gas_price),
             gas_limit: receipt.gas_limit,
-            to_addr: Address::Secp256k1Sha256Zilliqa(receipt.to_addr),
+            to_addr: Address::Secp256k1Sha256(receipt.to_addr),
             amount: u128::from_be_bytes(receipt.amount),
             code: receipt.code.clone(),
             data: receipt.data.clone(),

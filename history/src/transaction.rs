@@ -42,7 +42,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 sender: PubKey::Secp256k1Sha256Zilliqa(zil_receipt.pub_key)
                     .get_addr()?
                     .auto_format(),
-                recipient: Address::Secp256k1Sha256Zilliqa(zil_receipt.to_addr).auto_format(),
+                recipient: Address::Secp256k1Sha256(zil_receipt.to_addr).auto_format(),
                 teg: None,
                 status: TransactionStatus::Pending,
                 confirmed: None,
@@ -77,9 +77,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     sender: tx.recover_signer().unwrap_or_default().to_string(),
                     recipient: match tx.kind() {
                         TxKind::Call(addr) => addr.to_string(),
-                        TxKind::Create => {
-                            Address::Secp256k1Keccak256Ethereum(Address::ZERO).auto_format()
-                        }
+                        TxKind::Create => Address::Secp256k1Keccak256(Address::ZERO).auto_format(),
                     },
                     fee,
                     teg: None,
