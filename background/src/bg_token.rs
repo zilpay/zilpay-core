@@ -81,8 +81,9 @@ impl TokensManagement for Background {
             signer: None,
             token_info: Some((amount, token.decimals, token.symbol.clone())),
         };
+        let addr = if token.native { &from } else { &token.addr };
 
-        match token.addr {
+        match addr {
             Address::Secp256k1Keccak256(_) => {
                 let transfer_request = if token.native {
                     erc20_payment()
