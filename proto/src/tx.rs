@@ -44,7 +44,7 @@ impl TransactionReceipt {
     pub fn verify(&self) -> Result<bool, TransactionErrors> {
         match self {
             Self::Zilliqa((tx, _meta)) => {
-                let pub_key = PubKey::Secp256k1Sha256Zilliqa(tx.pub_key);
+                let pub_key = PubKey::Secp256k1Sha256(tx.pub_key);
                 let sig: Signature = Signature::SchnorrSecp256k1Sha256(tx.signature);
                 let bytes = create_proto_tx(&tx.into(), &pub_key).encode_proto_bytes();
                 let verify = sig.verify(&bytes, &pub_key)?;

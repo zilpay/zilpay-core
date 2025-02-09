@@ -8,10 +8,12 @@ use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::SHA512_SIZE,
 };
-use errors::background::BackgroundError;
+use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
+use proto::{address::Address, pubkey::PubKey};
 use session::{decrypt_session, encrypt_session};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
+use token::ft::FToken;
 use wallet::{
     wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
     wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
@@ -68,6 +70,12 @@ pub trait WalletManagement {
         params: BackgroundSKParams,
     ) -> std::result::Result<Vec<u8>, Self::Error>;
 
+    fn swap_zilliqa_chain(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+    ) -> std::result::Result<(), Self::Error>;
+
     /// Retrieves a wallet by its index
     fn get_wallet_by_index(&self, wallet_index: usize)
         -> std::result::Result<&Wallet, Self::Error>;
@@ -121,6 +129,49 @@ impl WalletManagement for Background {
         wallet.unlock(&seed_bytes)?;
 
         Ok(seed_bytes)
+    }
+
+    fn swap_zilliqa_chain(&self, wallet_index: usize, account_index: usize) -> Result<()> {
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let mut data = wallet.get_wallet_data()?;
+        let account = data
+            .accounts
+            .get_mut(account_index)
+            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+
+        match account.pub_key {
+            PubKey::Secp256k1Sha256(pub_key) => {
+                account.pub_key = PubKey::Secp256k1Keccak256(pub_key);
+            }
+            PubKey::Secp256k1Keccak256(pub_key) => {
+                account.pub_key = PubKey::Secp256k1Sha256(pub_key);
+            }
+            _ => {
+                return Err(AccountErrors::InvalidPubKeyType)?;
+            }
+        }
+
+        account.addr = account.pub_key.get_addr()?;
+        wallet.save_wallet_data(data)?;
+
+        let mut ftokens = wallet.get_ftokens()?;
+
+        ftokens.iter_mut().for_each(|t| {
+            if t.native {
+                match t.addr {
+                    Address::Secp256k1Sha256(addr) => {
+                        t.addr = Address::Secp256k1Keccak256(addr);
+                    }
+                    Address::Secp256k1Keccak256(addr) => {
+                        t.addr = Address::Secp256k1Sha256(addr);
+                    }
+                }
+            }
+        });
+
+        wallet.save_ftokens(&ftokens)?;
+
+        Ok(())
     }
 
     fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {

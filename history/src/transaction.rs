@@ -39,7 +39,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
             TransactionReceipt::Zilliqa((zil_receipt, metadata)) => Ok(HistoricalTransaction {
                 id: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
                 amount: U256::from(u128::from_be_bytes(zil_receipt.amount)),
-                sender: PubKey::Secp256k1Sha256Zilliqa(zil_receipt.pub_key)
+                sender: PubKey::Secp256k1Sha256(zil_receipt.pub_key)
                     .get_addr()?
                     .auto_format(),
                 recipient: Address::Secp256k1Sha256(zil_receipt.to_addr).auto_format(),

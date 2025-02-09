@@ -1,8 +1,15 @@
 use thiserror::Error;
 
 use crate::{
-    cipher::CipherErrors, keychain::KeyChainErrors, keypair::KeyPairError, network::NetworkErrors,
-    session::SessionErrors, storage::LocalStorageError, token::TokenError, tx::TransactionErrors,
+    account::AccountErrors,
+    cipher::CipherErrors,
+    keychain::KeyChainErrors,
+    keypair::{KeyPairError, PubKeyError},
+    network::NetworkErrors,
+    session::SessionErrors,
+    storage::LocalStorageError,
+    token::TokenError,
+    tx::TransactionErrors,
     wallet::WalletErrors,
 };
 
@@ -80,6 +87,12 @@ pub enum BackgroundError {
     #[error("Token error: {0}")]
     TokenError(TokenError),
 
+    #[error("Account Error: {0}")]
+    AccountErrors(AccountErrors),
+
+    #[error("PubKey Error: {0}")]
+    PubKeyError(PubKeyError),
+
     #[error("unable verify transaction")]
     TransactionInvalidSig,
 }
@@ -87,6 +100,18 @@ pub enum BackgroundError {
 impl From<LocalStorageError> for BackgroundError {
     fn from(error: LocalStorageError) -> Self {
         BackgroundError::LocalStorageError(error)
+    }
+}
+
+impl From<PubKeyError> for BackgroundError {
+    fn from(error: PubKeyError) -> Self {
+        BackgroundError::PubKeyError(error)
+    }
+}
+
+impl From<AccountErrors> for BackgroundError {
+    fn from(error: AccountErrors) -> Self {
+        BackgroundError::AccountErrors(error)
     }
 }
 

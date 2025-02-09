@@ -88,12 +88,12 @@ impl Address {
 
     pub fn from_pubkey(pk: &PubKey) -> Result<Self> {
         match pk {
-            PubKey::Secp256k1Sha256Zilliqa(pk) => {
+            PubKey::Secp256k1Sha256(pk) => {
                 let addr = from_zil_pub_key(pk)?;
 
                 Ok(Self::Secp256k1Sha256(addr))
             }
-            PubKey::Secp256k1Keccak256Ethereum(pk) => {
+            PubKey::Secp256k1Keccak256(pk) => {
                 let k256_pubkey = alloy::signers::k256::ecdsa::VerifyingKey::from_sec1_bytes(pk)
                     .map_err(|e| AddressError::InvalidVerifyingKey(e.to_string()))?;
                 let addr = alloy::primitives::Address::from_public_key(&k256_pubkey);
