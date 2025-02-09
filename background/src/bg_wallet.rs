@@ -368,6 +368,7 @@ mod tests_background {
     fn create_test_net_conf() -> ChainConfig {
         ChainConfig {
             testnet: None,
+            chain_ids: None,
             name: "Test Network".to_string(),
             chain: "TEST".to_string(),
             short_name: String::new(),

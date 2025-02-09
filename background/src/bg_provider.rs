@@ -93,6 +93,7 @@ mod tests_providers {
             rpc: vec!["http://localhost:8545".to_string()],
             features: vec![155, 1559],
             chain_id,
+            chain_ids: None,
             slip_44: 60,
             ens: None,
             explorers: vec![Explorer {

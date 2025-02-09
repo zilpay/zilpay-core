@@ -505,6 +505,7 @@ mod tests_network {
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
+            chain_ids: None,
             name: "Binance-smart-chain".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
@@ -526,6 +527,7 @@ mod tests_network {
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
             testnet: None,
+            chain_ids: None,
             name: "Zilliqa".to_string(),
             chain: "ZIL".to_string(),
             short_name: String::new(),
@@ -883,6 +885,7 @@ mod tests_network {
     async fn test_get_fee_history_eth() {
         let net_conf = ChainConfig {
             testnet: None,
+            chain_ids: None,
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
@@ -936,6 +939,7 @@ mod tests_network {
     async fn test_calc_fee_eth_batch() {
         let net_conf = ChainConfig {
             testnet: None,
+            chain_ids: None,
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
@@ -986,6 +990,7 @@ mod tests_network {
     async fn test_get_tx_params_payment() {
         let net_conf = ChainConfig {
             testnet: None,
+            chain_ids: None,
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
@@ -1039,6 +1044,7 @@ mod tests_network {
     async fn test_calc_fee_bsc_batch() {
         let net_conf = ChainConfig {
             testnet: None,
+            chain_ids: None,
             name: "Smart chain Testnet".to_string(),
             chain: "BNB".to_string(),
             short_name: String::new(),
