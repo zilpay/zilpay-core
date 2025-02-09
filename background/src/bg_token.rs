@@ -82,7 +82,7 @@ impl TokensManagement for Background {
             token_info: Some((amount, token.decimals, token.symbol.clone())),
         };
 
-        match from {
+        match token.addr {
             Address::Secp256k1Keccak256(_) => {
                 let transfer_request = if token.native {
                     erc20_payment()
@@ -121,7 +121,7 @@ impl TokensManagement for Background {
                     .to_string();
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: chain.config.chain_id as u16 - 32768, // problem in chain id ZILLIQA!!!
+                        chain_id: chain.config.chain_id as u16,
                         gas_price: 2000000000,
                         gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
                         to_addr: to,
