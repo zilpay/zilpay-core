@@ -7,7 +7,6 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FtokenBalances {
-    U64(u64),
     U128(u128),
     U256(U256),
 }
@@ -15,9 +14,15 @@ pub enum FtokenBalances {
 impl FtokenBalances {
     pub fn get_num(&self) -> U256 {
         match &self {
-            Self::U64(v) => U256::from(*v),
             Self::U128(v) => U256::from(*v),
             Self::U256(v) => *v,
+        }
+    }
+
+    pub fn to_string(&self) -> String {
+        match &self {
+            Self::U128(v) => v.to_string(),
+            Self::U256(v) => v.to_string(),
         }
     }
 }
