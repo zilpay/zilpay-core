@@ -128,8 +128,9 @@ impl TransactionRequest {
                     .build(&wallet)
                     .await
                     .map_err(|e| KeyPairError::FailToSignTx(e.to_string()))?;
+                let pub_key_bytes = keypair.get_pubkey_bytes();
 
-                metadata.signer = Some(keypair.get_pubkey()?);
+                metadata.signer = Some(PubKey::Secp256k1Keccak256(*pub_key_bytes));
 
                 Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
             }

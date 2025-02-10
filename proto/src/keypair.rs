@@ -26,21 +26,21 @@ type Result<T> = std::result::Result<T, KeyPairError>;
 
 #[derive(Debug, PartialEq)]
 pub enum KeyPair {
-    Secp256k1Sha256Zilliqa(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])), // ZILLIQA
-    Secp256k1Keccak256Ethereum(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])), // Ethereum
+    Secp256k1Sha256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])), // ZILLIQA
+    Secp256k1Keccak256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])), // Ethereum
 }
 
 impl KeyPair {
     pub fn gen_sha256() -> Result<Self> {
         let keys = Self::gen_keys_bytes()?;
 
-        Ok(Self::Secp256k1Sha256Zilliqa(keys))
+        Ok(Self::Secp256k1Sha256(keys))
     }
 
     pub fn gen_keccak256() -> Result<Self> {
         let keys = Self::gen_keys_bytes()?;
 
-        Ok(Self::Secp256k1Keccak256Ethereum(keys))
+        Ok(Self::Secp256k1Keccak256(keys))
     }
 
     pub fn from_sk_bytes(
@@ -89,11 +89,9 @@ impl KeyPair {
 
         match sk {
             SecretKey::Secp256k1Keccak256Ethereum(sk) => {
-                Ok(KeyPair::Secp256k1Keccak256Ethereum((pub_key, sk)))
+                Ok(KeyPair::Secp256k1Keccak256((pub_key, sk)))
             }
-            SecretKey::Secp256k1Sha256Zilliqa(sk) => {
-                Ok(KeyPair::Secp256k1Sha256Zilliqa((pub_key, sk)))
-            }
+            SecretKey::Secp256k1Sha256Zilliqa(sk) => Ok(KeyPair::Secp256k1Sha256((pub_key, sk))),
         }
     }
 
@@ -110,8 +108,8 @@ impl KeyPair {
         let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
 
         match bip49.slip44 {
-            slip44::ZILLIQA => Ok(Self::Secp256k1Sha256Zilliqa((pub_key, secret_key))),
-            slip44::ETHEREUM => Ok(Self::Secp256k1Keccak256Ethereum((pub_key, secret_key))),
+            slip44::ZILLIQA => Ok(Self::Secp256k1Sha256((pub_key, secret_key))),
+            slip44::ETHEREUM => Ok(Self::Secp256k1Keccak256((pub_key, secret_key))),
             _ => {
                 return Err(KeyPairError::ExtendedPrivKeyDeriveError(
                     Bip329Errors::InvalidSlip44(bip49.slip44),
@@ -129,24 +127,29 @@ impl KeyPair {
 
     pub fn get_secretkey(&self) -> Result<SecretKey> {
         match self {
-            KeyPair::Secp256k1Sha256Zilliqa((_, sk)) => Ok(SecretKey::Secp256k1Sha256Zilliqa(*sk)),
-            KeyPair::Secp256k1Keccak256Ethereum((_, sk)) => {
-                Ok(SecretKey::Secp256k1Keccak256Ethereum(*sk))
-            }
+            KeyPair::Secp256k1Sha256((_, sk)) => Ok(SecretKey::Secp256k1Sha256Zilliqa(*sk)),
+            KeyPair::Secp256k1Keccak256((_, sk)) => Ok(SecretKey::Secp256k1Keccak256Ethereum(*sk)),
         }
     }
 
     pub fn get_pubkey(&self) -> Result<PubKey> {
         match self {
-            KeyPair::Secp256k1Sha256Zilliqa((pk, _)) => Ok(PubKey::Secp256k1Sha256(*pk)),
-            KeyPair::Secp256k1Keccak256Ethereum((pk, _)) => Ok(PubKey::Secp256k1Keccak256(*pk)),
+            KeyPair::Secp256k1Sha256((pk, _)) => Ok(PubKey::Secp256k1Sha256(*pk)),
+            KeyPair::Secp256k1Keccak256((pk, _)) => Ok(PubKey::Secp256k1Keccak256(*pk)),
+        }
+    }
+
+    pub fn get_pubkey_bytes(&self) -> &[u8; PUB_KEY_SIZE] {
+        match self {
+            KeyPair::Secp256k1Sha256((pk, _)) => pk,
+            KeyPair::Secp256k1Keccak256((pk, _)) => pk,
         }
     }
 
     pub fn get_sk_bytes(&self) -> [u8; SECRET_KEY_SIZE] {
         match self {
-            KeyPair::Secp256k1Sha256Zilliqa((_, sk)) => *sk,
-            KeyPair::Secp256k1Keccak256Ethereum((_, sk)) => *sk,
+            KeyPair::Secp256k1Sha256((_, sk)) => *sk,
+            KeyPair::Secp256k1Keccak256((_, sk)) => *sk,
         }
     }
 
@@ -164,7 +167,7 @@ impl KeyPair {
 
     pub fn sign_message(&self, msg: &[u8]) -> Result<Signature> {
         match self {
-            KeyPair::Secp256k1Keccak256Ethereum((_, _sk)) => {
+            KeyPair::Secp256k1Keccak256((_, _sk)) => {
                 let signer = self.get_local_eth_siger()?;
                 let sig = signer
                     .sign_message_sync(msg)
@@ -174,7 +177,7 @@ impl KeyPair {
 
                 Ok(sig)
             }
-            KeyPair::Secp256k1Sha256Zilliqa((_, sk)) => {
+            KeyPair::Secp256k1Sha256((_, sk)) => {
                 let secret_key =
                     K256SecretKey::from_slice(sk).or(Err(KeyPairError::InvalidSecretKey))?;
                 let sig: Signature = schnorr::sign(msg, &secret_key)
@@ -206,12 +209,12 @@ impl KeyPair {
         let mut result = [0u8; KEYPAIR_BYTES_SIZE];
 
         match self {
-            KeyPair::Secp256k1Sha256Zilliqa((pk, sk)) => {
+            KeyPair::Secp256k1Sha256((pk, sk)) => {
                 result[0] = 0;
                 result[1..PUB_KEY_SIZE + 1].copy_from_slice(pk);
                 result[PUB_KEY_SIZE + 1..].copy_from_slice(sk);
             }
-            KeyPair::Secp256k1Keccak256Ethereum((pk, sk)) => {
+            KeyPair::Secp256k1Keccak256((pk, sk)) => {
                 result[0] = 1;
                 result[1..PUB_KEY_SIZE + 1].copy_from_slice(pk);
                 result[PUB_KEY_SIZE + 1..].copy_from_slice(sk);
@@ -235,8 +238,8 @@ impl KeyPair {
             .map_err(|_| KeyPairError::InvalidSecretKey)?;
 
         match key_type {
-            0 => Ok(KeyPair::Secp256k1Sha256Zilliqa((pk, sk))),
-            1 => Ok(KeyPair::Secp256k1Keccak256Ethereum((pk, sk))),
+            0 => Ok(KeyPair::Secp256k1Sha256((pk, sk))),
+            1 => Ok(KeyPair::Secp256k1Keccak256((pk, sk))),
             _ => Err(KeyPairError::InvalidKeyType),
         }
     }
@@ -252,8 +255,8 @@ mod tests_keypair {
         let pk = [1u8; PUB_KEY_SIZE];
         let sk = [2u8; SECRET_KEY_SIZE];
         match key_type {
-            0 => KeyPair::Secp256k1Sha256Zilliqa((pk, sk)),
-            1 => KeyPair::Secp256k1Keccak256Ethereum((pk, sk)),
+            0 => KeyPair::Secp256k1Sha256((pk, sk)),
+            1 => KeyPair::Secp256k1Keccak256((pk, sk)),
             _ => panic!("Invalid key type for test"),
         }
     }
