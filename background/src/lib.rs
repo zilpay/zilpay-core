@@ -63,6 +63,7 @@ pub mod bg_storage;
 pub mod bg_token;
 pub mod bg_tx;
 pub mod bg_wallet;
+pub mod bg_worker;
 pub mod book;
 pub mod connections;
 pub mod device_indicators;
