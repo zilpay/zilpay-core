@@ -77,6 +77,7 @@ mod tests_background_transactions {
 
     fn gen_zil_net_conf() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [333, 0],
             name: "Zilliqa(testnet)".to_string(),
@@ -93,6 +94,7 @@ mod tests_background_transactions {
 
     fn gen_bsc_net_conf() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [97, 0],
             name: "BNB Smart Chain Testnet".to_string(),

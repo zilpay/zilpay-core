@@ -19,6 +19,7 @@ pub struct ChainConfig {
     pub name: String,
     pub chain: String,
     pub short_name: String,
+    pub diff_block_time: u64,
     pub rpc: Vec<String>,
     pub features: Vec<u16>,
     pub chain_ids: [u64; 2],
@@ -158,6 +159,7 @@ mod tests {
 
     fn setup_config() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
             name: "test_network".to_string(),
@@ -230,6 +232,7 @@ mod tests {
     #[test]
     fn test_remove_node() {
         let mut config = ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
             name: "test".to_string(),
@@ -263,6 +266,7 @@ mod tests {
     #[test]
     fn test_remove_node_group() {
         let mut config = ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
             name: "test".to_string(),

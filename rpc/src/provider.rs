@@ -106,6 +106,7 @@ mod tests {
 
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
             name: "Zilliqa".to_string(),
@@ -127,6 +128,7 @@ mod tests {
 
     fn create_eth_config() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             chain_ids: [11155111, 0],
             testnet: None,
             name: "Ethereum Mainnet".to_string(),
@@ -150,6 +152,7 @@ mod tests {
 
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],
             name: "Binance Smart Chain".to_string(),

@@ -395,6 +395,7 @@ mod tests_background {
 
     fn create_test_net_conf() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
             name: "Test Network".to_string(),

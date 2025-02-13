@@ -506,6 +506,7 @@ mod tests_network {
 
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],
             name: "Binance-smart-chain".to_string(),
@@ -527,6 +528,7 @@ mod tests_network {
 
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
             name: "Zilliqa".to_string(),
@@ -884,6 +886,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_fee_history_eth() {
         let net_conf = ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],
             name: "Ethereum".to_string(),
@@ -937,6 +940,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_calc_fee_eth_batch() {
         let net_conf = ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],
             name: "Ethereum".to_string(),
@@ -987,6 +991,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_tx_params_payment() {
         let net_conf = ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
             name: "Ethereum".to_string(),
@@ -1040,6 +1045,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_calc_fee_bsc_batch() {
         let net_conf = ChainConfig {
+            diff_block_time: 0,
             testnet: None,
             chain_ids: [97, 0],
             name: "Smart chain Testnet".to_string(),
