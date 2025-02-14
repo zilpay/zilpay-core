@@ -1019,7 +1019,7 @@ mod tests_network {
             name: "Ethereum".to_string(),
             chain: "ETH".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
+            rpc: vec!["https://rpc.mevblocker.io".to_string()],
             features: vec![155, 1559, 4844],
             slip_44: 60,
             ens: None,
@@ -1062,6 +1062,9 @@ mod tests_network {
         assert_ne!(fee.blob_base_fee, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
         assert_ne!(fee.fee_history.priority_fee, U256::from(0));
+
+        let block_diff_time = provider.estimate_block_time(&recipient).await.unwrap();
+        assert!(block_diff_time > 10 && block_diff_time < 18);
     }
 
     #[tokio::test]
