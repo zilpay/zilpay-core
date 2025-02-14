@@ -1,12 +1,20 @@
 use crate::{Background, Result};
+use async_trait::async_trait;
 use errors::background::BackgroundError;
 use network::{common::Provider, provider::NetworkProvider};
+use proto::address::Address;
 use rpc::network_config::ChainConfig;
 use std::sync::Arc;
 
+#[async_trait]
 pub trait ProvidersManagement {
     type Error;
 
+    async fn update_block_diff_time(
+        &self,
+        chain_hash: u64,
+        addr: &Address,
+    ) -> std::result::Result<(), Self::Error>;
     fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error>;
     fn get_providers(&self) -> Vec<NetworkProvider>;
     fn add_provider(&self, config: ChainConfig) -> std::result::Result<u64, Self::Error>;
@@ -17,11 +25,27 @@ pub trait ProvidersManagement {
     ) -> std::result::Result<(), Self::Error>;
 }
 
+#[async_trait]
 impl ProvidersManagement for Background {
     type Error = BackgroundError;
     // TODO: add fetch more nodes
     // TODO: add method with rankeing node depends of network
     //
+
+    async fn update_block_diff_time(&self, chain_hash: u64, addr: &Address) -> Result<()> {
+        let mut chains = self.get_providers();
+        let chain = chains
+            .iter_mut()
+            .find(|p| p.config.hash() == chain_hash)
+            .ok_or(BackgroundError::ProviderNotExists(chain_hash))?;
+        let block_time_diff = chain.estimate_block_time(addr).await?;
+
+        chain.config.diff_block_time = block_time_diff;
+
+        self.update_providers(chains)?;
+
+        Ok(())
+    }
 
     fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error> {
         self.get_providers()
