@@ -72,6 +72,9 @@ pub enum BackgroundError {
     #[error("Argon2 proof creation error: {0}")]
     ArgonCreateProofError(CipherErrors),
 
+    #[error("Worker error: {0}")]
+    WorkerError(String),
+
     #[error("Failed to create keychain from Argon2 seed: {0}")]
     FailCreateKeychain(KeyChainErrors),
 

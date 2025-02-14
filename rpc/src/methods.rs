@@ -10,6 +10,7 @@ pub enum ZilMethods {
     CreateTransaction,
     GetTransactionStatus,
     GetLatestTxBlock,
+    GetTxBlock,
     GetRecentTransactions,
     GetMinimumGasPrice,
 }
@@ -22,6 +23,7 @@ impl RpcMethod for ZilMethods {
             ZilMethods::GetSmartContractSubState => "GetSmartContractSubState",
             ZilMethods::GetNetworkId => "GetNetworkId",
             ZilMethods::GetPendingTxn => "GetPendingTxn",
+            ZilMethods::GetTxBlock => "GetTxBlock",
             ZilMethods::GetTransaction => "GetTransaction",
             ZilMethods::CreateTransaction => "CreateTransaction",
             ZilMethods::GetTransactionStatus => "GetTransactionStatus",

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use crate::block_parse::{build_last_block_header_request, process_get_timestampt_block_response};
 use crate::common::Provider;
 use crate::gas_parse::{
     build_batch_gas_request, build_fee_history_request, json_rpc_error,
@@ -79,9 +80,30 @@ impl NetworkProvider {
         Self { config }
     }
 
-    pub async fn fetch_nodes_list(&mut self) -> Result<()> {
-        // TODO: make server ZilPay which track nodes and makes ranking.
-        Ok(())
+    pub async fn estimate_block_time(&self, address: &Address) -> Result<u64> {
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let payload = build_last_block_header_request(address, None);
+        let response = provider
+            .req::<Vec<ResultRes<Value>>>(&[payload])
+            .await
+            .map_err(NetworkErrors::Request)?;
+        let (last_blocknumber, last_timestamp) = {
+            let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
+
+            process_get_timestampt_block_response(&response, address)
+        };
+        let payload = build_last_block_header_request(address, Some(last_blocknumber - 1));
+        let response = provider
+            .req::<Vec<ResultRes<Value>>>(&[payload])
+            .await
+            .map_err(NetworkErrors::Request)?;
+        let (_, early_timestamp) = {
+            let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
+
+            process_get_timestampt_block_response(&response, address)
+        };
+
+        Ok(last_timestamp - early_timestamp)
     }
 
     pub async fn estimate_params_batch(
@@ -1086,6 +1108,9 @@ mod tests_network {
         assert_ne!(fee.tx_estimate_gas, U256::from(0));
         assert_ne!(fee.fee_history.max_fee, U256::from(0));
         assert_ne!(fee.fee_history.priority_fee, U256::from(0));
+
+        let block_diff_time = provider.estimate_block_time(&recipient).await.unwrap();
+        assert_eq!(block_diff_time, 3);
     }
 
     #[tokio::test]
@@ -1113,5 +1138,8 @@ mod tests_network {
 
         assert_eq!(params.gas_price, U256::from(2000000000));
         assert!(params.nonce > 66519);
+
+        let block_diff_time = provider.estimate_block_time(&from).await.unwrap();
+        assert!(block_diff_time > 30 && block_diff_time < 40);
     }
 }
