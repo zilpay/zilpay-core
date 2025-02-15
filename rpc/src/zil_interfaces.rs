@@ -1,6 +1,6 @@
+use errors::token::TokenError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use errors::token::TokenError;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ResultRes<T> {
@@ -15,6 +15,16 @@ pub struct ErrorRes {
     pub code: i16,
     pub message: String,
     pub data: Option<Value>,
+}
+
+impl std::fmt::Display for ErrorRes {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "JSON-RPC error (code: {}): {}", self.code, self.message)?;
+        if let Some(data) = &self.data {
+            write!(f, ", data: {}", data)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

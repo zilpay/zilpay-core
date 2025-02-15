@@ -60,6 +60,15 @@ pub struct Wallet {
     pub wallet_address: WalletAddrType,
 }
 
+impl Clone for Wallet {
+    fn clone(&self) -> Self {
+        Self {
+            storage: Arc::clone(&self.storage),
+            wallet_address: self.wallet_address,
+        }
+    }
+}
+
 impl Wallet {
     fn unlock_iternel(&self, seed_bytes: &Argon2Seed) -> Result<KeyChain> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;

@@ -2870,6 +2870,7 @@ dependencies = [
  "config",
  "crypto",
  "errors",
+ "history",
  "mockito",
  "proto",
  "rand",

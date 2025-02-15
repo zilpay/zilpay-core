@@ -9,7 +9,10 @@ use crate::gas_parse::{
     SCILLA_EIP,
 };
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
-use crate::tx_parse::{build_tx_request, process_tx_response};
+use crate::tx_parse::{
+    build_payload_tx_receipt, build_send_signed_tx_request, process_tx_receipt_response,
+    process_tx_send_response,
+};
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY;
@@ -18,6 +21,7 @@ use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
 use errors::token::TokenError;
 use errors::tx::TransactionErrors;
+use history::transaction::HistoricalTransaction;
 use proto::address::Address;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use rpc::common::JsonRPC;
@@ -104,6 +108,29 @@ impl NetworkProvider {
         };
 
         Ok(last_timestamp - early_timestamp)
+    }
+
+    pub async fn get_transactions_receipt(&self, txns: &mut [HistoricalTransaction]) -> Result<()> {
+        let mut requests: Vec<Value> = Vec::with_capacity(txns.len());
+
+        for tx in txns.iter() {
+            requests.push(build_payload_tx_receipt(&tx));
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(&requests)
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        for (index, res) in responses.into_iter().enumerate() {
+            // process_tx_receipt_response(res, &txns[index])?;
+            if let Some(tx) = txns.get_mut(index) {
+                process_tx_receipt_response(res, tx)?;
+            }
+        }
+
+        Ok(())
     }
 
     pub async fn estimate_params_batch(
@@ -299,7 +326,7 @@ impl NetworkProvider {
                 ))?;
             }
 
-            all_requests.push(build_tx_request(tx));
+            all_requests.push(build_send_signed_tx_request(tx));
         }
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
@@ -307,7 +334,7 @@ impl NetworkProvider {
         drop(all_requests);
 
         for (tx, response) in txns.iter_mut().zip(responses.iter()) {
-            process_tx_response(response, tx)?;
+            process_tx_send_response(response, tx)?;
         }
 
         Ok(txns)
@@ -1144,5 +1171,36 @@ mod tests_network {
 
         let block_diff_time = provider.estimate_block_time(&from).await.unwrap();
         assert!(block_diff_time > 30 && block_diff_time < 40);
+    }
+
+    #[tokio::test]
+    async fn test_tx_receipt() {
+        let net_conf = ChainConfig {
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://rpc.mevblocker.io".to_string()],
+            features: vec![155, 1559, 4844],
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let tx_history = HistoricalTransaction {
+            transaction_hash: String::from(
+                "0x0e79c48a5a972a9fdadd0db0cbf9ff046f048da5ea2a456d8b97cfa212ce4eb3",
+            ),
+            ..Default::default()
+        };
+        let mut list_txns = vec![tx_history];
+
+        provider
+            .get_transactions_receipt(&mut list_txns)
+            .await
+            .unwrap();
     }
 }

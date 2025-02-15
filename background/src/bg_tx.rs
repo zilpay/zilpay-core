@@ -195,7 +195,7 @@ mod tests_background_transactions {
         assert_eq!(txns.len(), 1);
 
         for tx in txns {
-            assert!(!tx.id.is_empty());
+            assert!(!tx.transaction_hash.is_empty());
         }
     }
 
@@ -266,7 +266,7 @@ mod tests_background_transactions {
         assert_eq!(txns.len(), 1);
 
         for tx in txns {
-            assert!(!tx.id.is_empty());
+            assert!(!tx.transaction_hash.is_empty());
         }
     }
 }

@@ -14,6 +14,9 @@ pub enum TransactionErrors {
     #[error("InvalidHash")]
     InvalidHash,
 
+    #[error("Not tranasction with hash: {0}")]
+    NoTxWithHash(String),
+
     #[error("Invalid transaction")]
     InvalidTransaction,
 

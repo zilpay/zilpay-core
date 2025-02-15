@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
-use errors::{background::BackgroundError, wallet::WalletErrors};
+use errors::background::BackgroundError;
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
 use wallet::wallet_storage::StorageOperations;
 

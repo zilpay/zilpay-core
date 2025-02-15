@@ -1,6 +1,10 @@
 use crate::Result;
-use alloy::{eips::eip2718::Encodable2718, hex};
+use alloy::eips::eip2718::Encodable2718;
 use errors::{network::NetworkErrors, tx::TransactionErrors};
+use history::{
+    status::TransactionStatus,
+    transaction::{ChainType, HistoricalTransaction},
+};
 use proto::tx::TransactionReceipt;
 use rpc::{
     methods::{EvmMethods, ZilMethods},
@@ -10,7 +14,7 @@ use rpc::{
 };
 use serde_json::{json, Value};
 
-pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
+pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
     match tx {
         TransactionReceipt::Zilliqa((zil, _)) => {
             RpcProvider::<ChainConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
@@ -18,7 +22,7 @@ pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
         TransactionReceipt::Ethereum((eth, _)) => {
             let mut encoded = Vec::with_capacity(eth.eip2718_encoded_length());
             eth.encode_2718(&mut encoded);
-            let hex_tx = format!("0x{}", hex::encode(encoded));
+            let hex_tx = alloy::hex::encode_prefixed(encoded);
 
             RpcProvider::<ChainConfig>::build_payload(
                 json!([hex_tx]),
@@ -28,20 +32,63 @@ pub fn build_tx_request(tx: &TransactionReceipt) -> Value {
     }
 }
 
-pub fn process_tx_response(response: &ResultRes<Value>, tx: &mut TransactionReceipt) -> Result<()> {
-    if let Some(error) = &response.error {
-        let error_msg = format!(
-            "JSON-RPC error (code: {}): {}{}",
-            error.code,
-            error.message,
-            error
-                .data
-                .as_ref()
-                .map(|d| format!(", data: {}", d))
-                .unwrap_or_default()
-        );
+pub fn build_payload_tx_receipt(tx: &HistoricalTransaction) -> Value {
+    match tx.chain_type {
+        ChainType::Scilla => {
+            todo!()
+        }
+        ChainType::EVM => RpcProvider::<ChainConfig>::build_payload(
+            json!([tx.transaction_hash]),
+            EvmMethods::GetTransactionReceipt,
+        ),
+    }
+}
 
-        return Err(NetworkErrors::RPCError(error_msg));
+pub fn process_tx_receipt_response(
+    response: ResultRes<Value>,
+    tx: &mut HistoricalTransaction,
+) -> Result<()> {
+    if let Some(err) = response.error {
+        return Err(NetworkErrors::RPCError(err.to_string()));
+    } else if let Some(result) = response.result {
+        match tx.chain_type {
+            ChainType::Scilla => {
+                todo!()
+            }
+            ChainType::EVM => {
+                let receipt: alloy::rpc::types::TransactionReceipt = serde_json::from_value(result)
+                    .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+
+                tx.block_number = receipt.block_number;
+                tx.gas_used = Some(receipt.gas_used);
+                tx.blob_gas_used = receipt.blob_gas_used;
+                tx.blob_gas_price = receipt.blob_gas_price;
+                tx.effective_gas_price = Some(receipt.effective_gas_price);
+
+                if receipt.status() {
+                    tx.status = TransactionStatus::Confirmed;
+                } else {
+                    tx.status = TransactionStatus::Rejected;
+                }
+
+                dbg!(&receipt);
+                // TODO: calc fee
+                // tx.effective_gas_price = Some(receipt.effective_gas_price);
+
+                return Ok(());
+            }
+        };
+    } else {
+        return Err(TransactionErrors::NoTxWithHash(tx.transaction_hash.clone()).into());
+    }
+}
+
+pub fn process_tx_send_response(
+    response: &ResultRes<Value>,
+    tx: &mut TransactionReceipt,
+) -> Result<()> {
+    if let Some(error) = &response.error {
+        return Err(NetworkErrors::RPCError(error.to_string()));
     }
 
     match tx {

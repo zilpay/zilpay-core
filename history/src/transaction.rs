@@ -7,6 +7,13 @@ use errors::tx::TransactionErrors;
 use proto::{address::Address, pubkey::PubKey, tx::TransactionReceipt};
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ChainType {
+    #[default]
+    EVM,
+    Scilla,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TokenInfo {
     pub value: U256,
@@ -14,9 +21,9 @@ pub struct TokenInfo {
     pub decimals: u8,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HistoricalTransaction {
-    pub id: String,
+    pub transaction_hash: String,
     pub amount: U256, // in native token
     pub sender: String,
     pub recipient: String,
@@ -24,11 +31,17 @@ pub struct HistoricalTransaction {
     pub status: TransactionStatus,
     pub confirmed: Option<u128>,
     pub timestamp: u64,
+    pub block_number: Option<u64>,
+    pub gas_used: Option<u64>,
+    pub blob_gas_used: Option<u64>,
+    pub blob_gas_price: Option<u128>,
+    pub effective_gas_price: Option<u128>,
     pub fee: u128, // in native token
     pub icon: Option<String>,
     pub title: Option<String>,
     pub nonce: u64,
     pub token_info: Option<TokenInfo>,
+    pub chain_type: ChainType,
 }
 
 impl TryFrom<TransactionReceipt> for HistoricalTransaction {
@@ -37,7 +50,9 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
     fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
         match receipt {
             TransactionReceipt::Zilliqa((zil_receipt, metadata)) => Ok(HistoricalTransaction {
-                id: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
+                chain_type: ChainType::Scilla,
+                block_number: None,
+                transaction_hash: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
                 amount: U256::from(u128::from_be_bytes(zil_receipt.amount)),
                 sender: PubKey::Secp256k1Sha256(zil_receipt.pub_key)
                     .get_addr()?
@@ -58,6 +73,10 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                         symbol,
                         decimals,
                     }),
+                gas_used: None,
+                blob_gas_used: None,
+                blob_gas_price: None,
+                effective_gas_price: None,
             }),
             TransactionReceipt::Ethereum((tx, metadata)) => {
                 let effective_gas_price = match tx.tx_type() {
@@ -72,7 +91,9 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 let fee = effective_gas_price * tx.gas_limit() as u128;
 
                 Ok(HistoricalTransaction {
-                    id: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
+                    block_number: None,
+                    chain_type: ChainType::EVM,
+                    transaction_hash: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
                     amount: tx.value(),
                     sender: tx.recover_signer().unwrap_or_default().to_string(),
                     recipient: match tx.kind() {
@@ -86,6 +107,10 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     timestamp: 0,
                     icon: metadata.icon,
                     title: metadata.title,
+                    gas_used: None,
+                    blob_gas_used: None,
+                    blob_gas_price: None,
+                    effective_gas_price: None,
                     nonce: tx.nonce(),
                     token_info: metadata
                         .token_info
