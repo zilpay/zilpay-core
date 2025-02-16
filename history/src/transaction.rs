@@ -28,18 +28,20 @@ pub struct HistoricalTransaction {
     pub sender: String,
     pub recipient: String,
     pub contract_address: Option<String>,
-    pub teg: Option<String>,
     pub status: TransactionStatus,
+    pub status_code: Option<u8>,
     pub timestamp: u64,
-    pub block_number: Option<u64>,
-    pub gas_used: Option<u64>,
-    pub blob_gas_used: Option<u64>,
+    pub block_number: Option<u128>,
+    pub gas_used: Option<u128>,
+    pub gas_limit: Option<u128>,
+    pub gas_price: Option<u128>,
+    pub blob_gas_used: Option<u128>,
     pub blob_gas_price: Option<u128>,
     pub effective_gas_price: Option<u128>,
     pub fee: u128, // in native token
     pub icon: Option<String>,
     pub title: Option<String>,
-    pub nonce: u64,
+    pub nonce: u128,
     pub token_info: Option<TokenInfo>,
     pub chain_type: ChainType,
     pub chain_hash: u64,
@@ -56,6 +58,9 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 } else {
                     Some(Address::Secp256k1Sha256(zil_receipt.to_addr).auto_format())
                 },
+                status_code: None,
+                gas_price: Some(u128::from_be_bytes(zil_receipt.gas_price)),
+                gas_limit: Some(zil_receipt.gas_limit as u128),
                 chain_hash: metadata.chain_hash,
                 chain_type: ChainType::Scilla,
                 block_number: None,
@@ -65,13 +70,12 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     .get_addr()?
                     .auto_format(),
                 recipient: Address::Secp256k1Sha256(zil_receipt.to_addr).auto_format(),
-                teg: None,
                 status: TransactionStatus::Pending,
                 timestamp: 0,
                 fee: u128::from_be_bytes(zil_receipt.gas_price) * (zil_receipt.gas_limit as u128),
                 icon: metadata.icon,
                 title: metadata.title,
-                nonce: zil_receipt.nonce,
+                nonce: zil_receipt.nonce as u128,
                 token_info: metadata
                     .token_info
                     .map(|(value, decimals, symbol)| TokenInfo {
@@ -98,7 +102,10 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
 
                 Ok(HistoricalTransaction {
                     block_number: None,
+                    status_code: None,
                     contract_address: None,
+                    gas_limit: Some(tx.gas_limit() as u128),
+                    gas_price: tx.gas_price(),
                     chain_hash: metadata.chain_hash,
                     chain_type: ChainType::EVM,
                     transaction_hash: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
@@ -109,7 +116,6 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                         TxKind::Create => Address::Secp256k1Keccak256(Address::ZERO).auto_format(),
                     },
                     fee,
-                    teg: None,
                     status: TransactionStatus::Pending,
                     timestamp: 0,
                     icon: metadata.icon,
@@ -118,7 +124,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     blob_gas_used: None,
                     blob_gas_price: None,
                     effective_gas_price: None,
-                    nonce: tx.nonce(),
+                    nonce: tx.nonce() as u128,
                     token_info: metadata
                         .token_info
                         .map(|(value, decimals, symbol)| TokenInfo {

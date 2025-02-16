@@ -5,7 +5,7 @@ use history::{
     status::TransactionStatus,
     transaction::{ChainType, HistoricalTransaction},
 };
-use proto::tx::TransactionReceipt;
+use proto::{address::Address, tx::TransactionReceipt, U256};
 use rpc::{
     methods::{EvmMethods, ZilMethods},
     network_config::ChainConfig,
@@ -34,9 +34,10 @@ pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
 
 pub fn build_payload_tx_receipt(tx: &HistoricalTransaction) -> Value {
     match tx.chain_type {
-        ChainType::Scilla => {
-            todo!()
-        }
+        ChainType::Scilla => RpcProvider::<ChainConfig>::build_payload(
+            json!([tx.transaction_hash]),
+            ZilMethods::GetTransactionStatus,
+        ),
         ChainType::EVM => RpcProvider::<ChainConfig>::build_payload(
             json!([tx.transaction_hash]),
             EvmMethods::GetTransactionReceipt,
@@ -53,7 +54,56 @@ pub fn process_tx_receipt_response(
     } else if let Some(result) = response.result {
         match tx.chain_type {
             ChainType::Scilla => {
-                todo!()
+                let amount = result
+                    .get("amount")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<U256>().ok())
+                    .unwrap_or(tx.amount);
+                let gas_limit = result
+                    .get("gasLimit")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<u128>().ok())
+                    .unwrap_or(tx.gas_limit.unwrap_or_default());
+                let gas_price = result
+                    .get("gasPrice")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<u128>().ok())
+                    .unwrap_or(tx.gas_price.unwrap_or_default());
+                let nonce = result
+                    .get("nonce")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<u128>().ok())
+                    .unwrap_or(tx.nonce);
+                let mb_status = result
+                    .get("status")
+                    .and_then(|a| a.as_number())
+                    .and_then(|a| a.as_u64())
+                    .and_then(|status| Some(status as u8));
+                let mb_sender = result
+                    .get("senderAddr")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| Address::from_zil_base16(a).ok());
+
+                tx.amount = amount;
+                tx.gas_limit = Some(gas_limit);
+                tx.gas_price = Some(gas_price);
+                tx.nonce = nonce;
+                tx.fee = gas_price * gas_limit;
+
+                if let Some(status) = mb_status {
+                    match status {
+                        1 | 2 | 4 | 5 | 6 => tx.status = TransactionStatus::Pending,
+                        3 => tx.status = TransactionStatus::Confirmed,
+                        _ => tx.status = TransactionStatus::Rejected,
+                    }
+                    tx.status_code = mb_status;
+                }
+
+                if let Some(sender) = mb_sender {
+                    tx.sender = sender.auto_format();
+                }
+
+                return Ok(());
             }
             ChainType::EVM => {
                 let receipt: alloy::rpc::types::TransactionReceipt = serde_json::from_value(result)
@@ -66,9 +116,9 @@ pub fn process_tx_receipt_response(
                     tx.recipient = to.to_string();
                 }
 
-                tx.block_number = receipt.block_number;
-                tx.gas_used = Some(receipt.gas_used);
-                tx.blob_gas_used = receipt.blob_gas_used;
+                tx.block_number = receipt.block_number.map(|b| b as u128);
+                tx.gas_used = Some(receipt.gas_used as u128);
+                tx.blob_gas_used = receipt.blob_gas_used.map(|b| b as u128);
                 tx.blob_gas_price = receipt.blob_gas_price;
                 tx.effective_gas_price = Some(receipt.effective_gas_price);
 

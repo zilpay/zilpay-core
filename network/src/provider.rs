@@ -538,7 +538,7 @@ mod tests_network {
     use super::*;
     use alloy::{primitives::U256, rpc::types::TransactionInput};
     use config::address::ADDR_LEN;
-    use history::status::TransactionStatus;
+    use history::{status::TransactionStatus, transaction::ChainType};
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
     use rpc::network_config::Explorer;
@@ -1174,7 +1174,7 @@ mod tests_network {
     }
 
     #[tokio::test]
-    async fn test_tx_receipt() {
+    async fn test_tx_receipt_evm() {
         let net_conf = ChainConfig {
             diff_block_time: 0,
             testnet: None,
@@ -1215,6 +1215,39 @@ mod tests_network {
         assert_eq!(
             list_txns.first().unwrap().status,
             TransactionStatus::Confirmed
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tx_receipt_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+        let tx_history = HistoricalTransaction {
+            transaction_hash: String::from(
+                "0xe193e982ae4d2ed605a88ed43b7ea9b432596e33a515a8549b54d51092b55d7c",
+            ),
+            chain_hash: provider.config.hash(),
+            chain_type: history::transaction::ChainType::Scilla,
+            ..Default::default()
+        };
+        let mut list_txns = vec![tx_history];
+
+        provider
+            .get_transactions_receipt(&mut list_txns)
+            .await
+            .unwrap();
+
+        assert_eq!(list_txns[0].amount, U256::from(9890465666543u128));
+        assert_eq!(list_txns[0].status, TransactionStatus::Confirmed);
+        assert_eq!(list_txns[0].status_code, Some(3));
+        assert_eq!(list_txns[0].gas_limit, Some(60));
+        assert_eq!(list_txns[0].gas_price, Some(2500000000));
+        assert_eq!(list_txns[0].fee, 150000000000);
+        assert_eq!(list_txns[0].nonce, 1045401);
+        assert_eq!(list_txns[0].chain_type, ChainType::Scilla);
+        assert_eq!(
+            list_txns[0].sender,
+            "zil15xvtse0rvcfwxetstvun72kw5daz8kge0frn3y"
         );
     }
 }
