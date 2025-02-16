@@ -1,14 +1,17 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{mpsc, Arc},
+    time::Duration,
+};
 
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
 use errors::background::BackgroundError;
-use history::{status::TransactionStatus, transaction::HistoricalTransaction};
 use wallet::wallet_storage::StorageOperations;
 
 #[derive(Debug)]
 pub enum JobMessage {
     Block,
+    Stop,
     Error(String),
 }
 
@@ -16,74 +19,62 @@ pub enum JobMessage {
 pub trait WorkerManager {
     type Error;
 
-    async fn start_history_job<CB>(
+    async fn start_block_track_job(
         &self,
         wallet_index: usize,
-        cb_job: CB,
-    ) -> std::result::Result<(), Self::Error>
-    where
-        CB: Fn(JobMessage) + Sync + Send + 'static;
+        worker_tx: mpsc::Sender<JobMessage>,
+        worker_rx: mpsc::Receiver<JobMessage>,
+    ) -> std::result::Result<(), Self::Error>;
 }
 
 #[async_trait]
 impl WorkerManager for Background {
     type Error = BackgroundError;
 
-    async fn start_history_job<CB>(&self, wallet_index: usize, cb_job: CB) -> Result<()>
-    where
-        CB: Fn(JobMessage) + Sync + Send + 'static,
-    {
+    async fn start_block_track_job(
+        &self,
+        wallet_index: usize,
+        worker_tx: mpsc::Sender<JobMessage>,
+        worker_rx: mpsc::Receiver<JobMessage>,
+    ) -> Result<()> {
         const MAX_ERRORS: u8 = 100;
-        const ERR_SECS: Duration = Duration::from_secs(10);
+
         let wallet = self.get_wallet_by_index(wallet_index)?.clone();
         let chain_arc = {
             let data = wallet.get_wallet_data()?;
             let mut chain = self.get_provider(data.default_chain_hash)?;
             let account = data.get_selected_account()?;
-
             if chain.config.diff_block_time == 0 {
                 self.update_block_diff_time(data.default_chain_hash, &account.addr)
                     .await?;
-
                 chain = self.get_provider(data.default_chain_hash)?;
             }
-
             Arc::new(chain)
         };
 
-        let wallet_arc = Arc::new(wallet);
         let handle = tokio::spawn({
             let mut error_counter: u8 = 0;
-            let wallet_ref = Arc::clone(&wallet_arc);
             let chain_ref = Arc::clone(&chain_arc);
+            let last_block_number: u64 = 0;
 
             async move {
                 loop {
-                    let history = match wallet_ref.get_history() {
-                        Ok(history) => history
-                            .into_iter()
-                            .filter(|t| t.status == TransactionStatus::Pending)
-                            .collect::<Vec<HistoricalTransaction>>(),
-                        Err(e) => {
-                            cb_job(JobMessage::Error(e.to_string()));
-                            error_counter += 1;
-                            tokio::time::sleep(ERR_SECS).await;
-                            continue;
+                    match worker_rx.recv() {
+                        Ok(JobMessage::Stop) => {
+                            break;
                         }
-                    };
-
-                    if history.is_empty() {
-                        tokio::time::sleep(Duration::from_secs(chain_ref.config.diff_block_time))
-                            .await;
-                        continue;
+                        Ok(_) => continue,
+                        Err(e) => {
+                            worker_tx
+                                .send(JobMessage::Error(e.to_string()))
+                                .unwrap_or_default();
+                            error_counter += 1;
+                        }
                     }
-
                     if error_counter >= MAX_ERRORS {
                         break;
                     }
-
                     tokio::time::sleep(Duration::from_secs(chain_ref.config.diff_block_time)).await;
-                    break;
                 }
             }
         });
@@ -108,8 +99,8 @@ mod tests_background_worker {
 
     use crate::{
         bg_crypto::CryptoOperations, bg_provider::ProvidersManagement,
-        bg_storage::StorageManagement, bg_wallet::WalletManagement, bg_worker::WorkerManager,
-        Background, BackgroundBip39Params,
+        bg_storage::StorageManagement, bg_wallet::WalletManagement, Background,
+        BackgroundBip39Params,
     };
 
     const PASSWORD: &str = "password";
@@ -176,13 +167,6 @@ mod tests_background_worker {
             device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![gen_bsc_token(net_config.hash())],
         })
-        .unwrap();
-
-        bg.start_history_job(0, |m| {
-            //
-            dbg!(m);
-        })
-        .await
         .unwrap();
     }
 }
