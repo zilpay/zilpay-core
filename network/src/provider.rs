@@ -84,6 +84,23 @@ impl NetworkProvider {
         Self { config }
     }
 
+    pub async fn get_current_block_number(&self) -> Result<U256> {
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let payload = RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::BlockNumber);
+        let response = provider
+            .req::<Vec<ResultRes<Value>>>(&[payload])
+            .await
+            .map_err(NetworkErrors::Request)?;
+        let block_number = response
+            .first()
+            .and_then(|res| res.result.as_ref())
+            .and_then(|result| result.as_str())
+            .and_then(|block_str| Self::parse_str_to_u256(&block_str))
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        Ok(block_number)
+    }
+
     pub async fn estimate_block_time(&self, address: &Address) -> Result<u64> {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let payload = build_last_block_header_request(address, None);
@@ -1252,5 +1269,23 @@ mod tests_network {
             list_txns[0].sender,
             "zil15xvtse0rvcfwxetstvun72kw5daz8kge0frn3y"
         );
+    }
+
+    #[tokio::test]
+    async fn test_get_block_number_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let block_number = provider.get_current_block_number().await.unwrap();
+        assert!(block_number != U256::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_get_block_number_evm() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let block_number = provider.get_current_block_number().await.unwrap();
+        assert!(block_number != U256::ZERO);
     }
 }

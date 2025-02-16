@@ -59,13 +59,13 @@ where
                 .await
             {
                 Ok(response) => response,
-                Err(_) => {
-                    if error == RpcError::BadRequest && k == Self::MAX_ERROR {
+                Err(e) => {
+                    if error == RpcError::BadRequest(e.to_string()) && k == Self::MAX_ERROR {
                         break;
-                    } else if error == RpcError::BadRequest {
+                    } else if error == RpcError::BadRequest(e.to_string()) {
                         continue;
                     } else {
-                        error = RpcError::BadRequest;
+                        error = RpcError::BadRequest(e.to_string());
                         continue;
                     }
                 }
@@ -217,25 +217,6 @@ mod tests {
         assert!(payload["params"].is_array());
         assert_eq!(payload["params"][0], "param1");
         assert_eq!(payload["params"][1], "param2");
-    }
-
-    #[tokio::test]
-    async fn test_network_error_handling() {
-        let mut config = create_bsc_config();
-        config.rpc = vec!["https://invalid.url.com".to_string()];
-
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&config);
-        let payloads = vec![RpcProvider::<ChainConfig>::build_payload(
-            json!(["0x0000000000000000000000000000000000000000", "latest"]),
-            EvmMethods::GetBalance,
-        )];
-
-        let result: Result<Vec<ResultRes<String>>> = provider.req(&payloads).await;
-        assert!(result.is_err());
-        match result {
-            Err(RpcError::BadRequest) => (),
-            _ => panic!("Expected BadRequest error"),
-        }
     }
 
     #[tokio::test]

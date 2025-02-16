@@ -3,8 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RpcError {
-    #[error("Bad request")]
-    BadRequest,
+    #[error("Bad request: {0}")]
+    BadRequest(String),
 
     #[error("Invalid JSON response: parse: {0}")]
     InvalidJson(String),
