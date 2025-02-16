@@ -1,7 +1,4 @@
-use std::{
-    sync::{mpsc, Arc},
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
@@ -10,7 +7,7 @@ use wallet::wallet_storage::StorageOperations;
 
 #[derive(Debug)]
 pub enum JobMessage {
-    Block,
+    Block(u64),
     Stop,
     Error(String),
 }
@@ -22,9 +19,8 @@ pub trait WorkerManager {
     async fn start_block_track_job(
         &self,
         wallet_index: usize,
-        worker_tx: mpsc::Sender<JobMessage>,
-        worker_rx: mpsc::Receiver<JobMessage>,
-    ) -> std::result::Result<(), Self::Error>;
+        worker_tx: tokio::sync::mpsc::Sender<JobMessage>,
+    ) -> std::result::Result<tokio::task::JoinHandle<()>, Self::Error>;
 }
 
 #[async_trait]
@@ -34,9 +30,8 @@ impl WorkerManager for Background {
     async fn start_block_track_job(
         &self,
         wallet_index: usize,
-        worker_tx: mpsc::Sender<JobMessage>,
-        worker_rx: mpsc::Receiver<JobMessage>,
-    ) -> Result<()> {
+        worker_tx: tokio::sync::mpsc::Sender<JobMessage>,
+    ) -> Result<tokio::task::JoinHandle<()>> {
         const MAX_ERRORS: u8 = 100;
 
         let wallet = self.get_wallet_by_index(wallet_index)?.clone();
@@ -55,51 +50,50 @@ impl WorkerManager for Background {
         let handle = tokio::spawn({
             let mut error_counter: u8 = 0;
             let chain_ref = Arc::clone(&chain_arc);
-            let last_block_number: u64 = 0;
+            let mut last_block_number: u64 = 0;
+            let mut interval =
+                tokio::time::interval(Duration::from_secs(chain_ref.config.diff_block_time));
 
             async move {
                 loop {
-                    match worker_rx.recv() {
-                        Ok(JobMessage::Stop) => {
-                            break;
-                        }
-                        Ok(_) => continue,
-                        Err(e) => {
-                            worker_tx
-                                .send(JobMessage::Error(e.to_string()))
-                                .unwrap_or_default();
-                            error_counter += 1;
+                    tokio::select! {
+                        _ = interval.tick() => {
+                            match chain_arc.get_current_block_number().await {
+                                Ok(block_number) => {
+                                    if block_number != last_block_number {
+                                        if worker_tx.send(JobMessage::Block(block_number)).await.is_ok() {
+                                            last_block_number = block_number;
+                                        } else {
+                                            break;
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    if worker_tx.send(JobMessage::Error(e.to_string())).await.is_ok() {
+                                        error_counter += 1;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
                         }
                     }
-
-                    match chain_ref.get_current_block_number().await {
-                        Ok(block_number) => {}
-                        Err(e) => {
-                            worker_tx
-                                .send(JobMessage::Error(e.to_string()))
-                                .unwrap_or_default();
-                            error_counter += 1;
-                        }
-                    };
 
                     if error_counter >= MAX_ERRORS {
                         break;
                     }
-                    tokio::time::sleep(Duration::from_secs(chain_ref.config.diff_block_time)).await;
                 }
             }
         });
 
-        handle
-            .await
-            .map_err(|e| BackgroundError::WorkerError(e.to_string()))?;
-
-        Ok(())
+        Ok(handle)
     }
 }
 
 #[cfg(test)]
 mod tests_background_worker {
+    use tokio::sync::mpsc;
+
     use alloy::primitives::map::HashMap;
     use config::address::ADDR_LEN;
     use crypto::{bip49::DerivationPath, slip44};
@@ -109,9 +103,12 @@ mod tests_background_worker {
     use token::ft::FToken;
 
     use crate::{
-        bg_crypto::CryptoOperations, bg_provider::ProvidersManagement,
-        bg_storage::StorageManagement, bg_wallet::WalletManagement, Background,
-        BackgroundBip39Params,
+        bg_crypto::CryptoOperations,
+        bg_provider::ProvidersManagement,
+        bg_storage::StorageManagement,
+        bg_wallet::WalletManagement,
+        bg_worker::{JobMessage, WorkerManager},
+        Background, BackgroundBip39Params,
     };
 
     const PASSWORD: &str = "password";
@@ -179,5 +176,23 @@ mod tests_background_worker {
             ftokens: vec![gen_bsc_token(net_config.hash())],
         })
         .unwrap();
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let handle = bg.start_block_track_job(0, tx).await.unwrap();
+        let mut k = 0u8;
+
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                JobMessage::Block(n) => {
+                    assert!(n > 0);
+                    k += 1;
+
+                    if k > 2 {
+                        handle.abort();
+                    }
+                }
+                _ => break,
+            }
+        }
     }
 }
