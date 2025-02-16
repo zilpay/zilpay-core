@@ -110,7 +110,10 @@ impl NetworkProvider {
         Ok(last_timestamp - early_timestamp)
     }
 
-    pub async fn get_transactions_receipt(&self, txns: &mut [HistoricalTransaction]) -> Result<()> {
+    pub async fn update_transactions_receipt(
+        &self,
+        txns: &mut [HistoricalTransaction],
+    ) -> Result<()> {
         let mut requests: Vec<Value> = Vec::with_capacity(txns.len());
 
         for tx in txns.iter() {
@@ -1201,7 +1204,7 @@ mod tests_network {
         let mut list_txns = vec![tx_history];
 
         provider
-            .get_transactions_receipt(&mut list_txns)
+            .update_transactions_receipt(&mut list_txns)
             .await
             .unwrap();
 
@@ -1233,7 +1236,7 @@ mod tests_network {
         let mut list_txns = vec![tx_history];
 
         provider
-            .get_transactions_receipt(&mut list_txns)
+            .update_transactions_receipt(&mut list_txns)
             .await
             .unwrap();
 

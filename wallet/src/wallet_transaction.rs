@@ -36,7 +36,7 @@ impl WalletTransaction for Wallet {
         }
 
         history = Vec::with_capacity(0);
-        self.save_history(&history)?;
+        self.add_history(&history)?;
 
         Ok(())
     }

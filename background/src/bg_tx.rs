@@ -1,7 +1,7 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
 use errors::{background::BackgroundError, tx::TransactionErrors};
-use history::transaction::HistoricalTransaction;
+use history::{status::TransactionStatus, transaction::HistoricalTransaction};
 use proto::tx::TransactionReceipt;
 use wallet::wallet_storage::StorageOperations;
 
@@ -17,11 +17,34 @@ pub trait TransactionsManagement {
         account_index: usize,
         txns: Vec<TransactionReceipt>,
     ) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
+
+    async fn check_pending_txns(
+        &self,
+        wallet_index: usize,
+    ) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
 }
 
 #[async_trait]
 impl TransactionsManagement for Background {
     type Error = BackgroundError;
+
+    async fn check_pending_txns(&self, wallet_index: usize) -> Result<Vec<HistoricalTransaction>> {
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let data = wallet.get_wallet_data()?;
+        let account = data.get_selected_account()?;
+        let chain = self.get_provider(account.chain_hash)?;
+        let mut history = wallet.get_history()?;
+
+        let matching_end = history.partition_point(|tx| {
+            tx.chain_hash == account.chain_hash && tx.status == TransactionStatus::Pending
+        });
+        let matching_tokens = &mut history[..matching_end];
+
+        chain.update_transactions_receipt(matching_tokens).await?;
+        wallet.save_history(&history)?;
+
+        Ok(history)
+    }
 
     async fn broadcast_signed_transactions<'a>(
         &self,
@@ -44,7 +67,7 @@ impl TransactionsManagement for Background {
             .map(|receipt| HistoricalTransaction::try_from(receipt))
             .collect::<std::result::Result<Vec<HistoricalTransaction>, TransactionErrors>>()?;
 
-        wallet.save_history(&history)?;
+        wallet.add_history(&history)?;
 
         Ok(history)
     }
@@ -53,7 +76,9 @@ impl TransactionsManagement for Background {
 #[cfg(test)]
 mod tests_background_transactions {
     use super::*;
-    use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
+    use crate::{
+        bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
+    };
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
     use cipher::argon2;
     use crypto::{bip49::DerivationPath, slip44};
@@ -96,12 +121,12 @@ mod tests_background_transactions {
         ChainConfig {
             diff_block_time: 0,
             testnet: None,
-            chain_ids: [97, 0],
+            chain_ids: [56, 0],
             name: "BNB Smart Chain Testnet".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
             rpc: vec![
-                "https://data-seed-prebsc-1-s1.binance.org:8545".to_string(),
+                "https://bsc-dataseed1.binance.org/".to_string(),
                 "https://data-seed-prebsc-2-s1.binance.org:8545/".to_string(),
                 "http://data-seed-prebsc-1-s2.binance.org:8545/".to_string(),
                 "https://bsctestapi.terminet.io/rpc".to_string(),
@@ -268,5 +293,94 @@ mod tests_background_transactions {
         for tx in txns {
             assert!(!tx.transaction_hash.is_empty());
         }
+    }
+
+    #[tokio::test]
+    async fn test_update_history_evm() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = ChainConfig {
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [56, 0],
+            name: "BNB Smart Chain mainnet".to_string(),
+            chain: "BSC".to_string(),
+            short_name: String::new(),
+            rpc: vec![
+                "https://bsc-dataseed1.binance.org/".to_string(),
+                "https://bsc-dataseed2.binance.org/".to_string(),
+                "https://bsc-dataseed3.binance.org/".to_string(),
+                "https://bsc-dataseed4.binance.org/".to_string(),
+            ],
+            features: vec![155, 1559],
+            slip_44: slip44::ETHEREUM,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let net_hash = net_config.hash();
+        let words = Background::gen_bip39(24).unwrap();
+
+        bg.add_provider(net_config).unwrap();
+
+        let accounts = [(
+            DerivationPath::new(slip44::ETHEREUM, 0),
+            "BSC Acc 0".to_string(),
+        )];
+        let device_indicators = [String::from("testbnb"), String::from("0000")];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: PASSWORD,
+            chain_hash: net_hash,
+            mnemonic_str: &words,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "BSC wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_bsc_token()],
+        })
+        .unwrap();
+
+        let tx_history = vec![
+            HistoricalTransaction {
+                transaction_hash: String::from(
+                    "0x3c5c16b756adf898dc9623445de94df709ffa2c1761d7579270dd292319981e5",
+                ),
+                chain_hash: net_hash,
+                chain_type: history::transaction::ChainType::EVM,
+                ..Default::default()
+            },
+            HistoricalTransaction {
+                transaction_hash: String::from(
+                    "0x6f3c4cb8145acf658db0a8fcf628c1294263d7ed4f9a2bbd92f7bf0e2846fb29",
+                ),
+                chain_hash: net_hash,
+                chain_type: history::transaction::ChainType::EVM,
+                ..Default::default()
+            },
+        ];
+        let walelt = bg.get_wallet_by_index(0).unwrap();
+
+        walelt.add_history(&tx_history).unwrap();
+        bg.check_pending_txns(0).await.unwrap();
+
+        let filterd_history = walelt
+            .get_history()
+            .unwrap()
+            .into_iter()
+            .filter(|t| t.chain_hash == net_hash)
+            .collect::<Vec<HistoricalTransaction>>();
+
+        assert_eq!(
+            filterd_history[0].transaction_hash,
+            tx_history[0].transaction_hash
+        );
+        assert_eq!(
+            filterd_history[1].transaction_hash,
+            tx_history[1].transaction_hash
+        );
+        assert_eq!(filterd_history[0].status, TransactionStatus::Confirmed);
+        assert_eq!(filterd_history[1].status, TransactionStatus::Rejected);
     }
 }

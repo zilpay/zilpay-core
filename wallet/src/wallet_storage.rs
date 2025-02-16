@@ -28,6 +28,10 @@ pub trait StorageOperations {
     ) -> std::result::Result<usize, Self::Error>;
     fn save_wallet_data(&self, data: WalletData) -> std::result::Result<(), Self::Error>;
     fn save_ftokens(&self, ftokens: &[FToken]) -> std::result::Result<(), Self::Error>;
+    fn add_history(
+        &self,
+        history: &[HistoricalTransaction],
+    ) -> std::result::Result<(), Self::Error>;
     fn save_history(
         &self,
         history: &[HistoricalTransaction],
@@ -145,18 +149,28 @@ impl StorageOperations for Wallet {
         &self,
         history: &[HistoricalTransaction],
     ) -> std::result::Result<(), Self::Error> {
+        let new_history = bincode::serialize(&history)?;
+        let history_db_key = Wallet::get_db_history_key(&self.wallet_address);
+
+        self.storage.set(&history_db_key, &new_history)?;
+        self.storage.flush()?;
+
+        Ok(())
+    }
+
+    fn add_history(
+        &self,
+        history: &[HistoricalTransaction],
+    ) -> std::result::Result<(), Self::Error> {
         let new_history = {
             let mut db_history = self.get_history()?;
 
             db_history.extend_from_slice(&history);
 
-            bincode::serialize(&db_history)?
+            db_history
         };
 
-        let history_db_key = Wallet::get_db_history_key(&self.wallet_address);
-
-        self.storage.set(&history_db_key, &new_history)?;
-        self.storage.flush()?;
+        self.save_history(&new_history)?;
 
         Ok(())
     }
