@@ -84,7 +84,7 @@ impl NetworkProvider {
         Self { config }
     }
 
-    pub async fn get_current_block_number(&self) -> Result<U256> {
+    pub async fn get_current_block_number(&self) -> Result<u64> {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let payload = RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::BlockNumber);
         let response = provider
@@ -95,7 +95,7 @@ impl NetworkProvider {
             .first()
             .and_then(|res| res.result.as_ref())
             .and_then(|result| result.as_str())
-            .and_then(|block_str| Self::parse_str_to_u256(&block_str))
+            .and_then(|block_str| u64::from_str_radix(&block_str.trim_start_matches("0x"), 16).ok())
             .ok_or(NetworkErrors::ResponseParseError)?;
 
         Ok(block_number)
@@ -1277,7 +1277,7 @@ mod tests_network {
         let provider = NetworkProvider::new(net_conf);
 
         let block_number = provider.get_current_block_number().await.unwrap();
-        assert!(block_number != U256::ZERO);
+        assert!(block_number != 0);
     }
 
     #[tokio::test]
@@ -1286,6 +1286,6 @@ mod tests_network {
         let provider = NetworkProvider::new(net_conf);
 
         let block_number = provider.get_current_block_number().await.unwrap();
-        assert!(block_number != U256::ZERO);
+        assert!(block_number != 0);
     }
 }

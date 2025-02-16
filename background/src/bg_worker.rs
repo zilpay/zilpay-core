@@ -71,6 +71,17 @@ impl WorkerManager for Background {
                             error_counter += 1;
                         }
                     }
+
+                    match chain_ref.get_current_block_number().await {
+                        Ok(block_number) => {}
+                        Err(e) => {
+                            worker_tx
+                                .send(JobMessage::Error(e.to_string()))
+                                .unwrap_or_default();
+                            error_counter += 1;
+                        }
+                    };
+
                     if error_counter >= MAX_ERRORS {
                         break;
                     }
