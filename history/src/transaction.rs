@@ -27,9 +27,9 @@ pub struct HistoricalTransaction {
     pub amount: U256, // in native token
     pub sender: String,
     pub recipient: String,
+    pub contract_address: Option<String>,
     pub teg: Option<String>,
     pub status: TransactionStatus,
-    pub confirmed: Option<u128>,
     pub timestamp: u64,
     pub block_number: Option<u64>,
     pub gas_used: Option<u64>,
@@ -42,6 +42,7 @@ pub struct HistoricalTransaction {
     pub nonce: u64,
     pub token_info: Option<TokenInfo>,
     pub chain_type: ChainType,
+    pub chain_hash: u64,
 }
 
 impl TryFrom<TransactionReceipt> for HistoricalTransaction {
@@ -50,6 +51,12 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
     fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
         match receipt {
             TransactionReceipt::Zilliqa((zil_receipt, metadata)) => Ok(HistoricalTransaction {
+                contract_address: if zil_receipt.data.is_empty() {
+                    None
+                } else {
+                    Some(Address::Secp256k1Sha256(zil_receipt.to_addr).auto_format())
+                },
+                chain_hash: metadata.chain_hash,
                 chain_type: ChainType::Scilla,
                 block_number: None,
                 transaction_hash: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
@@ -60,7 +67,6 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 recipient: Address::Secp256k1Sha256(zil_receipt.to_addr).auto_format(),
                 teg: None,
                 status: TransactionStatus::Pending,
-                confirmed: None,
                 timestamp: 0,
                 fee: u128::from_be_bytes(zil_receipt.gas_price) * (zil_receipt.gas_limit as u128),
                 icon: metadata.icon,
@@ -92,6 +98,8 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
 
                 Ok(HistoricalTransaction {
                     block_number: None,
+                    contract_address: None,
+                    chain_hash: metadata.chain_hash,
                     chain_type: ChainType::EVM,
                     transaction_hash: metadata.hash.ok_or(TransactionErrors::InvalidTxHash)?,
                     amount: tx.value(),
@@ -103,7 +111,6 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     fee,
                     teg: None,
                     status: TransactionStatus::Pending,
-                    confirmed: None,
                     timestamp: 0,
                     icon: metadata.icon,
                     title: metadata.title,

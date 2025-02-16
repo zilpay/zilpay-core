@@ -59,6 +59,13 @@ pub fn process_tx_receipt_response(
                 let receipt: alloy::rpc::types::TransactionReceipt = serde_json::from_value(result)
                     .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
 
+                tx.sender = receipt.from.to_string();
+                tx.contract_address = receipt.contract_address.map(|a| a.to_string());
+
+                if let Some(to) = receipt.to {
+                    tx.recipient = to.to_string();
+                }
+
                 tx.block_number = receipt.block_number;
                 tx.gas_used = Some(receipt.gas_used);
                 tx.blob_gas_used = receipt.blob_gas_used;
@@ -71,9 +78,15 @@ pub fn process_tx_receipt_response(
                     tx.status = TransactionStatus::Rejected;
                 }
 
-                dbg!(&receipt);
-                // TODO: calc fee
-                // tx.effective_gas_price = Some(receipt.effective_gas_price);
+                let mut total_cost = receipt.gas_used as u128 * receipt.effective_gas_price;
+
+                if let Some(blob_gas_used) = receipt.blob_gas_used {
+                    if let Some(blob_gas_price) = receipt.blob_gas_price {
+                        total_cost += blob_gas_used as u128 * blob_gas_price;
+                    }
+                }
+
+                tx.fee = total_cost;
 
                 return Ok(());
             }

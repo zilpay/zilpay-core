@@ -124,7 +124,6 @@ impl NetworkProvider {
             .map_err(NetworkErrors::Request)?;
 
         for (index, res) in responses.into_iter().enumerate() {
-            // process_tx_receipt_response(res, &txns[index])?;
             if let Some(tx) = txns.get_mut(index) {
                 process_tx_receipt_response(res, tx)?;
             }
@@ -539,6 +538,7 @@ mod tests_network {
     use super::*;
     use alloy::{primitives::U256, rpc::types::TransactionInput};
     use config::address::ADDR_LEN;
+    use history::status::TransactionStatus;
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
     use rpc::network_config::Explorer;
@@ -1192,8 +1192,10 @@ mod tests_network {
         let provider = NetworkProvider::new(net_conf);
         let tx_history = HistoricalTransaction {
             transaction_hash: String::from(
-                "0x0e79c48a5a972a9fdadd0db0cbf9ff046f048da5ea2a456d8b97cfa212ce4eb3",
+                "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715",
             ),
+            chain_hash: provider.config.hash(),
+            chain_type: history::transaction::ChainType::EVM,
             ..Default::default()
         };
         let mut list_txns = vec![tx_history];
@@ -1202,5 +1204,17 @@ mod tests_network {
             .get_transactions_receipt(&mut list_txns)
             .await
             .unwrap();
+
+        assert_eq!(list_txns.first().unwrap().fee, 15132287247000);
+        assert_eq!(list_txns.first().unwrap().gas_used, Some(21000));
+        assert_eq!(list_txns.first().unwrap().block_number, Some(21855983));
+        assert_eq!(
+            list_txns.first().unwrap().transaction_hash,
+            "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715"
+        );
+        assert_eq!(
+            list_txns.first().unwrap().status,
+            TransactionStatus::Confirmed
+        );
     }
 }
