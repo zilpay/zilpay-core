@@ -121,15 +121,13 @@ mod tests_background_transactions {
         ChainConfig {
             diff_block_time: 0,
             testnet: None,
-            chain_ids: [56, 0],
+            chain_ids: [97, 0],
             name: "BNB Smart Chain Testnet".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
             rpc: vec![
-                "https://bsc-dataseed1.binance.org/".to_string(),
                 "https://data-seed-prebsc-2-s1.binance.org:8545/".to_string(),
                 "http://data-seed-prebsc-1-s2.binance.org:8545/".to_string(),
-                "https://bsctestapi.terminet.io/rpc".to_string(),
             ],
             features: vec![155, 1559],
             slip_44: slip44::ETHEREUM,
