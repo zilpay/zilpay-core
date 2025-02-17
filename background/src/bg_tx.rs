@@ -40,6 +40,10 @@ impl TransactionsManagement for Background {
         });
         let matching_tokens = &mut history[..matching_end];
 
+        if matching_tokens.is_empty() {
+            return Ok(history);
+        }
+
         chain.update_transactions_receipt(matching_tokens).await?;
         wallet.save_history(&history)?;
 
