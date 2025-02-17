@@ -163,7 +163,9 @@ impl StorageOperations for Wallet {
         history: &[HistoricalTransaction],
     ) -> std::result::Result<(), Self::Error> {
         let new_history = {
-            let mut db_history = self.get_history()?;
+            let mut db_history = self
+                .get_history()
+                .unwrap_or(Vec::with_capacity(history.len()));
 
             db_history.extend_from_slice(&history);
 
