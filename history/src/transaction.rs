@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::status::TransactionStatus;
 use alloy::{
     consensus::{Transaction, TxType},
@@ -12,6 +14,15 @@ pub enum ChainType {
     #[default]
     EVM,
     Scilla,
+}
+
+impl fmt::Display for ChainType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ChainType::EVM => write!(f, "EVM"),
+            ChainType::Scilla => write!(f, "Scilla"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
