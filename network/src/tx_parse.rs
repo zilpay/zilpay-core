@@ -51,8 +51,22 @@ pub fn process_tx_receipt_response(
     response: ResultRes<Value>,
     tx: &mut HistoricalTransaction,
 ) -> Result<()> {
+    const MINUTES_IN_SECONDS: u64 = 10 * 60; // 10 minutes in seconds
+
     if let Some(err) = response.error {
-        return Err(NetworkErrors::RPCError(err.to_string()));
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let cutoff = now - MINUTES_IN_SECONDS;
+
+        if tx.timestamp < cutoff {
+            tx.status = TransactionStatus::Rejected;
+            tx.error = Some(err.to_string());
+        }
+
+        return Ok(());
     } else if let Some(result) = response.result {
         match tx.chain_type {
             ChainType::Scilla => {
@@ -102,8 +116,6 @@ pub fn process_tx_receipt_response(
                 }
 
                 if tx.status == TransactionStatus::Pending {
-                    const MINUTES_IN_SECONDS: u64 = 10 * 60; // 10 minutes in seconds
-
                     let now = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()
