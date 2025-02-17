@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{
+    fmt,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::status::TransactionStatus;
 use alloy::{
@@ -82,7 +85,10 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     .auto_format(),
                 recipient: Address::Secp256k1Sha256(zil_receipt.to_addr).auto_format(),
                 status: TransactionStatus::Pending,
-                timestamp: 0,
+                timestamp: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
                 fee: u128::from_be_bytes(zil_receipt.gas_price) * (zil_receipt.gas_limit as u128),
                 icon: metadata.icon,
                 title: metadata.title,
@@ -128,7 +134,10 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                     },
                     fee,
                     status: TransactionStatus::Pending,
-                    timestamp: 0,
+                    timestamp: SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs(),
                     icon: metadata.icon,
                     title: metadata.title,
                     gas_used: None,

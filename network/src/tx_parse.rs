@@ -92,8 +92,8 @@ pub fn process_tx_receipt_response(
 
                 if let Some(status) = mb_status {
                     match status {
-                        1 | 4 | 5 | 6 => tx.status = TransactionStatus::Pending,
-                        3 | 2 => tx.status = TransactionStatus::Confirmed,
+                        1 | 2 | 4 | 5 | 6 => tx.status = TransactionStatus::Pending,
+                        3 => tx.status = TransactionStatus::Confirmed,
                         _ => tx.status = TransactionStatus::Rejected,
                     }
                     tx.status_code = mb_status;
