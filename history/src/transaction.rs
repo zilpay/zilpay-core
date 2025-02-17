@@ -53,13 +53,28 @@ pub struct HistoricalTransaction {
     pub blob_gas_price: Option<u128>,
     pub effective_gas_price: Option<u128>,
     pub fee: u128, // in native token
+    #[serde(default, deserialize_with = "deserialize_error")]
     pub icon: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_error")]
     pub title: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_error")]
     pub error: Option<String>,
     pub nonce: u128,
     pub token_info: Option<TokenInfo>,
     pub chain_type: ChainType,
     pub chain_hash: u64,
+}
+
+fn deserialize_error<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(s))
+    }
 }
 
 impl TryFrom<TransactionReceipt> for HistoricalTransaction {
