@@ -35,16 +35,21 @@ impl TransactionsManagement for Background {
         let chain = self.get_provider(account.chain_hash)?;
         let mut history = wallet.get_history()?;
 
-        let matching_end = history.partition_point(|tx| {
-            tx.chain_hash == account.chain_hash && tx.status == TransactionStatus::Pending
-        });
-        let matching_tokens = &mut history[..matching_end];
+        let mut matching_transactions = Vec::with_capacity(history.len());
 
-        if matching_tokens.is_empty() {
+        for tx in history.iter_mut() {
+            if tx.chain_hash == account.chain_hash && tx.status == TransactionStatus::Pending {
+                matching_transactions.push(tx);
+            }
+        }
+
+        if matching_transactions.is_empty() {
             return Ok(history);
         }
 
-        chain.update_transactions_receipt(matching_tokens).await?;
+        chain
+            .update_transactions_receipt(&mut matching_transactions)
+            .await?;
         wallet.save_history(&history)?;
 
         Ok(history)

@@ -129,7 +129,7 @@ impl NetworkProvider {
 
     pub async fn update_transactions_receipt(
         &self,
-        txns: &mut [HistoricalTransaction],
+        txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
         let mut requests: Vec<Value> = Vec::with_capacity(txns.len());
 
@@ -1210,7 +1210,7 @@ mod tests_network {
             fallback_enabled: true,
         };
         let provider = NetworkProvider::new(net_conf);
-        let tx_history = HistoricalTransaction {
+        let mut tx_history = HistoricalTransaction {
             transaction_hash: String::from(
                 "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715",
             ),
@@ -1218,7 +1218,7 @@ mod tests_network {
             chain_type: history::transaction::ChainType::EVM,
             ..Default::default()
         };
-        let mut list_txns = vec![tx_history];
+        let mut list_txns = vec![&mut tx_history];
 
         provider
             .update_transactions_receipt(&mut list_txns)
@@ -1242,7 +1242,7 @@ mod tests_network {
     async fn test_tx_receipt_scilla() {
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
-        let tx_history = HistoricalTransaction {
+        let mut tx_history = HistoricalTransaction {
             transaction_hash: String::from(
                 "0xe193e982ae4d2ed605a88ed43b7ea9b432596e33a515a8549b54d51092b55d7c",
             ),
@@ -1250,7 +1250,7 @@ mod tests_network {
             chain_type: history::transaction::ChainType::Scilla,
             ..Default::default()
         };
-        let mut list_txns = vec![tx_history];
+        let mut list_txns = vec![&mut tx_history];
 
         provider
             .update_transactions_receipt(&mut list_txns)
