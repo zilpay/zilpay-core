@@ -55,6 +55,7 @@ pub struct HistoricalTransaction {
     pub fee: u128, // in native token
     pub icon: Option<String>,
     pub title: Option<String>,
+    pub error: Option<String>,
     pub nonce: u128,
     pub token_info: Option<TokenInfo>,
     pub chain_type: ChainType,
@@ -67,6 +68,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
     fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
         match receipt {
             TransactionReceipt::Zilliqa((zil_receipt, metadata)) => Ok(HistoricalTransaction {
+                error: None,
                 contract_address: if zil_receipt.data.is_empty() {
                     None
                 } else {
@@ -118,6 +120,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
                 let fee = effective_gas_price * tx.gas_limit() as u128;
 
                 Ok(HistoricalTransaction {
+                    error: None,
                     block_number: None,
                     status_code: None,
                     contract_address: None,

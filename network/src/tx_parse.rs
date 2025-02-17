@@ -1,3 +1,5 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use crate::Result;
 use alloy::eips::eip2718::Encodable2718;
 use errors::{network::NetworkErrors, tx::TransactionErrors};
@@ -97,6 +99,22 @@ pub fn process_tx_receipt_response(
                         _ => tx.status = TransactionStatus::Rejected,
                     }
                     tx.status_code = mb_status;
+                }
+
+                if tx.status == TransactionStatus::Pending {
+                    const MINUTES_IN_SECONDS: u64 = 10 * 60; // 10 minutes in seconds
+
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    let cutoff = now - MINUTES_IN_SECONDS;
+
+                    if tx.timestamp < cutoff {
+                        tx.status = TransactionStatus::Rejected;
+                        tx.error = Some("timeout".to_string());
+                    }
                 }
 
                 if let Some(sender) = mb_sender {
