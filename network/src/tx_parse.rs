@@ -194,12 +194,9 @@ pub fn process_tx_send_response(
         }
         TransactionReceipt::Ethereum((_eth, metadata)) => {
             if let Some(result) = &response.result {
-                let hash = result
-                    .as_str()
-                    .map(|v| v.trim_start_matches("0x").to_string())
-                    .ok_or(TransactionErrors::InvalidTxHash)?;
+                let hash = result.as_str().ok_or(TransactionErrors::InvalidTxHash)?;
 
-                metadata.hash = Some(hash);
+                metadata.hash = Some(hash.to_string());
 
                 Ok(())
             } else {
