@@ -40,7 +40,7 @@ where
         self.network.nodes()
     }
 
-    async fn req<SR>(&self, payloads: &Value) -> Result<SR>
+    async fn req<SR>(&self, payloads: Value) -> Result<SR>
     where
         SR: DeserializeOwned + Debug,
     {
@@ -181,7 +181,7 @@ mod tests {
             ZilMethods::GetBalance,
         )];
 
-        let res: Vec<ResultRes<GetBalanceRes>> = zil.req(&payloads.into()).await.unwrap();
+        let res: Vec<ResultRes<GetBalanceRes>> = zil.req(payloads.into()).await.unwrap();
 
         assert_eq!(res.len(), 1);
         assert!(res[0].result.is_some());
@@ -197,7 +197,7 @@ mod tests {
             EvmMethods::GetBalance,
         )];
 
-        let res: Vec<ResultRes<String>> = bsc.req(&payloads.into()).await.unwrap();
+        let res: Vec<ResultRes<String>> = bsc.req(payloads.into()).await.unwrap();
 
         assert_eq!(res.len(), 1);
         assert!(res[0].result.is_some());
@@ -228,7 +228,7 @@ mod tests {
             EvmMethods::GetBalance,
         )];
 
-        let result: Result<Vec<ResultRes<String>>> = provider.req(&payloads.into()).await;
+        let result: Result<Vec<ResultRes<String>>> = provider.req(payloads.into()).await;
 
         dbg!(&result);
     }

@@ -27,7 +27,7 @@ pub trait JsonRPC {
 
     fn get_nodes(&self) -> &[String];
 
-    async fn req<SR>(&self, payloads: &Value) -> Result<SR>
+    async fn req<SR>(&self, payloads: Value) -> Result<SR>
     where
         SR: DeserializeOwned + Debug;
 }

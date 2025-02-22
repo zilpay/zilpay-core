@@ -87,27 +87,24 @@ impl NetworkProvider {
     pub async fn proxy_req(&self, payload: Value) -> Result<Value> {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
 
-        let response = if payload.is_array() {
-            provider
-                .req::<Vec<ResultRes<Value>>>(payload)
-                .await
-                .map_err(NetworkErrors::Request)?;
-        } else {
-        };
+        let response = provider
+            .req::<Value>(payload)
+            .await
+            .map_err(NetworkErrors::Request)?;
 
-        Ok(payload)
+        Ok(response)
     }
 
     pub async fn get_current_block_number(&self) -> Result<u64> {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let payload = RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::BlockNumber);
         let response = provider
-            .req::<Vec<ResultRes<Value>>>(&[payload])
+            .req::<ResultRes<Value>>(payload)
             .await
             .map_err(NetworkErrors::Request)?;
         let block_number = response
-            .first()
-            .and_then(|res| res.result.as_ref())
+            .result
+            .as_ref()
             .and_then(|result| result.as_str())
             .and_then(|block_str| u64::from_str_radix(&block_str.trim_start_matches("0x"), 16).ok())
             .ok_or(NetworkErrors::ResponseParseError)?;
@@ -119,24 +116,17 @@ impl NetworkProvider {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let payload = build_last_block_header_request(address, None);
         let response = provider
-            .req::<Vec<ResultRes<Value>>>(&[payload])
+            .req::<ResultRes<Value>>(payload)
             .await
             .map_err(NetworkErrors::Request)?;
-        let (last_blocknumber, last_timestamp) = {
-            let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
-
-            process_get_timestampt_block_response(&response, address)
-        };
+        let (last_blocknumber, last_timestamp) =
+            { process_get_timestampt_block_response(&response, address) };
         let payload = build_last_block_header_request(address, Some(last_blocknumber - 1));
         let response = provider
-            .req::<Vec<ResultRes<Value>>>(&[payload])
+            .req::<ResultRes<Value>>(payload)
             .await
             .map_err(NetworkErrors::Request)?;
-        let (_, early_timestamp) = {
-            let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
-
-            process_get_timestampt_block_response(&response, address)
-        };
+        let (_, early_timestamp) = { process_get_timestampt_block_response(&response, address) };
 
         Ok(last_timestamp - early_timestamp)
     }
@@ -153,7 +143,7 @@ impl NetworkProvider {
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let responses = provider
-            .req::<Vec<ResultRes<Value>>>(&requests)
+            .req::<Vec<ResultRes<Value>>>(requests.into())
             .await
             .map_err(NetworkErrors::Request)?;
 
@@ -185,7 +175,7 @@ impl NetworkProvider {
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let response = provider
-            .req::<Vec<ResultRes<Value>>>(&requests)
+            .req::<Vec<ResultRes<Value>>>(requests.into())
             .await
             .map_err(NetworkErrors::Request)?;
 
@@ -263,10 +253,9 @@ impl NetworkProvider {
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let response = provider
-            .req::<Vec<ResultRes<Value>>>(&[request])
+            .req::<ResultRes<Value>>(request)
             .await
             .map_err(NetworkErrors::Request)?;
-        let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
 
         if let Some(error) = &response.error {
             json_rpc_error(error)?;
@@ -291,10 +280,9 @@ impl NetworkProvider {
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let response = provider
-            .req::<Vec<ResultRes<String>>>(&[request])
+            .req::<ResultRes<String>>(request)
             .await
             .map_err(NetworkErrors::Request)?;
-        let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
 
         if let Some(error) = &response.error {
             json_rpc_error(error)?;
@@ -322,10 +310,9 @@ impl NetworkProvider {
 
                 let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
                 let response = provider
-                    .req::<Vec<ResultRes<String>>>(&[request])
+                    .req::<ResultRes<String>>(request)
                     .await
                     .map_err(NetworkErrors::Request)?;
-                let response = response.first().ok_or(NetworkErrors::ResponseParseError)?;
 
                 if let Some(error) = &response.error {
                     json_rpc_error(error)?;
@@ -363,8 +350,9 @@ impl NetworkProvider {
         }
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-        let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await?;
-        drop(all_requests);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(all_requests.into())
+            .await?;
 
         for (tx, response) in txns.iter_mut().zip(responses.iter()) {
             process_tx_send_response(response, tx)?;
@@ -383,8 +371,9 @@ impl NetworkProvider {
         }
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-        let responses = provider.req::<Vec<ResultRes<Value>>>(&all_requests).await?;
-        drop(all_requests);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(all_requests.into())
+            .await?;
 
         let mut nonce_list = Vec::with_capacity(total);
 
@@ -427,7 +416,7 @@ impl NetworkProvider {
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let responses = provider
-            .req::<Vec<ResultRes<Value>>>(&all_requests)
+            .req::<Vec<ResultRes<Value>>>(all_requests.into())
             .await
             .map_err(NetworkErrors::Request)?;
 
@@ -463,10 +452,11 @@ impl NetworkProvider {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let responses: Vec<ResultRes<Value>> = provider
             .req(
-                &requests
+                requests
                     .iter()
                     .map(|(req, _)| req.clone())
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<_>>()
+                    .into(),
             )
             .await
             .map_err(NetworkErrors::Request)?;
