@@ -84,6 +84,20 @@ impl NetworkProvider {
         Self { config }
     }
 
+    pub async fn proxy_req(&self, payload: Value) -> Result<Value> {
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+
+        let response = if payload.is_array() {
+            provider
+                .req::<Vec<ResultRes<Value>>>(payload)
+                .await
+                .map_err(NetworkErrors::Request)?;
+        } else {
+        };
+
+        Ok(payload)
+    }
+
     pub async fn get_current_block_number(&self) -> Result<u64> {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let payload = RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::BlockNumber);
