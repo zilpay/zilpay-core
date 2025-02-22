@@ -56,6 +56,7 @@ pub struct HistoricalTransaction {
     pub icon: Option<String>,
     pub title: Option<String>,
     pub error: Option<String>,
+    pub sig: String,
     pub nonce: u128,
     pub token_info: Option<TokenInfo>,
     pub chain_type: ChainType,
@@ -68,6 +69,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
     fn try_from(receipt: TransactionReceipt) -> Result<Self, Self::Error> {
         match receipt {
             TransactionReceipt::Zilliqa((zil_receipt, metadata)) => Ok(HistoricalTransaction {
+                sig: alloy::hex::encode_prefixed(zil_receipt.signature),
                 error: None,
                 contract_address: if zil_receipt.data.is_empty() {
                     None
@@ -121,6 +123,7 @@ impl TryFrom<TransactionReceipt> for HistoricalTransaction {
 
                 Ok(HistoricalTransaction {
                     error: None,
+                    sig: alloy::hex::encode_prefixed(tx.signature_hash()),
                     block_number: None,
                     status_code: None,
                     contract_address: None,
