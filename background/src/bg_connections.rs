@@ -21,6 +21,7 @@ pub trait ConnectionManagement {
 
     /// Adds a new connection
     fn add_connection(&self, connection: Connection) -> std::result::Result<(), Self::Error>;
+    fn remove_connection(&self, domain: &str) -> std::result::Result<(), Self::Error>;
 }
 
 impl ConnectionManagement for Background {
@@ -37,6 +38,24 @@ impl ConnectionManagement for Background {
         }
 
         bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1))
+    }
+
+    fn remove_connection(&self, domain: &str) -> std::result::Result<(), Self::Error> {
+        let mut connections = self.get_connections();
+        let initial_len = connections.len();
+        connections.retain(|c| !c.domain.contains(domain));
+
+        if connections.len() == initial_len {
+            return Err(BackgroundError::ConnectionNotFound(domain.to_string()));
+        }
+
+        let bytes = bincode::serialize(&connections)
+            .map_err(|e| BackgroundError::FailToSerializeConnections(e.to_string()))?;
+
+        self.storage.set(CONNECTIONS_LIST_DB_KEY, &bytes)?;
+        self.storage.flush()?;
+
+        Ok(())
     }
 
     fn add_wallet_to_connection(&self, domain: String, wallet_index: usize) -> Result<()> {
@@ -83,7 +102,7 @@ impl ConnectionManagement for Background {
 }
 
 #[cfg(test)]
-mod tests_background {
+mod tests_background_connections {
     use errors::background::BackgroundError;
     use rand::Rng;
 
@@ -103,11 +122,9 @@ mod tests_background {
     fn test_connections_storage() {
         let (bg, dir) = setup_test_background();
 
-        // Test empty connections
         let connections = bg.get_connections();
         assert!(connections.is_empty());
 
-        // Create test connection
         let colors = DAppColors {
             primary: "#000000".to_string(),
             secondary: Some("#FFFFFF".to_string()),
@@ -122,10 +139,7 @@ mod tests_background {
             Some(colors),
         );
 
-        // Add connection
         bg.add_connection(connection.clone()).unwrap();
-
-        // Try to add duplicate connection
 
         assert_eq!(
             bg.add_connection(connection.clone()),
@@ -134,14 +148,12 @@ mod tests_background {
             ))
         );
 
-        // Verify first connection
         let connections = bg.get_connections();
         assert_eq!(connections.len(), 1);
         let first_conn = &connections[0];
         assert_eq!(first_conn.domain, "example.com");
         assert_eq!(first_conn.title, "Example DApp");
 
-        // Test persistence
         drop(bg);
         let bg2 = Background::from_storage_path(&dir).unwrap();
         let loaded_connections = bg2.get_connections();
@@ -152,5 +164,44 @@ mod tests_background {
         assert_eq!(loaded_conn.title, "Example DApp");
         assert!(loaded_conn.colors.is_some());
         assert!(loaded_conn.is_wallet_connected(0));
+    }
+
+    #[test]
+    fn test_remove_connection() {
+        let (bg, _dir) = setup_test_background();
+
+        let connection1 = Connection::new(
+            "example.com".to_string(),
+            0,
+            "Example DApp".to_string(),
+            None,
+        );
+        let connection2 =
+            Connection::new("sub.test.com".to_string(), 0, "Test DApp".to_string(), None);
+
+        bg.add_connection(connection1).unwrap();
+        bg.add_connection(connection2).unwrap();
+
+        let connections = bg.get_connections();
+        assert_eq!(connections.len(), 2);
+
+        // Test removing existing connection
+        bg.remove_connection("example").unwrap();
+        let connections = bg.get_connections();
+        assert_eq!(connections.len(), 1);
+        assert_eq!(connections[0].domain, "sub.test.com");
+
+        // Test removing with substring match
+        bg.remove_connection("test").unwrap();
+        let connections = bg.get_connections();
+        assert_eq!(connections.len(), 0);
+
+        // Test removing non-existent connection
+        assert_eq!(
+            bg.remove_connection("nonexistent"),
+            Err(BackgroundError::ConnectionNotFound(
+                "nonexistent".to_string()
+            ))
+        );
     }
 }
