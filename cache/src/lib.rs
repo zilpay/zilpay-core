@@ -18,7 +18,7 @@ impl Cache {
     }
 
     fn find_cached_file(&self, url_hash: &str) -> Option<String> {
-        let possible_extensions = ["png", "jpg", "jpeg", "gif", "svg", "webp"];
+        let possible_extensions = ["png", "jpg", "jpeg", "gif", "svg", "webp", "ico"];
         for ext in possible_extensions.iter() {
             let file_name = format!("{}.{}", url_hash, ext);
             let file_path = self.cache_dir.join(&file_name);
