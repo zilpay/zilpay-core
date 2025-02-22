@@ -19,6 +19,7 @@ use config::storage::NETWORK_DB_KEY;
 use crypto::bip49::DerivationPath;
 use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
+use errors::rpc::RpcError;
 use errors::token::TokenError;
 use errors::tx::TransactionErrors;
 use history::transaction::HistoricalTransaction;
@@ -84,7 +85,9 @@ impl NetworkProvider {
         Self { config }
     }
 
-    pub async fn proxy_req(&self, payload: Value) -> Result<Value> {
+    pub async fn proxy_req(&self, payload_str: String) -> Result<Value> {
+        let payload =
+            serde_json::from_str(&payload_str).map_err(|e| RpcError::InvalidJson(e.to_string()))?;
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
 
         let response = provider
