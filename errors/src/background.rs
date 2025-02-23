@@ -96,6 +96,9 @@ pub enum BackgroundError {
     #[error("PubKey Error: {0}")]
     PubKeyError(PubKeyError),
 
+    #[error("keypair Error: {0}")]
+    KeyPairError(KeyPairError),
+
     #[error("unable verify transaction")]
     TransactionInvalidSig,
 }
@@ -103,6 +106,12 @@ pub enum BackgroundError {
 impl From<LocalStorageError> for BackgroundError {
     fn from(error: LocalStorageError) -> Self {
         BackgroundError::LocalStorageError(error)
+    }
+}
+
+impl From<KeyPairError> for BackgroundError {
+    fn from(error: KeyPairError) -> Self {
+        BackgroundError::KeyPairError(error)
     }
 }
 

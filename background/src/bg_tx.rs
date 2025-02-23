@@ -1,9 +1,11 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
+use cipher::argon2::Argon2Seed;
 use errors::{background::BackgroundError, tx::TransactionErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
-use proto::tx::TransactionReceipt;
-use wallet::wallet_storage::StorageOperations;
+use proto::{pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
+use sha2::{Digest, Sha256};
+use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
 use crate::Background;
 
@@ -22,11 +24,38 @@ pub trait TransactionsManagement {
         &self,
         wallet_index: usize,
     ) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
+
+    async fn sign_message(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        seed_bytes: &Argon2Seed,
+        passphrase: Option<&str>,
+        message: &str,
+    ) -> std::result::Result<(PubKey, Signature), Self::Error>;
 }
 
 #[async_trait]
 impl TransactionsManagement for Background {
     type Error = BackgroundError;
+
+    async fn sign_message(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        seed_bytes: &Argon2Seed,
+        passphrase: Option<&str>,
+        message: &str,
+    ) -> Result<(PubKey, Signature)> {
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
+        let mut hasher = Sha256::new();
+        hasher.update(message);
+        let hash = hasher.finalize();
+        let signature = key_pair.sign_message(&hash)?;
+
+        Ok((key_pair.get_pubkey()?, signature))
+    }
 
     async fn check_pending_txns(&self, wallet_index: usize) -> Result<Vec<HistoricalTransaction>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
