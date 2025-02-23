@@ -25,7 +25,7 @@ pub trait TransactionsManagement {
         wallet_index: usize,
     ) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
 
-    async fn sign_message(
+    fn sign_message(
         &self,
         wallet_index: usize,
         account_index: usize,
@@ -39,7 +39,7 @@ pub trait TransactionsManagement {
 impl TransactionsManagement for Background {
     type Error = BackgroundError;
 
-    async fn sign_message(
+    fn sign_message(
         &self,
         wallet_index: usize,
         account_index: usize,
