@@ -13,7 +13,7 @@ pub struct DAppColors {
 pub struct Connection {
     // Base fields
     pub domain: String,
-    pub wallet_indexes: HashSet<usize>,
+    pub account_indexes: HashSet<usize>,
     pub favicon: Option<String>,
     pub title: String,
     pub description: Option<String>,
@@ -35,16 +35,16 @@ pub struct ConnectionPermissions {
 impl Connection {
     pub fn new(
         domain: String,
-        wallet_index: usize,
+        account_index: usize,
         title: String,
         colors: Option<DAppColors>,
     ) -> Self {
-        let mut wallet_indexes = HashSet::new();
-        wallet_indexes.insert(wallet_index);
+        let mut account_indexes = HashSet::new();
+        account_indexes.insert(account_index);
 
         Self {
             domain,
-            wallet_indexes,
+            account_indexes,
             favicon: None,
             title,
             description: None,
@@ -58,15 +58,15 @@ impl Connection {
     }
 
     pub fn add_wallet(&mut self, wallet_index: usize) {
-        self.wallet_indexes.insert(wallet_index);
+        self.account_indexes.insert(wallet_index);
     }
 
     pub fn remove_wallet(&mut self, wallet_index: usize) {
-        self.wallet_indexes.remove(&wallet_index);
+        self.account_indexes.remove(&wallet_index);
     }
 
     pub fn is_wallet_connected(&self, wallet_index: usize) -> bool {
-        self.wallet_indexes.contains(&wallet_index)
+        self.account_indexes.contains(&wallet_index)
     }
 
     pub fn update_last_connected(&mut self) {
@@ -109,7 +109,7 @@ mod tests {
         );
 
         assert_eq!(connection.domain, "example.com");
-        assert!(connection.wallet_indexes.contains(&0));
+        assert!(connection.account_indexes.contains(&0));
         assert_eq!(connection.title, "Example DApp");
         assert_eq!(connection.colors.unwrap().primary, colors.primary);
     }
