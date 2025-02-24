@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DAppColors {
-    pub primary: String,
+    pub primary: Option<String>,
     pub secondary: Option<String>,
     pub background: Option<String>,
     pub text: Option<String>,
@@ -95,7 +95,7 @@ mod tests {
     #[test]
     fn test_connection_creation() {
         let colors = DAppColors {
-            primary: "#000000".to_string(),
+            primary: Some("#000000".to_string()),
             secondary: Some("#FFFFFF".to_string()),
             background: None,
             text: None,
@@ -121,7 +121,7 @@ mod tests {
             0,
             "Example DApp".to_string(),
             Some(DAppColors {
-                primary: "#000000".to_string(),
+                primary: Some("#000000".to_string()),
                 secondary: None,
                 background: None,
                 text: None,
