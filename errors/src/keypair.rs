@@ -48,6 +48,12 @@ pub enum KeyPairError {
 
     #[error("Transaction error: {0}")]
     TransactionErrors(String),
+
+    #[error("secp256 sha256 is not supported eip712")]
+    InvalidSecp256k1Sha256,
+
+    #[error("eip712 error: {0}")]
+    Eip712Error(String),
 }
 
 #[derive(Debug, Error, PartialEq)]

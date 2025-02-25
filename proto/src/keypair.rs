@@ -1,3 +1,5 @@
+use alloy::dyn_abi::eip712::TypedData;
+use alloy::signers::Signer;
 use alloy::{
     network::EthereumWallet,
     signers::{local::PrivateKeySigner, SignerSync},
@@ -190,6 +192,27 @@ impl KeyPair {
         }
     }
 
+    pub async fn sign_typed_data_eip712(&self, data: TypedData) -> Result<Signature> {
+        match self {
+            KeyPair::Secp256k1Keccak256((_, _)) => {
+                let signer = self.get_local_eth_siger()?;
+                let signing_hash = data
+                    .eip712_signing_hash()
+                    .map_err(|e| KeyPairError::Eip712Error(e.to_string()))?;
+                let signature = signer
+                    .sign_hash(&signing_hash)
+                    .await
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+                let sig = signature
+                    .try_into()
+                    .map_err(KeyPairError::InvalidSignature)?;
+
+                Ok(sig)
+            }
+            KeyPair::Secp256k1Sha256((_, _)) => Err(KeyPairError::InvalidSecp256k1Sha256),
+        }
+    }
+
     pub fn verify_sig(&self, msg_bytes: &[u8], sig: &Signature) -> Result<bool> {
         let pk = self.get_pubkey()?;
         let is_verify = sig
@@ -249,6 +272,7 @@ impl KeyPair {
 mod tests_keypair {
     use super::*;
     use bip39::Mnemonic;
+    use serde_json::json;
     use std::borrow::Cow;
 
     fn create_test_keypair(key_type: u8) -> KeyPair {
@@ -427,5 +451,72 @@ mod tests_keypair {
 
         assert_eq!(eth_path.get_index(), 0);
         assert_eq!(zil_path.get_index(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_sign_typed_data_eip712_success() {
+        let key_pair = KeyPair::gen_keccak256().unwrap();
+        let address = key_pair.get_pubkey().unwrap().get_addr().unwrap();
+        let typed_data_json = json!({
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"}
+                ],
+                "Person": [
+                    {"name": "name", "type": "string"},
+                    {"name": "wallet", "type": "address"}
+                ]
+            },
+            "primaryType": "Person",
+            "domain": {
+                "name": "Ether Mail",
+                "version": "1",
+                "chainId": 1,
+                "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+            },
+            "message": {
+                "name": "Bob",
+                "wallet": address.to_eth_checksummed().unwrap()
+            }
+        });
+        let typed_data: TypedData = serde_json::from_str(&typed_data_json.to_string()).unwrap();
+        let signature = key_pair.sign_typed_data_eip712(typed_data).await;
+        assert!(signature.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_sign_typed_data_eip712_invalid_type() {
+        let key_pair = KeyPair::gen_sha256().unwrap();
+        let typed_data_json = json!({
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"}
+                ],
+                "Person": [
+                    {"name": "name", "type": "string"},
+                    {"name": "wallet", "type": "address"}
+                ]
+            },
+            "primaryType": "Person",
+            "domain": {
+                "name": "Ether Mail",
+                "version": "1",
+                "chainId": 1,
+                "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+            },
+            "message": {
+                "name": "Bob",
+                "wallet": "0xbBbBBBBbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"
+            }
+        });
+        let typed_data: TypedData = serde_json::from_str(&typed_data_json.to_string()).unwrap();
+        let result = key_pair.sign_typed_data_eip712(typed_data).await;
+        assert!(matches!(result, Err(KeyPairError::InvalidSecp256k1Sha256)));
     }
 }
