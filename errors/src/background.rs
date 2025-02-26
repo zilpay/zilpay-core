@@ -66,6 +66,9 @@ pub enum BackgroundError {
     #[error("Failed to generate BIP39 words from entropy: {0}")]
     FailToGenBip39FromEntropy(String),
 
+    #[error("Deserialize TypedData error: {0}")]
+    FailDeserializeTypedData(String),
+
     #[error("Argon2 password hashing error: {0}")]
     ArgonPasswordHashError(CipherErrors),
 

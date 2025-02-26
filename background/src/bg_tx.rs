@@ -1,4 +1,5 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
+use alloy::dyn_abi::TypedData;
 use async_trait::async_trait;
 use cipher::argon2::Argon2Seed;
 use errors::{background::BackgroundError, tx::TransactionErrors};
@@ -33,11 +34,37 @@ pub trait TransactionsManagement {
         passphrase: Option<&str>,
         message: &str,
     ) -> std::result::Result<(PubKey, Signature), Self::Error>;
+
+    async fn sign_typed_data_eip712(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        seed_bytes: &Argon2Seed,
+        passphrase: Option<&str>,
+        message: &str,
+    ) -> std::result::Result<(PubKey, Signature), Self::Error>;
 }
 
 #[async_trait]
 impl TransactionsManagement for Background {
     type Error = BackgroundError;
+
+    async fn sign_typed_data_eip712(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        seed_bytes: &Argon2Seed,
+        passphrase: Option<&str>,
+        typed_data_json: &str,
+    ) -> Result<(PubKey, Signature)> {
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
+        let typed_data: TypedData = serde_json::from_str(&typed_data_json.to_string())
+            .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
+        let signature = key_pair.sign_typed_data_eip712(typed_data).await?;
+
+        Ok((key_pair.get_pubkey()?, signature))
+    }
 
     fn sign_message(
         &self,
@@ -49,10 +76,7 @@ impl TransactionsManagement for Background {
     ) -> Result<(PubKey, Signature)> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
-        let mut hasher = Sha256::new();
-        hasher.update(message);
-        let hash = hasher.finalize();
-        let signature = key_pair.sign_message(&hash)?;
+        let signature = key_pair.sign_message(message.as_bytes())?;
 
         Ok((key_pair.get_pubkey()?, signature))
     }
