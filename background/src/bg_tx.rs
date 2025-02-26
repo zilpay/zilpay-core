@@ -5,7 +5,6 @@ use cipher::argon2::Argon2Seed;
 use errors::{background::BackgroundError, tx::TransactionErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
 use proto::{pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
-use sha2::{Digest, Sha256};
 use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
 use crate::Background;
