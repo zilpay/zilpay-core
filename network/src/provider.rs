@@ -182,6 +182,15 @@ impl NetworkProvider {
             .await
             .map_err(NetworkErrors::Request)?;
 
+        if response.iter().all(|res| res.error.is_some()) {
+            let all_errors = response
+                .into_iter()
+                .filter_map(|res| res.error.map(|e| e.message))
+                .collect::<Vec<String>>()
+                .join(", ");
+            return Err(NetworkErrors::RPCError(all_errors));
+        }
+
         let nonce = response
             .first()
             .and_then(|res| process_nonce_response(&res, sender).ok())
