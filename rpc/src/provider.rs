@@ -46,49 +46,41 @@ where
     {
         const TIME_OUT_SEC: u64 = 5;
         let client = reqwest::Client::new();
-        let mut error = RpcError::NetworkDown;
-        let mut k = 0;
+        let mut last_error = None;
 
         for url in self.get_nodes() {
-            k += 1;
-            let res = match client
+            let res = client
                 .post(url)
                 .timeout(Duration::from_secs(TIME_OUT_SEC))
                 .json(&payloads)
                 .send()
-                .await
-            {
-                Ok(response) => response,
-                Err(e) => {
-                    if error == RpcError::BadRequest(e.to_string()) && k == Self::MAX_ERROR {
-                        break;
-                    } else if error == RpcError::BadRequest(e.to_string()) {
-                        continue;
-                    } else {
-                        error = RpcError::BadRequest(e.to_string());
-                        continue;
-                    }
-                }
-            };
+                .await;
 
-            match res.json().await {
-                Ok(json) => {
-                    return Ok(json);
-                }
-                Err(e) => {
-                    if error == RpcError::InvalidJson(e.to_string()) && k == Self::MAX_ERROR {
-                        break;
-                    } else if error == RpcError::InvalidJson(e.to_string()) {
-                        continue;
-                    } else {
-                        error = RpcError::InvalidJson(e.to_string());
-                        continue;
+            match res {
+                Ok(response) => match response.text().await {
+                    Ok(text) => match serde_json::from_str::<SR>(&text) {
+                        Ok(json) => return Ok(json),
+                        Err(e) => {
+                            last_error = Some(RpcError::InvalidJson(format!(
+                                "Failed to parse JSON: {}. Response: {}",
+                                e, text
+                            )));
+                        }
+                    },
+                    Err(e) => {
+                        last_error = Some(RpcError::BadRequest(format!(
+                            "Failed to get response text: {}",
+                            e
+                        )));
                     }
+                },
+                Err(e) => {
+                    last_error = Some(RpcError::BadRequest(format!("Request failed: {}", e)));
                 }
             }
         }
 
-        Err(error)
+        Err(last_error.unwrap_or(RpcError::NetworkDown))
     }
 }
 
