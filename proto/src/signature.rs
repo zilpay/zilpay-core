@@ -2,9 +2,9 @@ use alloy::signers::k256;
 use alloy::signers::Signature as EthersSignature;
 use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA512_SIZE};
 use crypto::schnorr;
+use errors::crypto::SignatureError;
 use k256::ecdsa::Signature as SchnorrSignature;
 use k256::PublicKey as K256PublicKey;
-use errors::crypto::SignatureError;
 
 use crate::pubkey::PubKey;
 
@@ -22,6 +22,13 @@ impl Signature {
             hex::decode(value).map_err(|_| SignatureError::InvalidHexString(value.to_string()))?;
 
         bytes.as_slice().try_into()
+    }
+
+    pub fn to_hex_prefixed(&self) -> String {
+        match self {
+            Self::SchnorrSecp256k1Sha256(bytes) => alloy::hex::encode_prefixed(bytes),
+            Self::ECDSASecp256k1Keccak256(bytes) => alloy::hex::encode_prefixed(bytes),
+        }
     }
 
     pub fn verify(&self, msg_bytes: &[u8], pk: &PubKey) -> Result<bool> {
