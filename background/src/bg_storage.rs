@@ -118,6 +118,7 @@ mod tests_background {
 
     fn create_test_network_config() -> ChainConfig {
         ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],

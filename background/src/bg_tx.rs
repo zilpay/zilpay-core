@@ -163,6 +163,7 @@ mod tests_background_transactions {
 
     fn gen_zil_net_conf() -> ChainConfig {
         ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [333, 0],
@@ -180,6 +181,7 @@ mod tests_background_transactions {
 
     fn gen_bsc_net_conf() -> ChainConfig {
         ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [97, 0],
@@ -358,6 +360,7 @@ mod tests_background_transactions {
     async fn test_update_history_evm() {
         let (mut bg, _dir) = setup_test_background();
         let net_config = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],

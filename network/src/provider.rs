@@ -591,6 +591,7 @@ mod tests_network {
 
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],
@@ -613,6 +614,7 @@ mod tests_network {
 
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
@@ -971,6 +973,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_fee_history_eth() {
         let net_conf = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],
@@ -1025,6 +1028,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_calc_fee_eth_batch() {
         let net_conf = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],
@@ -1076,6 +1080,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_tx_params_payment() {
         let net_conf = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
@@ -1133,6 +1138,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_calc_fee_bsc_batch() {
         let net_conf = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [97, 0],
@@ -1212,6 +1218,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_tx_receipt_evm() {
         let net_conf = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],

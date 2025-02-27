@@ -112,6 +112,7 @@ pub fn format_u256(
     result.replace('\u{a0}', " ")
 }
 
+#[inline]
 fn format_integer_part(integer_part: &str, locale: &Locale) -> String {
     let grouping = locale.grouping();
     let separator = locale.separator();
@@ -132,6 +133,7 @@ fn format_integer_part(integer_part: &str, locale: &Locale) -> String {
     }
 }
 
+#[inline]
 fn format_indian_grouping(s: &str, separator: &str) -> String {
     let len = s.len();
     if len <= 3 {

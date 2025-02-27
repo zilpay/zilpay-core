@@ -214,6 +214,7 @@ mod tests_background_tokens {
 
     fn gen_net_conf() -> ChainConfig {
         ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [56, 0],

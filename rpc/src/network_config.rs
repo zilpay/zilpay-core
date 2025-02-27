@@ -18,6 +18,7 @@ pub struct Explorer {
 pub struct ChainConfig {
     pub name: String,
     pub chain: String,
+    pub logo: String,
     pub short_name: String,
     pub diff_block_time: u64,
     pub rpc: Vec<String>,
@@ -176,6 +177,7 @@ mod tests {
                 standard: 3091,
             }],
             fallback_enabled: true,
+            logo: String::new(),
         }
     }
 
@@ -232,6 +234,7 @@ mod tests {
     #[test]
     fn test_remove_node() {
         let mut config = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],
@@ -266,6 +269,7 @@ mod tests {
     #[test]
     fn test_remove_node_group() {
         let mut config = ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             chain_ids: [1, 0],

@@ -110,6 +110,7 @@ mod tests_providers {
 
     fn create_test_network_config(name: &str, chain_id: u64) -> ChainConfig {
         ChainConfig {
+            logo: String::new(),
             diff_block_time: 0,
             testnet: None,
             name: name.to_string(),
