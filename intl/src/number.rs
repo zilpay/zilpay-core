@@ -30,22 +30,22 @@ const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
     ("OIL", "🛢️"),
     ("GAS", "⛽"),
     ("PLAT", "Pt"),
-    ("GENERIC", "¤"),
 ];
 
 pub fn format_u256(
     value: U256,
     decimals: u8,
     locale_str: &str,
+    symbol_str: &str,
     threshold: f64,
     compact: bool,
 ) -> String {
     let locale = Locale::from_name(locale_str).unwrap_or(Locale::en);
     let currency_symbol = CURRENCY_SYMBOLS
         .iter()
-        .find(|&&(key, _)| key == locale_str)
+        .find(|&&(key, _)| key == symbol_str)
         .map(|&(_, symbol)| symbol)
-        .unwrap_or("¤");
+        .unwrap_or(symbol_str);
 
     let value_str = value.to_string();
     let decimals_usize = decimals as usize;
@@ -159,63 +159,63 @@ mod tests {
     #[test]
     fn test_traditional_currency() {
         let value = U256::from(123456789);
-        let result = format_u256(value, 2, "RUB", 0.0000001, false);
-        assert_eq!(result, "1,234,567.89 ₽");
+        let result = format_u256(value, 2, "ru", "RUB", 0.0000001, false);
+        assert_eq!(result, "1 234 567.89 ₽");
     }
 
     #[test]
     fn test_crypto_currency() {
         let value = U256::from(123456789);
-        let result = format_u256(value, 2, "BTC", 0.0000001, false);
+        let result = format_u256(value, 2, "en", "BTC", 0.0000001, false);
         assert_eq!(result, "1,234,567.89 ₿");
     }
 
     #[test]
     fn test_commodity() {
         let value = U256::from(500000);
-        let result = format_u256(value, 2, "GOLD", 0.0000001, false);
+        let result = format_u256(value, 2, "en", "GOLD", 0.0000001, false);
         assert_eq!(result, "5,000 Au");
     }
 
     #[test]
     fn test_zero_decimals() {
         let value = U256::from(1234567);
-        let result = format_u256(value, 0, "USD", 0.0000001, false);
+        let result = format_u256(value, 0, "en", "USD", 0.0000001, false);
         assert_eq!(result, "1,234,567 $");
     }
 
     #[test]
     fn test_small_number() {
         let value = U256::from(42);
-        let result = format_u256(value, 3, "EUR", 0.0000001, false);
+        let result = format_u256(value, 3, "fr", "EUR", 0.0000001, false);
         assert_eq!(result, "0.042 €");
     }
 
     #[test]
     fn test_threshold() {
         let value = U256::from(5);
-        let result = format_u256(value, 6, "ETH", 0.00001, false);
+        let result = format_u256(value, 6, "en", "ETH", 0.00001, false);
         assert_eq!(result, ">0.00001");
     }
 
     #[test]
     fn test_compact() {
         let value = U256::from(123456789);
-        let result = format_u256(value, 2, "USD", 0.0000001, true);
+        let result = format_u256(value, 2, "en", "USD", 0.0000001, true);
         assert_eq!(result, "1.234568M $");
     }
 
     #[test]
-    fn test_unknown_locale() {
+    fn test_unknown_symbol() {
         let value = U256::from(12345);
-        let result = format_u256(value, 2, "XYZ", 0.0000001, false);
-        assert_eq!(result, "123.45 ¤");
+        let result = format_u256(value, 2, "en", "ZIL", 0.0000001, false);
+        assert_eq!(result, "123.45 ZIL");
     }
 
     #[test]
     fn test_indian_grouping() {
         let value = U256::from(12345678);
-        let result = format_u256(value, 2, "INR", 0.0000001, false);
-        assert_eq!(result, "123,456.78 ₹");
+        let result = format_u256(value, 2, "hi", "INR", 0.0000001, false);
+        assert_eq!(result, "1,23,456.78 ₹");
     }
 }
