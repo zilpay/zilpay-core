@@ -2,14 +2,13 @@ use crate::{
     account::{self, Account},
     wallet_data::WalletData,
     wallet_types::WalletTypes,
-    Result, SecretKeyParams, Wallet,
+    Result, SecretKeyParams, Wallet, WalletAddrType,
 };
-use config::{
-    sha::SHA256_SIZE,
-    wallet::{N_BYTES_HASH, N_SALT},
-};
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+
+use config::sha::SHA256_SIZE;
 use errors::wallet::WalletErrors;
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use token::ft::FToken;
 
@@ -37,6 +36,8 @@ pub trait WalletInit {
     where
         Self: Sized;
 
+    fn wallet_key_gen() -> WalletAddrType;
+
     /// Creates a new wallet instance from BIP39 mnemonic words
     fn from_bip39_words(
         params: Bip39Params,
@@ -50,6 +51,15 @@ pub trait WalletInit {
 impl WalletInit for Wallet {
     type Error = WalletErrors;
 
+    fn wallet_key_gen() -> WalletAddrType {
+        let mut rng = ChaCha20Rng::from_entropy();
+        let mut chacha_key = [0u8; SHA256_SIZE];
+
+        rng.fill_bytes(&mut chacha_key);
+
+        chacha_key
+    }
+
     fn from_ledger(
         params: LedgerParams,
         config: WalletConfig,
@@ -62,12 +72,7 @@ impl WalletInit for Wallet {
 
         drop(cipher_proof);
 
-        let mut hasher = Sha256::new();
-
-        hasher.update(params.pub_key.as_bytes());
-        hasher.update(&params.ledger_id);
-
-        let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
+        let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
         let account = Account::from_ledger(
             params.pub_key,
             params.account_name,
@@ -108,10 +113,6 @@ impl WalletInit for Wallet {
             .sk
             .to_bytes()
             .map_err(WalletErrors::FailToGetSKBytes)?;
-        let mut combined = [0u8; SHA256_SIZE];
-
-        combined[..N_BYTES_HASH].copy_from_slice(&sk_as_bytes[..N_BYTES_HASH]);
-        combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
 
         let cipher_sk = config
             .keychain
@@ -123,11 +124,7 @@ impl WalletInit for Wallet {
         let proof_key = Self::safe_storage_save(&cipher_proof, Arc::clone(&config.storage))?;
         drop(cipher_proof);
         let cipher_entropy_key = Self::safe_storage_save(&cipher_sk, Arc::clone(&config.storage))?;
-
-        let mut hasher = Sha256::new();
-        hasher.update(combined);
-
-        let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
+        let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
         // SecretKey may stores only one account.
         let account = Account::from_secret_key(
             params.sk,
@@ -167,7 +164,6 @@ impl WalletInit for Wallet {
         let cipher_entropy = config
             .keychain
             .encrypt(params.mnemonic.to_entropy(), &config.settings.cipher_orders)?;
-        let mut combined = [0u8; SHA256_SIZE];
         let mnemonic_seed = params.mnemonic.to_seed_normalized(params.passphrase);
         let cipher_proof = config
             .keychain
@@ -176,14 +172,7 @@ impl WalletInit for Wallet {
         drop(cipher_proof);
         let cipher_entropy_key =
             Self::safe_storage_save(&cipher_entropy, Arc::clone(&config.storage))?;
-
-        combined[..N_BYTES_HASH].copy_from_slice(&mnemonic_seed[..N_BYTES_HASH]);
-        combined[N_BYTES_HASH..].copy_from_slice(&N_SALT);
-
-        let mut hasher = Sha256::new();
-        hasher.update(combined);
-
-        let wallet_address: [u8; SHA256_SIZE] = hasher.finalize().into();
+        let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
         let mut accounts: Vec<account::Account> = Vec::with_capacity(params.indexes.len());
 
         for index in params.indexes {

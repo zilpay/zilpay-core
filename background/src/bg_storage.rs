@@ -155,6 +155,7 @@ mod tests_background {
             password,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words,
+            mnemonic_check: true,
             accounts: &accounts,
             wallet_settings: Default::default(),
             passphrase: "",
@@ -194,6 +195,7 @@ mod tests_background {
             password: "pass1",
             chain_hash: net_conf.hash(),
             mnemonic_str: &words1,
+            mnemonic_check: true,
             accounts: &accounts1,
             wallet_settings: Default::default(),
             passphrase: "",
@@ -214,6 +216,7 @@ mod tests_background {
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: "pass2",
             chain_hash: net_conf.hash(),
+            mnemonic_check: true,
             mnemonic_str: &words2,
             accounts: &accounts2,
             wallet_settings: Default::default(),

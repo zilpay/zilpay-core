@@ -14,6 +14,7 @@ pub type Result<T> = std::result::Result<T, BackgroundError>;
 pub struct BackgroundBip39Params<'a> {
     pub password: &'a str,
     pub mnemonic_str: &'a str,
+    pub mnemonic_check: bool,
     pub passphrase: &'a str,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,

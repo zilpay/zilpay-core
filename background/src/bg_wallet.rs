@@ -171,8 +171,16 @@ impl WalletManagement for Background {
         .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain =
             KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
-        let mnemonic = Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
-            .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?;
+        let mnemonic = if params.mnemonic_check {
+            Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
+                .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?
+        } else {
+            Mnemonic::parse_in_normalized_without_checksum_check(
+                bip39::Language::English,
+                params.mnemonic_str,
+            )
+            .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?
+        };
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
@@ -435,6 +443,7 @@ mod tests_background {
         bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
+            mnemonic_check: true,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
@@ -467,6 +476,7 @@ mod tests_background {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password,
+            mnemonic_check: true,
             chain_hash: net_conf.hash(),
             accounts: &accounts,
             mnemonic_str: &words,
@@ -501,6 +511,7 @@ mod tests_background {
 
         bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
             password,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words,

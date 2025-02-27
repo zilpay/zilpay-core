@@ -228,6 +228,7 @@ mod tests_background_transactions {
         let device_indicators = [String::from("5435h"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
             password: PASSWORD,
             chain_hash: net_config.hash(),
             mnemonic_str: WORDS,
@@ -298,6 +299,7 @@ mod tests_background_transactions {
         let device_indicators = [String::from("testbnb"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
             password: PASSWORD,
             chain_hash: net_config.hash(),
             mnemonic_str: WORDS,
@@ -391,6 +393,7 @@ mod tests_background_transactions {
         let device_indicators = [String::from("testbnb"), String::from("0000")];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
             password: PASSWORD,
             chain_hash: net_hash,
             mnemonic_str: &words,

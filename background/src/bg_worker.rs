@@ -250,6 +250,7 @@ mod tests_background_worker {
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: PASSWORD,
+            mnemonic_check: true,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
@@ -294,6 +295,7 @@ mod tests_background_worker {
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
             password: PASSWORD,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
