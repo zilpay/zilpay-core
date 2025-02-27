@@ -72,7 +72,7 @@ pub fn format_u256(
     let threshold_scaled = (threshold * 10.0f64.powi(decimals as i32)).ceil() as u128;
     let threshold_u256 = U256::from(threshold_scaled);
     if value < threshold_u256 && !value.is_zero() {
-        return format!(">{}", threshold);
+        return format!(">{} {}", threshold, currency_symbol);
     }
 
     if compact && integer_part.len() > 3 {
@@ -197,7 +197,7 @@ mod tests {
     fn test_threshold() {
         let value = U256::from(5);
         let result = format_u256(value, 6, "en", "ETH", 0.00001, false);
-        assert_eq!(result, ">0.00001");
+        assert_eq!(result, ">0.00001 Ξ");
     }
 
     #[test]
@@ -219,5 +219,12 @@ mod tests {
         let value = U256::from(12345678);
         let result = format_u256(value, 2, "hi", "INR", 0.0000001, false);
         assert_eq!(result, "1,23,456.78 ₹");
+    }
+
+    #[test]
+    fn test_symbol() {
+        let value = U256::from(10000000u128);
+        let result = format_u256(value, 18, "", "BNB", 0.0000001, true);
+        assert_eq!(result, ">0.0000001 BNB");
     }
 }
