@@ -1,6 +1,7 @@
 use crate::{
-    bg_provider::ProvidersManagement, bg_storage::StorageManagement,
-    device_indicators::create_wallet_device_indicator, Background, BackgroundLedgerParams, Result,
+    bg_connections::ConnectionManagement, bg_provider::ProvidersManagement,
+    bg_storage::StorageManagement, device_indicators::create_wallet_device_indicator, Background,
+    BackgroundLedgerParams, Result,
 };
 use bip39::Mnemonic;
 use cipher::{argon2, keychain::KeyChain};
@@ -368,6 +369,7 @@ impl WalletManagement for Background {
         wallet.clear_data()?;
         wallet.clear_history()?;
         wallet.clear_ftokens()?;
+        self.clear_connection(wallet_index)?;
 
         indicators.retain(|&x| x != wallet_address);
         self.wallets.retain(|x| x.wallet_address != wallet_address);

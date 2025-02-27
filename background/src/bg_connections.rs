@@ -27,6 +27,7 @@ pub trait ConnectionManagement {
         wallet_index: usize,
         connections: Vec<Connection>,
     ) -> std::result::Result<(), Self::Error>;
+    fn clear_connection(&self, wallet_index: usize) -> std::result::Result<(), Self::Error>;
 }
 
 impl ConnectionManagement for Background {
@@ -36,6 +37,15 @@ impl ConnectionManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
 
         Ok([&wallet.wallet_address, CONNECTIONS_LIST_DB_KEY].concat())
+    }
+
+    fn clear_connection(&self, wallet_index: usize) -> Result<()> {
+        let key = self.get_db_key(wallet_index)?;
+
+        self.storage.remove(&key)?;
+        self.storage.flush()?;
+
+        Ok(())
     }
 
     fn save_connection(&self, wallet_index: usize, connections: Vec<Connection>) -> Result<()> {
