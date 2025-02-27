@@ -1,0 +1,8 @@
+[package]
+name = "intl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+alloy.workspace = true
+num-format = "0.4.4"
