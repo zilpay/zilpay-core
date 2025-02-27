@@ -5,6 +5,7 @@ pub use config;
 pub use crypto;
 pub use errors;
 pub use history;
+pub use intl;
 pub use network;
 pub use proto;
 pub use qrcodes;

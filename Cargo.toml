@@ -43,6 +43,7 @@ history = { path = "./history" }
 rpc = { path = "./rpc" }
 cipher = { path = "./cipher" }
 network = { path = "./network" }
+intl = { path = "./intl" }
 cache = { path = "./cache" }
 qrcodes = { path = "./qrcodes" }
 

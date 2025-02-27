@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 errors = { path = "../errors" }
+intl = { path = "../intl" }
 background = { path = "../background" }
 crypto = { path = "../crypto" }
 cipher = { path = "../cipher" }
