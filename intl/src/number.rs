@@ -32,6 +32,8 @@ const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
     ("PLAT", "Pt"),
 ];
 
+const DISPLAY_DECIMALS: usize = 6;
+
 pub fn format_u256(
     value: U256,
     decimals: u8,
@@ -99,17 +101,28 @@ pub fn format_u256(
         } else {
             return format!("{:.6}{} {}", compact_value, suffix, currency_symbol);
         }
-    }
-
-    let integer_formatted = format_integer_part(integer_part, &locale);
-
-    let result = if decimal_part.is_empty() {
-        format!("{} {}", integer_formatted, currency_symbol)
     } else {
-        format!("{}.{} {}", integer_formatted, decimal_part, currency_symbol)
-    };
-
-    result.replace('\u{a0}', " ")
+        let integer_formatted = format_integer_part(integer_part, &locale);
+        let decimal_display = if decimal_part.len() > DISPLAY_DECIMALS {
+            &decimal_part[..DISPLAY_DECIMALS]
+        } else {
+            decimal_part
+        };
+        let ellipsis = if decimal_part.len() > DISPLAY_DECIMALS {
+            ".."
+        } else {
+            ""
+        };
+        let result = if decimal_display.is_empty() {
+            format!("{} {}", integer_formatted, currency_symbol)
+        } else {
+            format!(
+                "{}.{}{} {}",
+                integer_formatted, decimal_display, ellipsis, currency_symbol
+            )
+        };
+        return result.replace('\u{a0}', " ");
+    }
 }
 
 #[inline]
@@ -226,5 +239,19 @@ mod tests {
         let value = U256::from(10000000u128);
         let result = format_u256(value, 18, "", "BNB", 0.0000001, true);
         assert_eq!(result, ">0.0000001 BNB");
+    }
+
+    #[test]
+    fn test_compact_with_long_decimal() {
+        let value = U256::from(233555435453454354u128);
+        let result = format_u256(value, 18, "en", "USD", 0.000001, true);
+        assert_eq!(result, "0.233555.. $");
+    }
+
+    #[test]
+    fn test_compact_with_exact_six_decimals() {
+        let value = U256::from(123456789123456789u128);
+        let result = format_u256(value, 18, "en", "ETH", 0.000001, true);
+        assert_eq!(result, "0.123456.. Ξ");
     }
 }
