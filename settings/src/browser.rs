@@ -10,7 +10,7 @@ pub enum ContentBlockingLevel {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BrowserSettings {
-    pub search_engine: String,
+    pub search_enginea_index: u8,
 
     pub javascript_enabled: bool,
     pub cache_enabled: bool,
@@ -38,7 +38,7 @@ pub struct BrowserSettings {
 impl Default for BrowserSettings {
     fn default() -> Self {
         BrowserSettings {
-            search_engine: "https://duckduckgo.com/?q=".to_string(),
+            search_enginea_index: 0,
             javascript_enabled: true,
             cache_enabled: true,
             cookies_enabled: true,
