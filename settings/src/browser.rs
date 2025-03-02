@@ -68,4 +68,13 @@ impl ContentBlockingLevel {
             Self::Strict => 2,
         }
     }
+
+    pub fn from_code(code: u8) -> Self {
+        match code {
+            0 => Self::None,
+            1 => Self::Moderate,
+            2 => Self::Strict,
+            _ => Self::None,
+        }
+    }
 }
