@@ -10,7 +10,7 @@ pub enum ContentBlockingLevel {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BrowserSettings {
-    pub search_enginea_index: u8,
+    pub search_engine_index: u8,
 
     pub cache_enabled: bool,
     pub cookies_enabled: bool,
@@ -29,7 +29,7 @@ pub struct BrowserSettings {
 impl Default for BrowserSettings {
     fn default() -> Self {
         BrowserSettings {
-            search_enginea_index: 0,
+            search_engine_index: 0,
             cache_enabled: true,
             cookies_enabled: true,
             content_blocking: ContentBlockingLevel::Moderate,
