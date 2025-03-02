@@ -59,3 +59,13 @@ impl Default for BrowserSettings {
         }
     }
 }
+
+impl ContentBlockingLevel {
+    pub fn code(&self) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::Moderate => 1,
+            Self::Strict => 2,
+        }
+    }
+}
