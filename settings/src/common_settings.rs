@@ -1,9 +1,9 @@
-use crate::{locale::Locale, notifications::Notifications, theme::Theme};
+use crate::{browser::BrowserSettings, locale::Locale, notifications::Notifications, theme::Theme};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Common application settings for UI preferences and behavior
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CommonSettings {
     /// Notification configuration and preferences
     #[serde(default)]
@@ -16,11 +16,20 @@ pub struct CommonSettings {
     /// Language and regional settings
     #[serde(default)]
     pub locale: Locale,
+
+    #[serde(default)]
+    pub browser: BrowserSettings,
 }
 
 impl CommonSettings {
-    pub fn new(notifications: Notifications, theme: Theme, locale: Locale) -> Self {
+    pub fn new(
+        notifications: Notifications,
+        theme: Theme,
+        locale: Locale,
+        browser: BrowserSettings,
+    ) -> Self {
         Self {
+            browser,
             notifications,
             theme,
             locale,
@@ -70,7 +79,8 @@ mod tests {
         let theme = Theme::default();
         let locale = Locale::Custom("en-US".to_string());
 
-        let settings = CommonSettings::new(notifications, theme, locale.clone());
+        let settings =
+            CommonSettings::new(notifications, theme, locale.clone(), Default::default());
 
         assert_eq!(settings.locale, locale);
     }

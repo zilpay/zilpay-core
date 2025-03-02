@@ -1,6 +1,6 @@
+use errors::settings::SettingsErrors;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use errors::settings::SettingsErrors;
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Locale {
