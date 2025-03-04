@@ -78,17 +78,10 @@ pub fn format_u256(
     }
 
     if compact && integer_part.len() > 3 {
-        let float_value =
-            value.to_string().parse::<f64>().unwrap_or(0.0) / 10f64.powi(decimals as i32);
-        let log = float_value.log10().floor();
-        let magnitude = if log >= 3.0 {
-            (log / 3.0).floor() * 3.0
-        } else {
-            0.0
-        };
-        let divisor = 10f64.powf(magnitude);
-        let compact_value = float_value / divisor;
-        let suffix = match magnitude as u32 {
+        let integer_len = integer_part.len();
+        let magnitude = ((integer_len - 1) / 3) * 3;
+
+        let suffix = match magnitude {
             3 => "K",
             6 => "M",
             9 => "B",
@@ -96,11 +89,24 @@ pub fn format_u256(
             15 => "Q",
             _ => "",
         };
-        if suffix.is_empty() {
-            return format!("{:.6} {}", compact_value, currency_symbol);
+
+        let significant = &integer_part[..integer_part.len() - magnitude];
+        let rest = &integer_part[integer_part.len() - magnitude..];
+
+        let formatted = if rest.chars().all(|c| c == '0') {
+            significant.to_string()
         } else {
-            return format!("{:.6}{} {}", compact_value, suffix, currency_symbol);
-        }
+            let rest_formatted = rest.trim_end_matches('0');
+            if rest_formatted.is_empty() {
+                significant.to_string()
+            } else if rest_formatted.len() > DISPLAY_DECIMALS {
+                format!("{}.{}..", significant, &rest_formatted[..DISPLAY_DECIMALS])
+            } else {
+                format!("{}.{}", significant, rest_formatted)
+            }
+        };
+
+        return format!("{}{} {}", formatted, suffix, currency_symbol);
     } else {
         let integer_formatted = format_integer_part(integer_part, &locale);
         let decimal_display = if decimal_part.len() > DISPLAY_DECIMALS {
@@ -217,7 +223,7 @@ mod tests {
     fn test_compact() {
         let value = U256::from(123456789);
         let result = format_u256(value, 2, "en", "USD", 0.0000001, true);
-        assert_eq!(result, "1.234568M $");
+        assert_eq!(result, "1.234567M $");
     }
 
     #[test]
@@ -253,5 +259,19 @@ mod tests {
         let value = U256::from(123456789123456789u128);
         let result = format_u256(value, 18, "en", "ETH", 0.000001, true);
         assert_eq!(result, "0.123456.. Ξ");
+    }
+
+    #[test]
+    fn test_k_values() {
+        let value = U256::from(20000000000000000000000u128);
+        let result = format_u256(value, 18, "", "ETH", 0.000001, true);
+        assert_eq!(result, "20K Ξ");
+    }
+
+    #[test]
+    fn test_none_k_values() {
+        let value = U256::from(20000000000000000000000u128);
+        let result = format_u256(value, 18, "", "ETH", 0.000001, false);
+        assert_eq!(result, "20,000 Ξ");
     }
 }
