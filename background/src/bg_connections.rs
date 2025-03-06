@@ -1,6 +1,6 @@
 use crate::{bg_wallet::WalletManagement, Result};
 
-use config::storage::CONNECTIONS_LIST_DB_KEY;
+use config::storage::CONNECTIONS_LIST_DB_KEY_V1;
 use errors::background::BackgroundError;
 
 use crate::{connections::Connection, Background};
@@ -36,7 +36,7 @@ impl ConnectionManagement for Background {
     fn get_db_key(&self, wallet_index: usize) -> std::result::Result<Vec<u8>, Self::Error> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
 
-        Ok([&wallet.wallet_address, CONNECTIONS_LIST_DB_KEY].concat())
+        Ok([&wallet.wallet_address, CONNECTIONS_LIST_DB_KEY_V1].concat())
     }
 
     fn clear_connection(&self, wallet_index: usize) -> Result<()> {

@@ -28,7 +28,6 @@ pub struct RequiredTxParams {
     pub nonce: u64,
 }
 
-pub const SCILLA_EIP: u16 = 666;
 pub const EIP1559: u16 = 1559;
 pub const EIP4844: u16 = 4844;
 

@@ -1,4 +1,3 @@
-use crate::Result;
 use alloy::{
     dyn_abi::{DynSolValue, FunctionExt, JsonAbiExt},
     hex,
@@ -15,6 +14,9 @@ use rpc::{
     zil_interfaces::{GetTokenInitItem, ResultRes},
 };
 use serde_json::{json, Value};
+use token::Result;
+
+type RequestResult<'a> = std::result::Result<Vec<(Value, RequestType<'a>)>, TokenError>;
 
 trait ResponseValidator {
     fn validate(&self) -> Result<&Self>;
@@ -23,24 +25,12 @@ trait ResponseValidator {
 impl<T> ResponseValidator for ResultRes<T> {
     fn validate(&self) -> Result<&Self> {
         if let Some(error) = &self.error {
-            let error_msg = format!(
-                "JSON-RPC error (code: {}): {}{}",
-                error.code,
-                error.message,
-                error
-                    .data
-                    .as_ref()
-                    .map(|d| format!(", data: {}", d))
-                    .unwrap_or_default()
-            );
-            Err(TokenError::NetworkError(error_msg))
+            Err(TokenError::NetworkError(error.to_string()))
         } else {
             Ok(self)
         }
     }
 }
-
-type RequestResult<'a> = std::result::Result<Vec<(Value, RequestType<'a>)>, TokenError>;
 
 #[derive(Debug)]
 pub enum RequestType<'a> {
@@ -65,7 +55,6 @@ impl std::fmt::Display for MetadataField {
     }
 }
 
-// Helper struct to encapsulate ERC20 functionality
 struct ERC20Helper {
     abi: JsonAbi,
 }

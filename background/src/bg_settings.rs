@@ -166,6 +166,7 @@ mod tests_background {
         let (mut bg, dir) = setup_test_background();
         let test_theme = Theme {
             appearances: settings::theme::Appearances::Light,
+            compact_numbers: true,
         };
 
         // Test setting theme
@@ -207,6 +208,7 @@ mod tests_background {
         assert!(bg.set_global_notifications(true).is_ok());
         assert!(bg
             .set_theme(Theme {
+                compact_numbers: true,
                 appearances: settings::theme::Appearances::System
             })
             .is_ok());
@@ -223,6 +225,7 @@ mod tests_background {
         assert_eq!(
             bg_reloaded.settings.theme,
             Theme {
+                compact_numbers: true,
                 appearances: settings::theme::Appearances::System
             }
         );

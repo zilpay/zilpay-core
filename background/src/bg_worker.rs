@@ -206,6 +206,7 @@ mod tests_background_worker {
 
     fn gen_net_conf() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,

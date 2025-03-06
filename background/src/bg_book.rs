@@ -1,4 +1,4 @@
-use config::storage::ADDRESS_BOOK_DB_KEY;
+use config::storage::ADDRESS_BOOK_DB_KEY_V1;
 use errors::background::BackgroundError;
 
 use crate::book::AddressBookEntry;
@@ -22,7 +22,7 @@ impl AddressBookManagement for Background {
     type Error = BackgroundError;
 
     fn get_address_book(&self) -> Vec<AddressBookEntry> {
-        let bytes = self.storage.get(ADDRESS_BOOK_DB_KEY).unwrap_or_default();
+        let bytes = self.storage.get(ADDRESS_BOOK_DB_KEY_V1).unwrap_or_default();
 
         if bytes.is_empty() {
             return Vec::with_capacity(1);
@@ -45,7 +45,7 @@ impl AddressBookManagement for Background {
         let bytes =
             bincode::serialize(&book).or(Err(BackgroundError::FailToSerializeAddressBook))?;
 
-        self.storage.set(ADDRESS_BOOK_DB_KEY, &bytes)?;
+        self.storage.set(ADDRESS_BOOK_DB_KEY_V1, &bytes)?;
         self.storage.flush()?;
 
         Ok(())

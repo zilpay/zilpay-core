@@ -12,4 +12,3 @@ bincode.workspace = true
 proto = { path = "../proto" }
 config = { path = "../config" }
 errors = { path = "../errors" }
-rpc = { path = "../rpc" }

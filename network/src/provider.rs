@@ -3,10 +3,13 @@ use std::sync::Arc;
 
 use crate::block_parse::{build_last_block_header_request, process_get_timestampt_block_response};
 use crate::common::Provider;
+use crate::ft_parse::{
+    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
+    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
+};
 use crate::gas_parse::{
     build_batch_gas_request, build_fee_history_request, json_rpc_error,
     process_parse_fee_history_request, GasFeeHistory, RequiredTxParams, EIP1559, EIP4844,
-    SCILLA_EIP,
 };
 use crate::nonce_parser::{build_nonce_request, process_nonce_response};
 use crate::tx_parse::{
@@ -15,7 +18,7 @@ use crate::tx_parse::{
 };
 use crate::Result;
 use alloy::primitives::U256;
-use config::storage::NETWORK_DB_KEY;
+use config::storage::NETWORK_DB_KEY_V1;
 use crypto::bip49::DerivationPath;
 use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
@@ -26,17 +29,13 @@ use history::transaction::HistoricalTransaction;
 use proto::address::Address;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use rpc::common::JsonRPC;
-use rpc::methods::{EvmMethods, ZilMethods};
+use rpc::methods::EvmMethods;
 use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::ResultRes;
 use serde_json::{json, Value};
 use storage::LocalStorage;
 use token::ft::FToken;
-use token::ft_parse::{
-    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
-    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
-};
 
 #[derive(Debug, PartialEq)]
 pub struct NetworkProvider {
@@ -51,7 +50,7 @@ impl NetworkProvider {
 
 impl Provider for NetworkProvider {
     fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
-        let bytes = storage.get(NETWORK_DB_KEY).unwrap_or_default();
+        let bytes = storage.get(NETWORK_DB_KEY_V1).unwrap_or_default();
 
         if bytes.is_empty() {
             return Vec::with_capacity(1);
@@ -73,7 +72,7 @@ impl Provider for NetworkProvider {
         let bytes =
             bincode::serialize(&as_vec).map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
-        storage.set(NETWORK_DB_KEY, &bytes)?;
+        storage.set(NETWORK_DB_KEY_V1, &bytes)?;
         storage.flush()?;
 
         Ok(())
@@ -279,34 +278,6 @@ impl NetworkProvider {
             .ok_or(NetworkErrors::ResponseParseError)?;
 
         process_parse_fee_history_request(result)
-    }
-
-    pub async fn get_gas_price(&self) -> Result<U256> {
-        let request = if self.config.features.contains(&SCILLA_EIP) {
-            RpcProvider::<ChainConfig>::build_payload(json!([]), ZilMethods::GetMinimumGasPrice)
-        } else if self.config.features.contains(&EIP1559) {
-            RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::MaxPriorityFeePerGas)
-        } else {
-            RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::GasPrice)
-        };
-
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-        let response = provider
-            .req::<ResultRes<String>>(request)
-            .await
-            .map_err(NetworkErrors::Request)?;
-
-        if let Some(error) = &response.error {
-            json_rpc_error(error)?;
-        }
-
-        let price_str = response
-            .result
-            .as_ref()
-            .ok_or(NetworkErrors::ResponseParseError)?;
-
-        U256::from_str_radix(price_str.trim_start_matches("0x"), 16)
-            .map_err(|_| NetworkErrors::ResponseParseError)
     }
 
     pub async fn estimate_gas(&self, tx: &TransactionRequest) -> Result<U256> {
@@ -571,6 +542,8 @@ impl NetworkProvider {
 
 #[cfg(test)]
 mod tests_network {
+    use crate::ft_parse::generate_erc20_transfer_data;
+
     use super::*;
     use alloy::{primitives::U256, rpc::types::TransactionInput};
     use config::address::ADDR_LEN;
@@ -578,7 +551,6 @@ mod tests_network {
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
     use rpc::network_config::Explorer;
-    use token::ft_parse::generate_erc20_transfer_data;
     use tokio;
 
     fn setup_temp_storage() -> Arc<LocalStorage> {
@@ -591,6 +563,7 @@ mod tests_network {
 
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -614,6 +587,7 @@ mod tests_network {
 
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -622,7 +596,7 @@ mod tests_network {
             chain: "ZIL".to_string(),
             short_name: String::new(),
             rpc: vec!["https://api.zilliqa.com".to_string()],
-            features: vec![SCILLA_EIP],
+            features: vec![],
             slip_44: 313,
             ens: None,
             explorers: vec![],
@@ -872,16 +846,6 @@ mod tests_network {
     }
 
     #[tokio::test]
-    async fn test_get_gas_price() {
-        let net_conf = create_bsc_config();
-        let provider = NetworkProvider::new(net_conf);
-
-        let gas_price = provider.get_gas_price().await.unwrap();
-
-        assert_eq!("1000000000", gas_price.to_string());
-    }
-
-    #[tokio::test]
     async fn test_estimate_gas_payment() {
         let net_conf = create_bsc_config();
         let provider = NetworkProvider::new(net_conf);
@@ -973,6 +937,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_fee_history_eth() {
         let net_conf = ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -1028,6 +993,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_calc_fee_eth_batch() {
         let net_conf = ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -1080,6 +1046,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_get_tx_params_payment() {
         let net_conf = ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -1138,6 +1105,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_calc_fee_bsc_batch() {
         let net_conf = ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -1218,6 +1186,7 @@ mod tests_network {
     #[tokio::test]
     async fn test_tx_receipt_evm() {
         let net_conf = ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,

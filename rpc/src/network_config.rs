@@ -3,6 +3,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use errors::rpc::RpcError;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
+use token::ft::FToken;
 
 use crate::common::{NetworkConfigTrait, Result};
 
@@ -29,6 +30,7 @@ pub struct ChainConfig {
     pub ens: Option<Address>,
     pub explorers: Vec<Explorer>,
     pub fallback_enabled: bool,
+    pub ftokens: Vec<FToken>,
 }
 
 impl ChainConfig {
@@ -178,6 +180,7 @@ mod tests {
             }],
             fallback_enabled: true,
             logo: String::new(),
+            ftokens: vec![],
         }
     }
 
@@ -234,6 +237,7 @@ mod tests {
     #[test]
     fn test_remove_node() {
         let mut config = ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -269,6 +273,7 @@ mod tests {
     #[test]
     fn test_remove_node_group() {
         let mut config = ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,

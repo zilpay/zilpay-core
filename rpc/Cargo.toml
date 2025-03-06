@@ -16,6 +16,7 @@ errors = { path = "../errors" }
 config = { path = "../config" }
 crypto = { path = "../crypto" }
 proto = { path = "../proto" }
+token = { path = "../token" }
 
 [dev-dependencies]
 mockito = "1.5.0"

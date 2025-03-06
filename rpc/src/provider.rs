@@ -98,6 +98,7 @@ mod tests {
 
     fn create_zilliqa_config() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
@@ -121,6 +122,7 @@ mod tests {
 
     fn create_eth_config() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             chain_ids: [11155111, 0],
@@ -146,6 +148,7 @@ mod tests {
 
     fn create_bsc_config() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,

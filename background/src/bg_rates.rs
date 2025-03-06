@@ -1,6 +1,6 @@
 use crate::Result;
 use async_trait::async_trait;
-use config::storage::CURRENCIES_RATES_DB_KEY;
+use config::storage::CURRENCIES_RATES_DB_KEY_V1;
 use errors::background::BackgroundError;
 use serde_json::{json, Value};
 
@@ -43,7 +43,7 @@ impl RatesManagement for Background {
     fn get_rates(&self) -> Value {
         let bytes = self
             .storage
-            .get(CURRENCIES_RATES_DB_KEY)
+            .get(CURRENCIES_RATES_DB_KEY_V1)
             .unwrap_or_default();
 
         if bytes.is_empty() {

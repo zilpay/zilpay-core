@@ -1,5 +1,5 @@
 use crate::{wallet_storage::StorageOperations, Result, Wallet, WalletAddrType};
-use config::storage::FTOKENS_DB_KEY;
+use config::storage::FTOKENS_DB_KEY_V1;
 use errors::wallet::WalletErrors;
 use token::ft::FToken;
 
@@ -50,7 +50,7 @@ impl TokenManagement for Wallet {
 
     #[inline]
     fn get_token_db_key(key: &WalletAddrType) -> Vec<u8> {
-        [key, FTOKENS_DB_KEY].concat()
+        [key, FTOKENS_DB_KEY_V1].concat()
     }
 }
 

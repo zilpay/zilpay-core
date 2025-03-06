@@ -1,7 +1,7 @@
 use crate::{wallet_storage::StorageOperations, Result, WalletAddrType};
 use async_trait::async_trait;
 use cipher::argon2::Argon2Seed;
-use config::storage::HISTORY_TXNS_DB_KEY;
+use config::storage::HISTORY_TXNS_DB_KEY_V1;
 use errors::wallet::WalletErrors;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 
@@ -55,7 +55,7 @@ impl WalletTransaction for Wallet {
 
     #[inline]
     fn get_db_history_key(key: &WalletAddrType) -> Vec<u8> {
-        [key, HISTORY_TXNS_DB_KEY].concat()
+        [key, HISTORY_TXNS_DB_KEY_V1].concat()
     }
 }
 

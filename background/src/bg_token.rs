@@ -2,13 +2,14 @@ use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Backg
 use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
 use errors::{background::BackgroundError, wallet::WalletErrors};
+use network::ft_parse::generate_erc20_transfer_data;
 use proto::{
     address::Address,
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
     zil_tx::ZILTransactionRequest,
 };
 use serde_json::json;
-use token::{ft::FToken, ft_parse::generate_erc20_transfer_data};
+use token::ft::FToken;
 use wallet::{account::Account, wallet_storage::StorageOperations};
 
 #[async_trait]
@@ -214,6 +215,7 @@ mod tests_background_tokens {
 
     fn gen_net_conf() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,

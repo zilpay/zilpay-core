@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use config::{
     sha::SHA256_SIZE,
-    storage::{GLOBAL_SETTINGS_DB_KEY, INDICATORS_DB_KEY},
+    storage::{GLOBAL_SETTINGS_DB_KEY_V1, INDICATORS_DB_KEY_V1},
 };
 use errors::background::BackgroundError;
 use settings::common_settings::CommonSettings;
@@ -32,7 +32,7 @@ impl StorageManagement for Background {
     type Error = BackgroundError;
 
     fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
-        let bytes = storage.get(GLOBAL_SETTINGS_DB_KEY).unwrap_or_default();
+        let bytes = storage.get(GLOBAL_SETTINGS_DB_KEY_V1).unwrap_or_default();
 
         if bytes.is_empty() {
             return CommonSettings::default();
@@ -43,7 +43,7 @@ impl StorageManagement for Background {
 
     fn get_indicators(storage: Arc<LocalStorage>) -> Vec<[u8; SHA256_SIZE]> {
         storage
-            .get(INDICATORS_DB_KEY)
+            .get(INDICATORS_DB_KEY_V1)
             .unwrap_or_default()
             .chunks(SHA256_SIZE)
             .map(|chunk| {
@@ -79,7 +79,7 @@ impl StorageManagement for Background {
         let bytes =
             bincode::serialize(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
 
-        self.storage.set(GLOBAL_SETTINGS_DB_KEY, &bytes)?;
+        self.storage.set(GLOBAL_SETTINGS_DB_KEY_V1, &bytes)?;
         self.storage.flush()?;
 
         Ok(())
@@ -91,7 +91,7 @@ impl StorageManagement for Background {
             .flat_map(|array| array.iter().cloned())
             .collect();
 
-        self.storage.set(INDICATORS_DB_KEY, &bytes)?;
+        self.storage.set(INDICATORS_DB_KEY_V1, &bytes)?;
         self.storage.flush()?;
 
         Ok(())
@@ -118,6 +118,7 @@ mod tests_background {
 
     fn create_test_network_config() -> ChainConfig {
         ChainConfig {
+            ftokens: vec![],
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
