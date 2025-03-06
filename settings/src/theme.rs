@@ -1,6 +1,6 @@
+use errors::settings::SettingsErrors;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use errors::settings::SettingsErrors;
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum Appearances {
@@ -59,4 +59,5 @@ impl std::fmt::Display for Appearances {
 #[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Theme {
     pub appearances: Appearances,
+    pub compact_numbers: bool,
 }
