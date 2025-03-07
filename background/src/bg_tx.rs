@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use cipher::argon2::Argon2Seed;
 use errors::{background::BackgroundError, tx::TransactionErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
-use proto::{pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
+use proto::{keypair::KeyPair, pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
+use sha2::{Digest, Sha256};
 use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
 use crate::Background;
@@ -75,7 +76,16 @@ impl TransactionsManagement for Background {
     ) -> Result<(PubKey, Signature)> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
-        let signature = key_pair.sign_message(message.as_bytes())?;
+        let signature = match key_pair {
+            KeyPair::Secp256k1Sha256(_) => {
+                let mut hasher = Sha256::new();
+                hasher.update(message.as_bytes());
+                let hash = hasher.finalize();
+
+                key_pair.sign_message(&hash)?
+            }
+            KeyPair::Secp256k1Keccak256(_) => key_pair.sign_message(message.as_bytes())?,
+        };
 
         Ok((key_pair.get_pubkey()?, signature))
     }

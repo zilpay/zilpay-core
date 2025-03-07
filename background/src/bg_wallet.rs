@@ -187,6 +187,9 @@ impl WalletManagement for Background {
             &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonCreateProofError)?;
+        let mut ftokens = provider.config.ftokens.clone();
+        ftokens.extend_from_slice(&params.ftokens);
+
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
@@ -203,7 +206,7 @@ impl WalletManagement for Background {
                 chain_config: &provider.config,
             },
             wallet_config,
-            params.ftokens,
+            ftokens,
         )?;
         let data = wallet.get_wallet_data().unwrap();
         let wallet_device_indicators =
@@ -265,6 +268,10 @@ impl WalletManagement for Background {
             &wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonCreateProofError)?;
+
+        let mut ftokens = provider.config.ftokens.clone();
+        ftokens.extend_from_slice(&params.ftokens);
+
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
@@ -283,7 +290,7 @@ impl WalletManagement for Background {
                 biometric_type: params.biometric_type,
             },
             wallet_config,
-            params.ftokens,
+            ftokens,
         )?;
         let data = wallet.get_wallet_data()?;
         let device_indicators =
@@ -322,6 +329,9 @@ impl WalletManagement for Background {
             &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonCreateProofError)?;
+        let mut ftokens = provider.config.ftokens.clone();
+        ftokens.extend_from_slice(&params.ftokens);
+
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&self.storage),
@@ -337,7 +347,7 @@ impl WalletManagement for Background {
                 chain_config: &provider.config,
             },
             wallet_config,
-            params.ftokens,
+            ftokens,
         )?;
         let data = wallet.get_wallet_data()?;
 

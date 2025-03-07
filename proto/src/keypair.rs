@@ -7,7 +7,6 @@ use alloy::{
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use crypto::{bip49::DerivationPath, schnorr, slip44};
 use k256::SecretKey as K256SecretKey;
-use sha2::{Digest, Sha256};
 
 use crate::{
     address::Address,
@@ -181,13 +180,9 @@ impl KeyPair {
                 Ok(sig)
             }
             KeyPair::Secp256k1Sha256((_, sk)) => {
-                let mut hasher = Sha256::new();
-                hasher.update(msg);
-                let hash = hasher.finalize();
-
                 let secret_key =
                     K256SecretKey::from_slice(sk).or(Err(KeyPairError::InvalidSecretKey))?;
-                let sig: Signature = schnorr::sign(&hash, &secret_key)
+                let sig: Signature = schnorr::sign(&msg, &secret_key)
                     .map_err(KeyPairError::SchorrError)?
                     .try_into()
                     .map_err(KeyPairError::InvalidSignature)?;
