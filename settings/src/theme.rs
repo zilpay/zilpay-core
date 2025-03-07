@@ -56,8 +56,17 @@ impl std::fmt::Display for Appearances {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Theme {
     pub appearances: Appearances,
     pub compact_numbers: bool,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Self {
+            appearances: Appearances::default(),
+            compact_numbers: true,
+        }
+    }
 }
