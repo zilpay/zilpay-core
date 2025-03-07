@@ -67,8 +67,10 @@ impl ChainConfig {
 
     pub fn hash(&self) -> u64 {
         let mut hasher = DefaultHasher::new();
+        let num = self.chain_ids[0] + self.chain_ids[1];
+
+        num.hash(&mut hasher);
         self.slip_44.hash(&mut hasher);
-        self.chain_ids.hash(&mut hasher);
         self.chain.hash(&mut hasher);
 
         hasher.finish()
