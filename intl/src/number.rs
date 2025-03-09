@@ -86,7 +86,7 @@ pub fn format_u256(
     let converted_formatted = if converted > 0.0 {
         format_value(value, decimals, &converted_config, Some(converted))
     } else {
-        native_formatted.clone()
+        "-".to_string()
     };
 
     (native_formatted, converted_formatted)
