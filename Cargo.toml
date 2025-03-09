@@ -45,6 +45,7 @@ cipher = { path = "./cipher" }
 network = { path = "./network" }
 intl = { path = "./intl" }
 cache = { path = "./cache" }
+token_quotes = { path = "./token_quotes" }
 qrcodes = { path = "./qrcodes" }
 
 [workspace.dependencies]

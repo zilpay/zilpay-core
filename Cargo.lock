@@ -6665,6 +6665,7 @@ dependencies = [
  "rpc",
  "settings",
  "token",
+ "token_quotes",
  "wallet",
 ]
 
@@ -6687,6 +6688,7 @@ dependencies = [
  "rpc",
  "settings",
  "token",
+ "token_quotes",
  "wallet",
  "zilpay",
 ]
