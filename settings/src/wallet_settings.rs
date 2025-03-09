@@ -23,30 +23,19 @@ pub struct WalletSettings {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 pub struct WalletFeatures {
-    /// Enable Rates fetcher if some! the value is BTC, RUB, USD
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub currency_convert: Option<String>,
 
-    /// Enable ENS domain resolution
     pub ens_enabled: bool,
 
-    /// Enable IPFS gateway if Some, for ENS content node like dweb.link
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ipfs_node: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 pub struct NetworkSettings {
-    /// Enable gas optimization features
     pub gas_control_enabled: bool,
-
-    /// Enable node ranking for better performance
     pub node_ranking_enabled: bool,
-
-    /// Maximum number of concurrent connections
     pub max_connections: u8,
-
-    /// Timeout for network requests in seconds
     pub request_timeout_secs: u32,
 }
 
