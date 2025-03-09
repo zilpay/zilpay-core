@@ -146,8 +146,6 @@ impl TransactionsManagement for Background {
 
 #[cfg(test)]
 mod tests_background_transactions {
-    use std::collections::HashMap;
-
     use super::*;
     use crate::{
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
@@ -216,7 +214,7 @@ mod tests_background_transactions {
 
     fn gen_bsc_token() -> FToken {
         FToken {
-            rates: HashMap::new(),
+            rate: 0f64,
             name: "BNB Smart Chain Testnet".to_string(),
             symbol: "tBNB".to_string(),
             decimals: 18,

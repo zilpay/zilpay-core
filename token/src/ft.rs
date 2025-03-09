@@ -16,7 +16,7 @@ pub struct FToken {
     pub default: bool,
     pub native: bool,
     pub chain_hash: u64,
-    pub rates: HashMap<String, f64>,
+    pub rate: f64,
 }
 
 impl FToken {
@@ -42,14 +42,14 @@ impl FToken {
             addr: Address::Secp256k1Sha256([0u8; ADDR_LEN]),
             logo: None,
             balances: HashMap::new(),
-            rates: HashMap::new(),
+            rate: 0f64,
             native: true,
         }
     }
 
     pub fn zlp(chain_hash: u64) -> Self {
         FToken {
-            rates: HashMap::new(),
+            rate: 0f64,
             chain_hash,
             default: true,
             name: "ZilPay wallet".to_string(),
@@ -72,7 +72,7 @@ impl FToken {
             addr: Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
             logo: None,
             balances: HashMap::new(),
-            rates: HashMap::new(),
+            rate: 0f64,
             native: true,
         }
     }

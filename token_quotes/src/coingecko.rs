@@ -45,7 +45,7 @@ pub async fn get_coingecko_rates(ftokens: &mut [FToken], vs_currency: &str) -> R
             .and_then(|rate| rate.as_f64())
             .unwrap_or(-1.0);
 
-        ftokens[index].rates.insert(vs_currency.to_string(), rate);
+        ftokens[index].rate = rate;
     }
 
     Ok(())
@@ -53,16 +53,14 @@ pub async fn get_coingecko_rates(ftokens: &mut [FToken], vs_currency: &str) -> R
 
 #[cfg(test)]
 mod coingecko_tests {
-    use proto::address::Address;
-    use std::collections::HashMap;
-
     use super::*;
+    use proto::address::Address;
 
     #[tokio::test]
     async fn test_get_coingecko_rates() {
         let mut tokens = vec![
             FToken {
-                rates: HashMap::new(),
+                rate: 0f64,
                 symbol: "ARB".to_string(),
                 name: "Arbitrum".to_string(),
                 decimals: 18,
@@ -74,7 +72,7 @@ mod coingecko_tests {
                 chain_hash: 0,
             },
             FToken {
-                rates: HashMap::new(),
+                rate: 0f64,
                 name: "Wrapped Ether".to_string(),
                 symbol: "WETH".to_string(),
                 decimals: 18,
@@ -88,8 +86,8 @@ mod coingecko_tests {
         ];
         get_coingecko_rates(&mut tokens, "rub").await.unwrap();
 
-        assert!(*tokens[0].rates.get("rub").unwrap() > 0.0);
-        assert!(*tokens[1].rates.get("rub").unwrap() > 0.0);
+        assert!(tokens[0].rate > 0.0);
+        assert!(tokens[1].rate > 0.0);
     }
 
     #[test]
