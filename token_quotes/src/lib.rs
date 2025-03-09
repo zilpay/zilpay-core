@@ -13,10 +13,25 @@ pub enum TokenQuotesAPIOptions {
 }
 
 impl TokenQuotesAPIOptions {
+    pub fn from_code(value: u8) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::Coingecko,
+            _ => Self::None,
+        }
+    }
+
     pub async fn request(&self, ftokens: &mut [FToken], vs_currency: &str) -> Result<()> {
         match self {
             TokenQuotesAPIOptions::None => Ok(()),
             TokenQuotesAPIOptions::Coingecko => get_coingecko_rates(ftokens, vs_currency).await,
+        }
+    }
+
+    pub fn code(&self) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::Coingecko => 1,
         }
     }
 }
