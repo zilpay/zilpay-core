@@ -120,7 +120,7 @@ fn format_value(value: U256, decimals: u8, config: &FormatConfig, rate_opt: Opti
     }
 
     if config.compact && value_parts.0.len() > 3 {
-        format_number_compact_parts(&value_parts.0, &value_parts.1, currency_symbol)
+        format_number_compact_parts(&value_parts.0, currency_symbol)
     } else {
         format_number_standard(&value_parts.0, &value_parts.1, &locale, currency_symbol)
     }
@@ -207,11 +207,7 @@ fn format_number_compact(value: f64, currency_symbol: &str, threshold: f64) -> S
     format!("{}{} {}", formatted, suffix, currency_symbol)
 }
 
-fn format_number_compact_parts(
-    integer_part: &str,
-    decimal_part: &str,
-    currency_symbol: &str,
-) -> String {
+fn format_number_compact_parts(integer_part: &str, currency_symbol: &str) -> String {
     let integer_len = integer_part.len();
     let magnitude = ((integer_len - 1) / 3) * 3;
     let suffix = get_magnitude_suffix(magnitude);
