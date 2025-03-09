@@ -24,7 +24,7 @@ impl RatesManagement for Background {
         if let Some(vs_currency) = data.settings.features.currency_convert {
             data.settings
                 .rates_api_options
-                .request(&mut ftokens, &vs_currency)
+                .request(&mut ftokens, &vs_currency.to_lowercase())
                 .await?;
 
             wallet.save_ftokens(&ftokens)?;
