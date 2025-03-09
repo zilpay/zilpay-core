@@ -225,6 +225,7 @@ mod tests_background_worker {
 
     fn gen_bsc_token(chain_hash: u64) -> FToken {
         FToken {
+            rates: HashMap::new(),
             chain_hash,
             default: true,
             name: "Binance Smart Chain".to_string(),

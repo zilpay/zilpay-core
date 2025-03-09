@@ -4996,6 +4996,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "token_quotes",
 ]
 
 [[package]]
@@ -5533,6 +5534,20 @@ dependencies = [
  "proto",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "token_quotes"
+version = "0.1.0"
+dependencies = [
+ "errors",
+ "mockito",
+ "proto",
+ "reqwest 0.11.27",
+ "serde",
+ "serde_json",
+ "token",
+ "tokio",
 ]
 
 [[package]]

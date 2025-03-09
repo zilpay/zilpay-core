@@ -1,56 +1,26 @@
-use crate::Result;
+use crate::{bg_wallet::WalletManagement, Result};
 use async_trait::async_trait;
-use config::storage::CURRENCIES_RATES_DB_KEY_V1;
 use errors::background::BackgroundError;
-use serde_json::{json, Value};
+use wallet::wallet_storage::StorageOperations;
 
 use crate::Background;
 
-/// Manages currency exchange rates
 #[async_trait]
 pub trait RatesManagement {
     type Error;
 
-    /// Updates current exchange rates
-    async fn update_rates(&self) -> std::result::Result<Value, Self::Error>;
-
-    /// Retrieves current exchange rates
-    fn get_rates(&self) -> Value;
+    async fn update_rates(&self, wallet_index: usize)
+        -> std::result::Result<Vec<f64>, Self::Error>;
 }
 
 #[async_trait]
 impl RatesManagement for Background {
     type Error = BackgroundError;
 
-    async fn update_rates(&self) -> Result<Value> {
-        // TODO: remake this method with timestamp and struct.
-        // let rates = fetch_rates()
-        //     .await
-        //     .map_err(BackgroundError::NetworkErrors)?;
-        // let bytes =
-        //     serde_json::to_vec(&json!([])).or(Err(BackgroundError::FailToSerializeRates))?;
+    async fn update_rates(&self, wallet_index: usize) -> Result<Vec<f64>> {
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let ftokens = wallet.get_ftokens()?;
 
-        // self.storage
-        //     .set(CURRENCIES_RATES_DB_KEY, &bytes)
-        //     .map_err(BackgroundError::FailToWriteIndicatorsWallet)?;
-        // self.storage
-        //     .flush()
-        //     .map_err(BackgroundError::LocalStorageFlushError)?;
-
-        Ok(json!([]))
-    }
-
-    fn get_rates(&self) -> Value {
-        let bytes = self
-            .storage
-            .get(CURRENCIES_RATES_DB_KEY_V1)
-            .unwrap_or_default();
-
-        if bytes.is_empty() {
-            // TODO: remake it with struct and timestamp.
-            return json!([]);
-        }
-
-        serde_json::from_slice(&bytes).unwrap_or(json!([]))
+        Ok(Vec::new())
     }
 }

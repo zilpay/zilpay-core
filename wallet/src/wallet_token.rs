@@ -82,6 +82,7 @@ mod tests_wallet_tokens {
 
     fn gen_bsc_token() -> FToken {
         FToken {
+            rates: HashMap::new(),
             chain_hash: 0,
             default: true,
             name: "Binance Smart Chain".to_string(),
@@ -151,6 +152,7 @@ mod tests_wallet_tokens {
 
         // Create custom token
         let custom_token = FToken {
+            rates: HashMap::new(),
             name: "Test Token".to_string(),
             symbol: "TST".to_string(),
             decimals: 18,
@@ -222,6 +224,7 @@ mod tests_wallet_tokens {
         let tokens = vec![
             gen_bsc_token(),
             FToken {
+                rates: HashMap::new(),
                 name: "Token 1".to_string(),
                 symbol: "TK1".to_string(),
                 decimals: 18,
@@ -233,6 +236,7 @@ mod tests_wallet_tokens {
                 chain_hash: 0,
             },
             FToken {
+                rates: HashMap::new(),
                 name: "Token 2".to_string(),
                 symbol: "TK2".to_string(),
                 decimals: 6,
@@ -251,6 +255,7 @@ mod tests_wallet_tokens {
                 addr: Address::from_zil_base16("3333333333333333333333333333333333333333").unwrap(),
                 logo: None,
                 default: false,
+                rates: HashMap::new(),
                 balances: HashMap::new(),
                 chain_hash: 0,
             },
@@ -348,6 +353,7 @@ mod tests_wallet_tokens {
         let tokens = vec![
             gen_bsc_token(),
             FToken {
+                rates: HashMap::new(),
                 name: "Token 1".to_string(),
                 symbol: "TK1".to_string(),
                 decimals: 18,
@@ -359,6 +365,7 @@ mod tests_wallet_tokens {
                 chain_hash: 0,
             },
             FToken {
+                rates: HashMap::new(),
                 name: "Token 2".to_string(),
                 symbol: "TK2".to_string(),
                 decimals: 6,
@@ -370,6 +377,7 @@ mod tests_wallet_tokens {
                 chain_hash: 0,
             },
             FToken {
+                rates: HashMap::new(),
                 name: "Token 3".to_string(),
                 symbol: "TK3".to_string(),
                 decimals: 8,

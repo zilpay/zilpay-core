@@ -477,6 +477,7 @@ impl NetworkProvider {
                     default: false,
                     native: false,
                     chain_hash: self.config.hash(),
+                    rates: HashMap::new(),
                 })
             }
             Address::Secp256k1Keccak256(_) => {
@@ -525,6 +526,7 @@ impl NetworkProvider {
                     default: false,
                     native: false,
                     chain_hash: self.config.hash(),
+                    rates: HashMap::new(),
                 })
             }
         }
@@ -663,8 +665,10 @@ mod tests_network {
                 default: false,
                 balances: HashMap::new(),
                 chain_hash: 0,
+                rates: HashMap::new(),
             },
             FToken {
+                rates: HashMap::new(),
                 name: "Zilliqa-bridged USDT token".to_string(),
                 symbol: "zUSDT".to_string(),
                 decimals: 6,
@@ -677,6 +681,7 @@ mod tests_network {
                 chain_hash: 0,
             },
             FToken {
+                rates: HashMap::new(),
                 name: "Zilliqa-bridged ETH token".to_string(),
                 symbol: "zETH".to_string(),
                 decimals: 18,

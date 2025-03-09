@@ -1,24 +1,24 @@
 use cipher::options::CipherOrders;
 use serde::{Deserialize, Serialize};
+use token_quotes::TokenQuotesAPIOptions;
 
 use crate::argon2::ArgonParams;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WalletSettings {
-    /// Ordered list of cipher algorithms for encryption
     pub cipher_orders: Vec<CipherOrders>,
 
-    /// Password hashing configuration parameters
     #[serde(default)]
     pub argon_params: ArgonParams,
 
-    /// Configuration for various wallet features
     #[serde(default)]
     pub features: WalletFeatures,
 
-    /// Network and performance settings
     #[serde(default)]
     pub network: NetworkSettings,
+
+    #[serde(default)]
+    pub rates_api_options: TokenQuotesAPIOptions,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
@@ -67,6 +67,7 @@ impl Default for WalletSettings {
             features: WalletFeatures::default(),
             network: NetworkSettings::default(),
             argon_params: ArgonParams::default(),
+            rates_api_options: Default::default(),
         }
     }
 }
@@ -202,6 +203,7 @@ mod wallet_settings_tests {
                 ens_enabled: false,
                 ipfs_node: None,
             },
+            rates_api_options: Default::default(),
             network: NetworkSettings {
                 gas_control_enabled: false,
                 node_ranking_enabled: true,
