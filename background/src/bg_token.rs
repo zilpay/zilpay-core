@@ -52,6 +52,7 @@ impl TokensManagement for Background {
             value: Some(amount),
             nonce: Some(0),
             gas: None,
+            from: Some(sender.addr.to_alloy_addr()),
             chain_id: Some(sender.chain_id),
             ..Default::default()
         };
