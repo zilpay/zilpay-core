@@ -43,8 +43,6 @@ pub const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
     ("SGD", "S$"),
     ("NZD", "NZ$"),
     ("XMR", "ɱ"),
-    ("XTZ", "ꜩ"),
-    ("ATOM", "⚛"),
     ("AED", "د.إ"),
     ("EGP", "£"),
     ("ETB", "Br"),
