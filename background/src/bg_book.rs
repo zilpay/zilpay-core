@@ -4,14 +4,10 @@ use errors::background::BackgroundError;
 use crate::book::AddressBookEntry;
 use crate::{Background, Result};
 
-/// Manages the address book functionality
 pub trait AddressBookManagement {
     type Error;
 
-    /// Retrieves all address book entries
     fn get_address_book(&self) -> Vec<AddressBookEntry>;
-
-    /// Adds a new entry to the address book
     fn add_to_address_book(
         &self,
         address: AddressBookEntry,
@@ -71,11 +67,9 @@ mod tests_background {
     #[test]
     fn test_address_book() {
         let (bg, dir) = setup_test_background();
-        // Test empty address book
         let book = bg.get_address_book();
         assert!(book.is_empty());
 
-        // Create test address
         let name = "Test Contact".to_string();
         let address =
             Address::from_eth_address("0x1234567890123456789012345678901234567890").unwrap();
@@ -83,17 +77,16 @@ mod tests_background {
             name,
             addr: address.clone(),
             net: 0,
+            slip44: 60,
         };
 
-        // Add address to book
         bg.add_to_address_book(entry.clone()).unwrap();
 
-        // Verify address was added
         let book = bg.get_address_book();
         assert_eq!(book.len(), 1);
         assert_eq!(&book[0].name, "Test Contact");
         assert_eq!(&book[0].addr, &address);
-        // Add another address
+
         let name2 = "Second Contact".to_string();
         let address2 =
             Address::from_eth_address("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd").unwrap();
@@ -101,6 +94,7 @@ mod tests_background {
             name: name2,
             addr: address2.clone(),
             net: 0,
+            slip44: 60,
         };
 
         bg.add_to_address_book(entry2.clone()).unwrap();
