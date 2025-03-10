@@ -1,7 +1,7 @@
 use alloy::primitives::U256;
 use num_format::{Grouping, Locale};
 
-const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
+pub const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
     ("RUB", "₽"),
     ("USD", "$"),
     ("EUR", "€"),
@@ -46,6 +46,10 @@ const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
     ("XTZ", "ꜩ"),
     ("ATOM", "⚛"),
     ("AED", "د.إ"),
+    ("EGP", "£"),
+    ("ETB", "Br"),
+    ("IRR", "﷼"),
+    ("SAR", "﷼"),
 ];
 
 const DISPLAY_DECIMALS: usize = 6;
