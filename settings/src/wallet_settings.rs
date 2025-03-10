@@ -23,11 +23,8 @@ pub struct WalletSettings {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 pub struct WalletFeatures {
-    pub currency_convert: Option<String>,
-
+    pub currency_convert: String,
     pub ens_enabled: bool,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub ipfs_node: Option<String>,
 }
 
@@ -64,7 +61,7 @@ impl Default for WalletSettings {
 impl Default for WalletFeatures {
     fn default() -> Self {
         Self {
-            currency_convert: Some(Self::DEFUALT_CURRENCY_CONVERT.to_string()),
+            currency_convert: Self::DEFUALT_CURRENCY_CONVERT.to_string(),
             ens_enabled: true,
             ipfs_node: Some(Self::DEFAULT_IPFS_NODE.to_string()),
         }
@@ -99,7 +96,7 @@ mod wallet_settings_tests {
         // Test default wallet features
         assert_eq!(
             settings.features.currency_convert,
-            Some(WalletFeatures::DEFUALT_CURRENCY_CONVERT.to_string())
+            WalletFeatures::DEFUALT_CURRENCY_CONVERT.to_string()
         );
         assert!(settings.features.ens_enabled);
         assert_eq!(
@@ -129,8 +126,8 @@ mod wallet_settings_tests {
 
         // Test currency conversion modification
         let usd = "USD";
-        features.currency_convert = Some(usd.to_string());
-        assert_eq!(features.currency_convert, Some(usd.to_string()));
+        features.currency_convert = usd.to_string();
+        assert_eq!(features.currency_convert, usd.to_string());
 
         // Test ENS disabling
         features.ens_enabled = false;
@@ -188,7 +185,7 @@ mod wallet_settings_tests {
             cipher_orders: vec![CipherOrders::NTRUP1277],
             argon_params: ArgonParams::low_memory(),
             features: WalletFeatures {
-                currency_convert: Some("EUR".to_string()),
+                currency_convert: "EUR".to_string(),
                 ens_enabled: false,
                 ipfs_node: None,
             },
@@ -205,10 +202,7 @@ mod wallet_settings_tests {
         assert_eq!(custom_settings.cipher_orders, vec![CipherOrders::NTRUP1277]);
 
         // Verify custom features
-        assert_eq!(
-            custom_settings.features.currency_convert,
-            Some("EUR".to_string())
-        );
+        assert_eq!(custom_settings.features.currency_convert, "EUR".to_string());
         assert!(!custom_settings.features.ens_enabled);
         assert!(custom_settings.features.ipfs_node.is_none());
 

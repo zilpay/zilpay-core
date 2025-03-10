@@ -15,7 +15,7 @@ fn build_url(ids: &[String], vs_currencies: &[&str]) -> String {
     )
 }
 
-pub async fn get_coingecko_rates(ftokens: &mut [FToken], vs_currency: &str) -> Result<()> {
+pub async fn get_coingecko_rates(ftokens: &mut [FToken], vs_currency: &str) -> Result<bool> {
     let ids: Vec<String> = ftokens
         .iter()
         .map(|t| t.name.to_lowercase().replace(" ", "-"))
@@ -48,7 +48,7 @@ pub async fn get_coingecko_rates(ftokens: &mut [FToken], vs_currency: &str) -> R
         ftokens[index].rate = rate;
     }
 
-    Ok(())
+    Ok(true)
 }
 
 #[cfg(test)]

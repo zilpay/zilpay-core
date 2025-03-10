@@ -21,9 +21,9 @@ impl TokenQuotesAPIOptions {
         }
     }
 
-    pub async fn request(&self, ftokens: &mut [FToken], vs_currency: &str) -> Result<()> {
+    pub async fn request(&self, ftokens: &mut [FToken], vs_currency: &str) -> Result<bool> {
         match self {
-            TokenQuotesAPIOptions::None => Ok(()),
+            TokenQuotesAPIOptions::None => Ok(false),
             TokenQuotesAPIOptions::Coingecko => get_coingecko_rates(ftokens, vs_currency).await,
         }
     }

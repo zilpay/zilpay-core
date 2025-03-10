@@ -21,12 +21,16 @@ impl RatesManagement for Background {
         let data = wallet.get_wallet_data()?;
         let mut ftokens = wallet.get_ftokens()?;
 
-        if let Some(vs_currency) = data.settings.features.currency_convert {
-            data.settings
-                .rates_api_options
-                .request(&mut ftokens, &vs_currency.to_lowercase())
-                .await?;
+        let is_updated = data
+            .settings
+            .rates_api_options
+            .request(
+                &mut ftokens,
+                &data.settings.features.currency_convert.to_lowercase(),
+            )
+            .await?;
 
+        if is_updated {
             wallet.save_ftokens(&ftokens)?;
         }
 
