@@ -1725,6 +1725,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rust-argon2",
  "serde",
+ "sha2",
  "tokio",
 ]
 

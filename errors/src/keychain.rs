@@ -1,4 +1,4 @@
-use crate::cipher::{CipherErrors, KuznechikErrors};
+use crate::cipher::{CipherErrors, CyberErrors, KuznechikErrors};
 use crate::{cipher::AesGCMErrors, ntru::NTRULPCipherErrors};
 use ntrulp::key::kem_error::KemErrors;
 use thiserror::Error;
@@ -31,6 +31,9 @@ pub enum KeyChainErrors {
 
     #[error("Kuznechik errors: {0}")]
     KuznechikErrors(KuznechikErrors),
+
+    #[error("Cyber errors: {0}")]
+    CyberErrors(CyberErrors),
 }
 
 impl From<AesGCMErrors> for KeyChainErrors {
@@ -48,5 +51,10 @@ impl From<KuznechikErrors> for KeyChainErrors {
 impl From<NTRULPCipherErrors> for KeyChainErrors {
     fn from(error: NTRULPCipherErrors) -> Self {
         KeyChainErrors::NTRULPCipherErrors(error)
+    }
+}
+impl From<CyberErrors> for KeyChainErrors {
+    fn from(error: CyberErrors) -> Self {
+        KeyChainErrors::CyberErrors(error)
     }
 }

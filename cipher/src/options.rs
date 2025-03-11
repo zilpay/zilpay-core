@@ -9,6 +9,7 @@ pub enum CipherOrders {
     AESGCM256,
     KUZNECHIK,
     NTRUP1277,
+    CYBER,
 }
 
 impl CipherOrders {
@@ -17,6 +18,7 @@ impl CipherOrders {
             0 => Ok(CipherOrders::AESGCM256),
             1 => Ok(CipherOrders::KUZNECHIK),
             2 => Ok(CipherOrders::NTRUP1277),
+            3 => Ok(CipherOrders::CYBER),
             _ => Err(CipherErrors::InvalidTypeCode),
         }
     }
@@ -26,6 +28,7 @@ impl CipherOrders {
             CipherOrders::AESGCM256 => 0,
             CipherOrders::KUZNECHIK => 1,
             CipherOrders::NTRUP1277 => 2,
+            CipherOrders::CYBER => 3,
         }
     }
 
@@ -86,35 +89,42 @@ mod tests_cipher_orders {
         let origin_order_ntru = CipherOrders::NTRUP1277;
         let origin_order_aes = CipherOrders::AESGCM256;
         let origin_order_kuz = CipherOrders::KUZNECHIK;
+        let origin_order_cyber = CipherOrders::CYBER;
 
         let bytes_ntru = origin_order_ntru.to_bytes();
         let bytes_aes = origin_order_aes.to_bytes();
         let bytes_kuz = origin_order_kuz.to_bytes();
+        let bytes_cyber = origin_order_cyber.to_bytes();
 
         let res_ntru = CipherOrders::from_bytes(bytes_ntru.into()).unwrap();
         let res_aes = CipherOrders::from_bytes(bytes_aes.into()).unwrap();
         let res_kuz = CipherOrders::from_bytes(bytes_kuz.into()).unwrap();
+        let res_cyber = CipherOrders::from_bytes(bytes_cyber.into()).unwrap();
 
         assert_eq!(res_ntru, origin_order_ntru);
         assert_eq!(res_aes, origin_order_aes);
         assert_eq!(res_kuz, origin_order_kuz);
+        assert_eq!(res_cyber, origin_order_cyber);
 
         let hex_ntru = origin_order_ntru.to_string();
         let hex_aes = origin_order_aes.to_string();
         let hex_kuz = origin_order_kuz.to_string();
+        let hex_cyber = origin_order_cyber.to_string();
 
         let res_ntru = CipherOrders::from_str(&hex_ntru).unwrap();
         let res_aes = CipherOrders::from_str(&hex_aes).unwrap();
         let res_kuz = CipherOrders::from_str(&hex_kuz).unwrap();
+        let res_cyber = CipherOrders::from_str(&hex_cyber).unwrap();
 
         assert_eq!(res_ntru, origin_order_ntru);
         assert_eq!(res_aes, origin_order_aes);
         assert_eq!(res_kuz, origin_order_kuz);
+        assert_eq!(res_cyber, origin_order_cyber);
     }
 
     #[test]
     fn test_convert_invalid() {
-        let invalid_bytes = vec![3];
+        let invalid_bytes = vec![4]; // 4 теперь недопустимый код (было 3)
         let res_ntru = CipherOrders::from_bytes(invalid_bytes.into());
 
         assert_eq!(res_ntru, Err(CipherErrors::InvalidTypeCode));

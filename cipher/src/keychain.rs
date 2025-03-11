@@ -1,6 +1,10 @@
 use crate::{
-    aes::{aes_gcm_decrypt, aes_gcm_encrypt, AESKey, AES_GCM_KEY_SIZE},
+    aes::{aes_gcm_decrypt, aes_gcm_encrypt, AES_GCM_KEY_SIZE},
     argon2::{derive_key, Argon2Seed},
+    cyber::{
+        cyber_decapsulate_and_decrypt, cyber_encapsulate_and_encrypt,
+        cyber_generate_keypair_from_seed,
+    },
     kuznechik::{kuznechik_decrypt, kuznechik_encrypt, KuznechikKey},
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
     options::CipherOrders,
@@ -13,6 +17,8 @@ use ntrulp::{
     key::{priv_key::PrivKey, pub_key::PubKey},
     params::params::{PUBLICKEYS_BYTES, SECRETKEYS_BYTES},
 };
+use pqc_kyber::Keypair as CyberKeypair;
+use sha2::{Digest, Sha256};
 
 pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
 
@@ -20,6 +26,20 @@ pub struct KeyChain {
     pub ntrup_keys: (PubKey, PrivKey),
     pub aes_key: [u8; AES_GCM_KEY_SIZE],
     pub kuznechik: KuznechikKey,
+    pub cyber: CyberKeypair,
+}
+
+fn derive_key_from_seed(seed: &[u8], idx: u8) -> [u8; SHA256_SIZE] {
+    let mut hasher = Sha256::new();
+    hasher.update(seed);
+    hasher.update([idx]);
+    let res = hasher.finalize();
+
+    let mut output = [0u8; SHA256_SIZE];
+    for i in 0..SHA256_SIZE {
+        output[i] = res[i];
+    }
+    output
 }
 
 impl KeyChain {
@@ -36,26 +56,36 @@ impl KeyChain {
             PrivKey::import(&pq_sk_bytes).map_err(KeyChainErrors::NTRUPrimePubKeyImportError)?;
 
         let mut aes_key = [0u8; AES_GCM_KEY_SIZE];
+        aes_key.copy_from_slice(
+            &bytes[PUBLICKEYS_BYTES + SECRETKEYS_BYTES
+                ..PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE],
+        );
 
-        aes_key.copy_from_slice(&bytes[PUBLICKEYS_BYTES + SECRETKEYS_BYTES..]);
+        let kuznechik_key = derive_key_from_seed(&aes_key, 1);
+        let cyber_seed = derive_key_from_seed(&aes_key, 2);
+        let cyber_keypair = cyber_generate_keypair_from_seed(&cyber_seed)?;
 
         Ok(Self {
-            kuznechik: aes_key, // TODO: generate new one
             ntrup_keys: (pq_pk, pq_sk),
             aes_key,
+            kuznechik: kuznechik_key,
+            cyber: cyber_keypair,
         })
     }
 
     pub fn from_seed(seed_bytes: &Argon2Seed) -> Result<Self, KeyChainErrors> {
         let (pk, sk) = ntru_keys_from_seed(seed_bytes)?;
-        let aes_key: AESKey = seed_bytes[SHA256_SIZE..]
-            .try_into()
-            .or(Err(KeyChainErrors::AESKeySliceError))?;
+
+        let aes_key = derive_key_from_seed(seed_bytes, 0);
+        let kuznechik_key = derive_key_from_seed(seed_bytes, 1);
+        let cyber_seed = derive_key_from_seed(seed_bytes, 2);
+        let cyber_keypair = cyber_generate_keypair_from_seed(&cyber_seed)?;
 
         Ok(Self {
-            kuznechik: aes_key,
             ntrup_keys: (pk, sk),
             aes_key,
+            kuznechik: kuznechik_key,
+            cyber: cyber_keypair,
         })
     }
 
@@ -71,7 +101,7 @@ impl KeyChain {
     }
 
     pub fn to_bytes(&self) -> [u8; KEYCHAIN_BYTES_SIZE] {
-        let mut res = [0u8; PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE];
+        let mut res = [0u8; KEYCHAIN_BYTES_SIZE];
         let pq_pk = self.ntrup_keys.0.to_bytes();
         let pq_sk = self.ntrup_keys.1.to_bytes();
 
@@ -99,6 +129,9 @@ impl KeyChain {
                     ciphertext = ntru_decrypt(self.ntrup_keys.1.clone(), ciphertext)
                         .map_err(KeyChainErrors::NTRUPrimeDecryptError)?
                 }
+                CipherOrders::CYBER => {
+                    ciphertext = cyber_decapsulate_and_decrypt(&self.cyber.secret, &ciphertext)?
+                }
             };
         }
 
@@ -110,15 +143,18 @@ impl KeyChain {
         mut plaintext: Vec<u8>,
         options: &[CipherOrders],
     ) -> Result<Vec<u8>, KeyChainErrors> {
-        let pk = &self.ntrup_keys.0;
-
         for o in options {
             match o {
                 CipherOrders::AESGCM256 => plaintext = aes_gcm_encrypt(&self.aes_key, &plaintext)?,
                 CipherOrders::KUZNECHIK => {
                     plaintext = kuznechik_encrypt(&self.kuznechik, &plaintext)?
                 }
-                CipherOrders::NTRUP1277 => plaintext = ntru_encrypt(pk.clone(), &plaintext)?,
+                CipherOrders::NTRUP1277 => {
+                    plaintext = ntru_encrypt(self.ntrup_keys.0.clone(), &plaintext)?
+                }
+                CipherOrders::CYBER => {
+                    plaintext = cyber_encapsulate_and_encrypt(&self.cyber.public, &plaintext)?
+                }
             };
         }
 
@@ -150,7 +186,7 @@ impl KeyChain {
 }
 
 #[cfg(test)]
-mod tests {
+mod keychain_tests {
     use core::panic;
 
     use crate::argon2::{derive_key, ARGON2_DEFAULT_CONFIG};
