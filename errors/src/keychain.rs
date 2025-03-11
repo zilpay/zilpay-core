@@ -1,4 +1,4 @@
-use crate::cipher::CipherErrors;
+use crate::cipher::{CipherErrors, KuznechikErrors};
 use crate::{cipher::AesGCMErrors, ntru::NTRULPCipherErrors};
 use ntrulp::key::kem_error::KemErrors;
 use thiserror::Error;
@@ -6,7 +6,7 @@ use thiserror::Error;
 #[derive(Debug, Error, PartialEq)]
 pub enum KeyChainErrors {
     #[error("NTRU Prime cipher error")]
-    NTRUPrimeCipherError(NTRULPCipherErrors),
+    NTRULPCipherErrors(NTRULPCipherErrors),
 
     #[error("NTRU Prime public key import error")]
     NTRUPrimePubKeyImportError(KemErrors),
@@ -17,18 +17,36 @@ pub enum KeyChainErrors {
     #[error("AES key slice error")]
     AESKeySliceError,
 
-    #[error("AES encrypt error: {0}")]
-    AESEncryptError(#[from] AesGCMErrors),
+    #[error("AES error: {0}")]
+    AesGCMErrors(AesGCMErrors),
 
     #[error("NTRU Prime encrypt error")]
     NTRUPrimeEncryptError(NTRULPCipherErrors),
-
-    #[error("AES decrypt error: {0}")]
-    AESDecryptError(AesGCMErrors),
 
     #[error("NTRU Prime decrypt error")]
     NTRUPrimeDecryptError(NTRULPCipherErrors),
 
     #[error("Failed to slice proof cipher")]
     FailSlicedProofCipher,
+
+    #[error("Kuznechik errors: {0}")]
+    KuznechikErrors(KuznechikErrors),
+}
+
+impl From<AesGCMErrors> for KeyChainErrors {
+    fn from(error: AesGCMErrors) -> Self {
+        KeyChainErrors::AesGCMErrors(error)
+    }
+}
+
+impl From<KuznechikErrors> for KeyChainErrors {
+    fn from(error: KuznechikErrors) -> Self {
+        KeyChainErrors::KuznechikErrors(error)
+    }
+}
+
+impl From<NTRULPCipherErrors> for KeyChainErrors {
+    fn from(error: NTRULPCipherErrors) -> Self {
+        KeyChainErrors::NTRULPCipherErrors(error)
+    }
 }

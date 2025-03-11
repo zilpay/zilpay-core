@@ -7,6 +7,7 @@ type Result<T> = std::result::Result<T, CipherErrors>;
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CipherOrders {
     AESGCM256,
+    KUZNECHIK,
     NTRUP1277,
 }
 
@@ -14,7 +15,8 @@ impl CipherOrders {
     pub fn from_code(code: u8) -> Result<Self> {
         match code {
             0 => Ok(CipherOrders::AESGCM256),
-            1 => Ok(CipherOrders::NTRUP1277),
+            1 => Ok(CipherOrders::KUZNECHIK),
+            2 => Ok(CipherOrders::NTRUP1277),
             _ => Err(CipherErrors::InvalidTypeCode),
         }
     }
@@ -22,7 +24,8 @@ impl CipherOrders {
     pub fn code(&self) -> u8 {
         match self {
             CipherOrders::AESGCM256 => 0,
-            CipherOrders::NTRUP1277 => 1,
+            CipherOrders::KUZNECHIK => 1,
+            CipherOrders::NTRUP1277 => 2,
         }
     }
 
@@ -82,24 +85,31 @@ mod tests_cipher_orders {
     fn test_ser() {
         let origin_order_ntru = CipherOrders::NTRUP1277;
         let origin_order_aes = CipherOrders::AESGCM256;
+        let origin_order_kuz = CipherOrders::KUZNECHIK;
 
         let bytes_ntru = origin_order_ntru.to_bytes();
         let bytes_aes = origin_order_aes.to_bytes();
+        let bytes_kuz = origin_order_kuz.to_bytes();
 
         let res_ntru = CipherOrders::from_bytes(bytes_ntru.into()).unwrap();
         let res_aes = CipherOrders::from_bytes(bytes_aes.into()).unwrap();
+        let res_kuz = CipherOrders::from_bytes(bytes_kuz.into()).unwrap();
 
         assert_eq!(res_ntru, origin_order_ntru);
         assert_eq!(res_aes, origin_order_aes);
+        assert_eq!(res_kuz, origin_order_kuz);
 
         let hex_ntru = origin_order_ntru.to_string();
         let hex_aes = origin_order_aes.to_string();
+        let hex_kuz = origin_order_kuz.to_string();
 
         let res_ntru = CipherOrders::from_str(&hex_ntru).unwrap();
         let res_aes = CipherOrders::from_str(&hex_aes).unwrap();
+        let res_kuz = CipherOrders::from_str(&hex_kuz).unwrap();
 
         assert_eq!(res_ntru, origin_order_ntru);
         assert_eq!(res_aes, origin_order_aes);
+        assert_eq!(res_kuz, origin_order_kuz);
     }
 
     #[test]

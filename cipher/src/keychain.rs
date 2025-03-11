@@ -1,6 +1,7 @@
 use crate::{
     aes::{aes_gcm_decrypt, aes_gcm_encrypt, AESKey, AES_GCM_KEY_SIZE},
     argon2::{derive_key, Argon2Seed},
+    kuznechik::{kuznechik_decrypt, kuznechik_encrypt},
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
     options::CipherOrders,
 };
@@ -44,8 +45,7 @@ impl KeyChain {
     }
 
     pub fn from_seed(seed_bytes: &Argon2Seed) -> Result<Self, KeyChainErrors> {
-        let (pk, sk) =
-            ntru_keys_from_seed(seed_bytes).map_err(KeyChainErrors::NTRUPrimeCipherError)?;
+        let (pk, sk) = ntru_keys_from_seed(seed_bytes)?;
         let aes_key: AESKey = seed_bytes[SHA256_SIZE..]
             .try_into()
             .or(Err(KeyChainErrors::AESKeySliceError))?;
@@ -87,8 +87,10 @@ impl KeyChain {
         for o in options.iter().rev() {
             match o {
                 CipherOrders::AESGCM256 => {
-                    ciphertext = aes_gcm_decrypt(&self.aes_key, &ciphertext)
-                        .map_err(KeyChainErrors::AESDecryptError)?
+                    ciphertext = aes_gcm_decrypt(&self.aes_key, &ciphertext)?
+                }
+                CipherOrders::KUZNECHIK => {
+                    ciphertext = kuznechik_decrypt(&self.aes_key, &ciphertext)?
                 }
                 CipherOrders::NTRUP1277 => {
                     ciphertext = ntru_decrypt(self.ntrup_keys.1.clone(), ciphertext)
@@ -109,14 +111,11 @@ impl KeyChain {
 
         for o in options {
             match o {
-                CipherOrders::AESGCM256 => {
-                    plaintext = aes_gcm_encrypt(&self.aes_key, &plaintext)
-                        .map_err(KeyChainErrors::AESEncryptError)?
+                CipherOrders::AESGCM256 => plaintext = aes_gcm_encrypt(&self.aes_key, &plaintext)?,
+                CipherOrders::KUZNECHIK => {
+                    plaintext = kuznechik_encrypt(&self.aes_key, &plaintext)?
                 }
-                CipherOrders::NTRUP1277 => {
-                    plaintext = ntru_encrypt(pk.clone(), &plaintext)
-                        .map_err(KeyChainErrors::NTRUPrimeEncryptError)?
-                }
+                CipherOrders::NTRUP1277 => plaintext = ntru_encrypt(pk.clone(), &plaintext)?,
             };
         }
 
@@ -216,7 +215,7 @@ mod tests {
         match keychain.decrypt(ciphertext, &invalid_options) {
             Ok(_) => panic!("invalid options should be fail decrypt"),
             Err(e) => match e {
-                KeyChainErrors::AESDecryptError(AesGCMErrors::DecryptError(err)) => {
+                KeyChainErrors::AesGCMErrors(AesGCMErrors::DecryptError(err)) => {
                     assert_eq!("aead::Error", err);
                 }
                 _ => panic!("should be fall with AESDecryptError"),
