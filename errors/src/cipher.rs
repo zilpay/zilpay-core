@@ -38,3 +38,33 @@ pub enum KuznechikErrors {
     #[error("Invalid PKCS#7 padding")]
     InvalidPadding,
 }
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum CyberErrors {
+    #[error("Invalid public key format")]
+    InvalidPublicKey,
+
+    #[error("Invalid secret key format")]
+    InvalidSecretKey,
+
+    #[error("Invalid input parameters")]
+    InvalidInput,
+
+    #[error("Ciphertext length is too short")]
+    InvalidCiphertextLength,
+
+    #[error("Seed length is insufficient for key generation")]
+    InvalidSeedLength,
+
+    #[error("Failed to decapsulate the shared secret")]
+    DecapsulationError,
+
+    #[error("Error generating random bytes")]
+    RandomGenerationError,
+
+    #[error("Encryption error: {0}")]
+    EncryptionError(String),
+
+    #[error("Decryption error: {0}")]
+    DecryptionError(String),
+}

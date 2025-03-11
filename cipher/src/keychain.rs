@@ -1,7 +1,7 @@
 use crate::{
     aes::{aes_gcm_decrypt, aes_gcm_encrypt, AESKey, AES_GCM_KEY_SIZE},
     argon2::{derive_key, Argon2Seed},
-    kuznechik::{kuznechik_decrypt, kuznechik_encrypt},
+    kuznechik::{kuznechik_decrypt, kuznechik_encrypt, KuznechikKey},
     ntrup::{ntru_decrypt, ntru_encrypt, ntru_keys_from_seed},
     options::CipherOrders,
 };
@@ -19,6 +19,7 @@ pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES
 pub struct KeyChain {
     pub ntrup_keys: (PubKey, PrivKey),
     pub aes_key: [u8; AES_GCM_KEY_SIZE],
+    pub kuznechik: KuznechikKey,
 }
 
 impl KeyChain {
@@ -39,6 +40,7 @@ impl KeyChain {
         aes_key.copy_from_slice(&bytes[PUBLICKEYS_BYTES + SECRETKEYS_BYTES..]);
 
         Ok(Self {
+            kuznechik: aes_key, // TODO: generate new one
             ntrup_keys: (pq_pk, pq_sk),
             aes_key,
         })
@@ -51,6 +53,7 @@ impl KeyChain {
             .or(Err(KeyChainErrors::AESKeySliceError))?;
 
         Ok(Self {
+            kuznechik: aes_key,
             ntrup_keys: (pk, sk),
             aes_key,
         })
@@ -90,7 +93,7 @@ impl KeyChain {
                     ciphertext = aes_gcm_decrypt(&self.aes_key, &ciphertext)?
                 }
                 CipherOrders::KUZNECHIK => {
-                    ciphertext = kuznechik_decrypt(&self.aes_key, &ciphertext)?
+                    ciphertext = kuznechik_decrypt(&self.kuznechik, &ciphertext)?
                 }
                 CipherOrders::NTRUP1277 => {
                     ciphertext = ntru_decrypt(self.ntrup_keys.1.clone(), ciphertext)
@@ -113,7 +116,7 @@ impl KeyChain {
             match o {
                 CipherOrders::AESGCM256 => plaintext = aes_gcm_encrypt(&self.aes_key, &plaintext)?,
                 CipherOrders::KUZNECHIK => {
-                    plaintext = kuznechik_encrypt(&self.aes_key, &plaintext)?
+                    plaintext = kuznechik_encrypt(&self.kuznechik, &plaintext)?
                 }
                 CipherOrders::NTRUP1277 => plaintext = ntru_encrypt(pk.clone(), &plaintext)?,
             };
