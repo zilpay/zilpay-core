@@ -22,15 +22,9 @@ use wallet::{
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
 
-/// Manages wallet operations including unlocking and creation
 pub trait WalletManagement {
     type Error;
 
-    /// Unlocks a wallet using password authentication
-    ///
-    /// * `password` - User password
-    /// * `device_indicators` - Device-specific identifiers
-    /// * `wallet_index` - Index of the wallet to unlock
     fn unlock_wallet_with_password(
         &self,
         password: &str,
@@ -38,11 +32,6 @@ pub trait WalletManagement {
         wallet_index: usize,
     ) -> std::result::Result<[u8; SHA512_SIZE], Self::Error>;
 
-    /// Unlocks a wallet using an existing session
-    ///
-    /// * `session_cipher` - Encrypted session data
-    /// * `device_indicators` - Device-specific identifiers
-    /// * `wallet_index` - Index of the wallet to unlock
     fn unlock_wallet_with_session(
         &self,
         session_cipher: Vec<u8>,
@@ -50,13 +39,11 @@ pub trait WalletManagement {
         wallet_index: usize,
     ) -> std::result::Result<[u8; SHA512_SIZE], Self::Error>;
 
-    /// Creates a new BIP39 wallet
     fn add_bip39_wallet(
         &mut self,
         params: BackgroundBip39Params,
     ) -> std::result::Result<Vec<u8>, Self::Error>;
 
-    /// Creates a new Ledger wallet
     fn add_ledger_wallet(
         &mut self,
         params: BackgroundLedgerParams,
@@ -64,7 +51,6 @@ pub trait WalletManagement {
         device_indicators: &[String],
     ) -> std::result::Result<Vec<u8>, Self::Error>;
 
-    /// Creates a new wallet from secret key
     fn add_sk_wallet(
         &mut self,
         params: BackgroundSKParams,
@@ -76,15 +62,61 @@ pub trait WalletManagement {
         account_index: usize,
     ) -> std::result::Result<(), Self::Error>;
 
-    /// Retrieves a wallet by its index
     fn get_wallet_by_index(&self, wallet_index: usize)
         -> std::result::Result<&Wallet, Self::Error>;
+    fn set_biometric(
+        &self,
+        password: &str,
+        mb_session_cipher: Option<Vec<u8>>,
+        device_indicators: &[String],
+        wallet_index: usize,
+        new_biometric_type: AuthMethod,
+    ) -> std::result::Result<Option<Vec<u8>>, Self::Error>;
 
     fn delete_wallet(&mut self, wallet_index: usize) -> std::result::Result<(), Self::Error>;
 }
 
 impl WalletManagement for Background {
     type Error = BackgroundError;
+
+    fn set_biometric(
+        &self,
+        password: &str,
+        mb_session_cipher: Option<Vec<u8>>,
+        device_indicators: &[String],
+        wallet_index: usize,
+        new_biometric_type: AuthMethod,
+    ) -> Result<Option<Vec<u8>>> {
+        let argon_seed = if let Some(session_cipher) = mb_session_cipher {
+            self.unlock_wallet_with_session(session_cipher, &device_indicators, wallet_index)?
+        } else {
+            self.unlock_wallet_with_password(password, &device_indicators, wallet_index)?
+        };
+
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let mut data = wallet.get_wallet_data()?;
+        let session = if new_biometric_type != AuthMethod::None {
+            let wallet_device_indicators =
+                create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
+
+            let gen_session = encrypt_session(
+                &wallet_device_indicators,
+                &argon_seed,
+                &data.settings.cipher_orders,
+                &data.settings.argon_params.into_config(),
+            )
+            .map_err(BackgroundError::CreateSessionError)?;
+
+            Some(gen_session)
+        } else {
+            None
+        };
+
+        data.biometric_type = new_biometric_type;
+        wallet.save_wallet_data(data)?;
+
+        Ok(session)
+    }
 
     fn unlock_wallet_with_password(
         &self,
@@ -93,7 +125,7 @@ impl WalletManagement for Background {
         wallet_index: usize,
     ) -> Result<[u8; SHA512_SIZE]> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
-        let data = wallet.get_wallet_data().unwrap();
+        let data = wallet.get_wallet_data()?;
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             password.as_bytes(),
@@ -208,7 +240,7 @@ impl WalletManagement for Background {
             wallet_config,
             ftokens,
         )?;
-        let data = wallet.get_wallet_data().unwrap();
+        let data = wallet.get_wallet_data()?;
         let wallet_device_indicators =
             create_wallet_device_indicator(&wallet.wallet_address, params.device_indicators);
 

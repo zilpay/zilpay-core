@@ -14,11 +14,9 @@ use token::ft::FToken;
 
 use crate::{wallet_storage::StorageOperations, Bip39Params, LedgerParams, WalletConfig};
 
-/// Core wallet initialization operations
 pub trait WalletInit {
     type Error;
 
-    /// Creates a new hardware wallet instance using Ledger device
     fn from_ledger(
         params: LedgerParams,
         config: WalletConfig,
@@ -27,7 +25,6 @@ pub trait WalletInit {
     where
         Self: Sized;
 
-    /// Creates a new wallet instance from an existing secret key
     fn from_sk(
         params: SecretKeyParams,
         config: WalletConfig,
@@ -38,7 +35,6 @@ pub trait WalletInit {
 
     fn wallet_key_gen() -> WalletAddrType;
 
-    /// Creates a new wallet instance from BIP39 mnemonic words
     fn from_bip39_words(
         params: Bip39Params,
         config: WalletConfig,
