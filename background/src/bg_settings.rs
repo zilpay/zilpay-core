@@ -2,7 +2,6 @@ use crate::{bg_storage::StorageManagement, Result};
 
 use errors::background::BackgroundError;
 use settings::{
-    locale::Locale,
     notifications::{NotificationState, Notifications},
     theme::Theme,
 };
@@ -13,26 +12,21 @@ use crate::Background;
 pub trait SettingsManagement {
     type Error;
 
-    /// Enables or disables global notifications
     fn set_global_notifications(
         &mut self,
         global_enabled: bool,
     ) -> std::result::Result<(), Self::Error>;
 
-    /// Updates notification settings for a specific wallet
     fn set_wallet_notifications(
         &mut self,
         wallet_index: usize,
         notification: NotificationState,
     ) -> std::result::Result<(), Self::Error>;
 
-    /// Updates application locale
-    fn set_locale(&mut self, new_locale: Locale) -> std::result::Result<(), Self::Error>;
+    fn set_locale(&mut self, new_locale: Option<String>) -> std::result::Result<(), Self::Error>;
 
-    /// Updates application theme
     fn set_theme(&mut self, new_theme: Theme) -> std::result::Result<(), Self::Error>;
 
-    /// Updates notification settings
     fn set_notifications(
         &mut self,
         new_notifications: Notifications,
@@ -63,7 +57,7 @@ impl SettingsManagement for Background {
         Ok(())
     }
 
-    fn set_locale(&mut self, new_locale: Locale) -> Result<()> {
+    fn set_locale(&mut self, new_locale: Option<String>) -> Result<()> {
         self.settings.locale = new_locale;
         self.save_settings()?;
 
@@ -148,7 +142,7 @@ mod tests_background {
     #[test]
     fn test_set_locale() {
         let (mut bg, dir) = setup_test_background();
-        let test_locale = Locale::System;
+        let test_locale = None;
 
         // Test setting locale
         assert!(bg.set_locale(test_locale.clone()).is_ok());
@@ -212,7 +206,7 @@ mod tests_background {
                 appearances: settings::theme::Appearances::System
             })
             .is_ok());
-        assert!(bg.set_locale(Locale::System).is_ok());
+        assert!(bg.set_locale(None).is_ok());
         assert!(bg
             .set_wallet_notifications(1, NotificationState::all_enabled())
             .is_ok());
@@ -229,7 +223,7 @@ mod tests_background {
                 appearances: settings::theme::Appearances::System
             }
         );
-        assert_eq!(bg_reloaded.settings.locale, Locale::System);
+        assert_eq!(bg_reloaded.settings.locale, None);
         assert_eq!(
             bg_reloaded.settings.notifications.wallet_states.get(&1),
             Some(&NotificationState::all_enabled())

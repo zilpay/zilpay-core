@@ -1,4 +1,4 @@
-use crate::{browser::BrowserSettings, locale::Locale, notifications::Notifications, theme::Theme};
+use crate::{browser::BrowserSettings, notifications::Notifications, theme::Theme};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -15,7 +15,7 @@ pub struct CommonSettings {
 
     /// Language and regional settings
     #[serde(default)]
-    pub locale: Locale,
+    pub locale: Option<String>,
 
     #[serde(default)]
     pub browser: BrowserSettings,
@@ -25,7 +25,7 @@ impl CommonSettings {
     pub fn new(
         notifications: Notifications,
         theme: Theme,
-        locale: Locale,
+        locale: Option<String>,
         browser: BrowserSettings,
     ) -> Self {
         Self {
@@ -43,7 +43,7 @@ impl CommonSettings {
     }
 
     /// Returns a new instance with the specified locale
-    pub fn with_locale(mut self, locale: Locale) -> Self {
+    pub fn with_locale(mut self, locale: Option<String>) -> Self {
         self.locale = locale;
         self
     }
@@ -77,7 +77,7 @@ mod tests {
     fn test_new_settings() {
         let notifications = Notifications::default();
         let theme = Theme::default();
-        let locale = Locale::Custom("en-US".to_string());
+        let locale = Some("en".to_string());
 
         let settings =
             CommonSettings::new(notifications, theme, locale.clone(), Default::default());
@@ -96,7 +96,7 @@ mod tests {
     #[test]
     fn test_with_locale() {
         let settings = setup_test_settings();
-        let custom_locale = Locale::Custom("fr-FR".to_string());
+        let custom_locale = Some("fr".to_string());
         let updated = settings.with_locale(custom_locale.clone());
         assert_eq!(updated.locale, custom_locale);
     }
