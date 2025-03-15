@@ -25,6 +25,9 @@ pub enum BackgroundError {
     #[error("Provider is not exists with chain id: {0}")]
     ProviderNotExists(u64),
 
+    #[error("Provider depends of : {0}")]
+    ProviderDepends(String),
+
     #[error("Failed to serialize networks")]
     FailToSerializeNetworks,
 

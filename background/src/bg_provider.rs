@@ -5,6 +5,7 @@ use network::{common::Provider, provider::NetworkProvider};
 use proto::address::Address;
 use rpc::network_config::ChainConfig;
 use std::sync::Arc;
+use wallet::wallet_storage::StorageOperations;
 
 #[async_trait]
 pub trait ProvidersManagement {
@@ -28,9 +29,6 @@ pub trait ProvidersManagement {
 #[async_trait]
 impl ProvidersManagement for Background {
     type Error = BackgroundError;
-    // TODO: add fetch more nodes
-    // TODO: add method with rankeing node depends of network
-    //
 
     async fn update_block_diff_time(&self, chain_hash: u64, addr: &Address) -> Result<()> {
         let mut chains = self.get_providers();
@@ -83,12 +81,28 @@ impl ProvidersManagement for Background {
     fn remvoe_providers(&self, index: usize) -> Result<()> {
         let mut providers = self.get_providers();
 
-        if providers.get(index).is_none() {
+        if let Some(provider) = providers.get(index) {
+            let hash = provider.config.hash();
+
+            for wallet in &self.wallets {
+                let data = wallet.get_wallet_data()?;
+
+                if data.default_chain_hash == hash {
+                    return Err(BackgroundError::ProviderDepends(data.wallet_name));
+                }
+
+                for account in data.accounts {
+                    if account.chain_hash == hash {
+                        return Err(BackgroundError::ProviderDepends(account.name));
+                    }
+                }
+            }
+
+            providers.remove(index);
+            self.update_providers(providers)?;
+        } else {
             return Err(BackgroundError::ProviderNotExists(index as u64));
         }
-
-        providers.remove(index);
-        self.update_providers(providers)?;
 
         Ok(())
     }
