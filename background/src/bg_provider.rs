@@ -19,7 +19,7 @@ pub trait ProvidersManagement {
     fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error>;
     fn get_providers(&self) -> Vec<NetworkProvider>;
     fn add_provider(&self, config: ChainConfig) -> std::result::Result<u64, Self::Error>;
-    fn remvoe_providers(&self, index: usize) -> std::result::Result<(), Self::Error>;
+    fn remvoe_provider(&self, index: usize) -> std::result::Result<(), Self::Error>;
     fn update_providers(
         &self,
         providers: Vec<NetworkProvider>,
@@ -78,7 +78,7 @@ impl ProvidersManagement for Background {
         Ok(hash)
     }
 
-    fn remvoe_providers(&self, index: usize) -> Result<()> {
+    fn remvoe_provider(&self, index: usize) -> Result<()> {
         let mut providers = self.get_providers();
 
         if let Some(provider) = providers.get(index) {
@@ -183,7 +183,7 @@ mod tests_providers {
         assert_eq!(providers.len(), 2);
 
         // Remove the second provider
-        bg.remvoe_providers(1).unwrap();
+        bg.remvoe_provider(1).unwrap();
         let providers = bg.get_providers();
 
         assert_eq!(providers.len(), 1);
@@ -195,7 +195,7 @@ mod tests_providers {
         let (bg, _dir) = setup_test_background();
 
         // Attempt to remove a provider when none exist
-        let result = bg.remvoe_providers(0);
+        let result = bg.remvoe_provider(0);
 
         assert!(result.is_err());
 
