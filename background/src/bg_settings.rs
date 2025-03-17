@@ -4,6 +4,7 @@ use crate::{bg_storage::StorageManagement, Result};
 
 use errors::background::BackgroundError;
 use settings::{
+    browser::BrowserSettings,
     notifications::{NotificationState, Notifications},
     theme::Theme,
 };
@@ -27,6 +28,10 @@ pub trait SettingsManagement {
     fn set_locale(&self, new_locale: Option<String>) -> std::result::Result<(), Self::Error>;
 
     fn set_theme(&self, new_theme: Theme) -> std::result::Result<(), Self::Error>;
+    fn set_browser_settings(
+        &self,
+        new_settings: BrowserSettings,
+    ) -> std::result::Result<(), Self::Error>;
 
     fn set_notifications(
         &self,
@@ -36,6 +41,15 @@ pub trait SettingsManagement {
 
 impl SettingsManagement for Background {
     type Error = BackgroundError;
+
+    fn set_browser_settings(&self, new_settings: BrowserSettings) -> Result<()> {
+        let mut global_settings = Background::load_global_settings(Arc::clone(&self.storage));
+
+        global_settings.browser = new_settings;
+        self.save_settings(global_settings)?;
+
+        Ok(())
+    }
 
     fn set_global_notifications(&self, global_enabled: bool) -> Result<()> {
         let mut global_settings = Background::load_global_settings(Arc::clone(&self.storage));
