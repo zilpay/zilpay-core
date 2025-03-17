@@ -5,6 +5,7 @@ use crate::{bg_storage::StorageManagement, Result};
 use errors::background::BackgroundError;
 use settings::{
     browser::BrowserSettings,
+    common_settings::CommonSettings,
     notifications::{NotificationState, Notifications},
     theme::Theme,
 };
@@ -18,6 +19,8 @@ pub trait SettingsManagement {
         &self,
         global_enabled: bool,
     ) -> std::result::Result<(), Self::Error>;
+
+    fn get_global_settings(&self) -> CommonSettings;
 
     fn set_wallet_notifications(
         &self,
@@ -41,6 +44,12 @@ pub trait SettingsManagement {
 
 impl SettingsManagement for Background {
     type Error = BackgroundError;
+
+    fn get_global_settings(&self) -> CommonSettings {
+        let global_settings = Background::load_global_settings(Arc::clone(&self.storage));
+
+        global_settings
+    }
 
     fn set_browser_settings(&self, new_settings: BrowserSettings) -> Result<()> {
         let mut global_settings = Background::load_global_settings(Arc::clone(&self.storage));
