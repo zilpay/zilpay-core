@@ -20,6 +20,7 @@ impl RatesManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let mut ftokens = wallet.get_ftokens()?;
+        let timeout_secs = data.settings.network.request_timeout_secs;
 
         let is_updated = data
             .settings
@@ -27,6 +28,7 @@ impl RatesManagement for Background {
             .request(
                 &mut ftokens,
                 &data.settings.features.currency_convert.to_lowercase(),
+                timeout_secs,
             )
             .await?;
 

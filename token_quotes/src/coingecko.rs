@@ -15,14 +15,21 @@ fn build_url(ids: &[String], vs_currencies: &[&str]) -> String {
     )
 }
 
-pub async fn get_coingecko_rates(ftokens: &mut [FToken], vs_currency: &str) -> Result<bool> {
+pub async fn get_coingecko_rates(
+    ftokens: &mut [FToken],
+    vs_currency: &str,
+    timeout: u32,
+) -> Result<bool> {
     let ids: Vec<String> = ftokens
         .iter()
         .map(|t| t.name.to_lowercase().replace(" ", "-"))
         .collect();
     let url = build_url(&ids, &[vs_currency]);
     let json_value: Value = {
-        let client = Client::new();
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(timeout as u64))
+            .build()
+            .map_err(|e| TokenQuotesError::ApiRequestError(e.to_string()))?;
         let response = client
             .get(&url)
             .send()
@@ -84,7 +91,7 @@ mod coingecko_tests {
                 chain_hash: 0,
             },
         ];
-        get_coingecko_rates(&mut tokens, "rub").await.unwrap();
+        get_coingecko_rates(&mut tokens, "rub", 10).await.unwrap();
 
         assert!(tokens[0].rate > 0.0);
         assert!(tokens[1].rate > 0.0);

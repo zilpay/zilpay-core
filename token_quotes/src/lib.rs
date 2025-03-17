@@ -21,10 +21,17 @@ impl TokenQuotesAPIOptions {
         }
     }
 
-    pub async fn request(&self, ftokens: &mut [FToken], vs_currency: &str) -> Result<bool> {
+    pub async fn request(
+        &self,
+        ftokens: &mut [FToken],
+        vs_currency: &str,
+        timeout: u32,
+    ) -> Result<bool> {
         match self {
             TokenQuotesAPIOptions::None => Ok(false),
-            TokenQuotesAPIOptions::Coingecko => get_coingecko_rates(ftokens, vs_currency).await,
+            TokenQuotesAPIOptions::Coingecko => {
+                get_coingecko_rates(ftokens, vs_currency, timeout).await
+            }
         }
     }
 
