@@ -3,7 +3,7 @@ pub use bip39::{Language, Mnemonic};
 use crypto::bip49::DerivationPath;
 use errors::background::BackgroundError;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
-use settings::{common_settings::CommonSettings, wallet_settings::WalletSettings};
+use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
 use token::ft::FToken;
@@ -51,7 +51,6 @@ pub struct BackgroundLedgerParams {
 pub struct Background {
     storage: Arc<LocalStorage>,
     pub wallets: Vec<Wallet>,
-    pub settings: CommonSettings,
 }
 
 pub mod bg_book;

@@ -25,7 +25,7 @@ pub trait StorageManagement {
         &self,
         indicators: Vec<[u8; SHA256_SIZE]>,
     ) -> std::result::Result<(), Self::Error>;
-    fn save_settings(&self) -> std::result::Result<(), Self::Error>;
+    fn save_settings(&self, settings: CommonSettings) -> std::result::Result<(), Self::Error>;
 }
 
 impl StorageManagement for Background {
@@ -57,10 +57,8 @@ impl StorageManagement for Background {
     fn from_storage_path(path: &str) -> Result<Self> {
         let storage = LocalStorage::from(path)?;
         let storage = Arc::new(storage);
-        // TODO: check old storage from first ZilPay version if indicators is empty
         let indicators = Self::get_indicators(Arc::clone(&storage));
         let mut wallets = Vec::with_capacity(indicators.len());
-        let settings = Self::load_global_settings(Arc::clone(&storage));
 
         for addr in &indicators {
             let w = Wallet::init_wallet(*addr, Arc::clone(&storage))?;
@@ -68,16 +66,12 @@ impl StorageManagement for Background {
             wallets.push(w);
         }
 
-        Ok(Self {
-            storage,
-            wallets,
-            settings,
-        })
+        Ok(Self { storage, wallets })
     }
 
-    fn save_settings(&self) -> Result<()> {
+    fn save_settings(&self, settings: CommonSettings) -> Result<()> {
         let bytes =
-            bincode::serialize(&self.settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
+            bincode::serialize(&settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
 
         self.storage.set(GLOBAL_SETTINGS_DB_KEY_V1, &bytes)?;
         self.storage.flush()?;
