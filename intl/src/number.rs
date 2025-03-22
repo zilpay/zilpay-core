@@ -235,7 +235,6 @@ fn format_number_compact_parts(integer_part: &str, currency_symbol: &str) -> Str
 
 fn get_magnitude_suffix(magnitude: usize) -> &'static str {
     match magnitude {
-        3 => "K",
         6 => "M",
         9 => "B",
         12 => "T",
