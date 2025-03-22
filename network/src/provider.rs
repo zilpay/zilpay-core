@@ -371,7 +371,7 @@ impl NetworkProvider {
 
     pub async fn update_balances(
         &self,
-        tokens: &mut [FToken],
+        mut tokens: Vec<&mut FToken>,
         accounts: &[&Address],
     ) -> Result<()> {
         let total_requests = tokens.iter().fold(0, |acc, token| match token.addr {
@@ -699,9 +699,10 @@ mod tests_network {
             &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
             &Address::from_zil_bech32("zil1uxfzk4n9ef2t3f4c4939ludlvp349uwqdx32xt").unwrap(),
         ];
+        let tokens_refs: Vec<&mut FToken> = tokens.iter_mut().collect();
 
         provider
-            .update_balances(&mut tokens, &accounts)
+            .update_balances(tokens_refs, &accounts)
             .await
             .unwrap();
 

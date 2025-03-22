@@ -175,9 +175,10 @@ impl TokensManagement for Background {
         let addresses: Vec<&Address> = data.accounts.iter().map(|a| &a.addr).collect();
         let provider = self.get_provider(selected_account.chain_hash)?;
 
-        let matching_end =
-            ftokens.partition_point(|token| token.chain_hash == selected_account.chain_hash);
-        let matching_tokens = &mut ftokens[..matching_end];
+        let matching_tokens: Vec<&mut FToken> = ftokens
+            .iter_mut()
+            .filter(|token| token.chain_hash == selected_account.chain_hash)
+            .collect();
 
         provider
             .update_balances(matching_tokens, &addresses)
