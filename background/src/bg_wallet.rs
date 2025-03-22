@@ -175,11 +175,11 @@ impl WalletManagement for Background {
         match account.pub_key {
             PubKey::Secp256k1Sha256(pub_key) => {
                 account.pub_key = PubKey::Secp256k1Keccak256(pub_key);
-                account.chain_id = provider.config.chain_ids[1];
+                account.chain_id = provider.config.chain_ids[0];
             }
             PubKey::Secp256k1Keccak256(pub_key) => {
                 account.pub_key = PubKey::Secp256k1Sha256(pub_key);
-                account.chain_id = provider.config.chain_ids[0];
+                account.chain_id = provider.config.chain_ids[1];
             }
             _ => {
                 return Err(AccountErrors::InvalidPubKeyType)?;
