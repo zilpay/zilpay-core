@@ -152,6 +152,17 @@ impl TransactionRequest {
             }
         }
     }
+
+    pub fn set_icon(&mut self, icon: String) {
+        match self {
+            TransactionRequest::Zilliqa((_, metadata)) => {
+                metadata.icon = Some(icon);
+            }
+            TransactionRequest::Ethereum((_, metadata)) => {
+                metadata.icon = Some(icon);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
