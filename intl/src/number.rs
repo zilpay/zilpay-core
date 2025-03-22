@@ -192,11 +192,16 @@ fn convert_u256_to_f64(value: U256, decimals: u8) -> f64 {
 
 fn format_number_compact(value: f64, currency_symbol: &str, threshold: f64) -> String {
     let magnitude = value.log10().floor() as usize / 3 * 3;
+
+    if magnitude == 3 {
+        let locale = Locale::en;
+        return format_f64(value, &locale, currency_symbol);
+    }
+
     let suffix = get_magnitude_suffix(magnitude);
 
     let scaled_value = value / 10.0f64.powi(magnitude as i32);
 
-    // Определяем количество десятичных знаков на основе threshold
     let precision = if threshold > 0.0 {
         (-threshold.log10().ceil() as i32).max(0) as usize
     } else {
@@ -212,6 +217,12 @@ fn format_number_compact(value: f64, currency_symbol: &str, threshold: f64) -> S
 fn format_number_compact_parts(integer_part: &str, currency_symbol: &str) -> String {
     let integer_len = integer_part.len();
     let magnitude = ((integer_len - 1) / 3) * 3;
+
+    if magnitude == 3 {
+        let locale = Locale::en;
+        return format_number_standard(integer_part, "", &locale, currency_symbol);
+    }
+
     let suffix = get_magnitude_suffix(magnitude);
 
     let significant = &integer_part[..integer_part.len() - magnitude];
@@ -445,7 +456,7 @@ mod tests {
     fn test_k_values() {
         let value = U256::from(20000000000000000000000u128);
         let (native, _) = format_u256(value, 18, "", "ETH", "USD", 0.000001, true, 0.0);
-        assert_eq!(native, "20K Ξ");
+        assert_eq!(native, "20,000 Ξ");
     }
 
     #[test]
@@ -479,6 +490,6 @@ mod tests {
         let (native, converted) =
             format_u256(value, 18, "en", "ETH", "USD", 0.000001, true, 1500.0);
         assert_eq!(native, "5 Ξ");
-        assert_eq!(converted, "7.5K $");
+        assert_eq!(converted, "7,500 $");
     }
 }
