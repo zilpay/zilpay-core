@@ -17,7 +17,7 @@ bech32.workspace = true
 k256.workspace = true
 hmac.workspace = true
 tokio.workspace = true
-prost = "0.12.6"
+prost = "0.13.5"
 
 crypto = { path = "../crypto" }
 config = { path = "../config" }
