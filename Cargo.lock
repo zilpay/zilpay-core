@@ -1452,10 +1452,10 @@ dependencies = [
  "hex",
  "kuznechik",
  "ntrulp",
- "pqc_kyber",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rust-argon2",
+ "safe_pqc_kyber",
  "serde",
  "sha2",
  "tokio",
@@ -3632,15 +3632,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pqc_kyber"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b23e1823e8a78ad67990c5cb843d5eba75ab3b8a44d041f3814fde89463dc6f"
-dependencies = [
- "rand_core 0.6.4",
-]
-
-[[package]]
 name = "primitive-types"
 version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4549,6 +4540,15 @@ name = "ryu"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28d3b2b1366ec20994f1fd18c3c594f05c5dd4bc44d8bb0c1c632c8d6829481f"
+
+[[package]]
+name = "safe_pqc_kyber"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "108c4ad7fe882cbb078ff40de415658e9d827f636e4fb17e7d5a97503a9aceaf"
+dependencies = [
+ "rand_core 0.6.4",
+]
 
 [[package]]
 name = "schannel"

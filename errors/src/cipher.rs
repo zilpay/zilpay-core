@@ -59,9 +59,6 @@ pub enum CyberErrors {
     #[error("Failed to decapsulate the shared secret")]
     DecapsulationError,
 
-    #[error("Error generating random bytes")]
-    RandomGenerationError,
-
     #[error("Encryption error: {0}")]
     EncryptionError(String),
 

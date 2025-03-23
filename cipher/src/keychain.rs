@@ -17,7 +17,7 @@ use ntrulp::{
     key::{priv_key::PrivKey, pub_key::PubKey},
     params::params::{PUBLICKEYS_BYTES, SECRETKEYS_BYTES},
 };
-use pqc_kyber::Keypair as CyberKeypair;
+use safe_pqc_kyber::Keypair as CyberKeypair;
 use sha2::{Digest, Sha256};
 
 pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
