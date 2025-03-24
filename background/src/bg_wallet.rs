@@ -201,8 +201,7 @@ impl WalletManagement for Background {
             &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonPasswordHashError)?;
-        let keychain =
-            KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
+        let keychain = KeyChain::from_seed(&argon_seed)?;
         let mnemonic = if params.mnemonic_check {
             Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
                 .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?
@@ -292,8 +291,7 @@ impl WalletManagement for Background {
             &wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonPasswordHashError)?;
-        let keychain =
-            KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
+        let keychain = KeyChain::from_seed(&argon_seed)?;
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
@@ -353,8 +351,7 @@ impl WalletManagement for Background {
             &params.wallet_settings.argon_params.into_config(),
         )
         .map_err(BackgroundError::ArgonPasswordHashError)?;
-        let keychain =
-            KeyChain::from_seed(&argon_seed).map_err(BackgroundError::FailCreateKeychain)?;
+        let keychain = KeyChain::from_seed(&argon_seed)?;
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,

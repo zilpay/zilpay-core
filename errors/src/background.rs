@@ -83,9 +83,6 @@ pub enum BackgroundError {
     #[error("Worker error: {0}")]
     WorkerError(String),
 
-    #[error("Failed to create keychain from Argon2 seed: {0}")]
-    FailCreateKeychain(KeyChainErrors),
-
     #[error("Failed to parse mnemonic words: {0}")]
     FailParseMnemonicWords(String),
 
@@ -118,6 +115,15 @@ pub enum BackgroundError {
 
     #[error("keychain error: {0}")]
     KeyChainErrors(KeyChainErrors),
+
+    #[error("Invalid backup signature")]
+    InvalidBackupSignature,
+
+    #[error("Invalid backup format")]
+    InvalidBackupFormat,
+
+    #[error("Unsupported backup version: {0}")]
+    UnsupportedBackupVersion(u8),
 }
 
 impl From<TokenQuotesError> for BackgroundError {
