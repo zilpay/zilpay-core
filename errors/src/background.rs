@@ -13,6 +13,7 @@ use crate::{
     tx::TransactionErrors,
     wallet::WalletErrors,
 };
+use bincode::ErrorKind;
 
 #[derive(Debug, Error, PartialEq)]
 pub enum BackgroundError {
@@ -111,6 +112,12 @@ pub enum BackgroundError {
 
     #[error("token rates error: {0}")]
     TokenQuotesError(TokenQuotesError),
+
+    #[error("Bincode Error: {0}")]
+    BincodeError(String),
+
+    #[error("keychain error: {0}")]
+    KeyChainErrors(KeyChainErrors),
 }
 
 impl From<TokenQuotesError> for BackgroundError {
@@ -161,8 +168,20 @@ impl From<NetworkErrors> for BackgroundError {
     }
 }
 
+impl From<KeyChainErrors> for BackgroundError {
+    fn from(error: KeyChainErrors) -> Self {
+        BackgroundError::KeyChainErrors(error)
+    }
+}
+
 impl From<WalletErrors> for BackgroundError {
     fn from(error: WalletErrors) -> Self {
         BackgroundError::WalletError(error)
+    }
+}
+
+impl From<Box<ErrorKind>> for BackgroundError {
+    fn from(error: Box<ErrorKind>) -> Self {
+        BackgroundError::BincodeError(error.to_string())
     }
 }
