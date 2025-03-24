@@ -1,7 +1,11 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use std::sync::Arc;
 
-use cipher::{argon2::Argon2Seed, keychain::KeyChain, options::CipherOrders};
+use cipher::{
+    argon2::{self, Argon2Seed, ARGON2_DEFAULT_CONFIG},
+    keychain::KeyChain,
+    options::CipherOrders,
+};
 use config::{
     sha::SHA256_SIZE,
     storage::{GLOBAL_SETTINGS_DB_KEY_V1, INDICATORS_DB_KEY_V1},
@@ -30,75 +34,8 @@ pub struct KeyStore {
     pub keys: Vec<u8>,
 }
 
-pub trait StorageManagement {
-    type Error;
-
-    fn from_storage_path(path: &str) -> std::result::Result<Self, Self::Error>
-    where
-        Self: Sized;
-    fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings;
-    fn get_indicators(storage: Arc<LocalStorage>) -> Vec<[u8; SHA256_SIZE]>;
-    fn save_indicators(
-        &self,
-        indicators: Vec<[u8; SHA256_SIZE]>,
-    ) -> std::result::Result<(), Self::Error>;
-    fn save_settings(&self, settings: CommonSettings) -> std::result::Result<(), Self::Error>;
-    fn get_keystore(
-        &self,
-        wallet_index: usize,
-        argon_seed: &Argon2Seed,
-    ) -> std::result::Result<Vec<u8>, Self::Error>;
-    fn use_backup(
-        &self,
-        cipher_backup: Vec<u8>,
-        argon_seed: &Argon2Seed,
-    ) -> std::result::Result<KeyStore, Self::Error>;
-}
-
-impl StorageManagement for Background {
-    type Error = BackgroundError;
-
-    fn get_keystore(&self, wallet_index: usize, argon_seed: &Argon2Seed) -> Result<Vec<u8>> {
-        let wallet = self.get_wallet_by_index(wallet_index)?;
-        let wallet_data = wallet.get_wallet_data()?;
-        let ftokens = wallet.get_ftokens()?;
-        let chain_config = self.get_provider(wallet_data.default_chain_hash)?.config;
-        let cipher_orders = wallet_data.settings.cipher_orders.clone();
-        let keys = match wallet_data.wallet_type {
-            WalletTypes::Ledger(_) => Vec::new(),
-            WalletTypes::SecretPhrase((_, _)) => {
-                wallet.reveal_mnemonic(argon_seed)?.to_string().into_bytes()
-            }
-            WalletTypes::SecretKey => wallet
-                .reveal_keypair(0, argon_seed, None)?
-                .to_bytes()?
-                .to_vec(),
-        };
-        let keystore = KeyStore {
-            wallet_data,
-            chain_config,
-            ftokens,
-            keys,
-            wallet_address: wallet.wallet_address,
-        };
-        let keystore_bytes = bincode::serialize(&keystore)?;
-        let keystore_version: u8 = 0;
-        let keychain = KeyChain::from_seed(argon_seed)?;
-        let cipher_bytes = keychain.encrypt(keystore_bytes, &cipher_orders)?;
-        let cipher_orders_bytes = cipher_orders.iter().map(|c| c.code()).collect::<Vec<u8>>();
-
-        let total_len = SIGNATURE.len() + 1 + 1 + cipher_orders_bytes.len() + cipher_bytes.len();
-        let mut result = Vec::with_capacity(total_len);
-        result.extend_from_slice(SIGNATURE);
-        result.push(keystore_version);
-        result.push(cipher_orders_bytes.len() as u8);
-        result.extend(cipher_orders_bytes);
-        result.extend(cipher_bytes);
-
-        Ok(result)
-    }
-
-    fn use_backup(&self, cipher_backup: Vec<u8>, argon_seed: &Argon2Seed) -> Result<KeyStore> {
+impl KeyStore {
+    pub fn from_backup(cipher_backup: Vec<u8>, argon_seed: &Argon2Seed) -> Result<KeyStore> {
         if cipher_backup.len() <= SIGNATURE.len() || &cipher_backup[..SIGNATURE.len()] != SIGNATURE
         {
             return Err(BackgroundError::InvalidBackupSignature);
@@ -148,6 +85,101 @@ impl StorageManagement for Background {
         let keystore: KeyStore = bincode::deserialize(&decrypted_data)?;
 
         Ok(keystore)
+    }
+}
+
+pub trait StorageManagement {
+    type Error;
+
+    fn from_storage_path(path: &str) -> std::result::Result<Self, Self::Error>
+    where
+        Self: Sized;
+    fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings;
+    fn get_indicators(storage: Arc<LocalStorage>) -> Vec<[u8; SHA256_SIZE]>;
+    fn save_indicators(
+        &self,
+        indicators: Vec<[u8; SHA256_SIZE]>,
+    ) -> std::result::Result<(), Self::Error>;
+    fn save_settings(&self, settings: CommonSettings) -> std::result::Result<(), Self::Error>;
+    fn get_keystore(
+        &self,
+        wallet_index: usize,
+        password: &str,
+        device_indicators: &[String],
+    ) -> std::result::Result<Vec<u8>, Self::Error>;
+    fn load_keystore(
+        &self,
+        backup_cipher: Vec<u8>,
+        password: &str,
+        device_indicators: &[String],
+    ) -> std::result::Result<(), Self::Error>;
+}
+
+impl StorageManagement for Background {
+    type Error = BackgroundError;
+
+    fn load_keystore(
+        &self,
+        backup_cipher: Vec<u8>,
+        password: &str,
+        device_indicators: &[String],
+    ) -> Result<()> {
+        let argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)
+            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let keystore = KeyStore::from_backup(backup_cipher, &argon_seed)?;
+
+        Ok(())
+    }
+
+    fn get_keystore(
+        &self,
+        wallet_index: usize,
+        password: &str,
+        device_indicators: &[String],
+    ) -> Result<Vec<u8>> {
+        let argon_seed =
+            self.unlock_wallet_with_password(password, device_indicators, wallet_index)?;
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let wallet_data = wallet.get_wallet_data()?;
+        let ftokens = wallet.get_ftokens()?;
+        let chain_config = self.get_provider(wallet_data.default_chain_hash)?.config;
+        let cipher_orders = wallet_data.settings.cipher_orders.clone();
+        let keys = match wallet_data.wallet_type {
+            WalletTypes::Ledger(_) => Vec::with_capacity(0),
+            WalletTypes::SecretPhrase((_, _)) => wallet
+                .reveal_mnemonic(&argon_seed)?
+                .to_string()
+                .into_bytes(),
+            WalletTypes::SecretKey => wallet
+                .reveal_keypair(0, &argon_seed, None)?
+                .to_bytes()?
+                .to_vec(),
+        };
+        let keystore = KeyStore {
+            wallet_data,
+            chain_config,
+            ftokens,
+            keys,
+            wallet_address: wallet.wallet_address,
+        };
+        let new_argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)
+            .map_err(BackgroundError::ArgonPasswordHashError)?;
+
+        let keystore_bytes = bincode::serialize(&keystore)?;
+        let keystore_version: u8 = 0;
+        let keychain = KeyChain::from_seed(&new_argon_seed)?;
+        let cipher_bytes = keychain.encrypt(keystore_bytes, &cipher_orders)?;
+        let cipher_orders_bytes = cipher_orders.iter().map(|c| c.code()).collect::<Vec<u8>>();
+
+        let total_len = SIGNATURE.len() + 1 + 1 + cipher_orders_bytes.len() + cipher_bytes.len();
+        let mut result = Vec::with_capacity(total_len);
+        result.extend_from_slice(SIGNATURE);
+        result.push(keystore_version);
+        result.push(cipher_orders_bytes.len() as u8);
+        result.extend(cipher_orders_bytes);
+        result.extend(cipher_bytes);
+
+        Ok(result)
     }
 
     fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
@@ -373,9 +405,10 @@ mod tests_background {
             ftokens: vec![],
         })
         .unwrap();
-        let argon_seed = bg.unlock_wallet_with_password(PASSWORD, &[], 0).unwrap();
-        let keystore_bytes = bg.get_keystore(0, &argon_seed).unwrap();
-        let keystore = bg.use_backup(keystore_bytes, &argon_seed).unwrap();
+        let keystore_bytes = bg.get_keystore(0, PASSWORD, &[]).unwrap();
+        let argon_seed =
+            argon2::derive_key(PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let keystore = KeyStore::from_backup(keystore_bytes, &argon_seed).unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let wallet_data = wallet.get_wallet_data().unwrap();
 
@@ -383,5 +416,36 @@ mod tests_background {
         assert_eq!(keystore.chain_config, net_conf);
         assert_eq!(keystore.wallet_address, wallet.wallet_address);
         assert_eq!(keystore.wallet_data, wallet_data);
+    }
+
+    #[test]
+    fn test_load_from_keystore() {
+        let (mut bg, _) = setup_test_background();
+        let net_conf = create_test_network_config();
+        const PASSWORD: &str = "shit password";
+
+        bg.add_provider(net_conf.clone()).unwrap();
+
+        let words1 = Background::gen_bip39(12).unwrap();
+        let accounts1 = [(
+            DerivationPath::new(slip44::ETHEREUM, 0),
+            "keystore wallet".to_string(),
+        )];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: PASSWORD,
+            chain_hash: net_conf.hash(),
+            mnemonic_str: &words1,
+            mnemonic_check: true,
+            accounts: &accounts1,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::from("shit walelt"),
+            biometric_type: Default::default(),
+            device_indicators: &[],
+            ftokens: vec![],
+        })
+        .unwrap();
+        let keystore_bytes = bg.get_keystore(0, PASSWORD, &[]).unwrap();
     }
 }
