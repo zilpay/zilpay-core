@@ -70,6 +70,13 @@ impl Clone for Wallet {
 }
 
 impl Wallet {
+    pub fn from(storage: Arc<LocalStorage>, wallet_address: WalletAddrType) -> Self {
+        Self {
+            storage,
+            wallet_address,
+        }
+    }
+
     fn unlock_iternel(&self, seed_bytes: &Argon2Seed) -> Result<KeyChain> {
         let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
         let data = self.get_wallet_data()?;

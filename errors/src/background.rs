@@ -4,7 +4,7 @@ use crate::{
     account::AccountErrors,
     cipher::CipherErrors,
     keychain::KeyChainErrors,
-    keypair::{KeyPairError, PubKeyError},
+    keypair::{KeyPairError, PubKeyError, SecretKeyError},
     network::NetworkErrors,
     session::SessionErrors,
     storage::LocalStorageError,
@@ -124,11 +124,20 @@ pub enum BackgroundError {
 
     #[error("Unsupported backup version: {0}")]
     UnsupportedBackupVersion(u8),
+
+    #[error("SecretKey error: {0}")]
+    SecretKeyError(SecretKeyError),
 }
 
 impl From<TokenQuotesError> for BackgroundError {
     fn from(error: TokenQuotesError) -> Self {
         BackgroundError::TokenQuotesError(error)
+    }
+}
+
+impl From<SecretKeyError> for BackgroundError {
+    fn from(error: SecretKeyError) -> Self {
+        BackgroundError::SecretKeyError(error)
     }
 }
 

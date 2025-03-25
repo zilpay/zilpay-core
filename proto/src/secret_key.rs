@@ -1,6 +1,6 @@
 use config::key::SECRET_KEY_SIZE;
-use std::str::FromStr;
 use errors::keypair::SecretKeyError;
+use std::str::FromStr;
 
 type Result<T> = std::result::Result<T, SecretKeyError>;
 

@@ -16,6 +16,7 @@ use config::{
     storage::{GLOBAL_SETTINGS_DB_KEY_V1, INDICATORS_DB_KEY_V1},
 };
 use errors::background::BackgroundError;
+use proto::secret_key::SecretKey;
 use rpc::network_config::ChainConfig;
 use serde::{Deserialize, Serialize};
 use session::encrypt_session;
@@ -263,6 +264,7 @@ impl StorageManagement for Background {
                 .into_bytes(),
             WalletTypes::SecretKey => wallet
                 .reveal_keypair(0, &argon_seed, None)?
+                .get_secretkey()?
                 .to_bytes()?
                 .to_vec(),
         };
@@ -560,7 +562,10 @@ mod tests_background {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let wallet_data = wallet.get_wallet_data().unwrap();
 
-        assert_eq!(keystore.keys, keypair.to_bytes().unwrap());
+        assert_eq!(
+            keystore.keys,
+            keypair.get_secretkey().unwrap().to_bytes().unwrap()
+        );
         assert_eq!(keystore.chain_config, net_conf);
         assert_eq!(keystore.wallet_address, wallet.wallet_address);
         assert_eq!(keystore.wallet_data, wallet_data);
@@ -671,5 +676,116 @@ mod tests_background {
         let words1 = wallet1.reveal_mnemonic(&seed_bytes1).unwrap();
 
         assert_eq!(words1, words0);
+    }
+
+    #[test]
+    fn test_load_from_keystore_keypair() {
+        let (mut bg, _) = setup_test_background();
+        let net_conf = create_test_network_config();
+        const PASSWORD: &str = "shit password";
+
+        bg.add_provider(net_conf.clone()).unwrap();
+
+        let keypair = KeyPair::gen_keccak256().unwrap();
+        let device_indicators = vec!["test indicator".to_string()];
+
+        bg.add_sk_wallet(BackgroundSKParams {
+            password: PASSWORD,
+            secret_key: keypair.get_secretkey().unwrap(),
+            wallet_name: "sk wallet".to_string(),
+            biometric_type: AuthMethod::FaceId,
+            device_indicators: &device_indicators,
+            wallet_settings: Default::default(),
+            chain_hash: net_conf.hash(),
+            ftokens: net_conf.ftokens.clone(),
+        })
+        .unwrap();
+
+        let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
+        let new_device_indicators = vec!["test new device indicator".to_string()];
+
+        let session1 = bg
+            .load_keystore(
+                keystore_bytes,
+                PASSWORD,
+                &new_device_indicators,
+                AuthMethod::None,
+            )
+            .unwrap();
+
+        assert!(session1.is_empty());
+
+        let wallet0 = bg.get_wallet_by_index(0).unwrap();
+        let restored_wallet_data0 = wallet0.get_wallet_data().unwrap();
+
+        let wallet1 = bg.get_wallet_by_index(1).unwrap();
+        let restored_wallet_data1 = wallet1.get_wallet_data().unwrap();
+
+        assert_ne!(
+            restored_wallet_data0.proof_key,
+            restored_wallet_data1.proof_key
+        );
+        assert_eq!(
+            restored_wallet_data0.wallet_type,
+            restored_wallet_data1.wallet_type
+        );
+        assert_eq!(
+            restored_wallet_data0.settings,
+            restored_wallet_data1.settings
+        );
+        assert_ne!(
+            restored_wallet_data0.accounts.first().unwrap().account_type,
+            restored_wallet_data1.accounts.first().unwrap().account_type,
+        );
+        assert_eq!(
+            restored_wallet_data0.accounts.first().unwrap().name,
+            restored_wallet_data1.accounts.first().unwrap().name,
+        );
+        assert_eq!(
+            restored_wallet_data0.accounts.first().unwrap().addr,
+            restored_wallet_data1.accounts.first().unwrap().addr,
+        );
+        assert_eq!(
+            restored_wallet_data0.accounts.first().unwrap().chain_hash,
+            restored_wallet_data1.accounts.first().unwrap().chain_hash,
+        );
+        assert_eq!(
+            restored_wallet_data0.accounts.first().unwrap().chain_id,
+            restored_wallet_data1.accounts.first().unwrap().chain_id,
+        );
+        assert_eq!(
+            restored_wallet_data0.accounts.first().unwrap().slip_44,
+            restored_wallet_data1.accounts.first().unwrap().slip_44,
+        );
+        assert_eq!(
+            restored_wallet_data0.accounts.first().unwrap().pub_key,
+            restored_wallet_data1.accounts.first().unwrap().pub_key,
+        );
+        assert_eq!(
+            restored_wallet_data0.wallet_name,
+            restored_wallet_data1.wallet_name
+        );
+        assert_eq!(
+            restored_wallet_data0.selected_account,
+            restored_wallet_data1.selected_account
+        );
+        assert_eq!(restored_wallet_data0.biometric_type, AuthMethod::FaceId);
+        assert_eq!(restored_wallet_data1.biometric_type, AuthMethod::None);
+        assert_eq!(
+            restored_wallet_data0.default_chain_hash,
+            restored_wallet_data1.default_chain_hash
+        );
+
+        let seed_bytes0 = bg
+            .unlock_wallet_with_password(PASSWORD, &device_indicators, 0)
+            .unwrap();
+        let seed_bytes1 = bg
+            .unlock_wallet_with_password(PASSWORD, &new_device_indicators, 1)
+            .unwrap();
+
+        let keypair0 = wallet0.reveal_keypair(0, &seed_bytes0, None).unwrap();
+        let keypair1 = wallet1.reveal_keypair(0, &seed_bytes1, None).unwrap();
+
+        assert_eq!(keypair0, keypair1);
     }
 }
