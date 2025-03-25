@@ -26,6 +26,7 @@ use wallet::{
     account_type::AccountType,
     wallet_crypto::WalletCrypto,
     wallet_data::{AuthMethod, WalletData},
+    wallet_init::WalletInit,
     wallet_storage::StorageOperations,
     wallet_types::WalletTypes,
     Wallet, WalletAddrType,
@@ -122,6 +123,7 @@ pub trait StorageManagement {
         backup_cipher: Vec<u8>,
         password: &str,
         device_indicators: &[String],
+        biometric_type: AuthMethod,
     ) -> std::result::Result<Vec<u8>, Self::Error>;
 }
 
@@ -133,6 +135,7 @@ impl StorageManagement for Background {
         backup_cipher: Vec<u8>,
         password: &str,
         device_indicators: &[String],
+        biometric_type: AuthMethod,
     ) -> Result<Vec<u8>> {
         let argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)
             .map_err(BackgroundError::ArgonPasswordHashError)?;
@@ -159,7 +162,6 @@ impl StorageManagement for Background {
         let keychain = KeyChain::from_seed(&argon_seed)?;
         let argon_params = keystore.wallet_data.settings.argon_params.clone();
         let cipher_orders = keystore.wallet_data.settings.cipher_orders.clone();
-        let biometric_type = keystore.wallet_data.biometric_type.clone();
 
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
@@ -168,6 +170,8 @@ impl StorageManagement for Background {
         )
         .map_err(BackgroundError::ArgonCreateProofError)?;
         let cipher_proof = keychain.make_proof(&proof, &cipher_orders)?;
+
+        keystore.wallet_data.biometric_type = biometric_type.clone();
 
         match &mut keystore.wallet_data.wallet_type {
             WalletTypes::Ledger(_) => {
@@ -208,7 +212,8 @@ impl StorageManagement for Background {
             }
         }
 
-        let wallet = Wallet::from(Arc::clone(&self.storage), keystore.wallet_address);
+        let wallet_address: [u8; SHA256_SIZE] = Wallet::wallet_key_gen();
+        let wallet = Wallet::from(Arc::clone(&self.storage), wallet_address);
 
         wallet.save_wallet_data(keystore.wallet_data)?;
         wallet.save_ftokens(&keystore.ftokens)?;
@@ -562,7 +567,7 @@ mod tests_background {
     }
 
     #[test]
-    fn test_load_from_keystore() {
+    fn test_load_from_keystore_bip39() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
         const PASSWORD: &str = "shit password";
@@ -570,27 +575,101 @@ mod tests_background {
         bg.add_provider(net_conf.clone()).unwrap();
 
         let words1 = Background::gen_bip39(12).unwrap();
-        let accounts1 = [(
-            DerivationPath::new(slip44::ETHEREUM, 0),
-            "keystore wallet".to_string(),
-        )];
+        let accounts1 = [
+            (
+                DerivationPath::new(slip44::ETHEREUM, 0),
+                "keystore wallet 0".to_string(),
+            ),
+            (
+                DerivationPath::new(slip44::ETHEREUM, 1),
+                "keystore wallet 1".to_string(),
+            ),
+        ];
+        let device_indicators = vec!["test indicator".to_string()];
 
-        bg.add_bip39_wallet(BackgroundBip39Params {
-            password: PASSWORD,
-            chain_hash: net_conf.hash(),
-            mnemonic_str: &words1,
-            mnemonic_check: true,
-            accounts: &accounts1,
-            wallet_settings: Default::default(),
-            passphrase: "",
-            wallet_name: String::from("shit walelt"),
-            biometric_type: Default::default(),
-            device_indicators: &[],
-            ftokens: vec![],
-        })
-        .unwrap();
-        let keystore_bytes = bg.get_keystore(0, PASSWORD, &[]).unwrap();
-        bg.delete_wallet(0).unwrap();
-        // bg.load_keystore(keystore_bytes, PASSWORD).unwrap();
+        let session0 = bg
+            .add_bip39_wallet(BackgroundBip39Params {
+                password: PASSWORD,
+                chain_hash: net_conf.hash(),
+                mnemonic_str: &words1,
+                mnemonic_check: true,
+                accounts: &accounts1,
+                wallet_settings: Default::default(),
+                passphrase: "",
+                wallet_name: String::from("shit walelt"),
+                biometric_type: AuthMethod::FaceId,
+                device_indicators: &device_indicators,
+                ftokens: vec![],
+            })
+            .unwrap();
+
+        let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
+        let new_device_indicators = vec!["test new device indicator".to_string()];
+
+        let session1 = bg
+            .load_keystore(
+                keystore_bytes,
+                PASSWORD,
+                &new_device_indicators,
+                AuthMethod::Fingerprint,
+            )
+            .unwrap();
+
+        let wallet0 = bg.get_wallet_by_index(0).unwrap();
+        let restored_wallet_data0 = wallet0.get_wallet_data().unwrap();
+
+        let wallet1 = bg.get_wallet_by_index(1).unwrap();
+        let restored_wallet_data1 = wallet1.get_wallet_data().unwrap();
+
+        assert_ne!(
+            restored_wallet_data0.proof_key,
+            restored_wallet_data1.proof_key
+        );
+        assert_ne!(
+            restored_wallet_data0.wallet_type,
+            restored_wallet_data1.wallet_type
+        );
+        assert_eq!(
+            restored_wallet_data0.settings,
+            restored_wallet_data1.settings
+        );
+        assert_eq!(
+            restored_wallet_data0.accounts,
+            restored_wallet_data1.accounts
+        );
+        assert_eq!(
+            restored_wallet_data0.wallet_name,
+            restored_wallet_data1.wallet_name
+        );
+        assert_eq!(
+            restored_wallet_data0.selected_account,
+            restored_wallet_data1.selected_account
+        );
+        assert_eq!(restored_wallet_data0.biometric_type, AuthMethod::FaceId);
+        assert_eq!(
+            restored_wallet_data1.biometric_type,
+            AuthMethod::Fingerprint
+        );
+        assert_eq!(
+            restored_wallet_data0.default_chain_hash,
+            restored_wallet_data1.default_chain_hash
+        );
+
+        bg.unlock_wallet_with_session(session0, &device_indicators, 0)
+            .unwrap();
+        let seed_bytes0 = bg
+            .unlock_wallet_with_password(PASSWORD, &device_indicators, 0)
+            .unwrap();
+
+        bg.unlock_wallet_with_session(session1, &new_device_indicators, 1)
+            .unwrap();
+        let seed_bytes1 = bg
+            .unlock_wallet_with_password(PASSWORD, &new_device_indicators, 1)
+            .unwrap();
+
+        let words0 = wallet0.reveal_mnemonic(&seed_bytes0).unwrap();
+        let words1 = wallet1.reveal_mnemonic(&seed_bytes1).unwrap();
+
+        assert_eq!(words1, words0);
     }
 }
