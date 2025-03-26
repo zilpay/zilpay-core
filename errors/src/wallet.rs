@@ -14,7 +14,7 @@ pub enum WalletErrors {
     #[error("No accounts available in wallet")]
     NoAccounts,
 
-    #[error("Invalid account index: {0}. Selected index must be less than number of accounts")]
+    #[error("Invalid account index: {0}. Selected index not found")]
     InvalidAccountIndex(usize),
 
     #[error("Account with index ({0}) already exists")]
