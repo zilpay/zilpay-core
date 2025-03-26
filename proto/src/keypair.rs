@@ -110,8 +110,9 @@ impl KeyPair {
         let secret_key: [u8; SECRET_KEY_SIZE] = secret_key.to_bytes().into();
 
         match bip49.slip44 {
-            slip44::ZILLIQA => Ok(Self::Secp256k1Sha256((pub_key, secret_key))),
-            slip44::ETHEREUM => Ok(Self::Secp256k1Keccak256((pub_key, secret_key))),
+            slip44::ETHEREUM | slip44::ZILLIQA => {
+                Ok(Self::Secp256k1Keccak256((pub_key, secret_key)))
+            }
             _ => {
                 return Err(KeyPairError::ExtendedPrivKeyDeriveError(
                     Bip329Errors::InvalidSlip44(bip49.slip44),

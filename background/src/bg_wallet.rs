@@ -175,11 +175,15 @@ impl WalletManagement for Background {
         match account.pub_key {
             PubKey::Secp256k1Sha256(pub_key) => {
                 account.pub_key = PubKey::Secp256k1Keccak256(pub_key);
-                account.chain_id = provider.config.chain_ids[0];
+                if let Some(chain_id) = provider.config.chain_ids.first() {
+                    account.chain_id = *chain_id;
+                }
             }
             PubKey::Secp256k1Keccak256(pub_key) => {
                 account.pub_key = PubKey::Secp256k1Sha256(pub_key);
-                account.chain_id = provider.config.chain_ids[1];
+                if let Some(chain_id) = provider.config.chain_ids.last() {
+                    account.chain_id = *chain_id;
+                }
             }
             _ => {
                 return Err(AccountErrors::InvalidPubKeyType)?;
