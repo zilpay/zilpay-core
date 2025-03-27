@@ -16,7 +16,6 @@ use config::{
     storage::{GLOBAL_SETTINGS_DB_KEY_V1, INDICATORS_DB_KEY_V1},
 };
 use errors::background::BackgroundError;
-use proto::secret_key::SecretKey;
 use rpc::network_config::ChainConfig;
 use serde::{Deserialize, Serialize};
 use session::encrypt_session;
