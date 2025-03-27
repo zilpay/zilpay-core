@@ -128,7 +128,7 @@ impl TokensManagement for Background {
                         chain_id: sender.chain_id as u16,
                         gas_price: 2000000000,
                         gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
-                        to_addr: to,
+                        to_addr: token.addr.clone(),
                         amount: 0,
                         code: Vec::with_capacity(0),
                         data: payload.as_bytes().to_vec(),
