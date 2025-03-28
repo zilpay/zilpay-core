@@ -51,7 +51,7 @@ impl TokensManagement for Background {
             to: Some(to.to_alloy_addr().into()),
             value: Some(amount),
             nonce: Some(0),
-            gas: None,
+            gas: Some(21000),
             from: Some(sender.addr.to_alloy_addr()),
             chain_id: Some(sender.chain_id),
             ..Default::default()
@@ -63,7 +63,7 @@ impl TokensManagement for Background {
                 to: Some(token.addr.to_alloy_addr().into()),
                 value: Some(U256::ZERO),
                 nonce: Some(0),
-                gas: None,
+                gas: Some(549755),
                 chain_id: Some(sender.chain_id),
                 input: TransactionInput::new(transfer_data.into()),
                 ..Default::default()
