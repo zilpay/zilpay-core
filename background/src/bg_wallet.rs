@@ -171,11 +171,6 @@ impl WalletManagement for Background {
             .get_mut(account_index)
             .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
         let provider = self.get_provider(account.chain_hash)?;
-        let default_provider = self.get_provider(data.default_chain_hash)?;
-
-        if provider.config.slip_44 != default_provider.config.slip_44 {
-            return Err(AccountErrors::InvalidPubKeyType)?;
-        }
 
         match account.pub_key {
             PubKey::Secp256k1Sha256(pub_key) => {
