@@ -65,9 +65,13 @@ impl ProvidersManagement for Background {
         Ok(())
     }
 
-    fn add_provider(&self, config: ChainConfig) -> Result<u64> {
+    fn add_provider(&self, mut config: ChainConfig) -> Result<u64> {
         let hash = config.hash();
         let mut providers = self.get_providers();
+
+        config.ftokens.iter_mut().for_each(|t| {
+            t.chain_hash = hash;
+        });
 
         providers.retain(|p| p.config.hash() != hash);
         let new_provider = NetworkProvider::new(config);
