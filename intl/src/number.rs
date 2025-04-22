@@ -2,6 +2,9 @@ use alloy::primitives::U256;
 use num_format::{Grouping, Locale};
 
 pub const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
+    ("BTC", "₿"),
+    ("ETH", "Ξ"),
+    ("LTC", "Ł"),
     ("RUB", "₽"),
     ("USD", "$"),
     ("EUR", "€"),
@@ -15,13 +18,6 @@ pub const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
     ("AUD", "A$"),
     ("CAD", "C$"),
     ("MXN", "$"),
-    ("BTC", "₿"),
-    ("ETH", "Ξ"),
-    ("LTC", "Ł"),
-    ("XRP", "✕"),
-    ("BCH", "Ƀ"),
-    ("ADA", "₳"),
-    ("DOT", "●"),
     ("SOL", "◎"),
     ("USDT", "₮"),
     ("DOGE", "Ð"),

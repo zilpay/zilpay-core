@@ -5,4 +5,6 @@ edition = "2024"
 
 [dependencies]
 alloy.workspace = true
+bigdecimal = "0.4.8"
 num-format = "0.4.4"
+errors = { path = "../errors" }

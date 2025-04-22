@@ -7,6 +7,7 @@ pub mod bip32;
 pub mod cache;
 pub mod cipher;
 pub mod crypto;
+pub mod intl;
 pub mod keychain;
 pub mod keypair;
 pub mod network;
