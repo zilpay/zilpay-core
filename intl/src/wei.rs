@@ -14,9 +14,12 @@ pub fn to_wei(value: String) -> Result<(BigInt, u8), IntlErrors> {
     Ok((big_value, decimals as u8))
 }
 
-pub fn from_wei(value: BigInt, decimals: u8) -> String {
-    let big_decimal = BigDecimal::new(value, decimals as i64);
-    big_decimal.normalized().to_plain_string()
+pub fn from_wei(value: String, decimals: u8) -> Result<String, IntlErrors> {
+    let big_value = BigInt::from_str(&value)
+        .map_err(|e| IntlErrors::BigDecimalParseError(value, e.to_string()))?;
+    let big_decimal = BigDecimal::new(big_value, decimals as i64);
+
+    Ok(big_decimal.normalized().to_plain_string())
 }
 
 #[cfg(test)]
@@ -87,55 +90,56 @@ mod tests_wei {
 
     #[test]
     fn test_from_wei_zero_decimals() {
-        let value = BigInt::from(12345);
+        let value = String::from("12345");
         let decimals = 0u8;
         let expected_string = "12345".to_string();
-        let result = from_wei(value, decimals);
+        let result = from_wei(value, decimals).unwrap();
+
         assert_eq!(result, expected_string);
     }
 
     #[test]
     fn test_from_wei_with_decimals() {
-        let value = BigInt::from(12345);
+        let value = String::from("12345");
         let decimals = 2u8;
         let expected_string = "123.45".to_string();
-        let result = from_wei(value, decimals);
+        let result = from_wei(value, decimals).unwrap();
         assert_eq!(result, expected_string);
     }
 
     #[test]
     fn test_from_wei_less_than_one() {
-        let value = BigInt::from(1);
+        let value = String::from("1");
         let decimals = 18u8;
         let expected_string = "0.000000000000000001".to_string();
-        let result = from_wei(value, decimals);
+        let result = from_wei(value, decimals).unwrap();
         assert_eq!(result, expected_string);
     }
 
     #[test]
     fn test_from_wei_leading_zeros_in_bigint() {
-        let value = BigInt::from(500);
+        let value = String::from("500");
         let decimals = 3u8;
         let expected_string = "0.5".to_string();
-        let result = from_wei(value, decimals);
+        let result = from_wei(value, decimals).unwrap();
         assert_eq!(result, expected_string);
     }
 
     #[test]
     fn test_from_wei_large_number() {
-        let value = BigInt::from_str("100000000000000000000").unwrap(); // 100 Ether
+        let value = String::from_str("100000000000000000000").unwrap();
         let decimals = 18u8;
         let expected_string = "100".to_string();
-        let result = from_wei(value, decimals);
+        let result = from_wei(value, decimals).unwrap();
         assert_eq!(result, expected_string);
     }
 
     #[test]
     fn test_from_wei_large_number_with_decimals() {
-        let value = BigInt::from_str("123456789000000000000").unwrap();
+        let value = String::from_str("123456789000000000000").unwrap();
         let decimals = 18u8;
         let expected_string = "123.456789".to_string();
-        let result = from_wei(value, decimals);
+        let result = from_wei(value, decimals).unwrap();
         assert_eq!(result, expected_string);
     }
 }
