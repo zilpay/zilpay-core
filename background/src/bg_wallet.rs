@@ -314,10 +314,10 @@ impl WalletManagement for Background {
         let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_ledger(
             LedgerParams {
-                pub_key: params.pub_key,
+                pub_keys: params.pub_keys,
                 ledger_id: params.ledger_id,
                 proof,
-                account_name: params.account_name,
+                account_names: params.account_names,
                 wallet_name: params.wallet_name,
                 wallet_index: params.wallet_index,
                 chain_config: &provider.config,

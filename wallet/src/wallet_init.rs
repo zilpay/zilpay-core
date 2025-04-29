@@ -8,7 +8,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 use config::sha::SHA256_SIZE;
-use errors::wallet::WalletErrors;
+use errors::{account::AccountErrors, wallet::WalletErrors};
 use std::sync::Arc;
 use token::ft::FToken;
 
@@ -69,16 +69,23 @@ impl WalletInit for Wallet {
         drop(cipher_proof);
 
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
-        let account = Account::from_ledger(
-            params.pub_key,
-            params.account_name,
-            params.wallet_index,
-            params.chain_config.hash(),
-            params.chain_config.chain_id(),
-            params.chain_config.slip_44,
-        )?;
 
-        let accounts: Vec<account::Account> = vec![account];
+        let accounts: Vec<Account> = params
+            .pub_keys
+            .into_iter()
+            .zip(params.account_names.into_iter())
+            .map(|(pub_key, account_name)| {
+                Account::from_ledger(
+                    pub_key,
+                    account_name,
+                    params.wallet_index,
+                    params.chain_config.hash(),
+                    params.chain_config.chain_id(),
+                    params.chain_config.slip_44,
+                )
+            })
+            .collect::<std::result::Result<Vec<account::Account>, AccountErrors>>()?;
+
         let data = WalletData {
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
