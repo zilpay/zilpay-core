@@ -409,7 +409,7 @@ mod tests_keypair {
         );
         assert_eq!(
             addr_zil.to_string(),
-            "zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"
+            "0xC315295101461753b838E0BE8688E744cf52Dd6b"
         );
 
         assert_ne!(
@@ -423,7 +423,7 @@ mod tests_keypair {
 
         assert_eq!(
             zil_key_pair.get_secretkey().unwrap().to_string(),
-            "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+            "01e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
         );
         assert_eq!(
             eth_key_pair.get_secretkey().unwrap().to_string(),
@@ -435,7 +435,7 @@ mod tests_keypair {
         );
         assert_eq!(
             zil_key_pair.get_pubkey().unwrap().to_string(),
-            "0003150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+            "0103150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
         );
     }
 
