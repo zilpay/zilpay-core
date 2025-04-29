@@ -19,16 +19,16 @@ pub enum PubKey {
 }
 
 impl PubKey {
-    pub fn from_compressed_hex(value: &str) -> Result<Self> {
+    pub fn from_compressed_hex(value: &str) -> Result<[u8; PUB_KEY_SIZE]> {
         let pk_bytes: [u8; PUB_KEY_SIZE] = hex::decode(value)
             .map_err(|_| PubKeyError::InvalidHex)?
             .try_into()
             .map_err(|_| PubKeyError::InvalidHex)?;
 
-        Ok(Self::Secp256k1Sha256(pk_bytes))
+        Ok(pk_bytes)
     }
 
-    pub fn from_uncompressed_hex(value: &str) -> Result<Self> {
+    pub fn from_uncompressed_hex(value: &str) -> Result<[u8; PUB_KEY_SIZE]> {
         let pk_bytes_vec = alloy::hex::decode(value).map_err(|_| PubKeyError::InvalidHex)?;
         let pk = K256PublicKey::from_sec1_bytes(&pk_bytes_vec)
             .map_err(|_| PubKeyError::InvalidLength)?;
@@ -37,7 +37,8 @@ impl PubKey {
             .to_vec()
             .try_into()
             .map_err(|_| PubKeyError::InvalidHex)?;
-        Ok(Self::Secp256k1Sha256(pk_bytes))
+
+        Ok(pk_bytes)
     }
 }
 
