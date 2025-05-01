@@ -1,10 +1,14 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
-use alloy::dyn_abi::TypedData;
+use alloy::{dyn_abi::TypedData, primitives::keccak256};
 use async_trait::async_trait;
 use cipher::argon2::Argon2Seed;
-use errors::{background::BackgroundError, tx::TransactionErrors};
+use config::sha::SHA256_SIZE;
+use errors::{background::BackgroundError, tx::TransactionErrors, wallet::WalletErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
-use proto::{keypair::KeyPair, pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
+use proto::{
+    address::Address, keypair::KeyPair, pubkey::PubKey, signature::Signature,
+    tx::TransactionReceipt,
+};
 use sha2::{Digest, Sha256};
 use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
@@ -35,6 +39,18 @@ pub trait TransactionsManagement {
         message: &str,
     ) -> std::result::Result<(PubKey, Signature), Self::Error>;
 
+    fn prepare_message(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        message: &str,
+    ) -> std::result::Result<[u8; SHA256_SIZE], Self::Error>;
+
+    fn prepare_eip712_message(
+        &self,
+        typed_data_json: String,
+    ) -> std::result::Result<[u8; SHA256_SIZE], Self::Error>;
+
     async fn sign_typed_data_eip712(
         &self,
         wallet_index: usize,
@@ -48,6 +64,47 @@ pub trait TransactionsManagement {
 #[async_trait]
 impl TransactionsManagement for Background {
     type Error = BackgroundError;
+
+    fn prepare_message(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        message: &str,
+    ) -> Result<[u8; SHA256_SIZE]> {
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let wallet_data = wallet.get_wallet_data()?;
+        let account = wallet_data
+            .accounts
+            .get(account_index)
+            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+
+        match account.addr {
+            Address::Secp256k1Sha256(_) => {
+                let mut hasher = Sha256::new();
+                hasher.update(message.as_bytes());
+                let hash = hasher.finalize();
+
+                Ok(hash.into())
+            }
+            Address::Secp256k1Keccak256(_) => {
+                let prefix = format!("\x19Ethereum Signed Message:\n{}", message.len());
+                let full_message = format!("{}{}", prefix, message);
+                let hash = keccak256(full_message.as_bytes());
+
+                Ok(hash.0)
+            }
+        }
+    }
+
+    fn prepare_eip712_message(&self, typed_data_json: String) -> Result<[u8; SHA256_SIZE]> {
+        let typed_data: TypedData = serde_json::from_str(&typed_data_json)
+            .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
+        let signing_hash = typed_data
+            .eip712_signing_hash()
+            .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
+
+        Ok(signing_hash.0)
+    }
 
     async fn sign_typed_data_eip712(
         &self,
