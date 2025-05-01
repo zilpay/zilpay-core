@@ -57,17 +57,17 @@ impl TryFrom<&Value> for GetTokenInitItem {
             item_type: value
                 .get("type")
                 .and_then(Value::as_str)
-                .ok_or(TokenError::MissingField("type".to_string()))?
+                .unwrap_or_default()
                 .to_string(),
             value: value
                 .get("value")
                 .and_then(Value::as_str)
-                .ok_or(TokenError::MissingField("value".to_string()))?
+                .unwrap_or_default()
                 .to_string(),
             vname: value
                 .get("vname")
                 .and_then(Value::as_str)
-                .ok_or(TokenError::MissingField("vname".to_string()))?
+                .unwrap_or_default()
                 .to_string(),
         })
     }

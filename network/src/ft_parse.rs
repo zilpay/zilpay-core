@@ -280,7 +280,7 @@ pub fn process_zil_metadata_response(init_res: &Value) -> Result<(String, String
         .ok_or(TokenError::InvalidContractInit)?
         .iter()
         .map(|v| v.try_into())
-        .collect::<std::result::Result<_, _>>()
+        .collect::<std::result::Result<Vec<GetTokenInitItem>, TokenError>>()
         .map_err(|_| TokenError::TokenParseError)?;
 
     let get_field = |field: &str| -> Result<String> {

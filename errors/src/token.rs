@@ -16,9 +16,6 @@ pub enum TokenError {
     #[error("ABI Error: {0}")]
     ABIError(String),
 
-    #[error("Missing required field: {0}")]
-    MissingField(String),
-
     #[error("Invalid field value for {field}: {value}")]
     InvalidFieldValue { field: String, value: String },
 
