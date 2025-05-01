@@ -49,7 +49,7 @@ pub trait TransactionsManagement {
     fn prepare_eip712_message(
         &self,
         typed_data_json: String,
-    ) -> std::result::Result<[u8; SHA256_SIZE], Self::Error>;
+    ) -> std::result::Result<TypedData, Self::Error>;
 
     async fn sign_typed_data_eip712(
         &self,
@@ -96,14 +96,11 @@ impl TransactionsManagement for Background {
         }
     }
 
-    fn prepare_eip712_message(&self, typed_data_json: String) -> Result<[u8; SHA256_SIZE]> {
+    fn prepare_eip712_message(&self, typed_data_json: String) -> Result<TypedData> {
         let typed_data: TypedData = serde_json::from_str(&typed_data_json)
             .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
-        let signing_hash = typed_data
-            .eip712_signing_hash()
-            .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
 
-        Ok(signing_hash.0)
+        Ok(typed_data)
     }
 
     async fn sign_typed_data_eip712(
