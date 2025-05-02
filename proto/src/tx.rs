@@ -4,7 +4,7 @@ use crate::pubkey::PubKey;
 use crate::signature::Signature;
 use crate::zil_tx::{ZILTransactionReceipt, ZILTransactionRequest};
 use crate::zq1_proto::{create_proto_tx, version_from_chainid};
-use alloy::consensus::TxEnvelope;
+use alloy::consensus::{SignableTransaction, TxEnvelope};
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{TxKind, U256};
 use crypto::schnorr::sign as zil_sign;
@@ -133,6 +133,55 @@ impl TransactionRequest {
                 metadata.signer = Some(PubKey::Secp256k1Keccak256(*pub_key_bytes));
 
                 Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
+            }
+        }
+    }
+
+    pub fn to_rlp_encode(self) -> Result<Vec<u8>, TransactionErrors> {
+        match self {
+            TransactionRequest::Zilliqa((_tx, _metadata)) => {
+                todo!()
+            }
+            TransactionRequest::Ethereum((tx, _)) => {
+                let mut capacity = 0;
+
+                capacity += 9;
+
+                if tx.nonce.is_some() {
+                    capacity += 9;
+                }
+                if tx.gas.is_some() {
+                    capacity += 9;
+                }
+                if let Some(TxKind::Call(_)) = tx.to {
+                    capacity += 21;
+                }
+                if tx.value.is_some() {
+                    capacity += 33;
+                }
+                if tx.chain_id.is_some() {
+                    capacity += 9;
+                }
+                if let Some(input) = &tx.input.input {
+                    capacity += 9 + input.len();
+                }
+                if let Some(data) = &tx.input.data {
+                    capacity += 9 + data.len();
+                }
+                if tx.max_fee_per_gas.is_some() {
+                    capacity += 17;
+                }
+                if tx.max_priority_fee_per_gas.is_some() {
+                    capacity += 17;
+                }
+
+                let mut rlp_bytes = Vec::with_capacity(capacity);
+
+                tx.build_consensus_tx()
+                    .map_err(|_| TransactionErrors::EncodeTxRlpError)?
+                    .encode_for_signing(&mut rlp_bytes);
+
+                Ok(rlp_bytes)
             }
         }
     }

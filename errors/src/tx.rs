@@ -17,6 +17,9 @@ pub enum TransactionErrors {
     #[error("Not tranasction with hash: {0}")]
     NoTxWithHash(String),
 
+    #[error("Fail to encode rlp")]
+    EncodeTxRlpError,
+
     #[error("Invalid transaction")]
     InvalidTransaction,
 
