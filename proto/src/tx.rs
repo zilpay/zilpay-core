@@ -4,9 +4,10 @@ use crate::pubkey::PubKey;
 use crate::signature::Signature;
 use crate::zil_tx::{ZILTransactionReceipt, ZILTransactionRequest};
 use crate::zq1_proto::{create_proto_tx, version_from_chainid};
-use alloy::consensus::{SignableTransaction, TxEnvelope};
+use alloy::consensus::{SignableTransaction, TxEip4844Variant, TxEnvelope, TypedTransaction};
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{TxKind, U256};
+use alloy::signers::Signature as EthersSignature;
 use crypto::schnorr::sign as zil_sign;
 use errors::keypair::KeyPairError;
 use errors::tx::TransactionErrors;
@@ -182,6 +183,38 @@ impl TransactionRequest {
                     .encode_for_signing(&mut rlp_bytes);
 
                 Ok(rlp_bytes)
+            }
+        }
+    }
+
+    pub fn with_signature(
+        self,
+        signature_bytes: Vec<u8>,
+    ) -> Result<TransactionReceipt, TransactionErrors> {
+        match self {
+            TransactionRequest::Ethereum((tx, metadata)) => {
+                let sig = EthersSignature::from_raw(&signature_bytes)
+                    .map_err(|_| TransactionErrors::BuildErrorEthSig)?;
+                let typed_tx = tx
+                    .build_typed_tx()
+                    .map_err(|_| TransactionErrors::BuildErrorTypedTx)?;
+                let signed_tx = match typed_tx {
+                    TypedTransaction::Legacy(tx) => TxEnvelope::Legacy(tx.into_signed(sig)),
+                    TypedTransaction::Eip2930(tx) => TxEnvelope::Eip2930(tx.into_signed(sig)),
+                    TypedTransaction::Eip1559(tx) => TxEnvelope::Eip1559(tx.into_signed(sig)),
+                    TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844(_)) => {
+                        return Err(TransactionErrors::BuildErrorTypedTx);
+                    }
+                    TypedTransaction::Eip4844(TxEip4844Variant::TxEip4844WithSidecar(tx)) => {
+                        TxEnvelope::Eip4844(tx.into_signed(sig).into())
+                    }
+                    TypedTransaction::Eip7702(tx) => TxEnvelope::Eip7702(tx.into_signed(sig)),
+                };
+
+                Ok(TransactionReceipt::Ethereum((signed_tx, metadata)))
+            }
+            TransactionRequest::Zilliqa(_) => {
+                todo!()
             }
         }
     }

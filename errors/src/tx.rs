@@ -20,6 +20,12 @@ pub enum TransactionErrors {
     #[error("Fail to encode rlp")]
     EncodeTxRlpError,
 
+    #[error("Fail to build typed tx")]
+    BuildErrorTypedTx,
+
+    #[error("Fail to build eth raw sig")]
+    BuildErrorEthSig,
+
     #[error("Invalid transaction")]
     InvalidTransaction,
 
