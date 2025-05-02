@@ -74,11 +74,11 @@ impl WalletInit for Wallet {
             .pub_keys
             .into_iter()
             .zip(params.account_names.into_iter())
-            .map(|(pub_key, account_name)| {
+            .map(|((ledger_index, pub_key), account_name)| {
                 Account::from_ledger(
                     pub_key,
                     account_name,
-                    params.wallet_index,
+                    ledger_index as usize,
                     params.chain_config.hash(),
                     params.chain_config.chain_id(),
                     params.chain_config.slip_44,

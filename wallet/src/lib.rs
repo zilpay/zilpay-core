@@ -27,7 +27,7 @@ pub struct WalletConfig {
 }
 
 pub struct LedgerParams<'a> {
-    pub pub_keys: Vec<PubKey>,
+    pub pub_keys: Vec<(u8, PubKey)>,
     pub ledger_id: Vec<u8>,
     pub proof: [u8; KEY_SIZE],
     pub account_names: Vec<String>,

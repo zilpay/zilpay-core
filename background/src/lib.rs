@@ -38,7 +38,7 @@ pub struct BackgroundSKParams<'a> {
 
 pub struct BackgroundLedgerParams {
     pub ledger_id: Vec<u8>,
-    pub pub_keys: Vec<PubKey>,
+    pub pub_keys: Vec<(u8, PubKey)>,
     pub wallet_name: String,
     pub account_names: Vec<String>,
     pub wallet_index: usize,
