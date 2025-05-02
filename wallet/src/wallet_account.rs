@@ -12,11 +12,9 @@ use rpc::network_config::ChainConfig;
 pub trait AccountManagement {
     type Error;
 
-    fn add_ledger_account(
+    fn update_ledger_accounts(
         &self,
-        name: String,
-        pub_key: PubKey,
-        index: usize,
+        accounts: Vec<(u8, PubKey, String)>,
         chain: &ChainConfig,
     ) -> std::result::Result<(), Self::Error>;
     fn add_next_bip39_account(
@@ -48,37 +46,32 @@ impl AccountManagement for Wallet {
         Ok(())
     }
 
-    fn add_ledger_account(
+    fn update_ledger_accounts(
         &self,
-        name: String,
-        pub_key: PubKey,
-        index: usize,
+        accounts: Vec<(u8, PubKey, String)>,
         chain: &ChainConfig,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
-        let has_account = data
-            .accounts
-            .iter()
-            .any(|account| account.account_type.value() == index);
 
         if data.wallet_type.code() != AccountType::Ledger(0).code() {
             return Err(WalletErrors::InvalidAccountType);
         }
 
-        if has_account {
-            return Err(WalletErrors::ExistsAccount(index));
+        data.accounts.clear();
+
+        for (ledger_index, pub_key, name) in accounts.into_iter() {
+            let ledger_account = Account::from_ledger(
+                pub_key,
+                name,
+                ledger_index as usize,
+                chain.hash(),
+                chain.chain_id(),
+                chain.slip_44,
+            )?;
+
+            data.accounts.push(ledger_account);
         }
 
-        let ledger_account = Account::from_ledger(
-            pub_key,
-            name,
-            index,
-            chain.hash(),
-            chain.chain_id(),
-            chain.slip_44,
-        )?;
-
-        data.accounts.push(ledger_account);
         self.save_wallet_data(data)?;
 
         Ok(())
