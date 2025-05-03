@@ -57,7 +57,7 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::InvalidAccountType);
         }
 
-        data.accounts.clear();
+        data.accounts = Vec::with_capacity(accounts.len());
 
         for (ledger_index, pub_key, name) in accounts.into_iter() {
             let ledger_account = Account::from_ledger(
