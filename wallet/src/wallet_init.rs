@@ -4,6 +4,7 @@ use crate::{
     wallet_types::WalletTypes,
     Result, SecretKeyParams, Wallet, WalletAddrType,
 };
+use proto::pubkey::PubKey;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -69,18 +70,24 @@ impl WalletInit for Wallet {
         drop(cipher_proof);
 
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
+        let chain_hash = params.chain_config.hash();
 
         let accounts: Vec<Account> = params
             .pub_keys
             .into_iter()
             .zip(params.account_names.into_iter())
             .map(|((ledger_index, pub_key), account_name)| {
+                let chain_id = match &pub_key {
+                    PubKey::Secp256k1Sha256(_) => params.chain_config.chain_ids[1],
+                    _ => params.chain_config.chain_id(),
+                };
+
                 Account::from_ledger(
                     pub_key,
                     account_name,
                     ledger_index as usize,
-                    params.chain_config.hash(),
-                    params.chain_config.chain_id(),
+                    chain_hash,
+                    chain_id,
                     params.chain_config.slip_44,
                 )
             })

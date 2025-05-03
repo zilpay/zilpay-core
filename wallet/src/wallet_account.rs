@@ -59,13 +59,19 @@ impl AccountManagement for Wallet {
 
         data.accounts = Vec::with_capacity(accounts.len());
 
+        let chain_hash = chain.hash();
+
         for (ledger_index, pub_key, name) in accounts.into_iter() {
+            let chain_id = match &pub_key {
+                PubKey::Secp256k1Sha256(_) => chain.chain_ids[1],
+                _ => chain.chain_id(),
+            };
             let ledger_account = Account::from_ledger(
                 pub_key,
                 name,
                 ledger_index as usize,
-                chain.hash(),
-                chain.chain_id(),
+                chain_hash,
+                chain_id,
                 chain.slip_44,
             )?;
 
