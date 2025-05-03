@@ -40,7 +40,10 @@ pub async fn zilpay_get_tokens(limit: u32, offset: u32) -> Result<Vec<FToken>> {
             decimals: token["decimals"].as_u64().unwrap_or(0) as u8,
             addr: Address::from_zil_bech32(token["bech32"].as_str().unwrap_or_default())
                 .unwrap_or_else(|_| Address::Secp256k1Sha256([0u8; 20])),
-            logo: None,
+            logo: Some(format!(
+                "https://meta.viewblock.io/zilliqa.{}/logo?t=dark",
+                token["bech32"]
+            )),
             balances: Default::default(),
             default: false,
             native: false,
