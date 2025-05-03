@@ -8,7 +8,9 @@ use alloy::consensus::{SignableTransaction, TxEip4844Variant, TxEnvelope, TypedT
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{TxKind, U256};
 use alloy::signers::Signature as EthersSignature;
+use config::sha::SHA512_SIZE;
 use crypto::schnorr::sign as zil_sign;
+use errors::crypto::SignatureError;
 use errors::keypair::KeyPairError;
 use errors::tx::TransactionErrors;
 use k256::SecretKey as K256SecretKey;
@@ -138,10 +140,12 @@ impl TransactionRequest {
         }
     }
 
-    pub fn to_rlp_encode(self) -> Result<Vec<u8>, TransactionErrors> {
+    pub fn to_rlp_encode(self, pub_key: &PubKey) -> Result<Vec<u8>, TransactionErrors> {
         match self {
-            TransactionRequest::Zilliqa((_tx, _metadata)) => {
-                todo!()
+            TransactionRequest::Zilliqa((tx, _metadata)) => {
+                let proto_buf = create_proto_tx(&tx, pub_key).encode_proto_bytes();
+
+                Ok(proto_buf)
             }
             TransactionRequest::Ethereum((tx, _)) => {
                 let mut capacity = 0;
@@ -190,6 +194,7 @@ impl TransactionRequest {
     pub fn with_signature(
         self,
         signature_bytes: Vec<u8>,
+        pub_key: &PubKey,
     ) -> Result<TransactionReceipt, TransactionErrors> {
         match self {
             TransactionRequest::Ethereum((tx, metadata)) => {
@@ -213,8 +218,25 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Ethereum((signed_tx, metadata)))
             }
-            TransactionRequest::Zilliqa(_) => {
-                todo!()
+            TransactionRequest::Zilliqa((tx, metadata)) => {
+                let signature: [u8; SHA512_SIZE] = signature_bytes
+                    .try_into()
+                    .map_err(|_| SignatureError::InvalidLength)?;
+                let signed_tx = ZILTransactionReceipt {
+                    signature,
+                    to_addr: *tx.to_addr.addr_bytes(),
+                    pub_key: pub_key.as_bytes(),
+                    version: version_from_chainid(tx.chain_id),
+                    nonce: tx.nonce,
+                    gas_price: tx.gas_price.to_be_bytes(),
+                    gas_limit: tx.gas_limit,
+                    amount: tx.amount.to_be_bytes(),
+                    code: tx.code,
+                    data: tx.data,
+                    priority: false,
+                };
+
+                Ok(TransactionReceipt::Zilliqa((signed_tx, metadata)))
             }
         }
     }
