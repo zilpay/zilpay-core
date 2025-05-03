@@ -16,8 +16,8 @@ use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
     wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
-    wallet_storage::StorageOperations, wallet_types::WalletTypes, Bip39Params, LedgerParams,
-    SecretKeyParams, Wallet, WalletConfig,
+    wallet_storage::StorageOperations, Bip39Params, LedgerParams, SecretKeyParams, Wallet,
+    WalletConfig,
 };
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
@@ -275,19 +275,6 @@ impl WalletManagement for Background {
         device_indicators: &[String],
     ) -> Result<Vec<u8>> {
         let provider = self.get_provider(params.chain_hash)?;
-
-        if self.wallets.iter().any(|w| {
-            if let Ok(data) = w.get_wallet_data() {
-                matches!(data.wallet_type, WalletTypes::Ledger(id) if id == params.ledger_id)
-            } else {
-                false
-            }
-        }) {
-            return Err(BackgroundError::LedgerIdExists(
-                String::from_utf8(params.ledger_id).unwrap_or_default(),
-            ));
-        }
-
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             device_indicator.as_bytes(),
