@@ -52,6 +52,7 @@ impl std::fmt::Display for TokenQuotesAPIOptions {
     }
 }
 
+pub mod bnb_tokens;
 pub mod coingecko;
 pub mod coingecko_tokens;
 pub mod zilliqa_tokens;
