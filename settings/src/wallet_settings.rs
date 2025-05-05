@@ -30,7 +30,7 @@ pub struct WalletFeatures {
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 pub struct NetworkSettings {
-    pub gas_control_enabled: bool,
+    pub tokens_list_fetcher: bool,
     pub node_ranking_enabled: bool,
     pub max_connections: u8,
     pub request_timeout_secs: u32,
@@ -71,7 +71,7 @@ impl Default for WalletFeatures {
 impl Default for NetworkSettings {
     fn default() -> Self {
         Self {
-            gas_control_enabled: true,
+            tokens_list_fetcher: true,
             node_ranking_enabled: true,
             max_connections: Self::DEFAULT_MAX_CONNECTIONS,
             request_timeout_secs: Self::DEFAULT_TIMEOUT,
@@ -105,7 +105,7 @@ mod wallet_settings_tests {
         );
 
         // Test default network settings
-        assert!(settings.network.gas_control_enabled);
+        assert!(settings.network.tokens_list_fetcher);
         assert!(settings.network.node_ranking_enabled);
         assert_eq!(
             settings.network.max_connections,
@@ -144,7 +144,7 @@ mod wallet_settings_tests {
 
         // Test gas control modification
         // network.gas_control_enabled = false;
-        assert!(network.gas_control_enabled);
+        assert!(network.tokens_list_fetcher);
 
         // Test node ranking modification
         network.node_ranking_enabled = false;
@@ -191,7 +191,7 @@ mod wallet_settings_tests {
             },
             rates_api_options: Default::default(),
             network: NetworkSettings {
-                gas_control_enabled: false,
+                tokens_list_fetcher: false,
                 node_ranking_enabled: true,
                 max_connections: 3,
                 request_timeout_secs: 15,
@@ -207,7 +207,7 @@ mod wallet_settings_tests {
         assert!(custom_settings.features.ipfs_node.is_none());
 
         // Verify custom network settings
-        assert!(!custom_settings.network.gas_control_enabled);
+        assert!(!custom_settings.network.tokens_list_fetcher);
         assert!(custom_settings.network.node_ranking_enabled);
         assert_eq!(custom_settings.network.max_connections, 3);
         assert_eq!(custom_settings.network.request_timeout_secs, 15);
