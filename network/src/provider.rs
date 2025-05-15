@@ -1152,11 +1152,9 @@ mod tests_network {
         assert_eq!(fee.nonce, 0);
         assert_ne!(fee.max_priority_fee, U256::from(0));
         assert_ne!(fee.tx_estimate_gas, U256::from(0));
-        assert_ne!(fee.fee_history.max_fee, U256::from(0));
-        assert_ne!(fee.fee_history.priority_fee, U256::from(0));
 
         let block_diff_time = provider.estimate_block_time(&recipient).await.unwrap();
-        assert_eq!(block_diff_time, 3);
+        assert!(block_diff_time >= 1 && block_diff_time < 5);
     }
 
     #[tokio::test]

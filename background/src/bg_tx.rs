@@ -285,7 +285,7 @@ mod tests_background_transactions {
     }
 
     #[tokio::test]
-    async fn test_sign_and_send_zil_tx() {
+    async fn test_sign_and_send_zil_legacy_tx() {
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_zil_net_conf();
 
@@ -311,11 +311,15 @@ mod tests_background_transactions {
             ftokens: vec![FToken::zil(net_config.hash())],
         })
         .unwrap();
+
+        bg.swap_zilliqa_chain(0, 0).unwrap();
+
         let providers = bg.get_providers();
         let provider = providers.first().unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
         let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
+
         let nonce = *provider
             .fetch_nonce(&addresses)
             .await
@@ -521,7 +525,7 @@ mod tests_background_transactions {
     }
 
     #[tokio::test]
-    async fn test_sign_message_zilliqa() {
+    async fn test_sign_message_legacy_zilliqa() {
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_zil_net_conf();
 
