@@ -1,5 +1,6 @@
 use config::storage::ADDRESS_BOOK_DB_KEY_V1;
 use errors::background::BackgroundError;
+use proto::address::Address;
 
 use crate::book::AddressBookEntry;
 use crate::{Background, Result};
@@ -12,10 +13,25 @@ pub trait AddressBookManagement {
         &self,
         address: AddressBookEntry,
     ) -> std::result::Result<(), Self::Error>;
+    fn remove_from_address_book(&self, address: &Address) -> std::result::Result<(), Self::Error>;
 }
 
 impl AddressBookManagement for Background {
     type Error = BackgroundError;
+
+    fn remove_from_address_book(&self, address: &Address) -> std::result::Result<(), Self::Error> {
+        let mut book = self.get_address_book();
+
+        book.retain(|entry| entry.addr != *address);
+
+        let bytes =
+            bincode::serialize(&book).or(Err(BackgroundError::FailToSerializeAddressBook))?;
+
+        self.storage.set(ADDRESS_BOOK_DB_KEY_V1, &bytes)?;
+        self.storage.flush()?;
+
+        Ok(())
+    }
 
     fn get_address_book(&self) -> Vec<AddressBookEntry> {
         let bytes = self.storage.get(ADDRESS_BOOK_DB_KEY_V1).unwrap_or_default();
@@ -80,6 +96,7 @@ mod tests_background {
             slip44: 60,
         };
 
+        // Test adding first address
         bg.add_to_address_book(entry.clone()).unwrap();
 
         let book = bg.get_address_book();
@@ -97,6 +114,7 @@ mod tests_background {
             slip44: 60,
         };
 
+        // Test adding second address
         bg.add_to_address_book(entry2.clone()).unwrap();
 
         // Verify both addresses exist
@@ -105,15 +123,22 @@ mod tests_background {
         assert_eq!(book[1].name, "Second Contact");
         assert_eq!(book[1].addr, address2);
 
+        // Test removing first address
+        bg.remove_from_address_book(&address).unwrap();
+        let book = bg.get_address_book();
+        assert_eq!(book.len(), 1);
+        assert_eq!(book[0].name, "Second Contact");
+        assert_eq!(book[0].addr, address2);
+
+        // Test removing second address
+        bg.remove_from_address_book(&address2).unwrap();
+        let book = bg.get_address_book();
+        assert!(book.is_empty());
+
         // Test persistence - create new instance
         drop(bg);
         let bg2 = Background::from_storage_path(&dir).unwrap();
         let book = bg2.get_address_book();
-
-        assert_eq!(book.len(), 2);
-        assert_eq!(book[0].name, "Test Contact");
-        assert_eq!(book[0].addr, address);
-        assert_eq!(book[1].name, "Second Contact");
-        assert_eq!(book[1].addr, address2);
+        assert!(book.is_empty());
     }
 }
