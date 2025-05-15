@@ -5,7 +5,7 @@ use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
 use errors::wallet::WalletErrors;
 use network::{common::Provider, provider::NetworkProvider};
-use proto::{keypair::KeyPair, secret_key::SecretKey, signature::Signature};
+use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey, signature::Signature};
 
 pub trait WalletCrypto {
     type Error;
@@ -67,13 +67,22 @@ impl WalletCrypto for Wallet {
                 let providers = NetworkProvider::load_network_configs(Arc::clone(&self.storage));
                 let provider = providers
                     .iter()
-                    .find(|&p| p.config.hash() == data.default_chain_hash)
-                    .ok_or(WalletErrors::ProviderNotExist(data.default_chain_hash))?;
+                    .find(|&p| p.config.hash() == account.chain_hash)
+                    .ok_or(WalletErrors::ProviderNotExist(account.chain_hash))?;
                 let m = self.reveal_mnemonic(seed_bytes)?;
                 let seed = m.to_seed(passphrase.unwrap_or(""));
                 let hd_index = account.account_type.value();
                 let bip49 = provider.get_bip49(hd_index);
-                let keypair = KeyPair::from_bip39_seed(&seed, &bip49)?;
+                let mut keypair = KeyPair::from_bip39_seed(&seed, &bip49)?;
+
+                match account.addr {
+                    Address::Secp256k1Sha256(_) => {
+                        keypair = keypair.to_sha256();
+                    }
+                    Address::Secp256k1Keccak256(_) => {
+                        keypair = keypair.to_keccak256();
+                    }
+                }
 
                 Ok(keypair)
             }

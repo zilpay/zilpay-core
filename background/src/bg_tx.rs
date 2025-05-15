@@ -5,10 +5,7 @@ use cipher::argon2::Argon2Seed;
 use config::sha::SHA256_SIZE;
 use errors::{background::BackgroundError, tx::TransactionErrors, wallet::WalletErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
-use proto::{
-    address::Address, keypair::KeyPair, pubkey::PubKey, signature::Signature,
-    tx::TransactionReceipt,
-};
+use proto::{address::Address, pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
 use sha2::{Digest, Sha256};
 use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
@@ -129,16 +126,22 @@ impl TransactionsManagement for Background {
         message: &str,
     ) -> Result<(PubKey, Signature)> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
+        let data = wallet.get_wallet_data()?;
+        let account = data
+            .accounts
+            .get(account_index)
+            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
-        let signature = match key_pair {
-            KeyPair::Secp256k1Sha256(_) => {
+        let signature = match account.addr {
+            Address::Secp256k1Sha256(_) => {
                 let mut hasher = Sha256::new();
                 hasher.update(message.as_bytes());
                 let hash = hasher.finalize();
 
                 key_pair.sign_message(&hash)?
             }
-            KeyPair::Secp256k1Keccak256(_) => key_pair.sign_message(message.as_bytes())?,
+            Address::Secp256k1Keccak256(_) => key_pair.sign_message(message.as_bytes())?,
         };
 
         Ok((key_pair.get_pubkey()?, signature))
@@ -515,5 +518,64 @@ mod tests_background_transactions {
         );
         assert_eq!(filterd_history[0].status, TransactionStatus::Confirmed);
         assert_eq!(filterd_history[1].status, TransactionStatus::Rejected);
+    }
+
+    #[tokio::test]
+    async fn test_sign_message_zilliqa() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_zil_net_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+        let accounts = [(
+            DerivationPath::new(slip44::ZILLIQA, 0),
+            "ZIL Acc 0".to_string(),
+        )];
+        let device_indicators = [String::from("5435h"), String::from("0000")];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: WORDS,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "ZIL wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![FToken::zil(net_config.hash())],
+        })
+        .unwrap();
+
+        bg.swap_zilliqa_chain(0, 0).unwrap();
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            PASSWORD.as_bytes(),
+            &device_indicator,
+            &bg.get_wallet_by_index(0)
+                .unwrap()
+                .get_wallet_data()
+                .unwrap()
+                .settings
+                .argon_params
+                .into_config(),
+        )
+        .unwrap();
+
+        let message = "Hello, Zilliqa!";
+        let (pubkey, signature) = bg.sign_message(0, 0, &argon_seed, None, message).unwrap();
+
+        let hashed_message = Sha256::digest(message.as_bytes());
+        let key_pair = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .reveal_keypair(0, &argon_seed, None)
+            .unwrap();
+
+        assert_eq!(pubkey.as_bytes(), *key_pair.get_pubkey_bytes());
+        let is_valid = key_pair.verify_sig(&hashed_message, &signature).unwrap();
+
+        assert!(is_valid);
     }
 }

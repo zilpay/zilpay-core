@@ -45,6 +45,20 @@ impl KeyPair {
         Ok(Self::Secp256k1Keccak256(keys))
     }
 
+    pub fn to_sha256(self) -> Self {
+        match self {
+            Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Sha256(vlaue),
+            Self::Secp256k1Keccak256(value) => Self::Secp256k1Sha256(value),
+        }
+    }
+
+    pub fn to_keccak256(self) -> Self {
+        match self {
+            Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Keccak256(vlaue),
+            Self::Secp256k1Keccak256(value) => Self::Secp256k1Keccak256(value),
+        }
+    }
+
     pub fn from_sk_bytes(
         sk: [u8; SECRET_KEY_SIZE],
     ) -> Result<([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])> {
