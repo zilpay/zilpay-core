@@ -422,9 +422,10 @@ mod tests_background {
     use super::*;
     use crate::{bg_crypto::CryptoOperations, bg_provider::ProvidersManagement};
     use crypto::{bip49::DerivationPath, slip44};
-    use proto::keypair::KeyPair;
+    use proto::{address::Address, keypair::KeyPair};
     use rand::Rng;
-    use rpc::network_config::{ChainConfig, Explorer};
+    use rpc::network_config::ChainConfig;
+    use wallet::wallet_account::AccountManagement;
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -444,15 +445,10 @@ mod tests_background {
             chain: "TEST".to_string(),
             short_name: String::new(),
             rpc: vec!["https://test.network".to_string()],
-            features: vec![155, 1559],
+            features: vec![],
             slip_44: slip44::ZILLIQA,
             ens: None,
-            explorers: vec![Explorer {
-                name: "TestExplorer".to_string(),
-                url: "https://test.explorer".to_string(),
-                icon: None,
-                standard: 3091,
-            }],
+            explorers: vec![],
             fallback_enabled: true,
         }
     }
@@ -579,5 +575,97 @@ mod tests_background {
         let bg = Background::from_storage_path(&dir).unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
+    }
+
+    #[test]
+    fn test_generate_zilliqa_legacy_accounts() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_conf = create_test_net_conf();
+        let password = "test_password";
+        let words = Background::gen_bip39(24).unwrap();
+
+        bg.add_provider(net_conf.clone()).unwrap();
+
+        let accounts = [(
+            DerivationPath::new(slip44::ZILLIQA, 0),
+            "Zilliqa wallet".to_string(),
+        )];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password,
+            mnemonic_check: true,
+            chain_hash: net_conf.hash(),
+            mnemonic_str: &words,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Test Wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![],
+        })
+        .unwrap();
+
+        bg.swap_zilliqa_chain(0, 0).unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(
+                password,
+                &[String::from("apple"), String::from("0000")],
+                0,
+            )
+            .unwrap();
+
+        if let Address::Secp256k1Sha256(_) = wallet
+            .get_wallet_data()
+            .unwrap()
+            .get_selected_account()
+            .unwrap()
+            .addr
+        {
+            assert!(true);
+        } else {
+            panic!("address should convert to legacy mode");
+        }
+
+        for i in 1..20 {
+            let bip49 = DerivationPath::new(slip44::ZILLIQA, i);
+            wallet
+                .add_next_bip39_account(
+                    format!("Zilliqa account {}", i),
+                    &bip49,
+                    "",
+                    &argon_seed,
+                    &net_conf,
+                )
+                .unwrap();
+
+            bg.swap_zilliqa_chain(0, i).unwrap();
+        }
+
+        let data = wallet.get_wallet_data().unwrap();
+
+        for acc in &data.accounts {
+            assert!(
+                matches!(acc.addr, Address::Secp256k1Sha256(_)),
+                "address should be in legacy mode"
+            );
+        }
+
+        for (i, _) in data.accounts.iter().enumerate() {
+            bg.swap_zilliqa_chain(0, i).unwrap();
+        }
+
+        let data = wallet.get_wallet_data().unwrap();
+
+        for acc in &data.accounts {
+            assert!(
+                matches!(acc.addr, Address::Secp256k1Keccak256(_)),
+                "address should be in evm mode"
+            );
+        }
     }
 }
