@@ -416,7 +416,7 @@ mod tests_tx {
             address: eth_addr.to_alloy_addr(),
             nonce: 1u64,
         };
-        let auth_sig = alloy::primitives::PrimitiveSignature::test_signature();
+        let auth_sig = alloy::primitives::Signature::test_signature();
         let authorization_list = vec![auth.into_signed(auth_sig)];
 
         let eip7702_request = ETHTransactionRequest {

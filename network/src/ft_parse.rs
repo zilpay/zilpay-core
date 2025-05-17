@@ -255,7 +255,7 @@ pub fn process_eth_metadata_response(
         .map_err(|e| TokenError::ABIError(format!("Failed to decode hex: {}", e)))?;
 
     let values = func
-        .abi_decode_output(&bytes, false)
+        .abi_decode_output(&bytes)
         .map_err(|e| TokenError::ABIError(e.to_string()))?;
 
     let value = values
