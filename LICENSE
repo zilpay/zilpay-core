@@ -1,47 +1,44 @@
-ZilPay Core Restricted Source License
+ZilPay Core Open Source License
 
 Copyright (c) 2024 Rinat.IP
 
-This is a Restricted Source License for "zilpay-core" (the "Software").
+This is an open source software license for "zilpay-core" (the "Software").
 
-COPYRIGHT AND OWNERSHIP
-The Software is protected by copyright laws. Rinat.IP maintains copyright ownership and grants only the specific, limited rights outlined in this license.
+1. COPYRIGHT AND OWNERSHIP
+The Software is open source and protected by copyright laws. Rinat.IP maintains copyright ownership while granting the rights specified in this license.
 
-PERMITTED ACTIONS
-Users are granted the following limited and non-exclusive permissions:
-a) To view and examine the Source Code for personal understanding.
-b) To modify the Source Code for personal use.
-c) To submit contributions, modifications, and improvements to the official repository.
+2. OPEN SOURCE RIGHTS
+Users are freely granted the following rights:
+   a) To view, examine, and fork the source code
+   b) To submit contributions, modifications, and improvements to the official repository
+   c) To use, modify, and distribute the Software for non-competing purposes
+   d) To create derivative works for non-competing purposes
 
-STRICT PROHIBITIONS
-The following actions are strictly prohibited without explicit written permission from Rinat.IP:
-a) Any form of copying, reproduction, or duplication of the Software, its Source Code, or any part thereof, except as strictly necessary for viewing or modification for personal use as permitted in Section 2.
-b) Using, executing, or incorporating any part of the Software, including any libraries, functions, or components, in any other software, system, or application, whether commercial or non-commercial.
-c) Distributing, sublicensing, selling, renting, leasing, lending, or otherwise making available the Software, the Source Code, or any modifications or derivative works thereof, to any third party. This includes, but is not limited to, sharing compiled binaries, modified source code, or any other form of the Software.
-d) Creating derivative works for purposes other than personal modification as permitted in Section 2.
-e) Any use of the Software in any product or service that competes with ZilPay wallet.
-f) Creating derivative works that provide similar functionality to ZilPay wallet.
+3. CONTRIBUTION TERMS
+The Software welcomes open source contributions:
+   a) Contributions must be submitted through official channels
+   b) Contributors retain their copyright but grant Rinat.IP perpetual license to use their contributions
+   c) All contributions are subject to review before inclusion
 
-CONTRIBUTION TERMS
-The Software welcomes contributions submitted through official channels:
-a) Contributions must be submitted through official channels.
-b) Contributors retain their copyright but grant Rinat.IP a perpetual, worldwide, irrevocable license to use their contributions without restriction.
-c) All contributions are subject to review and acceptance by Rinat.IP at their sole discretion.
+4. COMPETITIVE USE RESTRICTION
+This open source license prohibits:
+   a) Using the Software in any product that competes with ZilPay wallet
+   b) Creating derivative works that provide similar functionality to ZilPay wallet
+   c) Redistributing the Software as part of a competing wallet or financial service
 
-TERMINATION
-This license automatically terminates immediately if you breach any of its terms. Upon termination, you must cease all use of the Software and destroy all copies of the Source Code and any derivative works in your possession or control.
+5. TERMINATION
+This license automatically terminates if you breach any of its terms. Upon termination, you must cease all use of the Software.
 
-NO WARRANTY
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+6. NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED.
 
-LIMITATION OF LIABILITY
+7. LIMITATION OF LIABILITY
 IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-GENERAL
+8. GENERAL
 This License represents the complete agreement concerning the Software between users and Rinat.IP.
 
-For permissions regarding any prohibited use or other questions, please contact Rinat.IP directly.
+For permissions regarding competitive use or other questions, please contact Rinat.IP directly.
 
+-------------------
 By using, viewing, or contributing to the Software, you accept and agree to be bound by the terms of this license.
-
-
