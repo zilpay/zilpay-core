@@ -1,11 +1,11 @@
-use crate::{Background, Result};
+use crate::{bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
-use errors::background::BackgroundError;
+use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::{common::Provider, provider::NetworkProvider};
-use proto::address::Address;
+use proto::{address::Address, pubkey::PubKey};
 use rpc::network_config::ChainConfig;
 use std::sync::Arc;
-use wallet::wallet_storage::StorageOperations;
+use wallet::{wallet_storage::StorageOperations, wallet_types::WalletTypes};
 
 #[async_trait]
 pub trait ProvidersManagement {
@@ -18,6 +18,11 @@ pub trait ProvidersManagement {
     ) -> std::result::Result<(), Self::Error>;
     fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error>;
     fn get_providers(&self) -> Vec<NetworkProvider>;
+    fn select_accounts_chain(
+        &self,
+        wallet_index: usize,
+        chain_hash: u64,
+    ) -> std::result::Result<(), Self::Error>;
     fn add_provider(&self, config: ChainConfig) -> std::result::Result<u64, Self::Error>;
     fn remvoe_provider(&self, index: usize) -> std::result::Result<(), Self::Error>;
     fn update_providers(
@@ -107,6 +112,69 @@ impl ProvidersManagement for Background {
         } else {
             return Err(BackgroundError::ProviderNotExists(index as u64));
         }
+
+        Ok(())
+    }
+
+    fn select_accounts_chain(&self, wallet_index: usize, chain_hash: u64) -> Result<()> {
+        let provider = self.get_provider(chain_hash)?;
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let mut data = wallet.get_wallet_data()?;
+        let mut ftokens = wallet.get_ftokens()?;
+        let default_provider = self.get_provider(data.default_chain_hash)?;
+
+        if let WalletTypes::Ledger(_) = data.wallet_type {
+            if default_provider.config.slip_44 == 313 {
+                // old ledger doesn't support evm.
+                return Err(WalletErrors::InvalidAccountType)?;
+            }
+        }
+
+        for provider_ftoken in &provider.config.ftokens {
+            if let Some(existing_ftoken) = ftokens.iter_mut().find(|t| {
+                t.symbol == provider_ftoken.symbol && t.decimals == provider_ftoken.decimals
+            }) {
+                existing_ftoken.chain_hash = chain_hash;
+                existing_ftoken.balances = Default::default();
+            } else {
+                let new_ftoken = provider_ftoken.clone();
+                ftokens.insert(0, new_ftoken);
+            }
+        }
+
+        data.accounts.iter_mut().for_each(|a| {
+            if provider.config.slip_44 == 313 {
+                match a.pub_key {
+                    PubKey::Secp256k1Sha256(_pub_key) => {
+                        if let Some(chain_id) = provider.config.chain_ids.last() {
+                            a.chain_id = *chain_id;
+                        }
+                    }
+                    PubKey::Secp256k1Keccak256(_pub_key) => {
+                        if let Some(chain_id) = provider.config.chain_ids.first() {
+                            a.chain_id = *chain_id;
+                        }
+                    }
+                    _ => {}
+                }
+            } else if provider.config.slip_44 == 60 {
+                a.pub_key = PubKey::Secp256k1Keccak256(a.pub_key.as_bytes());
+
+                a.chain_id = provider.config.chain_id();
+            } else {
+                a.chain_id = provider.config.chain_id();
+            }
+
+            if let Some(addr) = a.pub_key.get_addr().ok() {
+                a.addr = addr;
+            }
+
+            a.chain_hash = chain_hash;
+            a.slip_44 = provider.config.slip_44;
+        });
+
+        wallet.save_wallet_data(data)?;
+        wallet.save_ftokens(&ftokens)?;
 
         Ok(())
     }

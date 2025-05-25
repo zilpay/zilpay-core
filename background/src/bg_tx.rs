@@ -215,7 +215,7 @@ mod tests_background_transactions {
     use rpc::network_config::ChainConfig;
     use token::ft::FToken;
     use tokio;
-    use wallet::wallet_crypto::WalletCrypto;
+    use wallet::{wallet_crypto::WalletCrypto, wallet_transaction::WalletTransaction};
 
     const PASSWORD: &str = "TEst password";
     const WORDS: &str =
@@ -358,6 +358,85 @@ mod tests_background_transactions {
         for tx in txns {
             assert!(!tx.transaction_hash.is_empty());
         }
+    }
+
+    #[tokio::test]
+    async fn test_sign_and_verify_zil_swap_to_bsc() {
+        let (mut bg, _dir) = setup_test_background();
+        let zil_config = gen_zil_net_conf();
+        let bsc_config = gen_bsc_net_conf();
+
+        bg.add_provider(zil_config.clone()).unwrap();
+        bg.add_provider(bsc_config.clone()).unwrap();
+
+        let accounts = [(
+            DerivationPath::new(slip44::ZILLIQA, 0),
+            "ZIL Acc 0".to_string(),
+        )];
+        let device_indicators = [String::from("5435h"), String::from("0000")];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: PASSWORD,
+            chain_hash: zil_config.hash(),
+            mnemonic_str: WORDS,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![FToken::zil(zil_config.hash())],
+        })
+        .unwrap();
+
+        bg.swap_zilliqa_chain(0, 0).unwrap();
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: Some(21000),
+            chain_id: Some(bsc_config.chain_id()),
+            ..Default::default()
+        };
+        let zilpay_trasnfer_req =
+            TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+
+        let argon_seed = bg
+            .unlock_wallet_with_password(&PASSWORD, &device_indicators, 0)
+            .unwrap();
+
+        bg.select_accounts_chain(0, bsc_config.hash()).unwrap();
+
+        let data = wallet.get_wallet_data().unwrap();
+        let selected_account = data.get_selected_account().unwrap();
+
+        assert_eq!(
+            selected_account.addr.to_string(),
+            "0xfB85dC021D75A916079663aac004316ac2bB9437"
+        );
+
+        if let PubKey::Secp256k1Keccak256(pub_key) = selected_account.pub_key {
+            assert_eq!(
+                hex::encode(pub_key),
+                "035b4412d3cb1dbbe08a8a2eb9e061d77c60c0608fc2fdbdd2ae46e3f31e6181e8"
+            );
+        } else {
+            panic!("invalid pubkey");
+        }
+
+        let tx = wallet
+            .sign_transaction(zilpay_trasnfer_req, 0, &argon_seed, None)
+            .await
+            .unwrap();
+
+        assert!(tx.verify().unwrap());
     }
 
     #[tokio::test]

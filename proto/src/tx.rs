@@ -127,10 +127,10 @@ impl TransactionRequest {
             TransactionRequest::Ethereum((tx, mut metadata)) => {
                 let wallet = keypair.get_local_eth_wallet()?;
                 let tx_envelope = tx
-                    .clone()
                     .build(&wallet)
                     .await
                     .map_err(|e| KeyPairError::FailToSignTx(e.to_string()))?;
+
                 let pub_key_bytes = keypair.get_pubkey_bytes();
 
                 metadata.signer = Some(PubKey::Secp256k1Keccak256(*pub_key_bytes));

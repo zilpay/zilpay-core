@@ -50,7 +50,7 @@ impl WalletTransaction for Wallet {
     ) -> Result<TransactionReceipt> {
         let keypair = self.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
-        Ok(req_tx.clone().sign(&keypair).await?)
+        Ok(req_tx.sign(&keypair).await?)
     }
 
     #[inline]
@@ -58,6 +58,3 @@ impl WalletTransaction for Wallet {
         [key, HISTORY_TXNS_DB_KEY_V1].concat()
     }
 }
-
-#[cfg(test)]
-mod tests_wallet_transactions {}
