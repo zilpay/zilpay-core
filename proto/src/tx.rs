@@ -4,6 +4,7 @@ use crate::pubkey::PubKey;
 use crate::signature::Signature;
 use crate::zil_tx::{ZILTransactionReceipt, ZILTransactionRequest};
 use crate::zq1_proto::{create_proto_tx, version_from_chainid};
+use alloy::consensus::transaction::SignerRecoverable;
 use alloy::consensus::{SignableTransaction, TxEip4844Variant, TxEnvelope, TypedTransaction};
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{TxKind, U256};

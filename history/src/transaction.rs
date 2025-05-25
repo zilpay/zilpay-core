@@ -5,7 +5,7 @@ use std::{
 
 use crate::status::TransactionStatus;
 use alloy::{
-    consensus::{Transaction, TxType},
+    consensus::{transaction::SignerRecoverable, Transaction, TxType},
     primitives::{TxKind, U256},
 };
 use errors::tx::TransactionErrors;
