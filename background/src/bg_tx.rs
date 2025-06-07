@@ -284,6 +284,21 @@ mod tests_background_transactions {
         }
     }
 
+    fn gen_zil_token() -> FToken {
+        FToken {
+            rate: 0f64,
+            name: "ZILiqa legacy".to_string(),
+            symbol: "ZIL".to_string(),
+            decimals: 12,
+            addr: Address::Secp256k1Sha256(Address::ZERO),
+            logo: None,
+            balances: Default::default(),
+            default: true,
+            native: true,
+            chain_hash: gen_zil_net_conf().hash(),
+        }
+    }
+
     #[tokio::test]
     async fn test_sign_and_send_zil_legacy_tx() {
         let (mut bg, _dir) = setup_test_background();
@@ -660,5 +675,77 @@ mod tests_background_transactions {
         let is_valid = key_pair.verify_sig(&hashed_message, &signature).unwrap();
 
         assert!(is_valid);
+    }
+
+    #[tokio::test]
+    async fn test_sign_and_send_zilliqa_tx_legacy() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_zil_net_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+        let accounts = [(DerivationPath::new(slip44::ZILLIQA, 0), "Zil 0".to_string())];
+        let device_indicators = [String::from("test zilliqa"), String::from("0000")];
+
+        const UNCHECKSUMED_WORD: &str =
+            "sword sure throw slide garden science six destroy canvas ceiling negative black";
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: false,
+            password: PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: UNCHECKSUMED_WORD,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Zilliqa legacy wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_zil_token()],
+        })
+        .unwrap();
+
+        bg.swap_zilliqa_chain(0, 0).unwrap();
+
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
+        let nonce = *provider
+            .fetch_nonce(&addresses)
+            .await
+            .unwrap()
+            .first()
+            .unwrap();
+        let zil_tx = ZILTransactionRequest {
+            chain_id: provider.config.chain_id() as u16,
+            nonce,
+            gas_price: 2000 * 10u128.pow(6),
+            gas_limit: 100000,
+            to_addr: Address::from_zil_bech32("zil1a7d2ed6qtlg08ke2wc6feyxt6vtmp74pd9a567")
+                .unwrap(),
+            amount: 1u128.pow(12),
+            code: Vec::with_capacity(0),
+            data: Vec::with_capacity(0),
+        };
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+        let revealed_mnemonic = wallet.reveal_mnemonic(&argon_seed).unwrap();
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        assert_eq!(revealed_mnemonic.to_string(), UNCHECKSUMED_WORD);
+        assert_eq!(
+            "fa76197854836ddf8dcba24a61d93695b99fbc30ca7a76c3d6f70cfd06978f96",
+            hex::encode(&keypair.get_secretkey().unwrap().as_ref())
+        );
+        assert_eq!(
+            "03cec7ce9ad4d5e9630e3c9eb656e7de32c3b76ed6adcdb3ea15e458a50b98c3a2",
+            hex::encode(&keypair.get_pubkey().unwrap().as_bytes())
+        );
+        // let signer_tx = tx_req.sign(&keypair).await.unwrap();
     }
 }
