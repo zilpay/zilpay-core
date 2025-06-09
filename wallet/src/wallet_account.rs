@@ -1,6 +1,6 @@
 use crate::{
-    account::Account, account_type::AccountType, wallet_storage::StorageOperations,
-    wallet_types::WalletTypes, Result, Wallet,
+    account::Account, account_type::AccountType, wallet_crypto::WalletCrypto,
+    wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet,
 };
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
 use config::bip39::EN_WORDS;
@@ -93,42 +93,30 @@ impl AccountManagement for Wallet {
         chain: &ChainConfig,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
+        let m = self.reveal_mnemonic(&seed_bytes)?;
+        let mnemonic_seed = m.to_seed(passphrase)?;
+        let has_account = data
+            .accounts
+            .iter()
+            .any(|account| account.account_type.value() == bip49.get_index());
 
-        match data.wallet_type {
-            WalletTypes::SecretPhrase((key, _)) => {
-                let keychain =
-                    KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
-                let storage_key = usize::to_le_bytes(key);
-                let cipher_entropy = self.storage.get(&storage_key)?;
-                let entropy = keychain.decrypt(cipher_entropy, &data.settings.cipher_orders)?;
-                // TODO: add more Languages
-                let m = Mnemonic::from_entropy(&EN_WORDS, &entropy)?;
-                let mnemonic_seed = m.to_seed(passphrase)?;
-                let has_account = data
-                    .accounts
-                    .iter()
-                    .any(|account| account.account_type.value() == bip49.get_index());
-
-                if has_account {
-                    return Err(WalletErrors::ExistsAccount(bip49.get_index()));
-                }
-
-                let hd_account = Account::from_hd(
-                    &mnemonic_seed,
-                    name,
-                    bip49,
-                    chain.hash(),
-                    chain.chain_id(),
-                    chain.slip_44,
-                )?;
-
-                data.accounts.push(hd_account);
-                self.save_wallet_data(data)?;
-
-                Ok(())
-            }
-            _ => Err(WalletErrors::InvalidAccountType),
+        if has_account {
+            return Err(WalletErrors::ExistsAccount(bip49.get_index()));
         }
+
+        let hd_account = Account::from_hd(
+            &mnemonic_seed,
+            name,
+            bip49,
+            chain.hash(),
+            chain.chain_id(),
+            chain.slip_44,
+        )?;
+
+        data.accounts.push(hd_account);
+        self.save_wallet_data(data)?;
+
+        Ok(())
     }
 
     fn select_account(&self, account_index: usize) -> Result<()> {

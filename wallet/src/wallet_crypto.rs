@@ -100,10 +100,22 @@ impl WalletCrypto for Wallet {
                 let keychain =
                     KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
                 let storage_key = usize::to_le_bytes(key);
-                let cipher_entropy = self.storage.get(&storage_key)?;
-                let entropy = keychain.decrypt(cipher_entropy, &data.settings.cipher_orders)?;
+                let cipher = self.storage.get(&storage_key)?;
+                let decypted = keychain.decrypt(cipher, &data.settings.cipher_orders)?;
+
                 // TODO: add more Languages
-                let m = Mnemonic::from_entropy(&EN_WORDS, &entropy)?;
+                // 32 this is max which can be entropy
+                let m = if let Some(mnemonic_str) = String::from_utf8(decypted.clone()).ok() {
+                    if let Some(m) =
+                        Mnemonic::parse_str_without_checksum(&EN_WORDS, &mnemonic_str).ok()
+                    {
+                        m
+                    } else {
+                        Mnemonic::from_entropy(&EN_WORDS, &decypted)?
+                    }
+                } else {
+                    Mnemonic::from_entropy(&EN_WORDS, &decypted)?
+                };
 
                 Ok(m)
             }

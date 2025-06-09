@@ -171,10 +171,10 @@ impl WalletInit for Wallet {
         config: WalletConfig,
         ftokens: Vec<FToken>,
     ) -> Result<Self> {
-        let mnemonic_entropy: Vec<u8> = params.mnemonic.to_entropy().into_iter().collect();
+        let mnemonic_str: Vec<u8> = params.mnemonic.to_string().as_bytes().to_vec();
         let cipher_entropy = config
             .keychain
-            .encrypt(mnemonic_entropy, &config.settings.cipher_orders)?;
+            .encrypt(mnemonic_str, &config.settings.cipher_orders)?;
         let mnemonic_seed = params.mnemonic.to_seed(params.passphrase)?;
         let cipher_proof = config
             .keychain

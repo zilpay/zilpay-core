@@ -219,7 +219,7 @@ mod tests_background_transactions {
 
     const PASSWORD: &str = "TEst password";
     const WORDS: &str =
-        "bless list almost large hybrid bamboo connect market seek danger fun law loop pulse ride film cook piano mercy virtual drop derive gaze dinosaur";
+        "future slot favorite conduct please organ trick seek goat easy chapter proud";
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -678,7 +678,7 @@ mod tests_background_transactions {
     }
 
     #[tokio::test]
-    async fn test_sign_and_send_zilliqa_tx_legacy() {
+    async fn test_unckeched_seed_phrase() {
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_zil_net_conf();
 
@@ -705,28 +705,8 @@ mod tests_background_transactions {
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
 
-        let providers = bg.get_providers();
-        let provider = providers.first().unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
-        let nonce = *provider
-            .fetch_nonce(&addresses)
-            .await
-            .unwrap()
-            .first()
-            .unwrap();
-        let zil_tx = ZILTransactionRequest {
-            chain_id: provider.config.chain_id() as u16,
-            nonce,
-            gas_price: 2000 * 10u128.pow(6),
-            gas_limit: 100000,
-            to_addr: Address::from_zil_bech32("zil1a7d2ed6qtlg08ke2wc6feyxt6vtmp74pd9a567")
-                .unwrap(),
-            amount: 1u128.pow(12),
-            code: Vec::with_capacity(0),
-            data: Vec::with_capacity(0),
-        };
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             PASSWORD.as_bytes(),
@@ -739,13 +719,12 @@ mod tests_background_transactions {
 
         assert_eq!(revealed_mnemonic.to_string(), UNCHECKSUMED_WORD);
         assert_eq!(
-            "fa76197854836ddf8dcba24a61d93695b99fbc30ca7a76c3d6f70cfd06978f96",
+            "d7986cf4acc822c1a6cdc4170f5561a6cee1591c37ec6a887bb650d051e4ad71",
             hex::encode(&keypair.get_secretkey().unwrap().as_ref())
         );
         assert_eq!(
-            "03cec7ce9ad4d5e9630e3c9eb656e7de32c3b76ed6adcdb3ea15e458a50b98c3a2",
+            "022b8e6855eaf04ec7bd2e01d5aaf4e46a111b509882e5456d97af60a6d1ed6f28",
             hex::encode(&keypair.get_pubkey().unwrap().as_bytes())
         );
-        // let signer_tx = tx_req.sign(&keypair).await.unwrap();
     }
 }
