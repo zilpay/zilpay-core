@@ -3606,9 +3606,9 @@ dependencies = [
 
 [[package]]
 name = "pqbip39"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "690d626d73373e49975fdf42204dac262134eee4a071e2c95387915d5128ef99"
+checksum = "450df8f3e3dd7a77b33222cea9ad5d4bb816565a17d7a4308002e0cf5816958a"
 dependencies = [
  "hmac",
  "sha2",
