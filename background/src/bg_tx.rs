@@ -219,7 +219,7 @@ mod tests_background_transactions {
 
     const PASSWORD: &str = "TEst password";
     const WORDS: &str =
-        "future slot favorite conduct please organ trick seek goat easy chapter proud";
+        "bless list almost large hybrid bamboo connect market seek danger fun law loop pulse ride film cook piano mercy virtual drop derive gaze dinosaur";
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
