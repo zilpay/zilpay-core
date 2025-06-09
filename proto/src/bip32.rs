@@ -1,4 +1,5 @@
 use config::sha::SHA256_SIZE;
+use errors::bip32::Bip329Errors;
 use hmac::{Hmac, Mac};
 use k256::{
     elliptic_curve::{bigint::U256, scalar::FromUintUnchecked},
@@ -6,7 +7,6 @@ use k256::{
 };
 use sha2::Sha512;
 use std::str::FromStr;
-use errors::bip32::Bip329Errors;
 
 const HARDENED_BIT: u32 = 1 << 31;
 const BITCOIN_SEED: &[u8] = b"Bitcoin seed";
@@ -138,14 +138,15 @@ fn derive_child_key(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bip39::Mnemonic;
+    use config::bip39::EN_WORDS;
+    use pqbip39::mnemonic::Mnemonic;
 
     #[test]
     fn bip39_to_address() {
         let phrase = "panda eyebrow bullet gorilla call smoke muffin taste mesh discover soft ostrich alcohol speed nation flash devote level hobby quick inner drive ghost inside";
         let expected_secret_key = b"\xff\x1e\x68\xeb\x7b\xf2\xf4\x86\x51\xc4\x7e\xf0\x17\x7e\xb8\x15\x85\x73\x22\x25\x7c\x58\x94\xbb\x4c\xfd\x11\x76\xc9\x98\x93\x14";
-        let mnemonic = Mnemonic::from_str(phrase).unwrap();
-        let seed = mnemonic.to_seed_normalized("");
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
+        let seed = mnemonic.to_seed("").unwrap();
 
         let account = derive_private_key(&seed, "m/44'/60'/0'/0/0").unwrap();
 

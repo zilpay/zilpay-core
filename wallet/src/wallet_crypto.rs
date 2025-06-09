@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
 use crate::{wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet};
-use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
+use config::bip39::EN_WORDS;
 use errors::wallet::WalletErrors;
 use network::{common::Provider, provider::NetworkProvider};
+use pqbip39::mnemonic::Mnemonic;
 use proto::{address::Address, keypair::KeyPair, secret_key::SecretKey, signature::Signature};
 
 pub trait WalletCrypto {
@@ -71,7 +72,7 @@ impl WalletCrypto for Wallet {
                     .find(|&p| p.config.hash() == data.default_chain_hash)
                     .ok_or(WalletErrors::ProviderNotExist(data.default_chain_hash))?;
                 let m = self.reveal_mnemonic(seed_bytes)?;
-                let seed = m.to_seed(passphrase.unwrap_or(""));
+                let seed = m.to_seed(passphrase.unwrap_or(""))?;
                 let hd_index = account.account_type.value();
                 let bip49 = provider.get_bip49(hd_index);
                 let mut keypair = KeyPair::from_bip39_seed(&seed, &bip49)?;
@@ -102,8 +103,7 @@ impl WalletCrypto for Wallet {
                 let cipher_entropy = self.storage.get(&storage_key)?;
                 let entropy = keychain.decrypt(cipher_entropy, &data.settings.cipher_orders)?;
                 // TODO: add more Languages
-                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
-                    .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
+                let m = Mnemonic::from_entropy(&EN_WORDS, &entropy)?;
 
                 Ok(m)
             }

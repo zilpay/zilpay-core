@@ -1,9 +1,10 @@
 use crate::Result;
-use bip39::{Language, Mnemonic};
+use config::bip39::EN_WORDS;
+use errors::background::BackgroundError;
+use pqbip39::mnemonic::Mnemonic;
 use proto::keypair::KeyPair;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use errors::background::BackgroundError;
 
 use crate::Background;
 
@@ -20,7 +21,7 @@ pub trait CryptoOperations {
     ///
     /// * `words` - Vector of words to validate
     /// * `lang` - BIP39 language for validation
-    fn find_invalid_bip39_words(words: &[String], lang: Language) -> Vec<usize>;
+    fn find_invalid_bip39_words(words: &[String]) -> Vec<usize>;
 
     /// Generates a new cryptographic key pair
     fn gen_keypair() -> std::result::Result<(String, String), Self::Error>;
@@ -41,19 +42,16 @@ impl CryptoOperations for Background {
 
         rng.fill_bytes(&mut entropy);
 
-        let m = Mnemonic::from_entropy_in(Language::English, &entropy)
-            .map_err(|e| BackgroundError::FailToGenBip39FromEntropy(e.to_string()))?;
+        let m = Mnemonic::from_entropy(&EN_WORDS, &entropy)?;
 
         Ok(m.to_string())
     }
 
-    fn find_invalid_bip39_words(words: &[String], lang: Language) -> Vec<usize> {
-        let word_list = lang.word_list();
-
+    fn find_invalid_bip39_words(words: &[String]) -> Vec<usize> {
         words
             .iter()
             .enumerate()
-            .filter(|(_, word)| !word_list.contains(&word.as_str()))
+            .filter(|(_, word)| !EN_WORDS.contains(&word.as_str()))
             .map(|(index, _)| index)
             .collect()
     }
@@ -69,7 +67,6 @@ impl CryptoOperations for Background {
 #[cfg(test)]
 mod tests_background {
     use crate::{bg_crypto::CryptoOperations, Background};
-    use bip39::Language;
     use config::key::{PUB_KEY_SIZE, SECRET_KEY_SIZE};
     use errors::background::BackgroundError;
 
@@ -81,7 +78,7 @@ mod tests_background {
                 .map(|v| v.to_string())
                 .collect();
 
-        let not_exists_ids = Background::find_invalid_bip39_words(&words, Language::English);
+        let not_exists_ids = Background::find_invalid_bip39_words(&words);
 
         assert_eq!(not_exists_ids, vec![6])
     }

@@ -286,7 +286,8 @@ impl KeyPair {
 #[cfg(test)]
 mod tests_keypair {
     use super::*;
-    use bip39::Mnemonic;
+    use config::bip39::EN_WORDS;
+    use pqbip39::mnemonic::Mnemonic;
     use serde_json::json;
     use std::borrow::Cow;
 
@@ -395,8 +396,8 @@ mod tests_keypair {
     fn test_bip39_derivation() {
         let mnemonic_str =
             "green process gate doctor slide whip priority shrug diamond crumble average help";
-        let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
-        let seed = m.to_seed("");
+        let m = Mnemonic::parse_str(&EN_WORDS, mnemonic_str).unwrap();
+        let seed = m.to_seed("").unwrap();
 
         assert_eq!(
             [

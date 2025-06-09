@@ -108,9 +108,9 @@ impl Account {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bip39::Mnemonic;
-    use config::address::ADDR_LEN;
+    use config::{address::ADDR_LEN, bip39::EN_WORDS};
     use crypto::slip44;
+    use pqbip39::mnemonic::Mnemonic;
     use rand::RngCore;
 
     #[test]
@@ -146,9 +146,9 @@ mod tests {
         let mnemonic_str =
             "green process gate doctor slide whip priority shrug diamond crumble average help";
         let name = "Account 0";
-        let m = Mnemonic::parse_normalized(mnemonic_str).unwrap();
+        let m = Mnemonic::parse_str(&EN_WORDS, mnemonic_str).unwrap();
         let bip49 = DerivationPath::new(slip44::ZILLIQA, 0);
-        let seed = m.to_seed("");
+        let seed = m.to_seed("").unwrap();
         let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0, 1, slip44::ZILLIQA).unwrap();
 
         for _ in 0..100 {

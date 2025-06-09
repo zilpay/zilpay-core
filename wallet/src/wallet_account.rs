@@ -2,10 +2,11 @@ use crate::{
     account::Account, account_type::AccountType, wallet_storage::StorageOperations,
     wallet_types::WalletTypes, Result, Wallet,
 };
-use bip39::Mnemonic;
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
+use config::bip39::EN_WORDS;
 use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
+use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
 use rpc::network_config::ChainConfig;
 
@@ -101,9 +102,8 @@ impl AccountManagement for Wallet {
                 let cipher_entropy = self.storage.get(&storage_key)?;
                 let entropy = keychain.decrypt(cipher_entropy, &data.settings.cipher_orders)?;
                 // TODO: add more Languages
-                let m = Mnemonic::from_entropy_in(bip39::Language::English, &entropy)
-                    .map_err(|e| WalletErrors::MnemonicError(e.to_string()))?;
-                let mnemonic_seed = m.to_seed_normalized(passphrase);
+                let m = Mnemonic::from_entropy(&EN_WORDS, &entropy)?;
+                let mnemonic_seed = m.to_seed(passphrase)?;
                 let has_account = data
                     .accounts
                     .iter()
@@ -155,14 +155,14 @@ mod tests {
         wallet_account::AccountManagement, wallet_data::AuthMethod, wallet_init::WalletInit,
         wallet_storage::StorageOperations, Bip39Params, Wallet, WalletConfig,
     };
-    use bip39::Mnemonic;
     use cipher::{
         argon2::{derive_key, ARGON2_DEFAULT_CONFIG},
         keychain::KeyChain,
     };
-    use config::cipher::PROOF_SIZE;
+    use config::{bip39::EN_WORDS, cipher::PROOF_SIZE};
     use crypto::{bip49::DerivationPath, slip44};
     use errors::wallet::WalletErrors;
+    use pqbip39::mnemonic::Mnemonic;
     use rand::Rng;
     use rpc::network_config::ChainConfig;
     use std::sync::Arc;
@@ -189,8 +189,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
 
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
-        let mnemonic =
-            Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, MNEMONIC_STR).unwrap();
 
         // Create wallet with 3 accounts
         let indexes = [0, 1, 2].map(|i| {

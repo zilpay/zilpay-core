@@ -171,10 +171,11 @@ impl WalletInit for Wallet {
         config: WalletConfig,
         ftokens: Vec<FToken>,
     ) -> Result<Self> {
+        let mnemonic_entropy: Vec<u8> = params.mnemonic.to_entropy().into_iter().collect();
         let cipher_entropy = config
             .keychain
-            .encrypt(params.mnemonic.to_entropy(), &config.settings.cipher_orders)?;
-        let mnemonic_seed = params.mnemonic.to_seed_normalized(params.passphrase);
+            .encrypt(mnemonic_entropy, &config.settings.cipher_orders)?;
+        let mnemonic_seed = params.mnemonic.to_seed(params.passphrase)?;
         let cipher_proof = config
             .keychain
             .make_proof(&params.proof, &config.settings.cipher_orders)?;
@@ -228,14 +229,14 @@ impl WalletInit for Wallet {
 mod tests {
     use std::sync::Arc;
 
-    use bip39::Mnemonic;
     use cipher::{
         argon2::{derive_key, ARGON2_DEFAULT_CONFIG},
         keychain::KeyChain,
     };
-    use config::{argon::KEY_SIZE, cipher::PROOF_SIZE};
+    use config::{argon::KEY_SIZE, bip39::EN_WORDS, cipher::PROOF_SIZE};
     use crypto::{bip49::DerivationPath, slip44};
     use errors::wallet::WalletErrors;
+    use pqbip39::mnemonic::Mnemonic;
     use proto::keypair::KeyPair;
     use rand::Rng;
     use rpc::network_config::ChainConfig;
@@ -267,8 +268,7 @@ mod tests {
 
         let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
-        let mnemonic =
-            Mnemonic::parse_in_normalized(bip39::Language::English, MNEMONIC_STR).unwrap();
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, MNEMONIC_STR).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
             (
                 DerivationPath::new(slip44::ZILLIQA, i),

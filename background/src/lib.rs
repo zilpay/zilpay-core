@@ -1,4 +1,4 @@
-pub use bip39::{Language, Mnemonic};
+pub use pqbip39::mnemonic::Mnemonic;
 
 use crypto::bip49::DerivationPath;
 use errors::background::BackgroundError;

@@ -1,3 +1,4 @@
+use pqbip39::errors::Bip39Error;
 use thiserror::Error;
 
 use crate::{
@@ -68,9 +69,6 @@ pub enum BackgroundError {
     #[error("Invalid BIP39 word count: {0}")]
     InvalidWordCount(u8),
 
-    #[error("Failed to generate BIP39 words from entropy: {0}")]
-    FailToGenBip39FromEntropy(String),
-
     #[error("Deserialize TypedData error: {0}")]
     FailDeserializeTypedData(String),
 
@@ -82,9 +80,6 @@ pub enum BackgroundError {
 
     #[error("Worker error: {0}")]
     WorkerError(String),
-
-    #[error("Failed to parse mnemonic words: {0}")]
-    FailParseMnemonicWords(String),
 
     #[error("wallet error: {0}")]
     WalletError(WalletErrors),
@@ -127,6 +122,9 @@ pub enum BackgroundError {
 
     #[error("SecretKey error: {0}")]
     SecretKeyError(SecretKeyError),
+
+    #[error("Bip39 error: {0}")]
+    Bip39Error(Bip39Error),
 }
 
 impl From<TokenQuotesError> for BackgroundError {
@@ -198,5 +196,11 @@ impl From<WalletErrors> for BackgroundError {
 impl From<Box<ErrorKind>> for BackgroundError {
     fn from(error: Box<ErrorKind>) -> Self {
         BackgroundError::BincodeError(error.to_string())
+    }
+}
+
+impl From<Bip39Error> for BackgroundError {
+    fn from(error: Bip39Error) -> Self {
+        BackgroundError::Bip39Error(error)
     }
 }

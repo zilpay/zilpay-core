@@ -3,6 +3,7 @@ pub const SYS_SIZE: usize = std::mem::size_of::<usize>();
 pub mod abi;
 pub mod address;
 pub mod argon;
+pub mod bip39;
 pub mod cipher;
 pub mod contracts;
 pub mod key;

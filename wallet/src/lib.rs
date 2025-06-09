@@ -5,11 +5,11 @@ use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use proto::pubkey::PubKey;
 
-use bip39::Mnemonic;
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
 use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
+use pqbip39::mnemonic::Mnemonic;
 use proto::secret_key::SecretKey;
 use rpc::network_config::ChainConfig;
 use settings::wallet_settings::WalletSettings;
@@ -47,7 +47,7 @@ pub struct SecretKeyParams<'a> {
 
 pub struct Bip39Params<'a> {
     pub proof: [u8; KEY_SIZE],
-    pub mnemonic: &'a Mnemonic,
+    pub mnemonic: &'a Mnemonic<'a>,
     pub passphrase: &'a str,
     pub indexes: &'a [(DerivationPath, String)],
     pub wallet_name: String,

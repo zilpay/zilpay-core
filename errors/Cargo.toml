@@ -8,4 +8,5 @@ ntrulp.workspace = true
 thiserror.workspace = true
 bincode.workspace = true
 rust-argon2.workspace = true
+pqbip39.workspace = true
 

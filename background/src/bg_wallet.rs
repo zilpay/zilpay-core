@@ -3,13 +3,14 @@ use crate::{
     bg_storage::StorageManagement, device_indicators::create_wallet_device_indicator, Background,
     BackgroundLedgerParams, Result,
 };
-use bip39::Mnemonic;
 use cipher::{argon2, keychain::KeyChain};
 use config::{
+    bip39::EN_WORDS,
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::SHA512_SIZE,
 };
 use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
+use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
 use session::{decrypt_session, encrypt_session};
 use settings::wallet_settings::WalletSettings;
@@ -207,14 +208,9 @@ impl WalletManagement for Background {
         .map_err(BackgroundError::ArgonPasswordHashError)?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
         let mnemonic = if params.mnemonic_check {
-            Mnemonic::parse_in_normalized(bip39::Language::English, params.mnemonic_str)
-                .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?
+            Mnemonic::parse_str(&EN_WORDS, params.mnemonic_str)?
         } else {
-            Mnemonic::parse_in_normalized_without_checksum_check(
-                bip39::Language::English,
-                params.mnemonic_str,
-            )
-            .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?
+            Mnemonic::parse_str_without_checksum(&EN_WORDS, params.mnemonic_str)?
         };
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],

@@ -7,6 +7,7 @@ use crate::{
     tx::TransactionErrors,
 };
 use bincode::ErrorKind;
+use pqbip39::errors::Bip39Error;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -65,9 +66,6 @@ pub enum WalletErrors {
     #[error("fail to find provider with hash: {0}")]
     ProviderNotExist(u64),
 
-    #[error("Mnemonic error: {0}")]
-    MnemonicError(String),
-
     #[error("Invalid account type")]
     InvalidAccountType,
 
@@ -106,6 +104,9 @@ pub enum WalletErrors {
 
     #[error("KeyPair Error: {0}")]
     KeyPairError(KeyPairError),
+
+    #[error("Bip39 error: {0}")]
+    Bip39Error(Bip39Error),
 }
 
 impl From<LocalStorageError> for WalletErrors {
@@ -147,5 +148,11 @@ impl From<Box<ErrorKind>> for WalletErrors {
 impl From<TransactionErrors> for WalletErrors {
     fn from(error: TransactionErrors) -> Self {
         WalletErrors::TransactionErrors(error)
+    }
+}
+
+impl From<Bip39Error> for WalletErrors {
+    fn from(error: Bip39Error) -> Self {
+        WalletErrors::Bip39Error(error)
     }
 }

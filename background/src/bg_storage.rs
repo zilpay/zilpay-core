@@ -4,18 +4,19 @@ use crate::{
 };
 use std::sync::Arc;
 
-use bip39::Mnemonic;
 use cipher::{
     argon2::{self, Argon2Seed, ARGON2_DEFAULT_CONFIG},
     keychain::KeyChain,
     options::CipherOrders,
 };
 use config::{
+    bip39::EN_WORDS,
     cipher::{PROOF_SALT, PROOF_SIZE},
     sha::SHA256_SIZE,
     storage::{GLOBAL_SETTINGS_DB_KEY_V1, INDICATORS_DB_KEY_V1},
 };
 use errors::background::BackgroundError;
+use pqbip39::mnemonic::Mnemonic;
 use rpc::network_config::ChainConfig;
 use serde::{Deserialize, Serialize};
 use session::encrypt_session;
@@ -194,14 +195,12 @@ impl StorageManagement for Background {
                 }
             }
             WalletTypes::SecretPhrase((storage_key, _)) => {
-                let words = String::from_utf8(keystore.keys)
-                    .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?;
-                let mnemonic = Mnemonic::parse_in_normalized_without_checksum_check(
-                    Default::default(),
-                    &words,
-                )
-                .map_err(|e| BackgroundError::FailParseMnemonicWords(e.to_string()))?;
-                let cipher_entropy = keychain.encrypt(mnemonic.to_entropy(), &cipher_orders)?;
+                let words = String::from_utf8(keystore.keys).map_err(|_| {
+                    BackgroundError::Bip39Error(pqbip39::errors::Bip39Error::UnknownWord(0))
+                })?;
+                let mnemonic = Mnemonic::parse_str_without_checksum(&EN_WORDS, &words)?;
+                let mnemonic_entropy: Vec<u8> = mnemonic.to_entropy().into_iter().collect();
+                let cipher_entropy = keychain.encrypt(mnemonic_entropy, &cipher_orders)?;
                 let cipher_entropy_key =
                     Wallet::safe_storage_save(&cipher_entropy, Arc::clone(&self.storage))?;
                 let proof_key =
