@@ -510,28 +510,222 @@ mod tests {
     use std::str::FromStr;
 
     fn get_proto_mainnet_pools() -> Vec<EvmPool> {
+        // This list is based on the TypeScript `protoMainnetPools` array.
         vec![
             EvmPool {
-                token_symbol: "shit".to_string(),
                 address: AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8")
                     .unwrap(),
-                token_address: AlloyAddress::from_str("0x0000000000000000000000000000000000000000")
-                    .unwrap(),
+                token_address: AlloyAddress::ZERO,
                 name: "Moonlet".to_string(),
                 pool_type: StakingPoolType::NORMAL,
                 token_decimals: 18,
+                token_symbol: "ZIL".to_string(),
             },
             EvmPool {
-                token_decimals: 18,
-                token_symbol: "shit".to_string(),
                 address: AlloyAddress::from_str("0x2Abed3a598CBDd8BB9089c09A9202FD80C55Df8c")
                     .unwrap(),
                 token_address: AlloyAddress::from_str("0xD8B61fed51b9037A31C2Bf0a5dA4B717AF0C0F78")
                     .unwrap(),
                 name: "AtomicWallet".to_string(),
                 pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "SHARK".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0xB9d689c64b969ad9eDd1EDDb50be42E217567fd3")
+                    .unwrap(),
+                token_address: AlloyAddress::ZERO,
+                name: "CEX.IO".to_string(),
+                pool_type: StakingPoolType::NORMAL,
+                token_decimals: 18,
+                token_symbol: "ZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0xe0C095DBE85a8ca75de4749B5AEe0D18100a3C39")
+                    .unwrap(),
+                token_address: AlloyAddress::from_str("0x7B213b5AEB896bC290F0cD8B8720eaF427098186")
+                    .unwrap(),
+                name: "PlunderSwap".to_string(),
+                pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "pZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0xC0247d13323F1D06b6f24350Eea03c5e0Fbf65ed")
+                    .unwrap(),
+                token_address: AlloyAddress::from_str("0x2c51C97b22E73AfD33911397A20Aa5176e7Ab951")
+                    .unwrap(),
+                name: "Luganodes".to_string(),
+                pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "LNZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0x8A0dEd57ABd3bc50A600c94aCbEcEf62db5f4D32")
+                    .unwrap(),
+                token_address: AlloyAddress::ZERO,
+                name: "DTEAM".to_string(),
+                pool_type: StakingPoolType::NORMAL,
+                token_decimals: 18,
+                token_symbol: "ZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0x3b1Cd55f995a9A8A634fc1A3cEB101e2baA636fc")
+                    .unwrap(),
+                token_address: AlloyAddress::ZERO,
+                name: "Shardpool".to_string(),
+                pool_type: StakingPoolType::NORMAL,
+                token_decimals: 18,
+                token_symbol: "ZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0x66a2bb4AD6999966616B2ad209833260F8eA07C8")
+                    .unwrap(),
+                token_address: AlloyAddress::from_str("0xA1Adc08C12c684AdB28B963f251d6cB1C6a9c0c1")
+                    .unwrap(),
+                name: "Encapsulate".to_string(),
+                pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "encapZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0xe59D98b887e6D40F52f7Cc8d5fb4CF0F9Ed7C98B")
+                    .unwrap(),
+                token_address: AlloyAddress::from_str("0xf564DF9BeB417FB50b38A58334CA7607B36D3BFb")
+                    .unwrap(),
+                name: "Amazing Pool - Avely and ZilPay".to_string(),
+                pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "stZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0xd090424684a9108229b830437b490363eB250A58")
+                    .unwrap(),
+                token_address: AlloyAddress::from_str("0xE10575244f8E8735d71ed00287e9d1403f03C960")
+                    .unwrap(),
+                name: "PathrockNetwork".to_string(),
+                pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "zLST".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0x33cDb55D7fD68d0Da1a3448F11bCdA5fDE3426B3")
+                    .unwrap(),
+                token_address: AlloyAddress::ZERO,
+                name: "BlackNodes".to_string(),
+                pool_type: StakingPoolType::NORMAL,
+                token_decimals: 18,
+                token_symbol: "ZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0x35118Af4Fc43Ce58CEcBC6Eeb21D0C1Eb7E28Bd3")
+                    .unwrap(),
+                token_address: AlloyAddress::from_str("0x245E6AB0d092672B18F27025385f98E2EC3a3275")
+                    .unwrap(),
+                name: "Lithium Digital".to_string(),
+                pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "litZil".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0x62269F615E1a3E36f96dcB7fDDF8B823737DD618")
+                    .unwrap(),
+                token_address: AlloyAddress::from_str("0x770a35A5A95c2107860E9F74c1845e20289cbfe6")
+                    .unwrap(),
+                name: "TorchWallet.io".to_string(),
+                pool_type: StakingPoolType::LIQUID,
+                token_decimals: 18,
+                token_symbol: "tZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0xa45114E92E26B978F0B37cF19E66634f997250f9")
+                    .unwrap(),
+                token_address: AlloyAddress::ZERO,
+                name: "Stakefish".to_string(),
+                pool_type: StakingPoolType::NORMAL,
+                token_decimals: 18,
+                token_symbol: "ZIL".to_string(),
+            },
+            EvmPool {
+                address: AlloyAddress::from_str("0x02376bA9e0f98439eA9F76A582FBb5d20E298177")
+                    .unwrap(),
+                token_address: AlloyAddress::ZERO,
+                name: "AlphaZIL (former Ezil)".to_string(),
+                pool_type: StakingPoolType::NORMAL,
+                token_decimals: 18,
+                token_symbol: "ZIL".to_string(),
             },
         ]
+    }
+
+    fn create_zilliqa_config() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://api.zilliqa.com".to_string()],
+            features: vec![],
+            slip_44: 313,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        }
+    }
+
+    #[test]
+    fn test_process_evm_pools_results_with_real_data() {
+        let pools = get_proto_mainnet_pools();
+        let evm_user_address =
+            Address::from_eth_address("0xb1fE20CD2b856BA1a4e08afb39dfF5C80f0cBbCa").unwrap();
+
+        // Start build_evm_pools_requests with id=5 to match the provided data.
+        let (_requests, req_map, _next_id) = build_evm_pools_requests(&pools, &evm_user_address, 5);
+
+        let mut mock_results: HashMap<u64, ResultRes<Value>> = HashMap::new();
+        // Corrected the ID for the "Amazing Pool" deleg_amt from 42 to 41.
+        let raw_data = [
+            (
+                41,
+                "0x000000000000000000000000000000000000000000084595161401484a000000",
+            ), // deleg_amt for "Amazing Pool"
+        ];
+        for (id, result) in raw_data {
+            mock_results.insert(
+                id,
+                ResultRes {
+                    id,
+                    jsonrpc: "2.0".to_string(),
+                    result: Some(json!(result)),
+                    error: None,
+                },
+            );
+        }
+
+        let (user_data, _pool_stats) = process_evm_pools_results(&mock_results, &req_map);
+
+        // Assert "Amazing Pool" data based on the provided expected output
+        let amazing_pool_addr =
+            AlloyAddress::from_str("0xe59D98b887e6D40F52f7Cc8d5fb4CF0F9Ed7C98B").unwrap();
+        let amazing_pool_user = user_data.get(&amazing_pool_addr).unwrap();
+
+        assert_eq!(
+            amazing_pool_user.deleg_amt,
+            U256::from_str("10000000000000000000000000").unwrap()
+        );
+        assert_eq!(amazing_pool_user.rewards, U256::ZERO);
+
+        // Assert data for another pool (e.g., Moonlet) to ensure it's processed as zero
+        let moonlet_addr =
+            AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8").unwrap();
+        // Use `get` and `unwrap_or_default` in case the pool had no successful RPC calls and wasn't added to the map
+        let moonlet_user = user_data.get(&moonlet_addr).cloned().unwrap_or_default();
+        assert_eq!(moonlet_user.deleg_amt, U256::ZERO);
+        assert_eq!(moonlet_user.rewards, U256::ZERO);
     }
 
     #[test]
@@ -634,25 +828,6 @@ mod tests {
             moonlet_commission_req["params"][0]["data"],
             json!(hex::encode_prefixed(get_commission_call.abi_encode()))
         );
-    }
-
-    fn create_zilliqa_config() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 0],
-            name: "Zilliqa".to_string(),
-            chain: "ZIL".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://api.zilliqa.com".to_string()],
-            features: vec![],
-            slip_44: 313,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        }
     }
 
     #[tokio::test]
