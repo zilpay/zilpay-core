@@ -11,3 +11,4 @@ pub mod provider;
 pub mod rates;
 pub mod stake;
 pub mod tx_parse;
+pub mod zil_stake_parse;
