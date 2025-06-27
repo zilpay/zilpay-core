@@ -1,4 +1,7 @@
-use crate::{rpc::RpcError, storage::LocalStorageError, token::TokenError, tx::TransactionErrors};
+use crate::{
+    address::AddressError, keypair::PubKeyError, rpc::RpcError, storage::LocalStorageError,
+    token::TokenError, tx::TransactionErrors,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -33,6 +36,12 @@ pub enum NetworkErrors {
     #[error("Transaction Error: {0}")]
     TransactionErrors(TransactionErrors),
 
+    #[error("PubKey Error: {0}")]
+    PubKeyError(PubKeyError),
+
+    #[error("Address Error: {0}")]
+    AddressError(AddressError),
+
     #[error("Parse response error")]
     ResponseParseError,
 
@@ -46,9 +55,21 @@ pub enum NetworkErrors {
     InvlaidChainConfig,
 }
 
+impl From<PubKeyError> for NetworkErrors {
+    fn from(error: PubKeyError) -> Self {
+        NetworkErrors::PubKeyError(error)
+    }
+}
+
 impl From<TransactionErrors> for NetworkErrors {
     fn from(error: TransactionErrors) -> Self {
         NetworkErrors::TransactionErrors(error)
+    }
+}
+
+impl From<AddressError> for NetworkErrors {
+    fn from(error: AddressError) -> Self {
+        NetworkErrors::AddressError(error)
     }
 }
 

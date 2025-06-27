@@ -9,7 +9,7 @@ use crate::{
 use alloy::primitives::U256;
 use async_trait::async_trait;
 use errors::network::NetworkErrors;
-use proto::address::Address;
+use proto::pubkey::PubKey;
 use rpc::{
     common::JsonRPC, network_config::ChainConfig, provider::RpcProvider, zil_interfaces::ResultRes,
 };
@@ -20,11 +20,7 @@ use std::collections::HashMap;
 pub trait ZilliqaStakeing {
     async fn get_zq2_providers(&self) -> Result<Vec<EvmPool>, NetworkErrors>;
 
-    async fn get_all_stakes(
-        &self,
-        scilla_user_address: &str,
-        evm_user_address: &Address,
-    ) -> Result<Vec<FinalOutput>, NetworkErrors>;
+    async fn get_all_stakes(&self, pub_key: &PubKey) -> Result<Vec<FinalOutput>, NetworkErrors>;
 }
 
 #[async_trait]
@@ -50,16 +46,16 @@ impl ZilliqaStakeing for NetworkProvider {
             .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))
     }
 
-    async fn get_all_stakes(
-        &self,
-        scilla_user_address: &str,
-        evm_user_address: &Address,
-    ) -> Result<Vec<FinalOutput>, NetworkErrors> {
+    async fn get_all_stakes(&self, pub_key: &PubKey) -> Result<Vec<FinalOutput>, NetworkErrors> {
+        let scilla_user_address = PubKey::Secp256k1Sha256(pub_key.as_bytes())
+            .get_addr()?
+            .get_zil_check_sum_addr()?;
+        let evm_user_address = PubKey::Secp256k1Keccak256(pub_key.as_bytes()).get_addr()?;
         let evm_pools = self.get_zq2_providers().await?;
 
-        let (core_reqs, core_ids, next_id) = build_initial_core_requests(1, scilla_user_address);
+        let (core_reqs, core_ids, next_id) = build_initial_core_requests(1, &scilla_user_address);
         let (evm_reqs, evm_req_map, _next_id) =
-            build_evm_pools_requests(&evm_pools, evm_user_address, next_id);
+            build_evm_pools_requests(&evm_pools, &evm_user_address, next_id);
 
         let all_requests: Vec<Value> = core_reqs.into_iter().chain(evm_reqs).collect();
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
@@ -92,7 +88,7 @@ impl ZilliqaStakeing for NetworkProvider {
 
         if let Some(avely_stake) = process_avely_stake(
             results_by_id.get(&core_ids.st_zil_balance).as_ref(),
-            scilla_user_address,
+            &scilla_user_address,
         ) {
             final_output.push(avely_stake);
         }
@@ -105,14 +101,46 @@ impl ZilliqaStakeing for NetworkProvider {
             (ssn_result, reward_cycle_result, withdraw_cycle_result)
         {
             let scilla_stakes =
-                process_scilla_stakes(self, ssn, reward, withdraw, scilla_user_address).await?;
+                process_scilla_stakes(self, ssn, reward, withdraw, &scilla_user_address).await?;
             final_output.extend(scilla_stakes);
+        }
+
+        fn tag_to_priority(tag: &str) -> u8 {
+            match tag {
+                "avely" => 0,
+                "scilla" => 1,
+                "evm" => 2,
+                _ => 3,
+            }
         }
 
         final_output.sort_by(|a, b| {
             b.deleg_amt
                 .cmp(&a.deleg_amt)
-                .then_with(|| a.name.cmp(&b.name))
+                .then_with(|| tag_to_priority(&a.tag).cmp(&tag_to_priority(&b.tag)))
+                .then_with(|| {
+                    let a_has_avely = a.name.to_lowercase().contains("avely");
+                    let b_has_avely = b.name.to_lowercase().contains("avely");
+                    b_has_avely.cmp(&a_has_avely)
+                })
+                .then_with(|| {
+                    b.vote_power
+                        .partial_cmp(&a.vote_power)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .then_with(|| {
+                    b.apr
+                        .partial_cmp(&a.apr)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .then_with(|| match (a.commission, b.commission) {
+                    (Some(a_comm), Some(b_comm)) => a_comm
+                        .partial_cmp(&b_comm)
+                        .unwrap_or(std::cmp::Ordering::Equal),
+                    (Some(_), None) => std::cmp::Ordering::Less,
+                    (None, Some(_)) => std::cmp::Ordering::Greater,
+                    (None, None) => std::cmp::Ordering::Equal,
+                })
         });
 
         Ok(final_output)
@@ -122,7 +150,7 @@ impl ZilliqaStakeing for NetworkProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proto::address::Address;
+    use proto::keypair::KeyPair;
     use rpc::network_config::ChainConfig;
 
     fn create_zilliqa_config() -> ChainConfig {
@@ -158,16 +186,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_all_stakes_orchestration() {
-        let scilla_user_address = "0x77e27c39ce572283b848e2cdf32cce761e34fa49";
-        let evm_user_address =
-            Address::from_eth_address("0xb1fE20CD2b856BA1a4e08afb39dfF5C80f0cBbCa").unwrap();
+        let keypair = KeyPair::gen_keccak256().unwrap();
+        let pubkey = keypair.get_pubkey().unwrap();
 
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
 
-        let result = provider
-            .get_all_stakes(scilla_user_address, &evm_user_address)
-            .await;
+        let result = provider.get_all_stakes(&pubkey).await;
 
         assert!(result.is_ok(), "Function should execute without errors");
         let final_output = result.unwrap();
@@ -177,6 +202,12 @@ mod tests {
         if final_output.len() > 1 {
             assert!(final_output[0].deleg_amt >= final_output[1].deleg_amt);
         }
+
+        let has_scilla_stake = final_output.iter().any(|s| s.tag == "scilla");
+        let has_evm_stake = final_output.iter().any(|s| s.tag == "evm");
+
+        println!("Has Scilla stake: {}", has_scilla_stake);
+        println!("Has EVM stake: {}", has_evm_stake);
 
         println!("{:#?}", final_output);
     }
