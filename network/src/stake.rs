@@ -49,7 +49,8 @@ impl ZilliqaStakeing for NetworkProvider {
     async fn get_all_stakes(&self, pub_key: &PubKey) -> Result<Vec<FinalOutput>, NetworkErrors> {
         let scilla_user_address = PubKey::Secp256k1Sha256(pub_key.as_bytes())
             .get_addr()?
-            .get_zil_check_sum_addr()?;
+            .get_zil_check_sum_addr()?
+            .to_lowercase();
         let evm_user_address = PubKey::Secp256k1Keccak256(pub_key.as_bytes()).get_addr()?;
         let evm_pools = self.get_zq2_providers().await?;
 
@@ -149,6 +150,8 @@ impl ZilliqaStakeing for NetworkProvider {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use proto::keypair::KeyPair;
     use rpc::network_config::ChainConfig;
@@ -186,8 +189,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_all_stakes_orchestration() {
-        let keypair = KeyPair::gen_keccak256().unwrap();
-        let pubkey = keypair.get_pubkey().unwrap();
+        let pubkey = PubKey::from_str(
+            "0002f006b10b35ed60ac7cb79866b228a048b7d820561ec917b1ad3d2e5a851cedb9",
+        )
+        .unwrap();
 
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
@@ -202,12 +207,6 @@ mod tests {
         if final_output.len() > 1 {
             assert!(final_output[0].deleg_amt >= final_output[1].deleg_amt);
         }
-
-        let has_scilla_stake = final_output.iter().any(|s| s.tag == "scilla");
-        let has_evm_stake = final_output.iter().any(|s| s.tag == "evm");
-
-        println!("Has Scilla stake: {}", has_scilla_stake);
-        println!("Has EVM stake: {}", has_evm_stake);
 
         println!("{:#?}", final_output);
     }
