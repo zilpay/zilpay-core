@@ -13,6 +13,7 @@ use rpc::{
     methods::{EvmMethods, ZilMethods},
     network_config::ChainConfig,
     provider::RpcProvider,
+    zil_interfaces::ResultRes,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -73,6 +74,36 @@ pub enum EvmRequestType {
 pub struct EvmRequestInfo {
     pub pool: EvmPool,
     pub req_type: EvmRequestType,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinalOutput {
+    pub name: String,
+    pub url: String,
+    pub address: String,
+    pub token_address: Option<String>,
+    pub deleg_amt: U256,
+    pub rewards: U256,
+    pub tvl: Option<String>,
+    pub vote_power: Option<f64>,
+    pub apr: Option<f64>,
+    pub commission: Option<f64>,
+    pub tag: String,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct EvmUserData {
+    pub deleg_amt: U256,
+    pub rewards: U256,
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct EvmPoolStats {
+    pub tvl: Option<U256>,
+    pub pool_stake: Option<U256>,
+    pub commission_num: Option<U256>,
+    pub commission_den: Option<U256>,
 }
 
 pub type EvmRequestMap = HashMap<u64, EvmRequestInfo>;
@@ -311,6 +342,123 @@ pub fn build_evm_pools_requests(
     }
 
     (requests, evm_request_map, start_id)
+}
+
+fn process_avely_stake(
+    st_zil_result: Option<&&ResultRes<Value>>,
+    scilla_user_address: &str,
+) -> Option<FinalOutput> {
+    let scilla_user_address_lower = scilla_user_address.to_lowercase();
+    let st_zil_balance = st_zil_result
+        .and_then(|res| res.result.as_ref())
+        .and_then(|r| r.get("balances"))
+        .and_then(|b| b.get(&scilla_user_address_lower))
+        .and_then(|v| v.as_str())
+        .and_then(|s| s.parse().ok())
+        .unwrap_or_default();
+
+    if st_zil_balance > U256::ZERO {
+        Some(FinalOutput {
+            name: "stZIL (Avely Finance)".to_string(),
+            url: "https://avely.fi/".to_string(),
+            address: ST_ZIL_CONTRACT.to_string(),
+            deleg_amt: st_zil_balance,
+            rewards: U256::ZERO,
+            tag: "avely".to_string(),
+            token_address: None,
+            tvl: None,
+            vote_power: None,
+            apr: None,
+            commission: None,
+        })
+    } else {
+        None
+    }
+}
+
+fn process_evm_pools_results(
+    results_by_id: &HashMap<u64, ResultRes<Value>>,
+    evm_request_map: &EvmRequestMap,
+) -> (
+    HashMap<AlloyAddress, EvmUserData>,
+    HashMap<AlloyAddress, EvmPoolStats>,
+) {
+    let mut temp_evm_user_data = HashMap::new();
+    let mut temp_evm_pool_stats = HashMap::new();
+
+    for (id, res) in results_by_id {
+        let req_info = match evm_request_map.get(id) {
+            Some(info) => info,
+            None => continue,
+        };
+
+        if res.error.is_some() {
+            continue;
+        }
+
+        let result_str = match res.result.as_ref().and_then(|r| r.as_str()) {
+            Some(s) if s != "0x" => s,
+            _ => continue,
+        };
+
+        let bytes = match hex::decode(result_str.trim_start_matches("0x")) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+
+        let pool_address = req_info.pool.address;
+        let user_data: &mut EvmUserData = temp_evm_user_data.entry(pool_address).or_default();
+        let pool_stats: &mut EvmPoolStats = temp_evm_pool_stats.entry(pool_address).or_default();
+
+        match req_info.req_type {
+            EvmRequestType::DelegAmt => {
+                let decoded_amt = if req_info.pool.pool_type == StakingPoolType::LIQUID {
+                    balanceOfCall::abi_decode_returns(&bytes)
+                        .ok()
+                        .map(|decoded| decoded)
+                } else {
+                    getDelegatedAmountCall::abi_decode_returns(&bytes)
+                        .ok()
+                        .map(|decoded| decoded)
+                };
+                if let Some(amt) = decoded_amt {
+                    user_data.deleg_amt = amt;
+                }
+            }
+            EvmRequestType::Rewards => {
+                if let Ok(decoded) = rewardsCall::abi_decode_returns(&bytes) {
+                    user_data.rewards = decoded;
+                }
+            }
+            EvmRequestType::Tvl => {
+                let decoded_tvl = if req_info.pool.pool_type == StakingPoolType::LIQUID {
+                    totalSupplyCall::abi_decode_returns(&bytes)
+                        .ok()
+                        .map(|decoded| decoded)
+                } else {
+                    getDelegatedTotalCall::abi_decode_returns(&bytes)
+                        .ok()
+                        .map(|decoded| decoded)
+                };
+                if let Some(tvl) = decoded_tvl {
+                    pool_stats.tvl = Some(tvl);
+                }
+            }
+            EvmRequestType::PoolStake => {
+                if let Ok(decoded) = getStakeCall::abi_decode_returns(&bytes) {
+                    pool_stats.pool_stake = Some(decoded);
+                }
+            }
+            EvmRequestType::Commission => {
+                if let Ok(decoded) = getCommissionCall::abi_decode_returns(&bytes) {
+                    pool_stats.commission_num = Some(decoded._0);
+                    pool_stats.commission_den = Some(decoded._1);
+                }
+            }
+        }
+    }
+
+    (temp_evm_user_data, temp_evm_pool_stats)
 }
 
 #[async_trait]
