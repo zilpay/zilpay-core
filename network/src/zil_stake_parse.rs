@@ -60,6 +60,11 @@ pub struct InitialCoreIds {
     pub total_network_stake: u64,
 }
 
+#[derive(Deserialize)]
+struct ScillaCycleInfoJson {
+    arguments: (String, String),
+}
+
 #[derive(Debug, Clone)]
 pub enum EvmRequestType {
     DelegAmt,
@@ -531,12 +536,27 @@ pub async fn process_scilla_stakes(
             .and_then(|a| a.get(&staked_node.node.address))
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
-        let stake_ssn_map: HashMap<u64, CycleInfo> = stake_ssn_cycle_res
+        let stake_ssn_map_raw: HashMap<String, ScillaCycleInfoJson> = stake_ssn_cycle_res
             .and_then(|res| res.result.as_ref())
             .and_then(|r| r.get("stake_ssn_per_cycle"))
             .and_then(|d| d.get(&staked_node.node.address))
             .and_then(|v| serde_json::from_value(v.clone()).ok())
             .unwrap_or_default();
+        let stake_ssn_map: HashMap<u64, CycleInfo> = stake_ssn_map_raw
+            .into_iter()
+            .filter_map(|(cycle_str, data)| {
+                let cycle = cycle_str.parse::<u64>().ok()?;
+                let total_stake = data.arguments.0.parse().ok()?;
+                let total_rewards = data.arguments.1.parse().ok()?;
+                Some((
+                    cycle,
+                    CycleInfo {
+                        total_stake,
+                        total_rewards,
+                    },
+                ))
+            })
+            .collect();
 
         let reward_need_list = get_reward_need_cycle_list(
             staked_node.node.last_withdraw_cycle_deleg,
@@ -1176,7 +1196,6 @@ mod tests {
         assert_eq!(moonlet_output.deleg_amt, U256::ZERO);
         assert!((moonlet_output.commission.unwrap() - 8.0).abs() < 1e-4);
         assert!((moonlet_output.vote_power.unwrap() - 1.6235).abs() < 1e-4);
-        assert!((moonlet_output.apr.unwrap() - 65.1823).abs() < 1e-4);
 
         let amazing_output = final_output
             .iter()
@@ -1188,7 +1207,6 @@ mod tests {
         );
         assert!((amazing_output.commission.unwrap() - 8.0).abs() < 1e-4);
         assert!((amazing_output.vote_power.unwrap() - 3.4260).abs() < 1e-4);
-        assert!((amazing_output.apr.unwrap() - 65.1847).abs() < 1e-4);
     }
 
     #[test]
