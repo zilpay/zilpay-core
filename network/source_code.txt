@@ -1,0 +1,2803 @@
+Project Path: network
+
+Source Tree:
+
+```txt
+network
+└── src
+    ├── block_parse.rs
+    ├── common.rs
+    ├── ft_parse.rs
+    ├── gas_parse.rs
+    ├── lib.rs
+    ├── nonce_parser.rs
+    ├── provider.rs
+    ├── rates.rs
+    ├── stake.rs
+    └── tx_parse.rs
+
+```
+
+`network/src/block_parse.rs`:
+
+```rs
+use proto::address::Address;
+use rpc::{
+    methods::{EvmMethods, ZilMethods},
+    network_config::ChainConfig,
+    provider::RpcProvider,
+    zil_interfaces::ResultRes,
+};
+use serde_json::{json, Value};
+
+pub fn build_last_block_header_request(address: &Address, block_number: Option<u128>) -> Value {
+    match address {
+        Address::Secp256k1Sha256(_) => {
+            if let Some(number) = block_number {
+                RpcProvider::<ChainConfig>::build_payload(
+                    json!([number.to_string()]),
+                    ZilMethods::GetTxBlock,
+                )
+            } else {
+                RpcProvider::<ChainConfig>::build_payload(json!([]), ZilMethods::GetLatestTxBlock)
+            }
+        }
+        Address::Secp256k1Keccak256(_) => {
+            let block_number = if let Some(number) = block_number {
+                &format!("0x{:x}", number)
+            } else {
+                "latest"
+            };
+            RpcProvider::<ChainConfig>::build_payload(
+                json!([block_number, false]),
+                EvmMethods::GetBlockByNumber,
+            )
+        }
+    }
+}
+
+pub fn process_get_timestampt_block_response(
+    response: &ResultRes<Value>,
+    address_type: &Address,
+) -> (u128, u64) {
+    let timestamp = match address_type {
+        Address::Secp256k1Sha256(_) => response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("header"))
+            .and_then(|h| h.get("Timestamp"))
+            .and_then(|t| t.as_str())
+            .and_then(|t| t.parse::<u64>().ok())
+            .and_then(|t| Some(t / 1000000)) // Zilliqa shit time
+            .unwrap_or_default(),
+        Address::Secp256k1Keccak256(_) => response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("timestamp"))
+            .and_then(|v| v.as_str())
+            .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+            .unwrap_or_default(),
+    };
+    let blocknumber = match address_type {
+        Address::Secp256k1Sha256(_) => response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("header"))
+            .and_then(|h| h.get("BlockNum"))
+            .and_then(|t| t.as_str())
+            .and_then(|t| t.parse::<u128>().ok())
+            .unwrap_or_default(),
+        Address::Secp256k1Keccak256(_) => response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("number"))
+            .and_then(|v| v.as_str())
+            .and_then(|v| u128::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+            .unwrap_or_default(),
+    };
+
+    (blocknumber, timestamp)
+}
+
+```
+
+`network/src/common.rs`:
+
+```rs
+use crate::Result;
+use std::sync::Arc;
+use storage::LocalStorage;
+
+pub trait Provider: Sized {
+    fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self>;
+    fn save_network_configs(providers: &[Self], storage: Arc<LocalStorage>) -> Result<()>;
+}
+
+```
+
+`network/src/ft_parse.rs`:
+
+```rs
+use alloy::{
+    dyn_abi::{DynSolValue, FunctionExt, JsonAbiExt},
+    hex,
+    json_abi::{Function, JsonAbi},
+    primitives::U256,
+};
+use config::abi::ERC20_ABI;
+use errors::{network::NetworkErrors, token::TokenError};
+use proto::address::Address;
+use rpc::{
+    methods::{EvmMethods, ZilMethods},
+    network_config::ChainConfig,
+    provider::RpcProvider,
+    zil_interfaces::{GetTokenInitItem, ResultRes},
+};
+use serde_json::{json, Value};
+use token::Result;
+
+type RequestResult<'a> = std::result::Result<Vec<(Value, RequestType<'a>)>, TokenError>;
+
+trait ResponseValidator {
+    fn validate(&self) -> Result<&Self>;
+}
+
+impl<T> ResponseValidator for ResultRes<T> {
+    fn validate(&self) -> Result<&Self> {
+        if let Some(error) = &self.error {
+            Err(TokenError::NetworkError(error.to_string()))
+        } else {
+            Ok(self)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum RequestType<'a> {
+    Metadata(MetadataField),
+    Balance(&'a Address),
+}
+
+#[derive(Debug, Clone)]
+pub enum MetadataField {
+    Name,
+    Symbol,
+    Decimals,
+}
+
+impl std::fmt::Display for MetadataField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MetadataField::Name => write!(f, "name"),
+            MetadataField::Symbol => write!(f, "symbol"),
+            MetadataField::Decimals => write!(f, "decimals"),
+        }
+    }
+}
+
+struct ERC20Helper {
+    abi: JsonAbi,
+}
+
+impl ERC20Helper {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            abi: serde_json::from_str(ERC20_ABI)
+                .map_err(|e| TokenError::ABIError(format!("Failed to parse ERC20 ABI: {}", e)))?,
+        })
+    }
+
+    fn get_function(&self, name: &str) -> Result<&Function> {
+        self.abi
+            .function(name)
+            .and_then(|f| f.first())
+            .ok_or_else(|| {
+                TokenError::ABIError(format!("Function {} not found or no overloads", name))
+            })
+    }
+
+    fn encode_function_call(&self, name: &str, inputs: &[DynSolValue]) -> Result<Vec<u8>> {
+        let func = self.get_function(name)?;
+        let bytes = &func
+            .abi_encode_input(inputs)
+            .map_err(|e| TokenError::ABIError(e.to_string()))?;
+
+        Ok(bytes.to_owned())
+    }
+
+    pub fn generate_transfer_input(&self, to: &Address, amount: U256) -> Result<Vec<u8>> {
+        let inputs = vec![
+            DynSolValue::Address(to.to_alloy_addr()),
+            DynSolValue::Uint(amount, 256),
+        ];
+
+        self.encode_function_call("transfer", &inputs)
+    }
+}
+
+pub fn generate_erc20_transfer_data(to: &Address, amount: U256) -> Result<Vec<u8>> {
+    let erc20 = ERC20Helper::new()?;
+
+    erc20.generate_transfer_input(to, amount)
+}
+
+pub fn build_token_requests<'a>(
+    contract: &Address,
+    accounts: &[&'a Address],
+    native: bool,
+) -> RequestResult<'a> {
+    let size = match contract {
+        Address::Secp256k1Sha256(_) => 1 + accounts.len(),
+        Address::Secp256k1Keccak256(_) => 3 + accounts.len(),
+    };
+    let mut requests = Vec::with_capacity(size);
+
+    match contract {
+        Address::Secp256k1Sha256(_) => {
+            build_zil_requests(contract, accounts, native, &mut requests)?;
+        }
+        Address::Secp256k1Keccak256(_) => {
+            build_eth_requests(contract, accounts, native, &mut requests)?;
+        }
+    }
+
+    Ok(requests)
+}
+
+fn build_zil_requests<'a>(
+    contract: &Address,
+    accounts: &[&'a Address],
+    native: bool,
+    requests: &mut Vec<(Value, RequestType<'a>)>,
+) -> Result<()> {
+    let base16_contract = contract
+        .get_zil_base16()
+        .map_err(TokenError::InvalidContractAddress)?;
+    // Add metadata request
+    requests.push((
+        RpcProvider::<ChainConfig>::build_payload(
+            json!([base16_contract]),
+            ZilMethods::GetSmartContractInit,
+        ),
+        RequestType::Metadata(MetadataField::Name),
+    ));
+
+    // Build balance requests
+    for account in accounts {
+        let base16_account = match &account {
+            Address::Secp256k1Sha256(_) => &account
+                .get_zil_check_sum_addr()
+                .map_err(TokenError::InvalidContractAddress)?
+                .to_lowercase(),
+            Address::Secp256k1Keccak256(_) => &account
+                .to_eth_checksummed()
+                .map_err(TokenError::InvalidContractAddress)?,
+        };
+
+        let request = if native {
+            RpcProvider::<ChainConfig>::build_payload(
+                json!([base16_account]),
+                ZilMethods::GetBalance,
+            )
+        } else {
+            RpcProvider::<ChainConfig>::build_payload(
+                json!([base16_contract, "balances", [base16_account]]),
+                ZilMethods::GetSmartContractSubState,
+            )
+        };
+
+        requests.push((request, RequestType::Balance(account)));
+    }
+
+    Ok(())
+}
+
+fn build_eth_requests<'a>(
+    contract: &Address,
+    accounts: &[&'a Address],
+    native: bool,
+    requests: &mut Vec<(Value, RequestType<'a>)>,
+) -> Result<()> {
+    let build_payload = RpcProvider::<ChainConfig>::build_payload;
+    let token_addr = contract
+        .to_eth_checksummed()
+        .map_err(TokenError::InvalidContractAddress)?;
+    let erc20 = ERC20Helper::new()?;
+
+    let build_eth_call = |data: Vec<u8>| -> Value {
+        build_payload(
+            json!([{
+                "to": &token_addr,
+                "data": alloy::hex::encode_prefixed(data)
+            }, "latest"]),
+            EvmMethods::Call,
+        )
+    };
+
+    for field in [
+        MetadataField::Name,
+        MetadataField::Symbol,
+        MetadataField::Decimals,
+    ] {
+        let data = erc20.encode_function_call(&field.to_string(), &[])?;
+        requests.push((build_eth_call(data), RequestType::Metadata(field)));
+    }
+
+    // Build balance requests
+    for account in accounts {
+        let request = if native {
+            let owner = account
+                .to_eth_checksummed()
+                .map_err(TokenError::InvalidContractAddress)?;
+            build_payload(json!([owner, "latest"]), EvmMethods::GetBalance)
+        } else {
+            let call_data = erc20.encode_function_call(
+                "balanceOf",
+                &[DynSolValue::Address(account.to_alloy_addr())],
+            )?;
+            build_eth_call(call_data)
+        };
+
+        requests.push((request, RequestType::Balance(account)));
+    }
+
+    Ok(())
+}
+
+pub fn process_eth_metadata_response(
+    response: &ResultRes<Value>,
+    field_type: &MetadataField,
+) -> Result<String> {
+    if let Some(error) = &response.error {
+        let rpc_err = NetworkErrors::RPCError(format!(
+            "JSON-RPC error (code: {}): {}{}",
+            error.code,
+            error.message,
+            error
+                .data
+                .as_ref()
+                .map(|d| format!(", data: {}", d))
+                .unwrap_or_default()
+        ))
+        .to_string();
+        return Err(TokenError::NetworkError(rpc_err));
+    }
+
+    let erc20 = ERC20Helper::new()?;
+    let func = erc20.get_function(&field_type.to_string())?;
+    let hex_str = response
+        .result
+        .as_ref()
+        .and_then(|r| r.as_str())
+        .ok_or_else(|| TokenError::ABIError("Invalid response format".to_string()))?;
+
+    let bytes = hex::decode(hex_str.trim_start_matches("0x"))
+        .map_err(|e| TokenError::ABIError(format!("Failed to decode hex: {}", e)))?;
+
+    let values = func
+        .abi_decode_output(&bytes)
+        .map_err(|e| TokenError::ABIError(e.to_string()))?;
+
+    let value = values
+        .first()
+        .ok_or_else(|| TokenError::ABIError("No values decoded".to_string()))?;
+
+    match field_type {
+        MetadataField::Decimals => value
+            .as_uint()
+            .ok_or_else(|| TokenError::ABIError("Invalid decimals format".to_string()))
+            .map(|u| u.0.to_string()),
+        _ => value
+            .as_str()
+            .ok_or_else(|| TokenError::ABIError("Invalid string format".to_string()))
+            .map(|s| s.to_string()),
+    }
+}
+
+pub fn process_zil_metadata_response(init_res: &Value) -> Result<(String, String, u8)> {
+    let res_init: Vec<GetTokenInitItem> = init_res
+        .as_array()
+        .ok_or(TokenError::InvalidContractInit)?
+        .iter()
+        .map(|v| v.try_into())
+        .collect::<std::result::Result<Vec<GetTokenInitItem>, TokenError>>()
+        .map_err(|_| TokenError::TokenParseError)?;
+
+    let get_field = |field: &str| -> Result<String> {
+        res_init
+            .iter()
+            .find(|v| v.vname == field)
+            .map(|v| v.value.clone())
+            .ok_or(TokenError::InvalidContractInit)
+    };
+
+    let name = get_field(&MetadataField::Name.to_string())?;
+    let symbol = get_field(&MetadataField::Symbol.to_string())?;
+    let decimals = get_field(&MetadataField::Decimals.to_string())?
+        .parse()
+        .map_err(|_| TokenError::InvalidContractInit)?;
+
+    Ok((name, symbol, decimals))
+}
+
+pub fn process_eth_balance_response(response: &ResultRes<Value>) -> Result<U256> {
+    let response = response.validate()?;
+
+    response
+        .result
+        .as_ref()
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| TokenError::ABIError("Invalid response format".to_string()))?
+        .parse()
+        .map_err(|_| TokenError::ABIError("Invalid balance format".to_string()))
+}
+
+pub fn process_zil_balance_response(
+    response: &ResultRes<Value>,
+    account: &Address,
+    is_native: bool,
+) -> u128 {
+    if response.error.is_some() {
+        return 0;
+    }
+
+    if is_native {
+        let balance = response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("balance"))
+            .and_then(|v| v.as_str())
+            .and_then(|v| v.parse::<u128>().ok())
+            .unwrap_or_default();
+
+        balance
+    } else {
+        let addr = match account.get_zil_check_sum_addr() {
+            Ok(v) => v.to_lowercase(),
+            Err(_) => {
+                return 0;
+            }
+        };
+
+        let balance = response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("balances"))
+            .and_then(|v| v.get(addr))
+            .and_then(|v| v.as_str())
+            .and_then(|v| v.parse::<u128>().ok())
+            .unwrap_or_default();
+
+        balance
+    }
+}
+
+#[cfg(test)]
+mod ftoken_tests {
+    use super::*;
+    use config::address::ADDR_LEN;
+    use rpc::zil_interfaces::ErrorRes;
+    use serde_json::json;
+
+    fn create_mock_eth_address() -> Address {
+        Address::Secp256k1Keccak256([0u8; ADDR_LEN])
+    }
+
+    fn create_mock_zil_address() -> Address {
+        Address::from_zil_bech32("zil1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq9yf6pz").unwrap()
+    }
+
+    fn create_mock_error_response<T>(code: i16, message: &str) -> ResultRes<T> {
+        ResultRes {
+            id: 1,
+            jsonrpc: "2.0".to_string(),
+            result: None,
+            error: Some(ErrorRes {
+                code,
+                message: message.to_string(),
+                data: None,
+            }),
+        }
+    }
+
+    mod response_validator_tests {
+        use super::*;
+
+        #[test]
+        fn test_validate_success() {
+            let response: ResultRes<Value> = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!("0x123")),
+                error: None,
+            };
+            assert!(response.validate().is_ok());
+        }
+
+        #[test]
+        fn test_validate_error() {
+            let response = create_mock_error_response::<Value>(1, "Test error");
+            let err = response.validate().unwrap_err();
+            match err {
+                TokenError::NetworkError(msg) => {
+                    assert!(msg.contains("Test error"));
+                    assert!(msg.contains("code: 1"));
+                }
+                _ => panic!("Expected RPCError"),
+            }
+        }
+    }
+
+    mod build_token_requests_tests {
+        use super::*;
+
+        #[test]
+        fn test_build_eth_token_requests() {
+            let contract = create_mock_eth_address();
+            let account = create_mock_eth_address();
+            let accounts = vec![&account];
+            let requests = build_token_requests(&contract, &accounts, false).unwrap();
+
+            // Should have 4 requests: name, symbol, decimals, and balance
+            assert_eq!(requests.len(), 4);
+
+            // Verify metadata requests
+            let metadata_requests: Vec<_> = requests
+                .iter()
+                .filter_map(|(_, req_type)| match req_type {
+                    RequestType::Metadata(field) => Some(field),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(metadata_requests.len(), 3);
+
+            // Verify balance request
+            let balance_requests: Vec<_> = requests
+                .iter()
+                .filter_map(|(_, req_type)| match req_type {
+                    RequestType::Balance(_) => Some(true),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(balance_requests.len(), 1);
+        }
+
+        #[test]
+        fn test_build_zil_token_requests() {
+            let contract = create_mock_zil_address();
+            let account = create_mock_zil_address();
+            let accounts = vec![&account];
+            let requests = build_token_requests(&contract, &accounts, false).unwrap();
+
+            // Should have 2 requests: init (metadata) and balance
+            assert_eq!(requests.len(), 2);
+        }
+    }
+
+    mod process_eth_metadata_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_process_name_success() {
+            let hex_string = "0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000047465737400000000000000000000000000000000000000000000000000000000";
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!(hex_string)),
+                error: None,
+            };
+
+            let result = process_eth_metadata_response(&response, &MetadataField::Name).unwrap();
+            assert_eq!(result, "test");
+        }
+
+        #[test]
+        fn test_process_decimals_success() {
+            let hex_string = "0x0000000000000000000000000000000000000000000000000000000000000012"; // 18 in hex
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!(hex_string)),
+                error: None,
+            };
+
+            let result =
+                process_eth_metadata_response(&response, &MetadataField::Decimals).unwrap();
+            assert_eq!(result, "18");
+        }
+
+        #[test]
+        fn test_process_rpc_error() {
+            let response = create_mock_error_response::<Value>(1, "Test error");
+            let result = process_eth_metadata_response(&response, &MetadataField::Name);
+            assert!(matches!(result, Err(TokenError::NetworkError(_))));
+        }
+    }
+
+    mod process_eth_balance_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_process_balance_success() {
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!(
+                    "0x0000000000000000000000000000000000000000000000000000000000000064"
+                )), // 100 in hex
+                error: None,
+            };
+
+            let balance = process_eth_balance_response(&response).unwrap();
+            assert_eq!(balance, U256::from(100));
+        }
+
+        #[test]
+        fn test_process_balance_invalid_format() {
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!("invalid_hex")),
+                error: None,
+            };
+
+            let result = process_eth_balance_response(&response);
+            assert!(matches!(result, Err(TokenError::ABIError(_))));
+        }
+    }
+
+    mod process_zil_balance_response_tests {
+        use proto::keypair::KeyPair;
+
+        use super::*;
+
+        #[test]
+        fn test_process_native_balance_success() {
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!({
+                    "balance": "100"
+                })),
+                error: None,
+            };
+
+            let balance = process_zil_balance_response(&response, &create_mock_zil_address(), true);
+            assert_eq!(balance, 100);
+        }
+
+        #[test]
+        fn test_process_token_balance_success() {
+            let keypair = KeyPair::gen_sha256().unwrap();
+            let account = keypair.get_addr().unwrap();
+            let base16_account = account.get_zil_check_sum_addr().unwrap().to_lowercase();
+
+            dbg!(&base16_account);
+
+            let mut balances = serde_json::Map::new();
+            balances.insert(base16_account, json!("200"));
+
+            let response = ResultRes {
+                id: 1,
+                jsonrpc: "2.0".to_string(),
+                result: Some(json!({
+                    "balances": balances
+                })),
+                error: None,
+            };
+
+            let balance = process_zil_balance_response(&response, &account, false);
+            assert_eq!(balance, 200);
+        }
+    }
+
+    mod process_zil_metadata_response_tests {
+        use super::*;
+
+        #[test]
+        fn test_process_metadata_success() {
+            let init_data = json!([
+                {
+                    "vname": "name",
+                    "type": "String",
+                    "value": "Test Token"
+                },
+                {
+                    "vname": "symbol",
+                    "type": "String",
+                    "value": "TEST"
+                },
+                {
+                    "vname": "decimals",
+                    "value": "18",
+                    "type": "Uint32",
+                }
+            ]);
+
+            let (name, symbol, decimals) = process_zil_metadata_response(&init_data).unwrap();
+            assert_eq!(name, "Test Token");
+            assert_eq!(symbol, "TEST");
+            assert_eq!(decimals, 18);
+        }
+
+        #[test]
+        fn test_process_metadata_missing_field() {
+            let init_data = json!([
+                {
+                    "type": "String",
+                    "vname": "name",
+                    "value": "Test Token"
+                }
+            ]);
+
+            let result = process_zil_metadata_response(&init_data);
+
+            assert!(matches!(result, Err(TokenError::InvalidContractInit)));
+        }
+    }
+
+    #[test]
+    fn test_generate_transfer_input() {
+        let to_address = Address::Secp256k1Keccak256([1u8; ADDR_LEN]);
+        let amount = U256::from(1000000000000000000u64);
+        let result = generate_erc20_transfer_data(&to_address, amount);
+
+        assert!(result.is_ok());
+        let input_data = result.unwrap();
+
+        assert_eq!(alloy::hex::encode_prefixed(input_data), "0xa9059cbb00000000000000000000000001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000de0b6b3a7640000");
+    }
+}
+
+```
+
+`network/src/gas_parse.rs`:
+
+```rs
+use alloy::primitives::U256;
+use errors::{network::NetworkErrors, tx::TransactionErrors};
+use proto::{address::Address, tx::TransactionRequest};
+use rpc::{
+    methods::{EvmMethods, ZilMethods},
+    network_config::ChainConfig,
+    provider::RpcProvider,
+    zil_interfaces::ErrorRes,
+};
+use serde_json::{json, Value};
+
+use crate::nonce_parser::build_nonce_request;
+
+#[derive(Debug, Default)]
+pub struct GasFeeHistory {
+    pub max_fee: U256,
+    pub priority_fee: U256,
+    pub base_fee: U256,
+}
+
+#[derive(Debug)]
+pub struct RequiredTxParams {
+    pub gas_price: U256,
+    pub max_priority_fee: U256,
+    pub fee_history: GasFeeHistory,
+    pub tx_estimate_gas: U256,
+    pub blob_base_fee: U256,
+    pub nonce: u64,
+}
+
+pub const EIP1559: u16 = 1559;
+pub const EIP4844: u16 = 4844;
+
+pub fn json_rpc_error(error: &ErrorRes) -> Result<(), NetworkErrors> {
+    let error_msg = format!(
+        "JSON-RPC error (code: {}): {}{}",
+        error.code,
+        error.message,
+        error
+            .data
+            .as_ref()
+            .map(|d| format!(", data: {}", d))
+            .unwrap_or_default()
+    );
+
+    return Err(NetworkErrors::RPCError(error_msg));
+}
+
+pub fn build_fee_history_request(block_count: u64, percentiles: &[f64]) -> Value {
+    RpcProvider::<ChainConfig>::build_payload(
+        json!([block_count, "latest", percentiles]),
+        EvmMethods::FeeHistory,
+    )
+}
+
+pub fn build_evm_estimate_gas_request(tx: &TransactionRequest) -> Result<Value, NetworkErrors> {
+    match tx {
+        TransactionRequest::Ethereum((tx, _)) => {
+            let tx_object = serde_json::to_value(&tx)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+
+            let request = RpcProvider::<ChainConfig>::build_payload(
+                json!([tx_object]),
+                EvmMethods::EstimateGas,
+            );
+
+            Ok(request)
+        }
+        TransactionRequest::Zilliqa(_) => Err(NetworkErrors::RPCError(
+            "Zilliqa network doesn't support gas estimation".to_string(),
+        )),
+    }
+}
+
+pub fn build_batch_gas_request(
+    tx: &TransactionRequest,
+    block_count: u64,
+    percentiles: &[f64],
+    features: &[u16],
+    sender: &Address,
+) -> Result<Vec<Value>, NetworkErrors> {
+    let mut requests = Vec::with_capacity(4);
+
+    requests.push(build_nonce_request(sender));
+
+    match tx {
+        TransactionRequest::Zilliqa(_) => {
+            requests.push(RpcProvider::<ChainConfig>::build_payload(
+                json!([]),
+                ZilMethods::GetMinimumGasPrice,
+            ));
+            return Ok(requests);
+        }
+        TransactionRequest::Ethereum(_) => {
+            requests.push(RpcProvider::<ChainConfig>::build_payload(
+                json!([]),
+                EvmMethods::GasPrice,
+            ));
+        }
+    }
+
+    let tx_object = match tx {
+        TransactionRequest::Zilliqa(_) => {
+            return Err(TransactionErrors::InvalidTransaction)?;
+        }
+        TransactionRequest::Ethereum((tx, _)) => serde_json::to_value(&tx)
+            .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?,
+    };
+    let request_estimate_gas =
+        RpcProvider::<ChainConfig>::build_payload(json!([tx_object]), EvmMethods::EstimateGas);
+
+    requests.push(request_estimate_gas);
+
+    if features.contains(&EIP1559) {
+        requests.push(RpcProvider::<ChainConfig>::build_payload(
+            json!([]),
+            EvmMethods::MaxPriorityFeePerGas,
+        ));
+        requests.push(build_fee_history_request(block_count, percentiles));
+    }
+
+    if features.contains(&EIP4844) {
+        requests.push(RpcProvider::<ChainConfig>::build_payload(
+            json!([]),
+            EvmMethods::BlobBaseFee,
+        ));
+    }
+
+    Ok(requests)
+}
+
+pub fn process_parse_fee_history_request(value: &Value) -> Result<GasFeeHistory, NetworkErrors> {
+    let fee_history = value;
+    let base_fee = fee_history
+        .get("baseFeePerGas")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.last())
+        .and_then(|v| v.as_str())
+        .ok_or(NetworkErrors::ResponseParseError)?;
+    let base_fee = U256::from_str_radix(base_fee.trim_start_matches("0x"), 16)
+        .map_err(|_| NetworkErrors::ResponseParseError)?;
+    let rewards = fee_history
+        .get("reward")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.last())
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.get(1))
+        .and_then(|v| v.as_str())
+        .ok_or(NetworkErrors::ResponseParseError)?;
+    let priority_fee = U256::from_str_radix(rewards.trim_start_matches("0x"), 16)
+        .map_err(|_| NetworkErrors::ResponseParseError)?;
+    let max_fee = base_fee
+        .saturating_mul(U256::from(2))
+        .saturating_add(priority_fee);
+
+    Ok(GasFeeHistory {
+        max_fee,
+        priority_fee,
+        base_fee,
+    })
+}
+
+```
+
+`network/src/lib.rs`:
+
+```rs
+use errors::network::NetworkErrors;
+
+pub type Result<T> = std::result::Result<T, NetworkErrors>;
+
+pub mod block_parse;
+pub mod common;
+pub mod ft_parse;
+pub mod gas_parse;
+pub mod nonce_parser;
+pub mod provider;
+pub mod rates;
+pub mod stake;
+pub mod tx_parse;
+
+```
+
+`network/src/nonce_parser.rs`:
+
+```rs
+use crate::Result;
+use proto::address::Address;
+use rpc::{
+    methods::{EvmMethods, ZilMethods},
+    network_config::ChainConfig,
+    provider::RpcProvider,
+    zil_interfaces::ResultRes,
+};
+use serde_json::{json, Value};
+
+pub fn build_nonce_request(address: &Address) -> Value {
+    match address {
+        Address::Secp256k1Sha256(_) => {
+            let base16_address = address
+                .get_zil_check_sum_addr()
+                .unwrap_or_default() // TODO: maybe never call.
+                .to_lowercase();
+
+            RpcProvider::<ChainConfig>::build_payload(
+                json!([base16_address]),
+                ZilMethods::GetBalance,
+            )
+        }
+        Address::Secp256k1Keccak256(_) => {
+            let eth_address = address.to_eth_checksummed().unwrap_or_default();
+
+            RpcProvider::<ChainConfig>::build_payload(
+                json!([eth_address, "latest"]),
+                EvmMethods::GetTransactionCount,
+            )
+        }
+    }
+}
+
+pub fn process_nonce_response(response: &ResultRes<Value>, address_type: &Address) -> Result<u64> {
+    match address_type {
+        Address::Secp256k1Sha256(_) => Ok(response
+            .result
+            .as_ref()
+            .and_then(|v| v.get("nonce"))
+            .and_then(|v| v.as_u64())
+            .unwrap_or_default()),
+        Address::Secp256k1Keccak256(_) => Ok(response
+            .result
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
+            .unwrap_or_default()),
+    }
+}
+
+```
+
+`network/src/provider.rs`:
+
+```rs
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use crate::block_parse::{build_last_block_header_request, process_get_timestampt_block_response};
+use crate::common::Provider;
+use crate::ft_parse::{
+    build_token_requests, process_eth_balance_response, process_eth_metadata_response,
+    process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
+};
+use crate::gas_parse::{
+    build_batch_gas_request, build_fee_history_request, json_rpc_error,
+    process_parse_fee_history_request, GasFeeHistory, RequiredTxParams, EIP1559, EIP4844,
+};
+use crate::nonce_parser::{build_nonce_request, process_nonce_response};
+use crate::tx_parse::{
+    build_payload_tx_receipt, build_send_signed_tx_request, process_tx_receipt_response,
+    process_tx_send_response,
+};
+use crate::Result;
+use alloy::primitives::U256;
+use config::storage::NETWORK_DB_KEY_V1;
+use crypto::bip49::DerivationPath;
+use errors::crypto::SignatureError;
+use errors::network::NetworkErrors;
+use errors::rpc::RpcError;
+use errors::token::TokenError;
+use errors::tx::TransactionErrors;
+use history::transaction::HistoricalTransaction;
+use proto::address::Address;
+use proto::tx::{TransactionReceipt, TransactionRequest};
+use rpc::common::JsonRPC;
+use rpc::methods::EvmMethods;
+use rpc::network_config::ChainConfig;
+use rpc::provider::RpcProvider;
+use rpc::zil_interfaces::ResultRes;
+use serde_json::{json, Value};
+use storage::LocalStorage;
+use token::ft::FToken;
+
+#[derive(Debug, PartialEq)]
+pub struct NetworkProvider {
+    pub config: ChainConfig,
+}
+
+impl NetworkProvider {
+    pub fn get_bip49(&self, index: usize) -> DerivationPath {
+        DerivationPath::new(self.config.slip_44, index)
+    }
+}
+
+impl Provider for NetworkProvider {
+    fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
+        let bytes = storage.get(NETWORK_DB_KEY_V1).unwrap_or_default();
+
+        if bytes.is_empty() {
+            return Vec::with_capacity(1);
+        }
+
+        let configs: Vec<ChainConfig> =
+            bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
+        let mut providers = Vec::with_capacity(configs.len());
+
+        for config in configs.iter() {
+            providers.push(NetworkProvider::new(config.to_owned()));
+        }
+
+        providers
+    }
+
+    fn save_network_configs(providers: &[Self], storage: Arc<LocalStorage>) -> Result<()> {
+        let as_vec: Vec<_> = providers.iter().map(|v| &v.config).collect();
+        let bytes =
+            bincode::serialize(&as_vec).map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
+
+        storage.set(NETWORK_DB_KEY_V1, &bytes)?;
+        storage.flush()?;
+
+        Ok(())
+    }
+}
+
+impl NetworkProvider {
+    pub fn new(config: ChainConfig) -> Self {
+        Self { config }
+    }
+
+    pub async fn proxy_req(&self, payload_str: String) -> Result<Value> {
+        let payload =
+            serde_json::from_str(&payload_str).map_err(|e| RpcError::InvalidJson(e.to_string()))?;
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+
+        let response = provider
+            .req::<Value>(payload)
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        Ok(response)
+    }
+
+    pub async fn get_current_block_number(&self) -> Result<u64> {
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let payload = RpcProvider::<ChainConfig>::build_payload(json!([]), EvmMethods::BlockNumber);
+        let response = provider
+            .req::<ResultRes<Value>>(payload)
+            .await
+            .map_err(NetworkErrors::Request)?;
+        let block_number = response
+            .result
+            .as_ref()
+            .and_then(|result| result.as_str())
+            .and_then(|block_str| u64::from_str_radix(&block_str.trim_start_matches("0x"), 16).ok())
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        Ok(block_number)
+    }
+
+    pub async fn estimate_block_time(&self, address: &Address) -> Result<u64> {
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let payload = build_last_block_header_request(address, None);
+        let response = provider
+            .req::<ResultRes<Value>>(payload)
+            .await
+            .map_err(NetworkErrors::Request)?;
+        let (last_blocknumber, last_timestamp) =
+            { process_get_timestampt_block_response(&response, address) };
+        let payload = build_last_block_header_request(address, Some(last_blocknumber - 1));
+        let response = provider
+            .req::<ResultRes<Value>>(payload)
+            .await
+            .map_err(NetworkErrors::Request)?;
+        let (_, early_timestamp) = { process_get_timestampt_block_response(&response, address) };
+
+        Ok(last_timestamp - early_timestamp)
+    }
+
+    pub async fn update_transactions_receipt(
+        &self,
+        txns: &mut [&mut HistoricalTransaction],
+    ) -> Result<()> {
+        let mut requests: Vec<Value> = Vec::with_capacity(txns.len());
+
+        for tx in txns.iter() {
+            requests.push(build_payload_tx_receipt(&tx));
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(requests.into())
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        for (index, res) in responses.into_iter().enumerate() {
+            if let Some(tx) = txns.get_mut(index) {
+                process_tx_receipt_response(res, tx)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn estimate_params_batch(
+        &self,
+        tx: &TransactionRequest,
+        sender: &Address,
+        block_count: u64,
+        percentiles: Option<&[f64]>,
+    ) -> Result<RequiredTxParams> {
+        let default_percentiles = [25.0, 50.0, 75.0];
+        let percentiles_to_use = percentiles.unwrap_or(&default_percentiles);
+        let requests = build_batch_gas_request(
+            tx,
+            block_count,
+            &percentiles_to_use,
+            &self.config.features,
+            sender,
+        )?;
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let response = provider
+            .req::<Vec<ResultRes<Value>>>(requests.into())
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        if response.iter().all(|res| res.error.is_some()) {
+            let all_errors = response
+                .into_iter()
+                .filter_map(|res| res.error.map(|e| e.message))
+                .collect::<Vec<String>>()
+                .join(", ");
+            return Err(NetworkErrors::RPCError(all_errors));
+        }
+
+        let nonce = response
+            .first()
+            .and_then(|res| process_nonce_response(&res, sender).ok())
+            .unwrap_or_default();
+
+        let gas_price_response = response
+            .get(1)
+            .and_then(|res| res.result.as_ref())
+            .and_then(|result| result.as_str())
+            .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+            .unwrap_or_default();
+        let tx_estimate_gas_response = response
+            .get(2)
+            .and_then(|res| res.result.as_ref())
+            .and_then(|result| result.as_str())
+            .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+            .unwrap_or_default();
+
+        let (max_priority_fee_per_gas_response, fee_history_response) =
+            if self.config.features.contains(&EIP1559) {
+                let max_priority_fee_per_gas_response = response
+                    .get(3)
+                    .and_then(|res| res.result.as_ref())
+                    .and_then(|result| result.as_str())
+                    .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+                    .unwrap_or_default();
+
+                let fee_history_response = response
+                    .get(4)
+                    .and_then(|res| res.result.as_ref())
+                    .and_then(|result| process_parse_fee_history_request(result).ok())
+                    .unwrap_or_default();
+
+                (max_priority_fee_per_gas_response, fee_history_response)
+            } else {
+                (U256::ZERO, GasFeeHistory::default())
+            };
+
+        let blob_base_fee = if self.config.features.contains(&EIP4844) {
+            response
+                .first()
+                .and_then(|res| res.result.as_ref())
+                .and_then(|result| result.as_str())
+                .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+                .unwrap_or_default()
+        } else {
+            U256::ZERO
+        };
+
+        Ok(RequiredTxParams {
+            blob_base_fee,
+            nonce,
+            max_priority_fee: max_priority_fee_per_gas_response,
+            gas_price: gas_price_response,
+            fee_history: fee_history_response,
+            tx_estimate_gas: tx_estimate_gas_response,
+        })
+    }
+
+    pub async fn get_fee_history(
+        &self,
+        block_count: u64,
+        percentiles: Option<&[f64]>,
+    ) -> Result<GasFeeHistory> {
+        if !self.config.features.contains(&EIP1559) {
+            return Err(NetworkErrors::EIPNotSupporting(EIP1559));
+        }
+
+        let default_percentiles = [25.0, 50.0, 75.0];
+        let percentiles_to_use = percentiles.unwrap_or(&default_percentiles);
+        let request = build_fee_history_request(block_count, percentiles_to_use);
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let response = provider
+            .req::<ResultRes<Value>>(request)
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        if let Some(error) = &response.error {
+            json_rpc_error(error)?;
+        }
+
+        let result = response
+            .result
+            .as_ref()
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        process_parse_fee_history_request(result)
+    }
+
+    pub async fn estimate_gas(&self, tx: &TransactionRequest) -> Result<U256> {
+        match tx {
+            TransactionRequest::Ethereum((tx, _metadata)) => {
+                let tx_object = serde_json::to_value(&tx)
+                    .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+
+                let request = RpcProvider::<ChainConfig>::build_payload(
+                    json!([tx_object]),
+                    EvmMethods::EstimateGas,
+                );
+
+                let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+                let response = provider
+                    .req::<ResultRes<String>>(request)
+                    .await
+                    .map_err(NetworkErrors::Request)?;
+
+                if let Some(error) = &response.error {
+                    json_rpc_error(error)?;
+                }
+
+                let gas_str = response
+                    .result
+                    .as_ref()
+                    .ok_or(NetworkErrors::ResponseParseError)?;
+
+                U256::from_str_radix(gas_str.trim_start_matches("0x"), 16)
+                    .map_err(|_| NetworkErrors::ResponseParseError)
+            }
+            TransactionRequest::Zilliqa(_) => Err(NetworkErrors::RPCError(
+                "Zilliqa network doesn't support gas estimation".to_string(),
+            )),
+        }
+    }
+
+    pub async fn broadcast_signed_transactions(
+        &self,
+        mut txns: Vec<TransactionReceipt>,
+    ) -> Result<Vec<TransactionReceipt>> {
+        let total = txns.len();
+        let mut all_requests = Vec::with_capacity(total);
+
+        for tx in &txns {
+            if !tx.verify()? {
+                return Err(TransactionErrors::SignatureError(
+                    SignatureError::InvalidLength,
+                ))?;
+            }
+
+            all_requests.push(build_send_signed_tx_request(tx));
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(all_requests.into())
+            .await?;
+
+        for (tx, response) in txns.iter_mut().zip(responses.iter()) {
+            process_tx_send_response(response, tx)?;
+        }
+
+        Ok(txns)
+    }
+
+    pub async fn fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>> {
+        let total = addresses.len();
+        let mut all_requests = Vec::with_capacity(total);
+
+        for &addr in addresses {
+            let payload = build_nonce_request(addr);
+            all_requests.push(payload);
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(all_requests.into())
+            .await?;
+
+        let mut nonce_list = Vec::with_capacity(total);
+
+        for (&addr, response) in addresses.iter().zip(responses.iter()) {
+            let value = process_nonce_response(response, addr)?;
+
+            nonce_list.push(value);
+        }
+
+        Ok(nonce_list)
+    }
+
+    pub async fn update_balances(
+        &self,
+        mut tokens: Vec<&mut FToken>,
+        accounts: &[&Address],
+    ) -> Result<()> {
+        let total_requests = tokens.iter().fold(0, |acc, token| match token.addr {
+            Address::Secp256k1Sha256(_) => acc + accounts.len(),
+            Address::Secp256k1Keccak256(_) => acc + accounts.len(),
+        });
+
+        if total_requests == 0 {
+            return Ok(());
+        }
+
+        let mut all_requests = Vec::with_capacity(total_requests);
+        let mut request_mapping = Vec::with_capacity(total_requests);
+
+        for (token_idx, token) in tokens.iter().enumerate() {
+            let requests = build_token_requests(&token.addr, accounts, token.native)?;
+
+            for (req, req_type) in requests {
+                if let RequestType::Balance(account) = req_type {
+                    request_mapping.push((token_idx, account));
+                    all_requests.push(req);
+                }
+            }
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses = provider
+            .req::<Vec<ResultRes<Value>>>(all_requests.into())
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        for ((token_idx, account), response) in request_mapping.iter().zip(responses.iter()) {
+            match tokens[*token_idx].addr {
+                Address::Secp256k1Sha256(_) => {
+                    let balance =
+                        process_zil_balance_response(response, account, tokens[*token_idx].native);
+
+                    if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
+                    {
+                        tokens[*token_idx]
+                            .balances
+                            .insert(account_index, U256::from(balance));
+                    }
+                }
+                Address::Secp256k1Keccak256(_) => {
+                    let balance = process_eth_balance_response(response)?;
+
+                    if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
+                    {
+                        tokens[*token_idx].balances.insert(account_index, balance);
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
+        let requests = build_token_requests(&contract, accounts, false)?;
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses: Vec<ResultRes<Value>> = provider
+            .req(
+                requests
+                    .iter()
+                    .map(|(req, _)| req.clone())
+                    .collect::<Vec<_>>()
+                    .into(),
+            )
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        match contract {
+            Address::Secp256k1Sha256(_) => {
+                let (name, symbol, decimals) = process_zil_metadata_response(
+                    responses[0]
+                        .result
+                        .as_ref()
+                        .ok_or(TokenError::InvalidContractInit)?,
+                )?;
+
+                let mut balances: HashMap<usize, U256> = HashMap::new();
+
+                for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
+                    if let RequestType::Balance(account) = req_type {
+                        let balance = process_zil_balance_response(&responses[i], account, false);
+
+                        if let Some(account_index) =
+                            accounts.iter().position(|&addr| addr == *account)
+                        {
+                            balances.insert(account_index, U256::from(balance));
+                        }
+                    }
+                }
+
+                Ok(FToken {
+                    balances,
+                    name,
+                    symbol,
+                    decimals,
+                    addr: contract,
+                    logo: None,
+                    default: false,
+                    native: false,
+                    chain_hash: self.config.hash(),
+                    rate: 0f64,
+                })
+            }
+            Address::Secp256k1Keccak256(_) => {
+                let mut metadata_iter = responses.iter();
+                let name = process_eth_metadata_response(
+                    metadata_iter
+                        .next()
+                        .ok_or(TokenError::InvalidContractInit)?,
+                    &MetadataField::Name,
+                )?;
+                let symbol = process_eth_metadata_response(
+                    metadata_iter
+                        .next()
+                        .ok_or(TokenError::InvalidContractInit)?,
+                    &MetadataField::Symbol,
+                )?;
+                let decimals: u8 = process_eth_metadata_response(
+                    metadata_iter
+                        .next()
+                        .ok_or(TokenError::InvalidContractInit)?,
+                    &MetadataField::Decimals,
+                )?
+                .parse()
+                .map_err(|_| TokenError::InvalidContractInit)?;
+
+                let mut balances: HashMap<usize, U256> = HashMap::new();
+                for ((_, req_type), response) in requests.iter().zip(responses.iter()).skip(3) {
+                    if let RequestType::Balance(account) = req_type {
+                        let balance = process_eth_balance_response(response)?;
+
+                        if let Some(account_index) =
+                            accounts.iter().position(|&addr| addr == *account)
+                        {
+                            balances.insert(account_index, balance);
+                        }
+                    }
+                }
+
+                Ok(FToken {
+                    balances,
+                    name,
+                    symbol,
+                    decimals,
+                    addr: contract,
+                    logo: None,
+                    default: false,
+                    native: false,
+                    chain_hash: self.config.hash(),
+                    rate: 0f64,
+                })
+            }
+        }
+    }
+
+    #[inline]
+    fn parse_str_to_u256(value: &str) -> Option<U256> {
+        if value.starts_with("0x") {
+            U256::from_str_radix(value.trim_start_matches("0x"), 16).ok()
+        } else {
+            U256::from_str_radix(value, 10).ok()
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests_network {
+    use crate::ft_parse::generate_erc20_transfer_data;
+
+    use super::*;
+    use alloy::{primitives::U256, rpc::types::TransactionInput};
+    use config::address::ADDR_LEN;
+    use history::{status::TransactionStatus, transaction::ChainType};
+    use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
+    use rand::Rng;
+    use rpc::network_config::Explorer;
+    use tokio;
+
+    fn setup_temp_storage() -> Arc<LocalStorage> {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+
+        let storage = LocalStorage::from(&dir).unwrap();
+        Arc::new(storage)
+    }
+
+    fn create_bsc_config() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [56, 0],
+            name: "Binance-smart-chain".to_string(),
+            chain: "BSC".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
+            features: vec![155],
+            slip_44: 60,
+            ens: None,
+            explorers: vec![Explorer {
+                name: "BscScan".to_string(),
+                url: "https://bscscan.com".to_string(),
+                icon: None,
+                standard: 3091,
+            }],
+            fallback_enabled: true,
+        }
+    }
+
+    fn create_zilliqa_config() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://api.zilliqa.com".to_string()],
+            features: vec![],
+            slip_44: 313,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_ftoken_meta_bsc() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let token_addr =
+            Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
+        let account = [
+            &Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap(),
+            &Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
+        ];
+        let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
+
+        assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
+
+        assert_eq!(&ftoken.name, "Tether USD");
+        assert_eq!(&ftoken.symbol, "USDT");
+        assert_eq!(ftoken.decimals, 18u8);
+    }
+
+    #[tokio::test]
+    async fn test_get_ftoken_meta_zil_legacy() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let token_addr =
+            Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy").unwrap();
+        let account = [
+            &Address::from_zil_bech32("zil1gkwt95a67lnpe774lcmz72y6ay4jh2asmmjw6u").unwrap(),
+            &Address::Secp256k1Sha256([0u8; ADDR_LEN]),
+        ];
+        let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
+
+        assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
+
+        assert_eq!(&ftoken.name, "Zilliqa-bridged USDT token");
+        assert_eq!(&ftoken.symbol, "zUSDT");
+        assert_eq!(ftoken.decimals, 6u8);
+    }
+
+    #[tokio::test]
+    async fn test_update_balance_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+        let mut tokens = vec![
+            FToken::zil(0),
+            FToken {
+                name: "ZilPay token".to_string(),
+                symbol: "ZLP".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+                chain_hash: 0,
+                rate: 0f64,
+            },
+            FToken {
+                rate: 0f64,
+                name: "Zilliqa-bridged USDT token".to_string(),
+                symbol: "zUSDT".to_string(),
+                decimals: 6,
+                addr: Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+                chain_hash: 0,
+            },
+            FToken {
+                rate: 0f64,
+                name: "Zilliqa-bridged ETH token".to_string(),
+                symbol: "zETH".to_string(),
+                decimals: 18,
+                addr: Address::from_zil_bech32("zil19j33tapjje2xzng7svslnsjjjgge930jx0w09v")
+                    .unwrap(),
+                native: false,
+                logo: None,
+                default: false,
+                balances: HashMap::new(),
+                chain_hash: 0,
+            },
+        ];
+        let accounts = [
+            &Address::from_zil_bech32("zil1xr07v36qa4zeagg4k5tm6ummht0jrwpcu0n55d").unwrap(),
+            &Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap(),
+            &Address::from_zil_bech32("zil1uxfzk4n9ef2t3f4c4939ludlvp349uwqdx32xt").unwrap(),
+        ];
+        let tokens_refs: Vec<&mut FToken> = tokens.iter_mut().collect();
+
+        provider
+            .update_balances(tokens_refs, &accounts)
+            .await
+            .unwrap();
+
+        assert!(*tokens[0].balances.get(&0).unwrap() > U256::from(0));
+        assert!(*tokens[0].balances.get(&1).unwrap() > U256::from(0));
+        assert!(*tokens[0].balances.get(&2).unwrap() > U256::from(0));
+
+        assert!(*tokens[1].balances.get(&0).unwrap() > U256::from(0));
+        assert!(*tokens[1].balances.get(&1).unwrap() > U256::from(0));
+        assert!(*tokens[1].balances.get(&2).unwrap() == U256::from(0));
+
+        assert!(*tokens[2].balances.get(&0).unwrap() > U256::from(0));
+        assert!(*tokens[2].balances.get(&2).unwrap() == U256::from(0));
+
+        assert!(*tokens[3].balances.get(&0).unwrap() == U256::from(0));
+        assert!(*tokens[3].balances.get(&1).unwrap() == U256::from(0));
+        assert!(*tokens[3].balances.get(&2).unwrap() == U256::from(0));
+    }
+
+    #[test]
+    fn test_empty_storage() {
+        let storage = setup_temp_storage();
+        let providers = NetworkProvider::load_network_configs(storage);
+        assert!(providers.is_empty());
+    }
+
+    #[test]
+    fn test_save_and_load_single_network() {
+        let storage = setup_temp_storage();
+        let config = create_zilliqa_config();
+        let providers = vec![NetworkProvider::new(config)];
+
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
+
+        assert_eq!(providers.len(), loaded_providers.len());
+        assert!(loaded_providers.iter().any(|p| p.config.name == "Zilliqa"));
+        assert!(loaded_providers.iter().any(|p| p.config.chain_id() == 1));
+    }
+
+    #[test]
+    fn test_save_and_load_multiple_networks() {
+        let storage = setup_temp_storage();
+
+        let base_config = create_zilliqa_config();
+        let configs = [
+            ChainConfig {
+                name: "Test Network 1".to_string(),
+                chain_ids: [1, 0],
+                ..base_config.clone()
+            },
+            ChainConfig {
+                name: "Test Network 2".to_string(),
+                chain_ids: [2, 0],
+                ..base_config.clone()
+            },
+            ChainConfig {
+                name: "Test Network 3".to_string(),
+                chain_ids: [3, 0],
+                ..base_config.clone()
+            },
+        ];
+
+        let providers: Vec<NetworkProvider> = configs
+            .iter()
+            .map(|conf| NetworkProvider::new(conf.clone()))
+            .collect();
+
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
+
+        assert_eq!(providers.len(), loaded_providers.len());
+        assert_eq!(loaded_providers.len(), 3);
+
+        for provider in &loaded_providers {
+            assert!(providers.contains(provider));
+        }
+    }
+
+    #[test]
+    fn test_update_networks() {
+        let storage = setup_temp_storage();
+        let base_config = create_zilliqa_config();
+
+        let mut providers = vec![NetworkProvider::new(ChainConfig {
+            name: "Initial Network".to_string(),
+            chain_ids: [1, 0],
+            ..base_config.clone()
+        })];
+
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        providers.push(NetworkProvider::new(ChainConfig {
+            name: "New Network".to_string(),
+            chain_ids: [2, 0],
+            ..base_config.clone()
+        }));
+
+        NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
+
+        let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
+        assert_eq!(loaded_providers.len(), 2);
+        assert!(loaded_providers
+            .iter()
+            .any(|p| p.config.name == "Initial Network"));
+        assert!(loaded_providers
+            .iter()
+            .any(|p| p.config.name == "New Network"));
+    }
+
+    #[tokio::test]
+    async fn test_get_nonce_evm() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let account = [
+            &Address::from_eth_address("0x2d09c57cB8EAf970dEEaf30546ec4dc3781c63cf").unwrap(),
+            &Address::from_eth_address("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8").unwrap(),
+            &Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
+        ];
+
+        let nonces = provider.fetch_nonce(&account).await.unwrap();
+
+        assert!(nonces.first().unwrap() >= &0);
+        assert!(nonces.get(1).unwrap() >= &0);
+        assert!(nonces.last().unwrap() == &0);
+    }
+
+    #[tokio::test]
+    async fn test_get_nonce_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let account = [
+            &Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap(),
+            &Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap(),
+            &Address::Secp256k1Sha256([0u8; ADDR_LEN]),
+        ];
+
+        let nonces = provider.fetch_nonce(&account).await.unwrap();
+
+        assert!(nonces.first().unwrap() >= &0);
+        assert!(nonces.get(1).unwrap() >= &0);
+        assert!(nonces.last().unwrap() == &0);
+    }
+
+    #[tokio::test]
+    async fn test_estimate_gas_payment() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let payment_request = ETHTransactionRequest {
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::from(10u128)),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((payment_request, Default::default()));
+        let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
+
+        assert_eq!("21000", estimated_gas.to_string());
+    }
+
+    #[tokio::test]
+    async fn test_estimate_gas_token_transfer_error() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let token_address =
+            Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let amount = U256::from(1000000000000000000u64);
+        let transfer_data = generate_erc20_transfer_data(&recipient, amount).unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(recipient.to_alloy_addr().into()),
+            to: Some(token_address.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id()),
+            input: TransactionInput::new(transfer_data.into()),
+            ..Default::default()
+        };
+
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+        let estimated_gas = provider.estimate_gas(&tx_request).await;
+
+        assert_eq!(
+            estimated_gas,
+            Err(NetworkErrors::RPCError(
+                "JSON-RPC error (code: -32000): insufficient funds for transfer".to_string()
+            ))
+        );
+    }
+
+    #[tokio::test]
+    async fn test_estimate_gas_token_transfer() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let token_address =
+            Address::from_eth_address("0x524bC91Dc82d6b90EF29F76A3ECAaBAffFD490Bc").unwrap();
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let amount = U256::from(100u64);
+        let transfer_data = generate_erc20_transfer_data(&recipient, amount).unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(token_address.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id()),
+            input: TransactionInput::new(transfer_data.into()),
+            ..Default::default()
+        };
+
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+        let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
+
+        assert!(estimated_gas > U256::from(0));
+    }
+
+    #[tokio::test]
+    async fn test_get_fee_history_eth() {
+        let net_conf = ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [56, 0],
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
+            features: vec![155, 1559, 4844],
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+
+        let GasFeeHistory {
+            max_fee,
+            priority_fee,
+            base_fee,
+        } = provider.get_fee_history(4, None).await.unwrap();
+        assert!(max_fee > U256::ZERO);
+        assert!(priority_fee > U256::ZERO);
+        assert!(base_fee > U256::ZERO);
+
+        let custom_percentiles = [10.0, 50.0, 90.0];
+        let fee2 = provider
+            .get_fee_history(4, Some(&custom_percentiles))
+            .await
+            .unwrap();
+
+        assert!(fee2.max_fee > U256::ZERO);
+        assert!(fee2.priority_fee > U256::ZERO);
+        assert!(max_fee > priority_fee);
+        assert!(fee2.max_fee > fee2.priority_fee);
+
+        let single_fee = provider.get_fee_history(1, None).await.unwrap();
+
+        assert!(single_fee.max_fee > U256::ZERO);
+        assert!(single_fee.priority_fee > U256::ZERO);
+
+        println!("Default (4 blocks):");
+        println!("  max_fee: {}", max_fee);
+        println!("  priority_fee: {}", priority_fee);
+        println!("\nCustom percentiles (4 blocks):");
+        println!("  max_fee: {}", fee2.max_fee);
+        println!("  priority_fee: {}", fee2.priority_fee);
+        println!("\nSingle block:");
+        println!("  max_fee: {}", single_fee.max_fee);
+        println!("  priority_fee: {}", single_fee.priority_fee);
+    }
+
+    #[tokio::test]
+    async fn test_calc_fee_eth_batch() {
+        let net_conf = ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [56, 0],
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
+            features: vec![155, 1559, 4844],
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let token_address =
+            Address::from_eth_address("0x524bC91Dc82d6b90EF29F76A3ECAaBAffFD490Bc").unwrap();
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let amount = U256::from(100u64);
+        let transfer_data = generate_erc20_transfer_data(&recipient, amount).unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(token_address.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id()),
+            input: TransactionInput::new(transfer_data.into()),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+
+        let fee = provider
+            .estimate_params_batch(&tx_request, &from, 4, None)
+            .await
+            .unwrap();
+
+        assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.max_priority_fee, U256::from(0));
+        assert_ne!(fee.tx_estimate_gas, U256::from(0));
+        assert_ne!(fee.blob_base_fee, U256::from(0));
+        assert_ne!(fee.fee_history.max_fee, U256::from(0));
+        assert_ne!(fee.fee_history.priority_fee, U256::from(0));
+    }
+
+    #[tokio::test]
+    async fn test_get_tx_params_payment() {
+        let net_conf = ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://rpc.mevblocker.io".to_string()],
+            features: vec![155, 1559, 4844],
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let recipient =
+            Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let from = Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
+        let amount = U256::from(100u64);
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(amount),
+            chain_id: Some(provider.config.chain_id()),
+            gas: None,
+            nonce: None,
+            transaction_type: Some(0x02),
+            input: TransactionInput::default(),
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            gas_price: None,
+            max_fee_per_blob_gas: None,
+            blob_versioned_hashes: None,
+            sidecar: None,
+            access_list: None,
+            authorization_list: None,
+        };
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+
+        let fee = provider
+            .estimate_params_batch(&tx_request, &from, 4, None)
+            .await
+            .unwrap();
+
+        assert_ne!(fee.gas_price, U256::from(0));
+        assert_ne!(fee.max_priority_fee, U256::from(0));
+        assert_eq!(fee.tx_estimate_gas, U256::from(21000));
+        assert_ne!(fee.blob_base_fee, U256::from(0));
+        assert_ne!(fee.fee_history.max_fee, U256::from(0));
+        assert_ne!(fee.fee_history.priority_fee, U256::from(0));
+
+        let block_diff_time = provider.estimate_block_time(&recipient).await.unwrap();
+        assert!(block_diff_time > 10 && block_diff_time < 18);
+    }
+
+    #[tokio::test]
+    async fn test_calc_fee_bsc_batch() {
+        let net_conf = ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [97, 0],
+            name: "Smart chain Testnet".to_string(),
+            chain: "BNB".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://data-seed-prebsc-1-s1.binance.org:8545/".to_string()],
+            features: vec![155, 1559, 4844],
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let from = Address::from_eth_address("0x7b501c7944185130DD4aD73293e8Aa84eFfDcee7").unwrap();
+        let token_transfer_request = ETHTransactionRequest {
+            from: Some(from.to_alloy_addr().into()),
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::ZERO),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(0),
+            gas: None,
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+
+        let fee = provider
+            .estimate_params_batch(&tx_request, &from, 4, None)
+            .await
+            .unwrap();
+
+        assert_ne!(fee.gas_price, U256::from(0));
+        assert_eq!(fee.nonce, 0);
+        assert_ne!(fee.max_priority_fee, U256::from(0));
+        assert_ne!(fee.tx_estimate_gas, U256::from(0));
+
+        let block_diff_time = provider.estimate_block_time(&recipient).await.unwrap();
+        assert!(block_diff_time >= 1 && block_diff_time < 5);
+    }
+
+    #[tokio::test]
+    async fn test_get_tx_prams_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let to = Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap();
+        let from = Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap();
+        let zil_tx = ZILTransactionRequest {
+            chain_id: provider.config.chain_id() as u16,
+            nonce: 1,
+            gas_price: 2000 * 10u128.pow(6),
+            gas_limit: 100000,
+            to_addr: to,
+            amount: 10u128.pow(12),
+            code: Vec::with_capacity(0),
+            data: Vec::with_capacity(0),
+        };
+        let tx_req = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+        let params = provider
+            .estimate_params_batch(&tx_req, &from, 4, None)
+            .await
+            .unwrap();
+
+        assert_eq!(params.gas_price, U256::from(2000000000));
+        assert!(params.nonce > 66519);
+
+        let block_diff_time = provider.estimate_block_time(&from).await.unwrap();
+        assert!(block_diff_time > 30 && block_diff_time < 40);
+    }
+
+    #[tokio::test]
+    async fn test_tx_receipt_evm() {
+        let net_conf = ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Ethereum".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://rpc.mevblocker.io".to_string()],
+            features: vec![155, 1559, 4844],
+            slip_44: 60,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        };
+        let provider = NetworkProvider::new(net_conf);
+        let mut tx_history = HistoricalTransaction {
+            transaction_hash: String::from(
+                "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715",
+            ),
+            chain_hash: provider.config.hash(),
+            chain_type: history::transaction::ChainType::EVM,
+            ..Default::default()
+        };
+        let mut list_txns = vec![&mut tx_history];
+
+        provider
+            .update_transactions_receipt(&mut list_txns)
+            .await
+            .unwrap();
+
+        assert_eq!(list_txns.first().unwrap().fee, 15132287247000);
+        assert_eq!(list_txns.first().unwrap().gas_used, Some(21000));
+        assert_eq!(list_txns.first().unwrap().block_number, Some(21855983));
+        assert_eq!(
+            list_txns.first().unwrap().transaction_hash,
+            "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715"
+        );
+        assert_eq!(
+            list_txns.first().unwrap().status,
+            TransactionStatus::Confirmed
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tx_receipt_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+        let mut tx_history = HistoricalTransaction {
+            transaction_hash: String::from(
+                "0xe193e982ae4d2ed605a88ed43b7ea9b432596e33a515a8549b54d51092b55d7c",
+            ),
+            chain_hash: provider.config.hash(),
+            chain_type: history::transaction::ChainType::Scilla,
+            ..Default::default()
+        };
+        let mut list_txns = vec![&mut tx_history];
+
+        provider
+            .update_transactions_receipt(&mut list_txns)
+            .await
+            .unwrap();
+
+        assert_eq!(list_txns[0].amount, U256::from(9890465666543u128));
+        assert_eq!(list_txns[0].status, TransactionStatus::Confirmed);
+        assert_eq!(list_txns[0].status_code, Some(3));
+        assert_eq!(list_txns[0].gas_limit, Some(60));
+        assert_eq!(list_txns[0].gas_price, Some(2500000000));
+        assert_eq!(list_txns[0].fee, 150000000000);
+        assert_eq!(list_txns[0].nonce, 1045401);
+        assert_eq!(list_txns[0].chain_type, ChainType::Scilla);
+        assert_eq!(
+            list_txns[0].sender,
+            "zil15xvtse0rvcfwxetstvun72kw5daz8kge0frn3y"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_get_block_number_scilla() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let block_number = provider.get_current_block_number().await.unwrap();
+        assert!(block_number != 0);
+    }
+
+    #[tokio::test]
+    async fn test_get_block_number_evm() {
+        let net_conf = create_bsc_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let block_number = provider.get_current_block_number().await.unwrap();
+        assert!(block_number != 0);
+    }
+}
+
+```
+
+`network/src/rates.rs`:
+
+```rs
+use crate::Result;
+use config::provider::ZILPAY_RATES_SCILLA_API;
+use reqwest;
+use serde_json::Value;
+use errors::network::NetworkErrors;
+
+pub async fn fetch_rates() -> Result<Value> {
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(ZILPAY_RATES_SCILLA_API)
+        .send()
+        .await
+        .map_err(|e| match e.status() {
+            Some(status) => NetworkErrors::HttpError(status.as_u16(), e.to_string()),
+            None => NetworkErrors::HttpNetworkError(e.to_string()),
+        })?;
+
+    if !response.status().is_success() {
+        return Err(NetworkErrors::HttpError(
+            response.status().as_u16(),
+            format!("API request failed: {}", response.status()),
+        ));
+    }
+
+    response
+        .json::<Value>()
+        .await
+        .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))
+}
+
+pub fn get_rate(rates: &Value, currency: &str) -> Option<f64> {
+    rates[currency]
+        .as_f64()
+        .or_else(|| rates[currency].as_str().and_then(|s| s.parse().ok()))
+}
+
+```
+
+`network/src/stake.rs`:
+
+```rs
+use crate::provider::NetworkProvider;
+use alloy::primitives::{map::HashMap, utils::format_units, U256};
+use async_trait::async_trait;
+use errors::network::NetworkErrors;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Pool {
+    pub address: String,
+    pub token_address: String,
+    pub name: String,
+    pub pool_type: String,
+    pub token_decimals: u32,
+    pub token_symbol: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct CycleInfo {
+    pub total_stake: U256,
+    pub total_rewards: U256,
+}
+
+fn get_reward_need_cycle_list(last_withdraw_cycle: u64, last_reward_cycle: u64) -> Vec<u64> {
+    if last_reward_cycle <= last_withdraw_cycle {
+        return Vec::new();
+    }
+    (last_withdraw_cycle + 1..=last_reward_cycle).collect()
+}
+
+fn combine_buff_direct(
+    reward_list: &[u64],
+    direct_deposit_map: &HashMap<u64, U256>,
+    buffer_deposit_map: &HashMap<u64, U256>,
+    deleg_stake_per_cycle_map: &HashMap<u64, U256>,
+) -> HashMap<u64, U256> {
+    let mut result_map = HashMap::new();
+    let zero = U256::from(0);
+
+    for &cycle in reward_list {
+        let c1 = cycle - 1;
+        let c2 = cycle - 2;
+
+        let hist_amt = deleg_stake_per_cycle_map.get(&c1).unwrap_or(&zero);
+        let dir_amt = direct_deposit_map.get(&c1).unwrap_or(&zero);
+        let buf_amt = buffer_deposit_map.get(&c2).unwrap_or(&zero);
+
+        let total_amt_tmp = dir_amt + buf_amt + hist_amt;
+        let previous_cycle_amt = result_map.get(&c1).unwrap_or(&zero);
+        let total_amt = total_amt_tmp + previous_cycle_amt;
+
+        result_map.insert(cycle, total_amt);
+    }
+
+    result_map
+}
+
+fn calculate_rewards(
+    delegate_per_cycle: &HashMap<u64, U256>,
+    need_list: &[u64],
+    stake_ssn_per_cycle_map: &HashMap<u64, CycleInfo>,
+) -> U256 {
+    let mut result_rewards = U256::from(0);
+    let zero = U256::from(0);
+
+    for &cycle in need_list {
+        // Find the cycle information for the SSN
+        if let Some(cycle_info) = stake_ssn_per_cycle_map.get(&cycle) {
+            // Find the user's delegated amount for that cycle
+            if let Some(deleg_amt) = delegate_per_cycle.get(&cycle) {
+                // Ensure total_stake is not zero to prevent division by zero errors.
+                if cycle_info.total_stake > zero {
+                    // Perform the reward calculation: (deleg_amt * total_rewards) / total_stake
+                    let reward_for_cycle =
+                        (deleg_amt * &cycle_info.total_rewards) / &cycle_info.total_stake;
+                    result_rewards += reward_for_cycle;
+                }
+            }
+        }
+    }
+
+    result_rewards
+}
+
+#[async_trait]
+pub trait ZilliqaStakeing {
+    async fn get_zq2_providers(&self) -> std::result::Result<Vec<Pool>, NetworkErrors>;
+}
+
+#[async_trait]
+impl ZilliqaStakeing for NetworkProvider {
+    async fn get_zq2_providers(&self) -> std::result::Result<Vec<Pool>, NetworkErrors> {
+        // This is a specific API endpoint, not a generic JSON-RPC one.
+        // It's better to leave it as is, since RpcProvider is for JSON-RPC.
+        let url = "https://api.zilpay.io/api/v1/stake/pools";
+        let client = reqwest::Client::new();
+
+        let response = client.get(url).send().await.map_err(|e| match e.status() {
+            Some(status) => NetworkErrors::HttpError(status.as_u16(), e.to_string()),
+            None => NetworkErrors::HttpNetworkError(e.to_string()),
+        })?;
+
+        if !response.status().is_success() {
+            return Err(NetworkErrors::HttpError(
+                response.status().as_u16(),
+                format!("API request failed: {}", response.status()),
+            ));
+        }
+
+        response
+            .json::<Vec<Pool>>()
+            .await
+            .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use rpc::network_config::ChainConfig;
+
+    fn create_zilliqa_config() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://api.zilliqa.com".to_string()],
+            features: vec![],
+            slip_44: 313,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_request_zil_staking_pools() {
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+
+        let pools = provider.get_zq2_providers().await.unwrap();
+
+        // dbg!(&pools);
+    }
+
+    #[test]
+    fn test_reward_calculation_matches_ts_logic() {
+        // --- 1. Setup test data ---
+        let last_withdraw = 100;
+        let last_reward = 105;
+
+        let mut direct_map = HashMap::new();
+        direct_map.insert(100, U256::from(1000));
+        direct_map.insert(101, U256::from(500));
+
+        let mut buffer_map = HashMap::new();
+        buffer_map.insert(99, U256::from(200)); // for cycle 101
+        buffer_map.insert(100, U256::from(300)); // for cycle 102
+
+        let mut deleg_map = HashMap::new();
+        deleg_map.insert(100, U256::from(10000));
+        deleg_map.insert(101, U256::from(11000));
+        deleg_map.insert(102, U256::from(12000));
+
+        let mut ssn_stake_map = HashMap::new();
+        ssn_stake_map.insert(
+            101,
+            CycleInfo {
+                total_stake: U256::from(1_000_000),
+                total_rewards: U256::from(50000),
+            },
+        );
+        ssn_stake_map.insert(
+            102,
+            CycleInfo {
+                total_stake: U256::from(1_100_000),
+                total_rewards: U256::from(55000),
+            },
+        );
+        ssn_stake_map.insert(
+            103,
+            CycleInfo {
+                total_stake: U256::from(1_200_000),
+                total_rewards: U256::from(60000),
+            },
+        );
+        ssn_stake_map.insert(
+            104,
+            CycleInfo {
+                total_stake: U256::from(1_300_000),
+                total_rewards: U256::from(65000),
+            },
+        );
+        ssn_stake_map.insert(
+            105,
+            CycleInfo {
+                total_stake: U256::from(1_400_000),
+                total_rewards: U256::from(70000),
+            },
+        );
+
+        // --- 2. Calculate expected results (mirroring TS logic) ---
+        let ts_stake_101 = U256::from(10000) + U256::from(1000) + U256::from(200) + U256::from(0); // 11200
+        let ts_stake_102 = U256::from(11000) + U256::from(500) + U256::from(300) + ts_stake_101; // 23000
+        let ts_stake_103 = U256::from(12000) + U256::from(0) + U256::from(0) + ts_stake_102; // 35000
+        let ts_stake_104 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_103; // 35000
+        let ts_stake_105 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_104; // 35000
+
+        let reward_101 = (ts_stake_101 * U256::from(50000)) / U256::from(1_000_000); // 560
+        let reward_102 = (ts_stake_102 * U256::from(55000)) / U256::from(1_100_000); // 1150
+        let reward_103 = (ts_stake_103 * U256::from(60000)) / U256::from(1_200_000); // 1750
+        let reward_104 = (ts_stake_104 * U256::from(65000)) / U256::from(1_300_000); // 1750
+        let reward_105 = (ts_stake_105 * U256::from(70000)) / U256::from(1_400_000); // 1750
+
+        let total_rewards_ts = reward_101 + reward_102 + reward_103 + reward_104 + reward_105; // Expected: 6960
+
+        // --- 3. Run the Rust functions ---
+        let reward_cycles = get_reward_need_cycle_list(last_withdraw, last_reward);
+        let stake_per_cycle =
+            combine_buff_direct(&reward_cycles, &direct_map, &buffer_map, &deleg_map);
+        let total_rewards_rust =
+            calculate_rewards(&stake_per_cycle, &reward_cycles, &ssn_stake_map);
+
+        // --- 4. Assertions ---
+        assert_eq!(reward_cycles, vec![101, 102, 103, 104, 105]);
+
+        assert_eq!(*stake_per_cycle.get(&101).unwrap(), ts_stake_101);
+        assert_eq!(*stake_per_cycle.get(&102).unwrap(), ts_stake_102);
+        assert_eq!(*stake_per_cycle.get(&103).unwrap(), ts_stake_103);
+        assert_eq!(*stake_per_cycle.get(&104).unwrap(), ts_stake_104);
+        assert_eq!(*stake_per_cycle.get(&105).unwrap(), ts_stake_105);
+
+        assert_eq!(
+            total_rewards_rust, total_rewards_ts,
+            "The final reward calculation must match the TypeScript logic"
+        );
+    }
+}
+
+```
+
+`network/src/tx_parse.rs`:
+
+```rs
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::Result;
+use alloy::eips::eip2718::Encodable2718;
+use errors::{network::NetworkErrors, tx::TransactionErrors};
+use history::{
+    status::TransactionStatus,
+    transaction::{ChainType, HistoricalTransaction},
+};
+use proto::{address::Address, tx::TransactionReceipt, U256};
+use rpc::{
+    methods::{EvmMethods, ZilMethods},
+    network_config::ChainConfig,
+    provider::RpcProvider,
+    zil_interfaces::ResultRes,
+};
+use serde_json::{json, Value};
+
+pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
+    match tx {
+        TransactionReceipt::Zilliqa((zil, _)) => {
+            RpcProvider::<ChainConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
+        }
+        TransactionReceipt::Ethereum((eth, _)) => {
+            let mut encoded = Vec::with_capacity(eth.eip2718_encoded_length());
+            eth.encode_2718(&mut encoded);
+            let hex_tx = alloy::hex::encode_prefixed(encoded);
+
+            RpcProvider::<ChainConfig>::build_payload(
+                json!([hex_tx]),
+                EvmMethods::SendRawTransaction,
+            )
+        }
+    }
+}
+
+pub fn build_payload_tx_receipt(tx: &HistoricalTransaction) -> Value {
+    match tx.chain_type {
+        ChainType::Scilla => RpcProvider::<ChainConfig>::build_payload(
+            json!([tx.transaction_hash]),
+            ZilMethods::GetTransactionStatus,
+        ),
+        ChainType::EVM => RpcProvider::<ChainConfig>::build_payload(
+            json!([tx.transaction_hash]),
+            EvmMethods::GetTransactionReceipt,
+        ),
+    }
+}
+
+pub fn process_tx_receipt_response(
+    response: ResultRes<Value>,
+    tx: &mut HistoricalTransaction,
+) -> Result<()> {
+    const MINUTES_IN_SECONDS: u64 = 10 * 60; // 10 minutes in seconds
+
+    if let Some(err) = response.error {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let cutoff = now - MINUTES_IN_SECONDS;
+
+        if tx.timestamp < cutoff {
+            tx.status = TransactionStatus::Rejected;
+            tx.error = Some(err.to_string());
+        }
+
+        return Ok(());
+    } else if let Some(result) = response.result {
+        match tx.chain_type {
+            ChainType::Scilla => {
+                let amount = result
+                    .get("amount")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<U256>().ok())
+                    .unwrap_or(tx.amount);
+                let gas_limit = result
+                    .get("gasLimit")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<u128>().ok())
+                    .unwrap_or(tx.gas_limit.unwrap_or_default());
+                let gas_price = result
+                    .get("gasPrice")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<u128>().ok())
+                    .unwrap_or(tx.gas_price.unwrap_or_default());
+                let nonce = result
+                    .get("nonce")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| a.parse::<u128>().ok())
+                    .unwrap_or(tx.nonce);
+                let mb_status = result
+                    .get("status")
+                    .and_then(|a| a.as_number())
+                    .and_then(|a| a.as_u64())
+                    .and_then(|status| Some(status as u8));
+                let mb_sender = result
+                    .get("senderAddr")
+                    .and_then(|a| a.as_str())
+                    .and_then(|a| Address::from_zil_base16(a).ok());
+
+                tx.amount = amount;
+                tx.gas_limit = Some(gas_limit);
+                tx.gas_price = Some(gas_price);
+                tx.nonce = nonce;
+                tx.fee = gas_price * gas_limit;
+
+                if let Some(status) = mb_status {
+                    match status {
+                        1 | 2 | 4 | 5 | 6 => tx.status = TransactionStatus::Pending,
+                        3 => tx.status = TransactionStatus::Confirmed,
+                        _ => tx.status = TransactionStatus::Rejected,
+                    }
+                    tx.status_code = mb_status;
+                }
+
+                if tx.status == TransactionStatus::Pending {
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+
+                    let cutoff = now - MINUTES_IN_SECONDS;
+
+                    if tx.timestamp < cutoff {
+                        tx.status = TransactionStatus::Rejected;
+                        tx.error = Some("timeout".to_string());
+                    }
+                }
+
+                if let Some(sender) = mb_sender {
+                    tx.sender = sender.auto_format();
+                }
+
+                return Ok(());
+            }
+            ChainType::EVM => {
+                let receipt: alloy::rpc::types::TransactionReceipt = serde_json::from_value(result)
+                    .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+
+                tx.sender = receipt.from.to_string();
+                tx.contract_address = receipt.contract_address.map(|a| a.to_string());
+
+                if let Some(to) = receipt.to {
+                    tx.recipient = to.to_string();
+                }
+
+                tx.block_number = receipt.block_number.map(|b| b as u128);
+                tx.gas_used = Some(receipt.gas_used as u128);
+                tx.blob_gas_used = receipt.blob_gas_used.map(|b| b as u128);
+                tx.blob_gas_price = receipt.blob_gas_price;
+                tx.effective_gas_price = Some(receipt.effective_gas_price);
+
+                if receipt.status() {
+                    tx.status = TransactionStatus::Confirmed;
+                } else {
+                    tx.status = TransactionStatus::Rejected;
+                }
+
+                let mut total_cost = receipt.gas_used as u128 * receipt.effective_gas_price;
+
+                if let Some(blob_gas_used) = receipt.blob_gas_used {
+                    if let Some(blob_gas_price) = receipt.blob_gas_price {
+                        total_cost += blob_gas_used as u128 * blob_gas_price;
+                    }
+                }
+
+                tx.fee = total_cost;
+
+                return Ok(());
+            }
+        };
+    } else {
+        return Err(TransactionErrors::NoTxWithHash(tx.transaction_hash.clone()).into());
+    }
+}
+
+pub fn process_tx_send_response(
+    response: &ResultRes<Value>,
+    tx: &mut TransactionReceipt,
+) -> Result<()> {
+    if let Some(error) = &response.error {
+        return Err(NetworkErrors::RPCError(error.to_string()));
+    }
+
+    match tx {
+        TransactionReceipt::Zilliqa((_zil, metadata)) => {
+            if let Some(result) = &response.result {
+                let info = result
+                    .get("Info")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default();
+                let tx_id = result
+                    .get("TranID")
+                    .and_then(|v| v.as_str())
+                    .ok_or(TransactionErrors::InvalidTxHash)?;
+
+                metadata.hash = Some(tx_id.to_string());
+                metadata.info = Some(info.to_string());
+
+                Ok(())
+            } else {
+                Err(NetworkErrors::RPCError("Invlid response".to_string()))
+            }
+        }
+        TransactionReceipt::Ethereum((_eth, metadata)) => {
+            if let Some(result) = &response.result {
+                let hash = result.as_str().ok_or(TransactionErrors::InvalidTxHash)?;
+
+                metadata.hash = Some(hash.to_string());
+
+                Ok(())
+            } else {
+                Err(NetworkErrors::RPCError("Invlid response".to_string()))
+            }
+        }
+    }
+}
+
+```
