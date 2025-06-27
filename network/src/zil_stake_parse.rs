@@ -75,9 +75,11 @@ pub struct EvmRequestInfo {
     pub req_type: EvmRequestType,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 pub struct SsnDeleg {
-    pub arguments: (String, String, String, String, String, String),
+    pub argtypes: Vec<serde_json::Value>,
+    pub arguments: Vec<serde_json::Value>,
+    pub constructor: String,
 }
 
 #[derive(Debug, Clone)]
@@ -105,7 +107,7 @@ pub struct FinalOutput {
     pub token_address: Option<String>,
     pub deleg_amt: U256,
     pub rewards: U256,
-    pub tvl: Option<String>,
+    pub tvl: Option<u128>,
     pub vote_power: Option<f64>,
     pub apr: Option<f64>,
     pub commission: Option<f64>,
@@ -145,15 +147,22 @@ pub fn combine_buff_direct(
     let zero = U256::from(0);
 
     for &cycle in reward_list {
-        let c1 = cycle - 1;
-        let c2 = cycle - 2;
+        let c1_key = if cycle >= 1 { Some(cycle - 1) } else { None };
+        let c2_key = if cycle >= 2 { Some(cycle - 2) } else { None };
 
-        let hist_amt = deleg_stake_per_cycle_map.get(&c1).unwrap_or(&zero);
-        let dir_amt = direct_deposit_map.get(&c1).unwrap_or(&zero);
-        let buf_amt = buffer_deposit_map.get(&c2).unwrap_or(&zero);
+        let hist_amt = c1_key
+            .and_then(|k| deleg_stake_per_cycle_map.get(&k))
+            .unwrap_or(&zero);
+        let dir_amt = c1_key
+            .and_then(|k| direct_deposit_map.get(&k))
+            .unwrap_or(&zero);
+        let buf_amt = c2_key
+            .and_then(|k| buffer_deposit_map.get(&k))
+            .unwrap_or(&zero);
 
         let total_amt_tmp = dir_amt + buf_amt + hist_amt;
-        let previous_cycle_amt = result_map.get(&c1).unwrap_or(&zero);
+
+        let previous_cycle_amt = c1_key.and_then(|k| result_map.get(&k)).unwrap_or(&zero);
         let total_amt = total_amt_tmp + previous_cycle_amt;
 
         result_map.insert(cycle, total_amt);
@@ -261,9 +270,8 @@ pub fn assemble_evm_final_output(
         let user_entry = user_data.get(&pool.address).cloned().unwrap_or_default();
         let stats_entry = pool_stats.get(&pool.address);
 
-        if user_entry.deleg_amt <= U256::ZERO
-            && stats_entry.and_then(|s| s.tvl).unwrap_or(U256::ZERO) <= U256::ZERO
-        {
+        let tvl_is_zero = stats_entry.and_then(|s| s.tvl).unwrap_or(U256::ZERO) <= U256::ZERO;
+        if user_entry.deleg_amt <= U256::ZERO && tvl_is_zero {
             continue;
         }
 
@@ -280,45 +288,47 @@ pub fn assemble_evm_final_output(
 
         if let Some(stats) = stats_entry {
             if let Some(tvl) = stats.tvl {
-                output_entry.tvl = format_units(tvl, pool.token_decimals as u8).ok();
+                output_entry.tvl = tvl.to_string().parse().ok();
             }
 
             if let (Some(pool_stake), Some(commission_num), Some(commission_den)) =
                 (stats.pool_stake, stats.commission_num, stats.commission_den)
             {
                 if total_network_stake > U256::ZERO {
-                    let bigint_division_precision = U256::from(1_000_000);
-
-                    // Расчет Vote Power
-                    let vp_ratio_big =
-                        (pool_stake * bigint_division_precision) / total_network_stake;
-                    let vp_ratio = vp_ratio_big.to::<u64>() as f64
-                        / bigint_division_precision.to::<u64>() as f64;
-                    output_entry.vote_power = Some((vp_ratio * 100.0 * 10000.0).round() / 10000.0);
-
-                    // Расчет APR и Комиссии
+                    let vp_ratio_float = f64::from(pool_stake) / f64::from(total_network_stake);
+                    output_entry.vote_power =
+                        Some((vp_ratio_float * 100.0 * 10000.0).round() / 10000.0);
                     if commission_den > U256::ZERO {
                         let rewards_per_year_in_zil = 51000.0 * 24.0 * 365.0;
-                        let commission_ratio_big =
-                            (commission_num * bigint_division_precision) / commission_den;
-                        let commission_ratio = commission_ratio_big.to::<u64>() as f64
-                            / bigint_division_precision.to::<u64>() as f64;
 
-                        // Сохраняем комиссию в процентах
+                        let commission_ratio_float =
+                            f64::from(commission_num) / f64::from(commission_den);
                         output_entry.commission =
-                            Some((commission_ratio * 100.0 * 10000.0).round() / 10000.0);
+                            Some((commission_ratio_float * 100.0 * 10000.0).round() / 10000.0);
 
-                        let delegator_year_reward = vp_ratio * rewards_per_year_in_zil;
+                        let delegator_year_reward = vp_ratio_float * rewards_per_year_in_zil;
                         let delegator_reward_for_share =
-                            delegator_year_reward * (1.0 - commission_ratio);
+                            delegator_year_reward * (1.0 - commission_ratio_float);
 
                         let pool_stake_in_zil: f64 = format_units(pool_stake, 18)
                             .unwrap_or_default()
                             .parse()
                             .unwrap_or_default();
-                        let apr = (delegator_reward_for_share / pool_stake_in_zil) * 100.0;
-                        output_entry.apr = Some((apr * 10000.0).round() / 10000.0);
+
+                        if pool_stake_in_zil > 0.0 {
+                            let apr = (delegator_reward_for_share / pool_stake_in_zil) * 100.0;
+                            output_entry.apr = Some((apr * 10000.0).round() / 10000.0);
+                        } else {
+                            output_entry.apr = Some(0.0);
+                        }
+                    } else {
+                        output_entry.commission = Some(0.0);
+                        output_entry.apr = Some(0.0);
                     }
+                } else {
+                    output_entry.vote_power = Some(0.0);
+                    output_entry.commission = Some(0.0);
+                    output_entry.apr = Some(0.0);
                 }
             }
         }
@@ -340,8 +350,9 @@ pub async fn process_scilla_stakes(
         .as_ref()
         .and_then(|r| r.get("ssnlist"))
         .ok_or(NetworkErrors::ResponseParseError)?;
-    let ssn_list: HashMap<String, SsnDeleg> = serde_json::from_value(ssn_list_val.clone())
-        .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+
+    let ssn_raw_map: HashMap<String, SsnDeleg> = serde_json::from_value(ssn_list_val.clone())
+        .map_err(|e| NetworkErrors::ParseHttpError(format!("Failed to parse ssn_list: {}", e)))?;
 
     let last_reward_cycle_str = reward_cycle_result
         .result
@@ -361,14 +372,22 @@ pub async fn process_scilla_stakes(
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let all_ssn_nodes: Vec<SSNode> = ssn_list
+    let all_ssn_nodes: Vec<SSNode> = ssn_raw_map
         .into_iter()
-        .map(|(key, val)| SSNode {
-            name: val.arguments.3.clone(),
-            url: val.arguments.5.clone(),
-            address: key.clone(),
-            last_reward_cycle,
-            last_withdraw_cycle_deleg: *last_withdraw_nodes.get(&key).unwrap_or(&0),
+        .filter_map(|(key, val)| {
+            let name_val = val.arguments.get(3)?;
+            let url_val = val.arguments.get(5)?;
+
+            let name = name_val.as_str()?.to_string();
+            let url = url_val.as_str()?.to_string();
+
+            Some(SSNode {
+                name,
+                url,
+                last_withdraw_cycle_deleg: *last_withdraw_nodes.get(&key).unwrap_or(&0),
+                address: key,
+                last_reward_cycle,
+            })
         })
         .collect();
 
@@ -770,9 +789,13 @@ pub fn process_evm_pools_results(
                 }
             }
             EvmRequestType::Commission => {
-                if let Ok(decoded) = getCommissionCall::abi_decode_returns(&bytes) {
+                let decoded_commission = getCommissionCall::abi_decode_returns(&bytes);
+                if let Ok(decoded) = decoded_commission {
                     pool_stats.commission_num = Some(decoded._0);
                     pool_stats.commission_den = Some(decoded._1);
+                } else {
+                    pool_stats.commission_num = Some(U256::ZERO);
+                    pool_stats.commission_den = Some(U256::from(1));
                 }
             }
         }
@@ -800,7 +823,6 @@ mod tests {
     use std::str::FromStr;
 
     fn get_proto_mainnet_pools() -> Vec<EvmPool> {
-        // This list is based on the TypeScript `protoMainnetPools` array.
         vec![
             EvmPool {
                 address: AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8")
@@ -954,17 +976,14 @@ mod tests {
         let evm_user_address =
             Address::from_eth_address("0xb1fE20CD2b856BA1a4e08afb39dfF5C80f0cBbCa").unwrap();
 
-        // Start build_evm_pools_requests with id=5 to match the provided data.
         let (_requests, req_map, _next_id) = build_evm_pools_requests(&pools, &evm_user_address, 5);
 
         let mut mock_results: HashMap<u64, ResultRes<Value>> = HashMap::new();
-        // Corrected the ID for the "Amazing Pool" deleg_amt from 42 to 41.
-        let raw_data = [
-            (
-                41,
-                "0x000000000000000000000000000000000000000000084595161401484a000000",
-            ), // deleg_amt for "Amazing Pool"
-        ];
+
+        let raw_data = [(
+            41,
+            "0x000000000000000000000000000000000000000000084595161401484a000000",
+        )];
         for (id, result) in raw_data {
             mock_results.insert(
                 id,
@@ -979,7 +998,6 @@ mod tests {
 
         let (user_data, _pool_stats) = process_evm_pools_results(&mock_results, &req_map);
 
-        // Assert "Amazing Pool" data based on the provided expected output
         let amazing_pool_addr =
             AlloyAddress::from_str("0xe59D98b887e6D40F52f7Cc8d5fb4CF0F9Ed7C98B").unwrap();
         let amazing_pool_user = user_data.get(&amazing_pool_addr).unwrap();
@@ -990,10 +1008,9 @@ mod tests {
         );
         assert_eq!(amazing_pool_user.rewards, U256::ZERO);
 
-        // Assert data for another pool (e.g., Moonlet) to ensure it's processed as zero
         let moonlet_addr =
             AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8").unwrap();
-        // Use `get` and `unwrap_or_default` in case the pool had no successful RPC calls and wasn't added to the map
+
         let moonlet_user = user_data.get(&moonlet_addr).cloned().unwrap_or_default();
         assert_eq!(moonlet_user.deleg_amt, U256::ZERO);
         assert_eq!(moonlet_user.rewards, U256::ZERO);
@@ -1331,17 +1348,17 @@ mod tests {
             },
         );
 
-        let ts_stake_101 = U256::from(10000) + U256::from(1000) + U256::from(200); // 11200
-        let ts_stake_102 = U256::from(11000) + U256::from(500) + U256::from(300) + ts_stake_101; // 23000
-        let ts_stake_103 = U256::from(12000) + U256::from(0) + U256::from(0) + ts_stake_102; // 35000
-        let ts_stake_104 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_103; // 35000
-        let ts_stake_105 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_104; // 35000
+        let ts_stake_101 = U256::from(10000) + U256::from(1000) + U256::from(200);
+        let ts_stake_102 = U256::from(11000) + U256::from(500) + U256::from(300) + ts_stake_101;
+        let ts_stake_103 = U256::from(12000) + U256::from(0) + U256::from(0) + ts_stake_102;
+        let ts_stake_104 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_103;
+        let ts_stake_105 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_104;
 
-        let reward_101 = (ts_stake_101 * U256::from(50000)) / U256::from(1_000_000); // 560
-        let reward_102 = (ts_stake_102 * U256::from(55000)) / U256::from(1_100_000); // 1150
-        let reward_103 = (ts_stake_103 * U256::from(60000)) / U256::from(1_200_000); // 1750
-        let reward_104 = (ts_stake_104 * U256::from(65000)) / U256::from(1_300_000); // 1750
-        let reward_105 = (ts_stake_105 * U256::from(70000)) / U256::from(1_400_000); // 1750
+        let reward_101 = (ts_stake_101 * U256::from(50000)) / U256::from(1_000_000);
+        let reward_102 = (ts_stake_102 * U256::from(55000)) / U256::from(1_100_000);
+        let reward_103 = (ts_stake_103 * U256::from(60000)) / U256::from(1_200_000);
+        let reward_104 = (ts_stake_104 * U256::from(65000)) / U256::from(1_300_000);
+        let reward_105 = (ts_stake_105 * U256::from(70000)) / U256::from(1_400_000);
 
         let total_rewards_ts = reward_101 + reward_102 + reward_103 + reward_104 + reward_105;
 
