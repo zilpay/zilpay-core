@@ -37,11 +37,12 @@ pub enum StakingPoolType {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EvmPool {
-    pub id: String,
-    pub address: AlloyAddress,
     pub token_address: AlloyAddress,
-    pub name: String,
     pub pool_type: StakingPoolType,
+    pub address: AlloyAddress,
+    pub name: String,
+    pub token_decimals: u32,
+    pub token_symbol: String,
 }
 
 #[derive(Clone, Debug)]
@@ -363,16 +364,18 @@ mod tests {
     fn get_proto_mainnet_pools() -> Vec<EvmPool> {
         vec![
             EvmPool {
-                id: "MHhBMDU3".to_string(),
+                token_symbol: "shit".to_string(),
                 address: AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8")
                     .unwrap(),
                 token_address: AlloyAddress::from_str("0x0000000000000000000000000000000000000000")
                     .unwrap(),
                 name: "Moonlet".to_string(),
                 pool_type: StakingPoolType::NORMAL,
+                token_decimals: 18,
             },
             EvmPool {
-                id: "MHgyQWJl".to_string(),
+                token_decimals: 18,
+                token_symbol: "shit".to_string(),
                 address: AlloyAddress::from_str("0x2Abed3a598CBDd8BB9089c09A9202FD80C55Df8c")
                     .unwrap(),
                 token_address: AlloyAddress::from_str("0xD8B61fed51b9037A31C2Bf0a5dA4B717AF0C0F78")
