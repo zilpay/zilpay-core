@@ -1,12 +1,10 @@
 use crate::{
     account::Account, account_type::AccountType, wallet_crypto::WalletCrypto,
-    wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet,
+    wallet_storage::StorageOperations, Result, Wallet,
 };
-use cipher::{argon2::Argon2Seed, keychain::KeyChain};
-use config::bip39::EN_WORDS;
+use cipher::argon2::Argon2Seed;
 use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
-use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
 use rpc::network_config::ChainConfig;
 

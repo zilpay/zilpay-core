@@ -9,4 +9,5 @@ pub mod gas_parse;
 pub mod nonce_parser;
 pub mod provider;
 pub mod rates;
+pub mod stake;
 pub mod tx_parse;
