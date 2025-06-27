@@ -46,7 +46,7 @@ pub struct EvmPool {
     pub token_symbol: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct CycleInfo {
     pub total_stake: U256,
     pub total_rewards: U256,
@@ -76,7 +76,28 @@ pub struct EvmRequestInfo {
     pub req_type: EvmRequestType,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
+struct SsnDeleg {
+    pub arguments: (String, String, String, String, String, String),
+}
+
+#[derive(Debug, Clone)]
+struct SSNode {
+    pub address: String,
+    pub last_reward_cycle: u64,
+    pub last_withdraw_cycle_deleg: u64,
+    pub name: String,
+    pub url: String,
+}
+
+#[derive(Debug)]
+struct ScillaStakedNode {
+    pub node: SSNode,
+    pub deleg_amt: U256,
+    pub rewards: U256,
+}
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FinalOutput {
     pub name: String,
@@ -306,6 +327,227 @@ fn assemble_evm_final_output(
     }
 
     final_output
+}
+
+async fn process_scilla_stakes(
+    provider: &NetworkProvider,
+    ssn_result: &ResultRes<Value>,
+    reward_cycle_result: &ResultRes<Value>,
+    withdraw_cycle_result: &ResultRes<Value>,
+    scilla_user_address: &str,
+) -> Result<Vec<FinalOutput>, NetworkErrors> {
+    let ssn_list_val = ssn_result
+        .result
+        .as_ref()
+        .and_then(|r| r.get("ssnlist"))
+        .ok_or(NetworkErrors::ResponseParseError)?;
+    let ssn_list: HashMap<String, SsnDeleg> = serde_json::from_value(ssn_list_val.clone())
+        .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+
+    let last_reward_cycle_str = reward_cycle_result
+        .result
+        .as_ref()
+        .and_then(|r| r.get("lastrewardcycle"))
+        .and_then(|c| c.as_str())
+        .ok_or(NetworkErrors::ResponseParseError)?;
+    let last_reward_cycle = last_reward_cycle_str
+        .parse::<u64>()
+        .map_err(|_| NetworkErrors::ResponseParseError)?;
+
+    let last_withdraw_nodes: HashMap<String, u64> = withdraw_cycle_result
+        .result
+        .as_ref()
+        .and_then(|r| r.get("last_withdraw_cycle_deleg"))
+        .and_then(|d| d.get(scilla_user_address))
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let all_ssn_nodes: Vec<SSNode> = ssn_list
+        .into_iter()
+        .map(|(key, val)| SSNode {
+            name: val.arguments.3.clone(),
+            url: val.arguments.5.clone(),
+            address: key.clone(),
+            last_reward_cycle,
+            last_withdraw_cycle_deleg: *last_withdraw_nodes.get(&key).unwrap_or(&0),
+        })
+        .collect();
+
+    let deleg_amt_requests: Vec<Value> = all_ssn_nodes
+        .iter()
+        .enumerate()
+        .map(|(i, node)| {
+            RpcProvider::<ChainConfig>::build_payload(
+                json!([
+                    SCILLA_GZIL_CONTRACT,
+                    "ssn_deleg_amt",
+                    [node.address, scilla_user_address]
+                ]),
+                ZilMethods::GetSmartContractSubState,
+            )
+            .with_id(i as u64)
+        })
+        .collect();
+
+    let deleg_amt_results: Vec<ResultRes<Value>> = provider
+        .proxy_req(json!(deleg_amt_requests).to_string())
+        .await?
+        .as_array()
+        .ok_or(NetworkErrors::ResponseParseError)?
+        .iter()
+        .map(|v| serde_json::from_value(v.clone()))
+        .collect::<Result<_, _>>()
+        .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+
+    let mut staked_scilla_nodes: Vec<ScillaStakedNode> = Vec::new();
+    for res in deleg_amt_results {
+        let node = &all_ssn_nodes[res.id as usize];
+        if let Some(delegations) = res
+            .result
+            .as_ref()
+            .and_then(|r| r.get("ssn_deleg_amt"))
+            .and_then(|d| d.get(&node.address))
+            .and_then(|a| a.get(scilla_user_address))
+        {
+            if let Some(amount_str) = delegations.as_str() {
+                if let Ok(amount_qa) = amount_str.parse::<U256>() {
+                    if amount_qa > U256::ZERO {
+                        staked_scilla_nodes.push(ScillaStakedNode {
+                            node: node.clone(),
+                            deleg_amt: amount_qa,
+                            rewards: U256::ZERO,
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    if staked_scilla_nodes.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let scilla_user_address_lower = scilla_user_address.to_lowercase();
+    let reward_data_requests: Vec<Value> = staked_scilla_nodes
+        .iter()
+        .enumerate()
+        .flat_map(|(i, staked_node)| {
+            vec![
+                RpcProvider::<ChainConfig>::build_payload(
+                    json!([
+                        SCILLA_GZIL_CONTRACT,
+                        "direct_deposit_deleg",
+                        [&scilla_user_address_lower, &staked_node.node.address]
+                    ]),
+                    ZilMethods::GetSmartContractSubState,
+                )
+                .with_id((i * 4 + 1) as u64),
+                RpcProvider::<ChainConfig>::build_payload(
+                    json!([
+                        SCILLA_GZIL_CONTRACT,
+                        "buff_deposit_deleg",
+                        [&scilla_user_address_lower, &staked_node.node.address]
+                    ]),
+                    ZilMethods::GetSmartContractSubState,
+                )
+                .with_id((i * 4 + 2) as u64),
+                RpcProvider::<ChainConfig>::build_payload(
+                    json!([
+                        SCILLA_GZIL_CONTRACT,
+                        "deleg_stake_per_cycle",
+                        [&scilla_user_address_lower, &staked_node.node.address]
+                    ]),
+                    ZilMethods::GetSmartContractSubState,
+                )
+                .with_id((i * 4 + 3) as u64),
+                RpcProvider::<ChainConfig>::build_payload(
+                    json!([
+                        SCILLA_GZIL_CONTRACT,
+                        "stake_ssn_per_cycle",
+                        [&staked_node.node.address]
+                    ]),
+                    ZilMethods::GetSmartContractSubState,
+                )
+                .with_id((i * 4 + 4) as u64),
+            ]
+        })
+        .collect();
+
+    let reward_data_results: Vec<ResultRes<Value>> = provider
+        .proxy_req(json!(reward_data_requests).to_string())
+        .await?
+        .as_array()
+        .ok_or(NetworkErrors::ResponseParseError)?
+        .iter()
+        .map(|v| serde_json::from_value(v.clone()))
+        .collect::<Result<_, _>>()
+        .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+
+    let reward_results_by_id: HashMap<u64, ResultRes<Value>> =
+        reward_data_results.into_iter().map(|r| (r.id, r)).collect();
+
+    for (i, staked_node) in staked_scilla_nodes.iter_mut().enumerate() {
+        let direct_res = reward_results_by_id.get(&((i * 4 + 1) as u64));
+        let buff_res = reward_results_by_id.get(&((i * 4 + 2) as u64));
+        let deleg_cycle_res = reward_results_by_id.get(&((i * 4 + 3) as u64));
+        let stake_ssn_cycle_res = reward_results_by_id.get(&((i * 4 + 4) as u64));
+
+        let direct_map: HashMap<u64, U256> = direct_res
+            .and_then(|res| res.result.as_ref())
+            .and_then(|r| r.get("direct_deposit_deleg"))
+            .and_then(|d| d.get(&scilla_user_address_lower))
+            .and_then(|a| a.get(&staked_node.node.address))
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+        let buffer_map: HashMap<u64, U256> = buff_res
+            .and_then(|res| res.result.as_ref())
+            .and_then(|r| r.get("buff_deposit_deleg"))
+            .and_then(|d| d.get(&scilla_user_address_lower))
+            .and_then(|a| a.get(&staked_node.node.address))
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+        let deleg_cycle_map: HashMap<u64, U256> = deleg_cycle_res
+            .and_then(|res| res.result.as_ref())
+            .and_then(|r| r.get("deleg_stake_per_cycle"))
+            .and_then(|d| d.get(&scilla_user_address_lower))
+            .and_then(|a| a.get(&staked_node.node.address))
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+        let stake_ssn_map: HashMap<u64, CycleInfo> = stake_ssn_cycle_res
+            .and_then(|res| res.result.as_ref())
+            .and_then(|r| r.get("stake_ssn_per_cycle"))
+            .and_then(|d| d.get(&staked_node.node.address))
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+
+        let reward_need_list = get_reward_need_cycle_list(
+            staked_node.node.last_withdraw_cycle_deleg,
+            staked_node.node.last_reward_cycle,
+        );
+        if !reward_need_list.is_empty() {
+            let delegate_per_cycle = combine_buff_direct(
+                &reward_need_list,
+                &direct_map,
+                &buffer_map,
+                &deleg_cycle_map,
+            );
+            staked_node.rewards =
+                calculate_rewards(&delegate_per_cycle, &reward_need_list, &stake_ssn_map);
+        }
+    }
+
+    Ok(staked_scilla_nodes
+        .into_iter()
+        .map(|sn| FinalOutput {
+            name: sn.node.name,
+            url: sn.node.url,
+            address: sn.node.address,
+            deleg_amt: sn.deleg_amt,
+            rewards: sn.rewards,
+            tag: "scilla".to_string(),
+            ..Default::default()
+        })
+        .collect())
 }
 
 pub fn build_evm_pools_requests(
