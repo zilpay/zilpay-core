@@ -13,6 +13,7 @@ pub enum ZilMethods {
     GetTxBlock,
     GetRecentTransactions,
     GetMinimumGasPrice,
+    GetBlockchainInfo,
 }
 
 impl RpcMethod for ZilMethods {
@@ -30,6 +31,7 @@ impl RpcMethod for ZilMethods {
             ZilMethods::GetLatestTxBlock => "GetLatestTxBlock",
             ZilMethods::GetRecentTransactions => "GetRecentTransactions",
             ZilMethods::GetMinimumGasPrice => "GetMinimumGasPrice",
+            ZilMethods::GetBlockchainInfo => "GetBlockchainInfo",
         }
     }
 }
