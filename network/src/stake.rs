@@ -235,7 +235,6 @@ impl ZilliqaStakeing for NetworkProvider {
             blockchain_info_result.as_ref(),
             &scilla_user_address,
         );
-        dbg!(&pending_withdrawals);
         final_output.extend(pending_withdrawals);
 
         fn tag_to_priority(tag: &str) -> u8 {
@@ -249,9 +248,9 @@ impl ZilliqaStakeing for NetworkProvider {
         }
 
         final_output.sort_by(|a, b| {
-            b.deleg_amt
-                .cmp(&a.deleg_amt)
-                .then_with(|| tag_to_priority(&a.tag).cmp(&tag_to_priority(&b.tag)))
+            tag_to_priority(&a.tag)
+                .cmp(&tag_to_priority(&b.tag))
+                .then_with(|| b.deleg_amt.cmp(&a.deleg_amt))
                 .then_with(|| {
                     let a_has_avely = a.name.to_lowercase().contains("avely");
                     let b_has_avely = b.name.to_lowercase().contains("avely");
@@ -335,10 +334,6 @@ mod tests {
         let final_output = result.unwrap();
 
         assert!(!final_output.is_empty(), "Should return some staking data");
-
-        if final_output.len() > 1 {
-            assert!(final_output[0].deleg_amt >= final_output[1].deleg_amt);
-        }
 
         println!("{:#?}", final_output);
     }
