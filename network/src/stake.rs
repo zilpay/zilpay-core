@@ -44,21 +44,21 @@ pub trait ZilliqaStakeing {
         &self,
     ) -> Result<TransactionRequest, NetworkErrors>;
 
-    fn build_tx_evm_build_stake_request(
+    fn build_tx_evm_stake_request(
         &self,
         amount: U256,
         delegator_address: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_evm_build_unstake_request(
+    fn build_tx_evm_unstake_request(
         &self,
         amount_to_unstake: U256,
         delegator_address: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_build_claim_unstake_request(
+    fn build_tx_claim_unstake_request(
         &self,
         delegator_address: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_build_build_claim_reward_request(
+    fn build_tx_build_claim_reward_request(
         &self,
         delegator_address: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
@@ -66,7 +66,7 @@ pub trait ZilliqaStakeing {
 
 #[async_trait]
 impl ZilliqaStakeing for NetworkProvider {
-    fn build_tx_evm_build_stake_request(
+    fn build_tx_evm_stake_request(
         &self,
         amount: U256,
         delegator_address: Address,
@@ -81,7 +81,7 @@ impl ZilliqaStakeing for NetworkProvider {
         Ok(req_tx)
     }
 
-    fn build_tx_evm_build_unstake_request(
+    fn build_tx_evm_unstake_request(
         &self,
         amount_to_unstake: U256,
         delegator_address: Address,
@@ -96,7 +96,7 @@ impl ZilliqaStakeing for NetworkProvider {
         Ok(req_tx)
     }
 
-    fn build_tx_build_claim_unstake_request(
+    fn build_tx_claim_unstake_request(
         &self,
         delegator_address: Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
@@ -110,7 +110,7 @@ impl ZilliqaStakeing for NetworkProvider {
         Ok(req_tx)
     }
 
-    fn build_tx_build_build_claim_reward_request(
+    fn build_tx_build_claim_reward_request(
         &self,
         delegator_address: Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
