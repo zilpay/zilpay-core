@@ -52,8 +52,8 @@ impl ZilliqaStakeing for NetworkProvider {
             gas_limit: 5000,
             to_addr: contract,
             amount: 0,
-            code: params.to_string().into_bytes(),
-            data: vec![],
+            code: vec![],
+            data: params.to_string().into_bytes(),
         };
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
@@ -91,8 +91,8 @@ impl ZilliqaStakeing for NetworkProvider {
             gas_limit: 5000,
             to_addr: contract,
             amount: 0,
-            code: params.to_string().into_bytes(),
-            data: vec![],
+            code: vec![],
+            data: params.to_string().into_bytes(),
         };
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
@@ -125,8 +125,8 @@ impl ZilliqaStakeing for NetworkProvider {
             gas_limit: 100000,
             to_addr: contract,
             amount: 0,
-            code: params.to_string().into_bytes(),
-            data: vec![],
+            code: vec![],
+            data: params.to_string().into_bytes(),
         };
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
