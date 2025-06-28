@@ -8,23 +8,65 @@ use crate::{
 };
 use alloy::primitives::U256;
 use async_trait::async_trait;
+use config::contracts::SCILLA_GZIL_CONTRACT;
 use errors::network::NetworkErrors;
-use proto::pubkey::PubKey;
+use proto::{
+    address::Address, pubkey::PubKey, tx::TransactionRequest, zil_tx::ZILTransactionRequest,
+};
 use rpc::{
     common::JsonRPC, network_config::ChainConfig, provider::RpcProvider, zil_interfaces::ResultRes,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 
 #[async_trait]
 pub trait ZilliqaStakeing {
     async fn get_zq2_providers(&self) -> Result<Vec<EvmPool>, NetworkErrors>;
-
     async fn get_all_stakes(&self, pub_key: &PubKey) -> Result<Vec<FinalOutput>, NetworkErrors>;
+    async fn build_tx_scilla_claim(
+        &self,
+        stake: &FinalOutput,
+    ) -> Result<TransactionRequest, NetworkErrors>;
 }
 
 #[async_trait]
 impl ZilliqaStakeing for NetworkProvider {
+    async fn build_tx_scilla_claim(
+        &self,
+        stake: &FinalOutput,
+    ) -> Result<TransactionRequest, NetworkErrors> {
+        if stake.tag != "scilla" {
+            return Err(NetworkErrors::TransactionErrors(
+                errors::tx::TransactionErrors::InvalidTransaction,
+            ));
+        }
+
+        let params = json!({
+            "_tag": "WithdrawStakeRewards",
+            "params": [
+                {
+                    "vname": "ssnaddr",
+                    "type": "ByStr20",
+                    "value": stake.address
+                }
+            ]
+        });
+        let contract = Address::from_zil_base16(SCILLA_GZIL_CONTRACT)?;
+        let zil_tx = ZILTransactionRequest {
+            chain_id: self.config.chain_ids[1] as u16,
+            nonce: 0,
+            gas_price: 2000000050,
+            gas_limit: 100000,
+            to_addr: contract,
+            amount: 0,
+            code: params.to_string().into_bytes(),
+            data: vec![],
+        };
+        let req_tx = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+
+        Ok(req_tx)
+    }
+
     async fn get_zq2_providers(&self) -> Result<Vec<EvmPool>, NetworkErrors> {
         let url = "https://api.zilpay.io/api/v1/stake/pools";
         let client = reqwest::Client::new();
@@ -153,7 +195,6 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use proto::keypair::KeyPair;
     use rpc::network_config::ChainConfig;
 
     fn create_zilliqa_config() -> ChainConfig {
