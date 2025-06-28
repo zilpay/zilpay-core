@@ -23,15 +23,15 @@ use std::collections::HashMap;
 pub trait ZilliqaStakeing {
     async fn get_zq2_providers(&self) -> Result<Vec<EvmPool>, NetworkErrors>;
     async fn get_all_stakes(&self, pub_key: &PubKey) -> Result<Vec<FinalOutput>, NetworkErrors>;
-    async fn build_tx_scilla_claim(
+    fn build_tx_scilla_claim(
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors>;
-    async fn build_tx_scilla_init_unstake(
+    fn build_tx_scilla_init_unstake(
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors>;
-    async fn build_tx_scilla_complete_withdrawal(
+    fn build_tx_scilla_complete_withdrawal(
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors>;
@@ -39,7 +39,7 @@ pub trait ZilliqaStakeing {
 
 #[async_trait]
 impl ZilliqaStakeing for NetworkProvider {
-    async fn build_tx_scilla_complete_withdrawal(
+    fn build_tx_scilla_complete_withdrawal(
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors> {
@@ -69,7 +69,7 @@ impl ZilliqaStakeing for NetworkProvider {
         Ok(req_tx)
     }
 
-    async fn build_tx_scilla_init_unstake(
+    fn build_tx_scilla_init_unstake(
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors> {
@@ -110,7 +110,7 @@ impl ZilliqaStakeing for NetworkProvider {
         Ok(req_tx)
     }
 
-    async fn build_tx_scilla_claim(
+    fn build_tx_scilla_claim(
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors> {
