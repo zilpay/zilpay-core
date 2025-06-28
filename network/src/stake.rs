@@ -11,7 +11,10 @@ use async_trait::async_trait;
 use config::contracts::SCILLA_GZIL_CONTRACT;
 use errors::network::NetworkErrors;
 use proto::{
-    address::Address, pubkey::PubKey, tx::TransactionRequest, zil_tx::ZILTransactionRequest,
+    address::Address,
+    pubkey::PubKey,
+    tx::{TransactionMetadata, TransactionRequest},
+    zil_tx::ZILTransactionRequest,
 };
 use rpc::{
     common::JsonRPC, network_config::ChainConfig, provider::RpcProvider, zil_interfaces::ResultRes,
@@ -31,18 +34,12 @@ pub trait ZilliqaStakeing {
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_scilla_complete_withdrawal(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors>;
+    fn build_tx_scilla_complete_withdrawal(&self) -> Result<TransactionRequest, NetworkErrors>;
 }
 
 #[async_trait]
 impl ZilliqaStakeing for NetworkProvider {
-    fn build_tx_scilla_complete_withdrawal(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors> {
+    fn build_tx_scilla_complete_withdrawal(&self) -> Result<TransactionRequest, NetworkErrors> {
         let params = json!({
             "_tag": "CompleteWithdrawal",
             "params": []
@@ -58,7 +55,11 @@ impl ZilliqaStakeing for NetworkProvider {
             code: params.to_string().into_bytes(),
             data: vec![],
         };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+        let metdata = TransactionMetadata {
+            chain_hash: self.config.hash(),
+            ..Default::default()
+        };
+        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
 
         Ok(req_tx)
     }
@@ -93,7 +94,11 @@ impl ZilliqaStakeing for NetworkProvider {
             code: params.to_string().into_bytes(),
             data: vec![],
         };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+        let metdata = TransactionMetadata {
+            chain_hash: self.config.hash(),
+            ..Default::default()
+        };
+        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
 
         Ok(req_tx)
     }
@@ -123,7 +128,11 @@ impl ZilliqaStakeing for NetworkProvider {
             code: params.to_string().into_bytes(),
             data: vec![],
         };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+        let metdata = TransactionMetadata {
+            chain_hash: self.config.hash(),
+            ..Default::default()
+        };
+        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
 
         Ok(req_tx)
     }
