@@ -8,7 +8,7 @@ use crate::{
 };
 use alloy::primitives::U256;
 use async_trait::async_trait;
-use config::contracts::SCILLA_GZIL_CONTRACT;
+use config::contracts::SCILLA_STAKE_PROXY;
 use errors::network::NetworkErrors;
 use proto::{
     address::Address,
@@ -44,7 +44,7 @@ impl ZilliqaStakeing for NetworkProvider {
             "_tag": "CompleteWithdrawal",
             "params": []
         });
-        let contract = Address::from_zil_base16(SCILLA_GZIL_CONTRACT)?;
+        let contract = Address::from_zil_base16(SCILLA_STAKE_PROXY)?;
         let zil_tx = ZILTransactionRequest {
             chain_id: self.config.chain_ids[1] as u16,
             nonce: 0,
@@ -83,7 +83,7 @@ impl ZilliqaStakeing for NetworkProvider {
             }
           ]
         });
-        let contract = Address::from_zil_base16(SCILLA_GZIL_CONTRACT)?;
+        let contract = Address::from_zil_base16(SCILLA_STAKE_PROXY)?;
         let zil_tx = ZILTransactionRequest {
             chain_id: self.config.chain_ids[1] as u16,
             nonce: 0,
@@ -117,7 +117,7 @@ impl ZilliqaStakeing for NetworkProvider {
                 }
             ]
         });
-        let contract = Address::from_zil_base16(SCILLA_GZIL_CONTRACT)?;
+        let contract = Address::from_zil_base16(SCILLA_STAKE_PROXY)?;
         let zil_tx = ZILTransactionRequest {
             chain_id: self.config.chain_ids[1] as u16,
             nonce: 0,
