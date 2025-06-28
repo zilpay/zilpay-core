@@ -1,13 +1,13 @@
 use crate::provider::NetworkProvider;
 use alloy::{
     hex,
-    primitives::{utils::format_units, Address as AlloyAddress, U256},
+    primitives::{utils::format_units, Address as AlloyAddress, TxKind, U256},
     sol,
     sol_types::SolCall,
 };
 use config::contracts::{DEPOSIT_ADDRESS, SCILLA_GZIL_CONTRACT, ST_ZIL_CONTRACT};
 use errors::network::NetworkErrors;
-use proto::address::Address;
+use proto::{address::Address, tx::ETHTransactionRequest};
 use rpc::{
     methods::{EvmMethods, ZilMethods},
     network_config::ChainConfig,
@@ -29,6 +29,12 @@ sol! {
     function getDelegatedTotal() external view returns (uint256);
     function getStake() external view returns (uint256);
     function getCommission() external view returns (uint256, uint256);
+
+    function stake() external payable;
+    function unstake(uint256 shares) external;
+    function claim() external;
+    function withdrawAllRewards() external;
+    function stakeRewards() external;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -146,6 +152,60 @@ pub struct EvmPoolStats {
 }
 
 pub type EvmRequestMap = HashMap<u64, EvmRequestInfo>;
+
+pub fn build_stake_request(amount: U256, delegator_address: AlloyAddress) -> ETHTransactionRequest {
+    let stake_call = stakeCall {};
+    let to = TxKind::Call(delegator_address);
+    let req_tx = ETHTransactionRequest {
+        value: Some(amount),
+        to: Some(to),
+        input: stake_call.abi_encode().into(),
+        ..Default::default()
+    };
+
+    return req_tx;
+}
+
+pub fn build_unstake_request(
+    amount_to_unstake: U256,
+    delegator_address: AlloyAddress,
+) -> ETHTransactionRequest {
+    let unstake_call = unstakeCall {
+        shares: amount_to_unstake,
+    };
+    let to = TxKind::Call(delegator_address);
+    let req_tx = ETHTransactionRequest {
+        input: unstake_call.abi_encode().into(),
+        to: Some(to),
+        ..Default::default()
+    };
+
+    return req_tx;
+}
+
+pub fn build_claim_unstake_request(delegator_address: AlloyAddress) -> ETHTransactionRequest {
+    let claim_call = claimCall {};
+    let to = TxKind::Call(delegator_address);
+    let req_tx = ETHTransactionRequest {
+        input: claim_call.abi_encode().into(),
+        to: Some(to),
+        ..Default::default()
+    };
+
+    return req_tx;
+}
+
+pub fn build_claim_reward_request(delegator_address: AlloyAddress) -> ETHTransactionRequest {
+    let withdraw_rewards_call = withdrawAllRewardsCall {};
+    let to = TxKind::Call(delegator_address);
+    let req_tx = ETHTransactionRequest {
+        input: withdraw_rewards_call.abi_encode().into(),
+        to: Some(to),
+        ..Default::default()
+    };
+
+    return req_tx;
+}
 
 pub fn get_reward_need_cycle_list(last_withdraw_cycle: u64, last_reward_cycle: u64) -> Vec<u64> {
     if last_reward_cycle <= last_withdraw_cycle {

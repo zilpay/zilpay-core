@@ -1,9 +1,10 @@
 use crate::{
     provider::NetworkProvider,
     zil_stake_parse::{
-        assemble_evm_final_output, build_evm_pools_requests, build_initial_core_requests,
-        process_avely_stake, process_evm_pools_results, process_pending_withdrawals,
-        process_scilla_stakes, EvmPool, FinalOutput,
+        assemble_evm_final_output, build_claim_reward_request, build_claim_unstake_request,
+        build_evm_pools_requests, build_initial_core_requests, build_stake_request,
+        build_unstake_request, process_avely_stake, process_evm_pools_results,
+        process_pending_withdrawals, process_scilla_stakes, EvmPool, FinalOutput,
     },
 };
 use alloy::primitives::U256;
@@ -42,10 +43,87 @@ pub trait ZilliqaStakeing {
     fn build_tx_scilla_complete_withdrawal_avely(
         &self,
     ) -> Result<TransactionRequest, NetworkErrors>;
+
+    fn build_tx_evm_build_stake_request(
+        &self,
+        amount: U256,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors>;
+    fn build_tx_evm_build_unstake_request(
+        &self,
+        amount_to_unstake: U256,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors>;
+    fn build_tx_build_claim_unstake_request(
+        &self,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors>;
+    fn build_tx_build_build_claim_reward_request(
+        &self,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors>;
 }
 
 #[async_trait]
 impl ZilliqaStakeing for NetworkProvider {
+    fn build_tx_evm_build_stake_request(
+        &self,
+        amount: U256,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors> {
+        let tx = build_stake_request(amount, delegator_address.to_alloy_addr());
+        let metdata = TransactionMetadata {
+            chain_hash: self.config.hash(),
+            ..Default::default()
+        };
+        let req_tx = TransactionRequest::Ethereum((tx, metdata));
+
+        Ok(req_tx)
+    }
+
+    fn build_tx_evm_build_unstake_request(
+        &self,
+        amount_to_unstake: U256,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors> {
+        let tx = build_unstake_request(amount_to_unstake, delegator_address.to_alloy_addr());
+        let metdata = TransactionMetadata {
+            chain_hash: self.config.hash(),
+            ..Default::default()
+        };
+        let req_tx = TransactionRequest::Ethereum((tx, metdata));
+
+        Ok(req_tx)
+    }
+
+    fn build_tx_build_claim_unstake_request(
+        &self,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors> {
+        let tx = build_claim_unstake_request(delegator_address.to_alloy_addr());
+        let metdata = TransactionMetadata {
+            chain_hash: self.config.hash(),
+            ..Default::default()
+        };
+        let req_tx = TransactionRequest::Ethereum((tx, metdata));
+
+        Ok(req_tx)
+    }
+
+    fn build_tx_build_build_claim_reward_request(
+        &self,
+        delegator_address: Address,
+    ) -> Result<TransactionRequest, NetworkErrors> {
+        let tx = build_claim_reward_request(delegator_address.to_alloy_addr());
+        let metdata = TransactionMetadata {
+            chain_hash: self.config.hash(),
+            ..Default::default()
+        };
+        let req_tx = TransactionRequest::Ethereum((tx, metdata));
+
+        Ok(req_tx)
+    }
+
     fn build_tx_scilla_withdraw_stake_avely(
         &self,
         stake: &FinalOutput,
