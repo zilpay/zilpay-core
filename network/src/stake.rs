@@ -43,12 +43,6 @@ impl ZilliqaStakeing for NetworkProvider {
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        if stake.tag != "scilla" {
-            return Err(NetworkErrors::TransactionErrors(
-                errors::tx::TransactionErrors::InvalidTransaction,
-            ));
-        }
-
         let params = json!({
             "_tag": "CompleteWithdrawal",
             "params": []
@@ -73,12 +67,6 @@ impl ZilliqaStakeing for NetworkProvider {
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        if stake.tag != "scilla" {
-            return Err(NetworkErrors::TransactionErrors(
-                errors::tx::TransactionErrors::InvalidTransaction,
-            ));
-        }
-
         let params = json!({
           "_tag": "WithdrawStakeAmt",
           "params": [
@@ -114,12 +102,6 @@ impl ZilliqaStakeing for NetworkProvider {
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        if stake.tag != "scilla" {
-            return Err(NetworkErrors::TransactionErrors(
-                errors::tx::TransactionErrors::InvalidTransaction,
-            ));
-        }
-
         let params = json!({
             "_tag": "WithdrawStakeRewards",
             "params": [
