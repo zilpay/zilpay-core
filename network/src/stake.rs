@@ -79,7 +79,7 @@ impl ZilliqaStakeing for NetworkProvider {
             {
               "vname": "amt",
               "type": "Uint128",
-              "value": stake.deleg_amt
+              "value": stake.deleg_amt.to_string()
             }
           ]
         });
