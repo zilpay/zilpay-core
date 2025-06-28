@@ -18,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
+const WITHDRAWAL_CONTRACT: &str = "a7c67d49c82c7dc1b73d231640b2e4d0661d37c1";
+
 sol! {
     function getFutureTotalStake() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256 balance);
@@ -58,6 +60,14 @@ pub struct InitialCoreIds {
     pub withdraw_cycle: u64,
     pub st_zil_balance: u64,
     pub total_network_stake: u64,
+    pub withdrawal_pending: u64,
+    pub blockchain_info: u64,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct BlockchainInfo {
+    pub num_tx_blocks: String,
 }
 
 #[derive(Deserialize)]
@@ -117,6 +127,8 @@ pub struct FinalOutput {
     pub apr: Option<f64>,
     pub commission: Option<f64>,
     pub tag: String,
+    pub withdrawal_block: Option<u64>,
+    pub current_block: Option<u64>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -213,6 +225,10 @@ pub fn build_initial_core_requests(
     start_id += 1;
     let total_network_stake_id = start_id;
     start_id += 1;
+    let withdrawal_pending_id = start_id;
+    start_id += 1;
+    let blockchain_info_id = start_id;
+    start_id += 1;
 
     let ids = InitialCoreIds {
         ssn_list: ssn_list_id,
@@ -220,6 +236,8 @@ pub fn build_initial_core_requests(
         withdraw_cycle: withdraw_cycle_id,
         st_zil_balance: st_zil_balance_id,
         total_network_stake: total_network_stake_id,
+        withdrawal_pending: withdrawal_pending_id,
+        blockchain_info: blockchain_info_id,
     };
 
     let scilla_user_address_lower = scilla_user_address.to_lowercase();
@@ -258,9 +276,66 @@ pub fn build_initial_core_requests(
             EvmMethods::Call,
         )
         .with_id(total_network_stake_id),
+        RpcProvider::<ChainConfig>::build_payload(
+            json!([
+                WITHDRAWAL_CONTRACT,
+                "withdrawal_pending",
+                [scilla_user_address]
+            ]),
+            ZilMethods::GetSmartContractSubState,
+        )
+        .with_id(withdrawal_pending_id),
+        RpcProvider::<ChainConfig>::build_payload(json!([]), ZilMethods::GetBlockchainInfo)
+            .with_id(blockchain_info_id),
     ];
 
     (requests, ids, start_id)
+}
+
+pub fn process_pending_withdrawals(
+    withdrawal_pending_result: Option<&&ResultRes<Value>>,
+    blockchain_info_result: Option<&&ResultRes<Value>>,
+    scilla_user_address: &str,
+) -> Vec<FinalOutput> {
+    let current_block = blockchain_info_result
+        .and_then(|res| res.result.as_ref())
+        .and_then(|r| serde_json::from_value::<BlockchainInfo>(r.clone()).ok())
+        .and_then(|info| info.num_tx_blocks.parse::<u64>().ok())
+        .unwrap_or(0);
+
+    let scilla_user_address_lower = scilla_user_address.to_lowercase();
+    let withdrawals: HashMap<String, String> = withdrawal_pending_result
+        .and_then(|res| res.result.as_ref())
+        .and_then(|r| r.get("withdrawal_pending"))
+        .and_then(|wp| wp.get(&scilla_user_address_lower))
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let mut withdrawal_block: Option<u64> = None;
+    let mut claimable_amount = U256::ZERO;
+
+    for (block_str, amount_str) in withdrawals {
+        if let (Ok(block), Ok(amount)) = (block_str.parse::<u64>(), amount_str.parse::<U256>()) {
+            withdrawal_block = Some(block);
+            claimable_amount = amount;
+        }
+    }
+
+    let mut outputs = Vec::new();
+
+    if claimable_amount > U256::ZERO {
+        outputs.push(FinalOutput {
+            withdrawal_block,
+            current_block: Some(current_block),
+            name: "Pending Withdrawal (Claimable)".to_string(),
+            address: WITHDRAWAL_CONTRACT.to_string(),
+            deleg_amt: claimable_amount,
+            tag: "withdrawal".to_string(),
+            ..Default::default()
+        });
+    }
+
+    outputs
 }
 
 pub fn assemble_evm_final_output(
@@ -729,6 +804,7 @@ pub fn process_avely_stake(
             vote_power: None,
             apr: None,
             commission: None,
+            ..Default::default()
         })
     } else {
         None
@@ -991,6 +1067,65 @@ mod tests {
     }
 
     #[test]
+    fn test_process_pending_withdrawals() {
+        let scilla_user_address = "0x77e27c39ce572283b848e2cdf32cce761e34fa49";
+        let scilla_user_address_lower = scilla_user_address.to_lowercase();
+        let withdrawal_json = json!({
+            "withdrawal_pending": {
+                scilla_user_address_lower: {
+                    "4944395": "100000000000000",
+                    "5000000": "200000000000000"
+                }
+            }
+        });
+        let blockchain_info_json = json!({
+            "NumTxBlocks": "4944537"
+        });
+
+        let withdrawal_res = ResultRes {
+            id: 1,
+            jsonrpc: "2.0".to_string(),
+            result: Some(withdrawal_json),
+            error: None,
+        };
+        let blockchain_info_res = ResultRes {
+            id: 2,
+            jsonrpc: "2.0".to_string(),
+            result: Some(blockchain_info_json),
+            error: None,
+        };
+
+        let output = process_pending_withdrawals(
+            Some(&&withdrawal_res),
+            Some(&&blockchain_info_res),
+            scilla_user_address,
+        );
+
+        assert_eq!(output.len(), 2);
+        let claimable = output
+            .iter()
+            .find(|o| o.name.contains("Claimable"))
+            .unwrap();
+        let unclaimable = output
+            .iter()
+            .find(|o| o.name.contains("Unclaimable"))
+            .unwrap();
+
+        assert_eq!(
+            claimable.deleg_amt,
+            U256::from_str("100000000000000").unwrap()
+        );
+        assert_eq!(claimable.tag, "withdrawal");
+        assert_eq!(claimable.address, WITHDRAWAL_CONTRACT);
+
+        assert_eq!(
+            unclaimable.deleg_amt,
+            U256::from_str("200000000000000").unwrap()
+        );
+        assert_eq!(unclaimable.tag, "withdrawal");
+    }
+
+    #[test]
     fn test_process_evm_pools_results_with_real_data() {
         let pools = get_proto_mainnet_pools();
         let evm_user_address =
@@ -1214,14 +1349,16 @@ mod tests {
         let scilla_user_address = "0x77e27c39ce572283b848e2cdf32cce761e34fa49";
         let (requests, ids, next_id) = build_initial_core_requests(1, scilla_user_address);
 
-        assert_eq!(requests.len(), 5);
-        assert_eq!(next_id, 6);
+        assert_eq!(requests.len(), 7);
+        assert_eq!(next_id, 8);
 
         assert_eq!(ids.ssn_list, 1);
         assert_eq!(ids.reward_cycle, 2);
         assert_eq!(ids.withdraw_cycle, 3);
         assert_eq!(ids.st_zil_balance, 4);
         assert_eq!(ids.total_network_stake, 5);
+        assert_eq!(ids.withdrawal_pending, 6);
+        assert_eq!(ids.blockchain_info, 7);
 
         let req1 = &requests[0];
         assert_eq!(req1["id"], 1);
@@ -1251,6 +1388,23 @@ mod tests {
                 get_future_total_stake_call.abi_encode()
             ))
         );
+
+        let req6 = &requests[5];
+        assert_eq!(req6["id"], 6);
+        assert_eq!(req6["method"], "GetSmartContractSubState");
+        assert_eq!(
+            req6["params"],
+            json!([
+                WITHDRAWAL_CONTRACT,
+                "withdrawal_pending",
+                [scilla_user_address]
+            ])
+        );
+
+        let req7 = &requests[6];
+        assert_eq!(req7["id"], 7);
+        assert_eq!(req7["method"], "GetBlockchainInfo");
+        assert_eq!(req7["params"], json!([]));
     }
 
     #[test]

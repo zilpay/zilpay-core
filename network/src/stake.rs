@@ -2,8 +2,8 @@ use crate::{
     provider::NetworkProvider,
     zil_stake_parse::{
         assemble_evm_final_output, build_evm_pools_requests, build_initial_core_requests,
-        process_avely_stake, process_evm_pools_results, process_scilla_stakes, EvmPool,
-        FinalOutput,
+        process_avely_stake, process_evm_pools_results, process_pending_withdrawals,
+        process_scilla_stakes, EvmPool, FinalOutput,
     },
 };
 use alloy::primitives::U256;
@@ -227,12 +227,24 @@ impl ZilliqaStakeing for NetworkProvider {
             final_output.extend(scilla_stakes);
         }
 
+        let withdrawal_pending_result = results_by_id.get(&core_ids.withdrawal_pending);
+        let blockchain_info_result = results_by_id.get(&core_ids.blockchain_info);
+
+        let pending_withdrawals = process_pending_withdrawals(
+            withdrawal_pending_result.as_ref(),
+            blockchain_info_result.as_ref(),
+            &scilla_user_address,
+        );
+        dbg!(&pending_withdrawals);
+        final_output.extend(pending_withdrawals);
+
         fn tag_to_priority(tag: &str) -> u8 {
             match tag {
-                "avely" => 0,
-                "scilla" => 1,
-                "evm" => 2,
-                _ => 3,
+                "withdrawal" => 0,
+                "avely" => 1,
+                "scilla" => 2,
+                "evm" => 3,
+                _ => 4,
             }
         }
 
