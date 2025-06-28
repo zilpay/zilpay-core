@@ -31,10 +31,44 @@ pub trait ZilliqaStakeing {
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors>;
+    async fn build_tx_scilla_complete_withdrawal(
+        &self,
+        stake: &FinalOutput,
+    ) -> Result<TransactionRequest, NetworkErrors>;
 }
 
 #[async_trait]
 impl ZilliqaStakeing for NetworkProvider {
+    async fn build_tx_scilla_complete_withdrawal(
+        &self,
+        stake: &FinalOutput,
+    ) -> Result<TransactionRequest, NetworkErrors> {
+        if stake.tag != "scilla" {
+            return Err(NetworkErrors::TransactionErrors(
+                errors::tx::TransactionErrors::InvalidTransaction,
+            ));
+        }
+
+        let params = json!({
+            "_tag": "CompleteWithdrawal",
+            "params": []
+        });
+        let contract = Address::from_zil_base16(SCILLA_GZIL_CONTRACT)?;
+        let zil_tx = ZILTransactionRequest {
+            chain_id: self.config.chain_ids[1] as u16,
+            nonce: 0,
+            gas_price: 2000000050,
+            gas_limit: 5000,
+            to_addr: contract,
+            amount: 0,
+            code: params.to_string().into_bytes(),
+            data: vec![],
+        };
+        let req_tx = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+
+        Ok(req_tx)
+    }
+
     async fn build_tx_scilla_init_unstake(
         &self,
         stake: &FinalOutput,
@@ -65,7 +99,7 @@ impl ZilliqaStakeing for NetworkProvider {
             chain_id: self.config.chain_ids[1] as u16,
             nonce: 0,
             gas_price: 2000000050,
-            gas_limit: 100000,
+            gas_limit: 5000,
             to_addr: contract,
             amount: 0,
             code: params.to_string().into_bytes(),
