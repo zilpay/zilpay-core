@@ -184,7 +184,7 @@ impl NetworkProvider {
         if response.iter().all(|res| res.error.is_some()) {
             let all_errors = response
                 .into_iter()
-                .filter_map(|res| res.error.map(|e| e.message))
+                .filter_map(|res| res.error.map(|e| e.to_string()))
                 .collect::<Vec<String>>()
                 .join(", ");
             return Err(NetworkErrors::RPCError(all_errors));
@@ -201,8 +201,15 @@ impl NetworkProvider {
             .and_then(|result| result.as_str())
             .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
             .unwrap_or_default();
-        let tx_estimate_gas_response = response
-            .get(2)
+
+        let tx_estimate_gas_response = response.get(2);
+
+        if let Some(errors) = tx_estimate_gas_response.and_then(|res| res.error.as_ref()) {
+            let error = errors.to_string();
+            return Err(NetworkErrors::RPCError(error));
+        }
+
+        let tx_estimate_gas_response = tx_estimate_gas_response
             .and_then(|res| res.result.as_ref())
             .and_then(|result| result.as_str())
             .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))

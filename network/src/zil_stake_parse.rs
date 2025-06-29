@@ -168,12 +168,12 @@ pub fn build_stake_request(amount: U256, delegator_address: AlloyAddress) -> ETH
 
 pub fn build_unstake_request(
     amount_to_unstake: U256,
-    delegator_address: AlloyAddress,
+    provider: AlloyAddress,
 ) -> ETHTransactionRequest {
     let unstake_call = unstakeCall {
         shares: amount_to_unstake,
     };
-    let to = TxKind::Call(delegator_address);
+    let to = TxKind::Call(provider);
     let req_tx = ETHTransactionRequest {
         input: unstake_call.abi_encode().into(),
         to: Some(to),

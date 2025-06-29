@@ -47,20 +47,24 @@ pub trait ZilliqaStakeing {
     fn build_tx_evm_stake_request(
         &self,
         amount: U256,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
     fn build_tx_evm_unstake_request(
         &self,
         amount_to_unstake: U256,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
     fn build_tx_claim_unstake_request(
         &self,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
     fn build_tx_build_claim_reward_request(
         &self,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
 }
 
@@ -69,9 +73,14 @@ impl ZilliqaStakeing for NetworkProvider {
     fn build_tx_evm_stake_request(
         &self,
         amount: U256,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        let tx = build_stake_request(amount, delegator_address.to_alloy_addr());
+        let mut tx =
+            build_stake_request(amount, provider.to_alloy_addr()).from(from.to_alloy_addr());
+
+        tx.chain_id = Some(self.config.chain_ids[0]);
+
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
             ..Default::default()
@@ -84,9 +93,14 @@ impl ZilliqaStakeing for NetworkProvider {
     fn build_tx_evm_unstake_request(
         &self,
         amount_to_unstake: U256,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        let tx = build_unstake_request(amount_to_unstake, delegator_address.to_alloy_addr());
+        let mut tx = build_unstake_request(amount_to_unstake, provider.to_alloy_addr())
+            .from(from.to_alloy_addr());
+
+        tx.chain_id = Some(self.config.chain_ids[0]);
+
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
             ..Default::default()
@@ -98,9 +112,14 @@ impl ZilliqaStakeing for NetworkProvider {
 
     fn build_tx_claim_unstake_request(
         &self,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        let tx = build_claim_unstake_request(delegator_address.to_alloy_addr());
+        let mut tx =
+            build_claim_unstake_request(provider.to_alloy_addr()).from(from.to_alloy_addr());
+
+        tx.chain_id = Some(self.config.chain_ids[0]);
+
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
             ..Default::default()
@@ -112,9 +131,14 @@ impl ZilliqaStakeing for NetworkProvider {
 
     fn build_tx_build_claim_reward_request(
         &self,
-        delegator_address: Address,
+        provider: Address,
+        from: Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        let tx = build_claim_reward_request(delegator_address.to_alloy_addr());
+        let mut tx =
+            build_claim_reward_request(provider.to_alloy_addr()).from(from.to_alloy_addr());
+
+        tx.chain_id = Some(self.config.chain_ids[0]);
+
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
             ..Default::default()
@@ -464,7 +488,6 @@ mod tests {
 
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
-
         let result = provider.get_all_stakes(&pubkey).await;
 
         assert!(result.is_ok(), "Function should execute without errors");
