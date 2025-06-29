@@ -3,8 +3,9 @@ use crate::{
     zil_stake_parse::{
         assemble_evm_final_output, build_claim_reward_request, build_claim_unstake_request,
         build_evm_pools_requests, build_initial_core_requests, build_stake_request,
-        build_unstake_request, process_avely_stake, process_evm_pools_results,
-        process_pending_withdrawals, process_scilla_stakes, EvmPool, FinalOutput,
+        build_unstake_request, process_avely_stake, process_evm_pending_withdrawals,
+        process_evm_pools_results, process_pending_withdrawals, process_scilla_stakes, EvmPool,
+        FinalOutput,
     },
 };
 use alloy::primitives::U256;
@@ -391,6 +392,14 @@ impl ZilliqaStakeing for NetworkProvider {
         let withdrawal_pending_result = results_by_id.get(&core_ids.withdrawal_pending);
         let blockchain_info_result = results_by_id.get(&core_ids.blockchain_info);
 
+        let current_block = blockchain_info_result
+            .and_then(|res| res.result.as_ref())
+            .and_then(|r| {
+                serde_json::from_value::<crate::zil_stake_parse::BlockchainInfo>(r.clone()).ok()
+            })
+            .and_then(|info| info.num_tx_blocks.parse::<u64>().ok())
+            .unwrap_or(0);
+
         let pending_withdrawals = process_pending_withdrawals(
             withdrawal_pending_result.as_ref(),
             blockchain_info_result.as_ref(),
@@ -398,9 +407,13 @@ impl ZilliqaStakeing for NetworkProvider {
         );
         final_output.extend(pending_withdrawals);
 
+        let evm_pending_withdrawals =
+            process_evm_pending_withdrawals(&results_by_id, &evm_req_map, current_block);
+        final_output.extend(evm_pending_withdrawals);
+
         fn tag_to_priority(tag: &str) -> u8 {
             match tag {
-                "withdrawal" => 0,
+                "withdrawal" | "withdrawalEVM" => 0,
                 "avely" => 1,
                 "scilla" => 2,
                 "evm" => 3,

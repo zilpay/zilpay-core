@@ -18,8 +18,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
-const WITHDRAWAL_CONTRACT: &str = "a7c67d49c82c7dc1b73d231640b2e4d0661d37c1";
-
 sol! {
     function getFutureTotalStake() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256 balance);
@@ -29,6 +27,7 @@ sol! {
     function getDelegatedTotal() external view returns (uint256);
     function getStake() external view returns (uint256);
     function getCommission() external view returns (uint256, uint256);
+    function getPendingClaims() external view returns (uint256[2][] memory claims);
 
     function stake() external payable;
     function unstake(uint256 shares) external;
@@ -81,13 +80,14 @@ struct ScillaCycleInfoJson {
     arguments: (String, String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EvmRequestType {
     DelegAmt,
     Rewards,
     PoolStake,
     Commission,
     Tvl,
+    PendingWithdrawal,
 }
 
 #[derive(Debug, Clone)]
@@ -338,7 +338,7 @@ pub fn build_initial_core_requests(
         .with_id(total_network_stake_id),
         RpcProvider::<ChainConfig>::build_payload(
             json!([
-                WITHDRAWAL_CONTRACT,
+                SCILLA_GZIL_CONTRACT,
                 "withdrawal_pending",
                 [scilla_user_address]
             ]),
@@ -388,7 +388,7 @@ pub fn process_pending_withdrawals(
             withdrawal_block,
             current_block: Some(current_block),
             name: "Pending Withdrawal (Claimable)".to_string(),
-            address: WITHDRAWAL_CONTRACT.to_string(),
+            address: SCILLA_GZIL_CONTRACT.to_string(),
             deleg_amt: claimable_amount,
             tag: "withdrawal".to_string(),
             ..Default::default()
@@ -833,6 +833,22 @@ pub fn build_evm_pools_requests(
                 req_type: EvmRequestType::Commission,
             },
         );
+
+        let pending_withdrawal_id = start_id;
+        start_id += 1;
+        let get_pending_claims_call = getPendingClaimsCall {};
+        let pending_withdrawal_req = build_payload(
+            json!([{ "to": pool.address, "data": hex::encode_prefixed(get_pending_claims_call.abi_encode()), "from": evm_user_address.to_string() }, "latest"]),
+            EvmMethods::Call,
+        );
+        requests.push(pending_withdrawal_req.with_id(pending_withdrawal_id));
+        evm_request_map.insert(
+            pending_withdrawal_id,
+            EvmRequestInfo {
+                pool: pool.clone(),
+                req_type: EvmRequestType::PendingWithdrawal,
+            },
+        );
     }
 
     (requests, evm_request_map, start_id)
@@ -888,6 +904,10 @@ pub fn process_evm_pools_results(
         };
 
         if res.error.is_some() {
+            continue;
+        }
+
+        if req_info.req_type == EvmRequestType::PendingWithdrawal {
             continue;
         }
 
@@ -954,10 +974,71 @@ pub fn process_evm_pools_results(
                     pool_stats.commission_den = Some(U256::from(1));
                 }
             }
+            EvmRequestType::PendingWithdrawal => {}
         }
     }
 
     (temp_evm_user_data, temp_evm_pool_stats)
+}
+
+pub fn process_evm_pending_withdrawals(
+    results_by_id: &HashMap<u64, ResultRes<Value>>,
+    evm_request_map: &EvmRequestMap,
+    current_block: u64,
+) -> Vec<FinalOutput> {
+    let mut final_outputs = Vec::new();
+
+    for (id, res) in results_by_id {
+        let req_info = match evm_request_map.get(id) {
+            Some(info) => info,
+            None => continue,
+        };
+
+        if req_info.req_type != EvmRequestType::PendingWithdrawal {
+            continue;
+        }
+
+        if res.error.is_some() {
+            continue;
+        }
+
+        let result_str = match res.result.as_ref().and_then(|r| r.as_str()) {
+            Some(s) if s != "0x" => s,
+            _ => continue,
+        };
+
+        let bytes = match hex::decode(result_str.trim_start_matches("0x")) {
+            Ok(b) => b,
+            Err(_) => continue,
+        };
+
+        if let Ok(decoded) = getPendingClaimsCall::abi_decode_returns(&bytes) {
+            for claim in decoded {
+                let withdrawal_block = claim[0].to::<u64>();
+                let amount = claim[1];
+
+                if amount > U256::ZERO {
+                    let is_claimable = withdrawal_block <= current_block;
+                    let name = if is_claimable {
+                        format!("Pending Withdrawal from {} (Claimable)", req_info.pool.name)
+                    } else {
+                        format!("Pending Withdrawal from {}", req_info.pool.name)
+                    };
+                    final_outputs.push(FinalOutput {
+                        name,
+                        url: "".to_string(),
+                        address: format!("{:#x}", req_info.pool.address),
+                        deleg_amt: amount,
+                        tag: "withdrawalEVM".to_string(),
+                        withdrawal_block: Some(withdrawal_block),
+                        current_block: Some(current_block),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+    }
+    final_outputs
 }
 
 trait WithId {
@@ -1176,7 +1257,7 @@ mod tests {
             U256::from_str("100000000000000").unwrap()
         );
         assert_eq!(claimable.tag, "withdrawal");
-        assert_eq!(claimable.address, WITHDRAWAL_CONTRACT);
+        assert_eq!(claimable.address, SCILLA_GZIL_CONTRACT);
 
         assert_eq!(
             unclaimable.deleg_amt,
@@ -1455,7 +1536,7 @@ mod tests {
         assert_eq!(
             req6["params"],
             json!([
-                WITHDRAWAL_CONTRACT,
+                SCILLA_GZIL_CONTRACT,
                 "withdrawal_pending",
                 [scilla_user_address]
             ])
