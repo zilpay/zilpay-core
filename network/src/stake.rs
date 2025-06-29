@@ -47,24 +47,24 @@ pub trait ZilliqaStakeing {
     fn build_tx_evm_stake_request(
         &self,
         amount: U256,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
     fn build_tx_evm_unstake_request(
         &self,
         amount_to_unstake: U256,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
     fn build_tx_claim_unstake_request(
         &self,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
     fn build_tx_build_claim_reward_request(
         &self,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
 }
 
@@ -73,8 +73,8 @@ impl ZilliqaStakeing for NetworkProvider {
     fn build_tx_evm_stake_request(
         &self,
         amount: U256,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
         let mut tx =
             build_stake_request(amount, provider.to_alloy_addr()).from(from.to_alloy_addr());
@@ -93,8 +93,8 @@ impl ZilliqaStakeing for NetworkProvider {
     fn build_tx_evm_unstake_request(
         &self,
         amount_to_unstake: U256,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
         let mut tx = build_unstake_request(amount_to_unstake, provider.to_alloy_addr())
             .from(from.to_alloy_addr());
@@ -112,8 +112,8 @@ impl ZilliqaStakeing for NetworkProvider {
 
     fn build_tx_claim_unstake_request(
         &self,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
         let mut tx =
             build_claim_unstake_request(provider.to_alloy_addr()).from(from.to_alloy_addr());
@@ -131,8 +131,8 @@ impl ZilliqaStakeing for NetworkProvider {
 
     fn build_tx_build_claim_reward_request(
         &self,
-        provider: Address,
-        from: Address,
+        provider: &Address,
+        from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
         let mut tx =
             build_claim_reward_request(provider.to_alloy_addr()).from(from.to_alloy_addr());
