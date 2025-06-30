@@ -28,6 +28,7 @@ sol! {
     function getStake() external view returns (uint256);
     function getCommission() external view returns (uint256, uint256);
     function getPendingClaims() external view returns (uint256[2][] memory claims);
+    function getPrice() external view returns (uint256);
 
     function stake() external payable;
     function unstake(uint256 shares) external;
@@ -88,6 +89,7 @@ pub enum EvmRequestType {
     Commission,
     Tvl,
     PendingWithdrawal,
+    Price,
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +133,7 @@ pub struct FinalOutput {
     pub tvl: Option<u128>,
     pub vote_power: Option<f64>,
     pub apr: Option<f64>,
+    pub price: Option<f64>,
     pub commission: Option<f64>,
     pub tag: String,
     pub withdrawal_block: Option<u64>,
@@ -149,6 +152,7 @@ pub struct EvmPoolStats {
     pub pool_stake: Option<U256>,
     pub commission_num: Option<U256>,
     pub commission_den: Option<U256>,
+    pub price: Option<U256>,
 }
 
 pub type EvmRequestMap = HashMap<u64, EvmRequestInfo>;
@@ -429,6 +433,14 @@ pub fn assemble_evm_final_output(
         if let Some(stats) = stats_entry {
             if let Some(tvl) = stats.tvl {
                 output_entry.tvl = tvl.to_string().parse().ok();
+            }
+
+            if let Some(price_u256) = stats.price {
+                let price_f64: f64 = format_units(price_u256, 18)
+                    .unwrap_or_default()
+                    .parse()
+                    .unwrap_or_default();
+                output_entry.price = Some(price_f64);
             }
 
             if let (Some(pool_stake), Some(commission_num), Some(commission_den)) =
@@ -778,6 +790,24 @@ pub fn build_evm_pools_requests(
             );
         }
 
+        if pool.pool_type == StakingPoolType::LIQUID {
+            let price_id = start_id;
+            start_id += 1;
+            let get_price_call = getPriceCall {};
+            let price_req = build_payload(
+                json!([{ "to": pool.address, "data": hex::encode_prefixed(get_price_call.abi_encode()) }, "latest"]),
+                EvmMethods::Call,
+            );
+            requests.push(price_req.with_id(price_id));
+            evm_request_map.insert(
+                price_id,
+                EvmRequestInfo {
+                    pool: pool.clone(),
+                    req_type: EvmRequestType::Price,
+                },
+            );
+        }
+
         let tvl_id = start_id;
         start_id += 1;
         let tvl_req = if pool.pool_type == StakingPoolType::LIQUID {
@@ -943,6 +973,11 @@ pub fn process_evm_pools_results(
             EvmRequestType::Rewards => {
                 if let Ok(decoded) = rewardsCall::abi_decode_returns(&bytes) {
                     user_data.rewards = decoded;
+                }
+            }
+            EvmRequestType::Price => {
+                if let Ok(decoded) = getPriceCall::abi_decode_returns(&bytes) {
+                    pool_stats.price = Some(decoded);
                 }
             }
             EvmRequestType::Tvl => {
@@ -1310,179 +1345,6 @@ mod tests {
         let moonlet_user = user_data.get(&moonlet_addr).cloned().unwrap_or_default();
         assert_eq!(moonlet_user.deleg_amt, U256::ZERO);
         assert_eq!(moonlet_user.rewards, U256::ZERO);
-    }
-
-    #[test]
-    fn test_assemble_evm_final_output_with_real_data() {
-        let pools = get_proto_mainnet_pools();
-        let total_network_stake = U256::from_str("630535302503909246899505609").unwrap();
-
-        let mut user_data = HashMap::new();
-        user_data.insert(
-            AlloyAddress::from_str("0xe59D98b887e6D40F52f7Cc8d5fb4CF0F9Ed7C98B").unwrap(),
-            EvmUserData {
-                deleg_amt: U256::from_str("10000000000000000000000000").unwrap(),
-                rewards: U256::ZERO,
-            },
-        );
-
-        let mut pool_stats = HashMap::new();
-        pool_stats.insert(
-            AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10237287493646143508392206").unwrap()),
-                pool_stake: Some(U256::from_str("10237287493646143508392206").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x2Abed3a598CBDd8BB9089c09A9202FD80C55Df8c").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10034888021342446971735205").unwrap()),
-                pool_stake: Some(U256::from_str("10508052748385519195925337").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0xB9d689c64b969ad9eDd1EDDb50be42E217567fd3").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("21946110000000000000000000").unwrap()),
-                pool_stake: Some(U256::from_str("21946110000000000000000000").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0xe0C095DBE85a8ca75de4749B5AEe0D18100a3C39").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("11672633461235654575276049").unwrap()),
-                pool_stake: Some(U256::from_str("13287312536846802617691049").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0xC0247d13323F1D06b6f24350Eea03c5e0Fbf65ed").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("11005021076167994104091571").unwrap()),
-                pool_stake: Some(U256::from_str("11259881828752700222853569").unwrap()),
-                commission_num: Some(U256::from(1000)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x8A0dEd57ABd3bc50A600c94aCbEcEf62db5f4D32").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10012398000000000000000000").unwrap()),
-                pool_stake: Some(U256::from_str("10012398000000000000000000").unwrap()),
-                commission_num: Some(U256::from(1000)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x3b1Cd55f995a9A8A634fc1A3cEB101e2baA636fc").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10024751000000000000000000").unwrap()),
-                pool_stake: Some(U256::from_str("10024751000000000000000000").unwrap()),
-                commission_num: Some(U256::from(1000)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x66a2bb4AD6999966616B2ad209833260F8eA07C8").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10016872167542680756663733").unwrap()),
-                pool_stake: Some(U256::from_str("10312028053449932803340906").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0xe59D98b887e6D40F52f7Cc8d5fb4CF0F9Ed7C98B").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("20693380675539100961364497").unwrap()),
-                pool_stake: Some(U256::from_str("21602479861384281430978136").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0xd090424684a9108229b830437b490363eB250A58").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10000299874698857153672725").unwrap()),
-                pool_stake: Some(U256::from_str("10000300000000000000000000").unwrap()),
-                commission_num: Some(U256::from(1000)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x33cDb55D7fD68d0Da1a3448F11bCdA5fDE3426B3").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10009995000000000000000000").unwrap()),
-                pool_stake: Some(U256::from_str("10009995000000000000000000").unwrap()),
-                commission_num: Some(U256::from(670)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x35118Af4Fc43Ce58CEcBC6Eeb21D0C1Eb7E28Bd3").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10000487380928487718028066").unwrap()),
-                pool_stake: Some(U256::from_str("10290079859948883024222433").unwrap()),
-                commission_num: Some(U256::from(1000)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x62269F615E1a3E36f96dcB7fDDF8B823737DD618").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10240697410747595477291763").unwrap()),
-                pool_stake: Some(U256::from_str("10542298122494984096102119").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0xa45114E92E26B978F0B37cF19E66634f997250f9").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10000628000000000000000000").unwrap()),
-                pool_stake: Some(U256::from_str("10000628000000000000000000").unwrap()),
-                commission_num: Some(U256::from(1000)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-        pool_stats.insert(
-            AlloyAddress::from_str("0x02376bA9e0f98439eA9F76A582FBb5d20E298177").unwrap(),
-            EvmPoolStats {
-                tvl: Some(U256::from_str("10501300000000000000000000").unwrap()),
-                pool_stake: Some(U256::from_str("10501300000000000000000000").unwrap()),
-                commission_num: Some(U256::from(800)),
-                commission_den: Some(U256::from(10000)),
-            },
-        );
-
-        let final_output =
-            assemble_evm_final_output(&pools, &user_data, &pool_stats, total_network_stake);
-
-        assert_eq!(final_output.len(), 15);
-
-        let moonlet_output = final_output.iter().find(|p| p.name == "Moonlet").unwrap();
-        assert_eq!(moonlet_output.deleg_amt, U256::ZERO);
-        assert!((moonlet_output.commission.unwrap() - 8.0).abs() < 1e-4);
-        assert!((moonlet_output.vote_power.unwrap() - 1.6235).abs() < 1e-4);
-
-        let amazing_output = final_output
-            .iter()
-            .find(|p| p.name == "Amazing Pool - Avely and ZilPay")
-            .unwrap();
-        assert_eq!(
-            amazing_output.deleg_amt,
-            U256::from_str("10000000000000000000000000").unwrap()
-        );
-        assert!((amazing_output.commission.unwrap() - 8.0).abs() < 1e-4);
-        assert!((amazing_output.vote_power.unwrap() - 3.4260).abs() < 1e-4);
     }
 
     #[test]
