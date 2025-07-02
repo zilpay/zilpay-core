@@ -362,13 +362,12 @@ impl ZilliqaStakeing for NetworkProvider {
 
         let (temp_evm_user_data, temp_evm_pool_stats) =
             process_evm_pools_results(&results_by_id, &evm_req_map);
-        let evm_stakes = assemble_evm_final_output(
+        let mut evm_stakes = assemble_evm_final_output(
             &evm_pools,
             &temp_evm_user_data,
             &temp_evm_pool_stats,
             total_network_stake,
         );
-        final_output.extend(evm_stakes);
 
         if let Some(avely_stake) = process_avely_stake(
             results_by_id.get(&core_ids.st_zil_balance).as_ref(),
@@ -400,16 +399,30 @@ impl ZilliqaStakeing for NetworkProvider {
             .and_then(|info| info.num_tx_blocks.parse::<u64>().ok())
             .unwrap_or(0);
 
+        let evm_pending_withdrawals_map =
+            process_evm_pending_withdrawals(&results_by_id, &evm_req_map, current_block);
+
+        for pool_output in &mut evm_stakes {
+            pool_output.current_block = Some(current_block);
+
+            if let Some(withdrawals) = evm_pending_withdrawals_map.get(
+                &pool_output
+                    .address
+                    .parse::<alloy::primitives::Address>()
+                    .unwrap_or_default(),
+            ) {
+                pool_output.pending_withdrawals = withdrawals.clone();
+            }
+        }
+
+        final_output.extend(evm_stakes);
+
         let pending_withdrawals = process_pending_withdrawals(
             withdrawal_pending_result.as_ref(),
             blockchain_info_result.as_ref(),
             &scilla_user_address,
         );
         final_output.extend(pending_withdrawals);
-
-        let evm_pending_withdrawals =
-            process_evm_pending_withdrawals(&results_by_id, &evm_req_map, current_block);
-        final_output.extend(evm_pending_withdrawals);
 
         Ok(final_output)
     }

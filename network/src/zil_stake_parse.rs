@@ -37,6 +37,13 @@ sol! {
     function stakeRewards() external;
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Clone)]
+pub struct PendingWithdrawal {
+    pub amount: U256,
+    pub withdrawal_block: u64,
+    pub claimable: bool,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct LPToken {
     pub name: String,
@@ -134,8 +141,8 @@ pub struct FinalOutput {
     pub price: Option<f64>,
     pub commission: Option<f64>,
     pub tag: String,
-    pub withdrawal_block: Option<u64>,
     pub current_block: Option<u64>,
+    pub pending_withdrawals: Vec<PendingWithdrawal>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -373,26 +380,28 @@ pub fn process_pending_withdrawals(
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let mut withdrawal_block: Option<u64> = None;
-    let mut claimable_amount = U256::ZERO;
+    let mut pending_withdrawal = PendingWithdrawal {
+        amount: Default::default(),
+        withdrawal_block: 0,
+        claimable: true,
+    };
 
     for (block_str, amount_str) in withdrawals {
         if let (Ok(block), Ok(amount)) = (block_str.parse::<u64>(), amount_str.parse::<U256>()) {
-            withdrawal_block = Some(block);
-            claimable_amount = amount;
+            pending_withdrawal.withdrawal_block = block;
+            pending_withdrawal.amount = amount;
         }
     }
 
     let mut outputs = Vec::new();
 
-    if claimable_amount > U256::ZERO {
+    if pending_withdrawal.amount > U256::ZERO {
         outputs.push(FinalOutput {
-            withdrawal_block,
             current_block: Some(current_block),
             name: "Pending Withdrawal (Claimable)".to_string(),
             address: SCILLA_GZIL_CONTRACT.to_string(),
-            deleg_amt: claimable_amount,
             tag: "withdrawal".to_string(),
+            pending_withdrawals: vec![pending_withdrawal],
             ..Default::default()
         });
     }
@@ -1015,8 +1024,8 @@ pub fn process_evm_pending_withdrawals(
     results_by_id: &HashMap<u64, ResultRes<Value>>,
     evm_request_map: &EvmRequestMap,
     current_block: u64,
-) -> Vec<FinalOutput> {
-    let mut final_outputs = Vec::new();
+) -> HashMap<AlloyAddress, Vec<PendingWithdrawal>> {
+    let mut withdrawals_by_pool: HashMap<AlloyAddress, Vec<PendingWithdrawal>> = HashMap::new();
 
     for (id, res) in results_by_id {
         let req_info = match evm_request_map.get(id) {
@@ -1048,26 +1057,20 @@ pub fn process_evm_pending_withdrawals(
                 let amount = claim[1];
 
                 if amount > U256::ZERO {
-                    let is_claimable = withdrawal_block <= current_block;
-                    let name = if is_claimable {
-                        format!("Pending Withdrawal from {} (Claimable)", req_info.pool.name)
-                    } else {
-                        format!("Pending Withdrawal from {}", req_info.pool.name)
+                    let pending_withdrawal = PendingWithdrawal {
+                        amount,
+                        withdrawal_block,
+                        claimable: withdrawal_block <= current_block,
                     };
-                    final_outputs.push(FinalOutput {
-                        name,
-                        address: format!("{:#x}", req_info.pool.address),
-                        deleg_amt: amount,
-                        tag: "withdrawalEVM".to_string(),
-                        withdrawal_block: Some(withdrawal_block),
-                        current_block: Some(current_block),
-                        ..Default::default()
-                    });
+                    withdrawals_by_pool
+                        .entry(req_info.pool.address)
+                        .or_default()
+                        .push(pending_withdrawal);
                 }
             }
         }
     }
-    final_outputs
+    withdrawals_by_pool
 }
 
 trait WithId {
