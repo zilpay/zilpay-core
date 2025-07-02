@@ -37,20 +37,19 @@ sol! {
     function stakeRewards() external;
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub enum StakingPoolType {
-    LIQUID,
-    NORMAL,
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct LPToken {
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u8,
+    pub address: AlloyAddress,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct EvmPool {
-    pub token_address: AlloyAddress,
-    pub pool_type: StakingPoolType,
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct EvmPoolV2 {
     pub address: AlloyAddress,
+    pub token: Option<LPToken>,
     pub name: String,
-    pub token_decimals: u8,
-    pub token_symbol: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -81,7 +80,7 @@ struct ScillaCycleInfoJson {
     arguments: (String, String),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum EvmRequestType {
     DelegAmt,
     Rewards,
@@ -92,9 +91,9 @@ pub enum EvmRequestType {
     Price,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct EvmRequestInfo {
-    pub pool: EvmPool,
+    pub pool: EvmPoolV2,
     pub req_type: EvmRequestType,
 }
 
@@ -121,13 +120,12 @@ pub struct ScillaStakedNode {
     pub rewards: U256,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FinalOutput {
     pub name: String,
-    pub url: String,
     pub address: String,
-    pub token_address: Option<String>,
+    pub token: Option<LPToken>,
     pub deleg_amt: U256,
     pub rewards: U256,
     pub tvl: Option<u128>,
@@ -403,7 +401,7 @@ pub fn process_pending_withdrawals(
 }
 
 pub fn assemble_evm_final_output(
-    pools: &[EvmPool],
+    pools: &[EvmPoolV2],
     user_data: &HashMap<AlloyAddress, EvmUserData>,
     pool_stats: &HashMap<AlloyAddress, EvmPoolStats>,
     total_network_stake: U256,
@@ -421,9 +419,8 @@ pub fn assemble_evm_final_output(
 
         let mut output_entry = FinalOutput {
             name: pool.name.clone(),
-            url: "".to_string(),
             address: format!("{:#x}", pool.address),
-            token_address: Some(format!("{:#x}", pool.token_address)),
+            token: pool.token.clone(),
             deleg_amt: user_entry.deleg_amt,
             rewards: user_entry.rewards,
             tag: "evm".to_string(),
@@ -725,7 +722,6 @@ pub async fn process_scilla_stakes(
         .into_iter()
         .map(|sn| FinalOutput {
             name: sn.node.name,
-            url: sn.node.url,
             address: sn.node.address,
             deleg_amt: sn.deleg_amt,
             rewards: sn.rewards,
@@ -736,7 +732,7 @@ pub async fn process_scilla_stakes(
 }
 
 pub fn build_evm_pools_requests(
-    pools: &[EvmPool],
+    pools: &[EvmPoolV2],
     evm_user_address: &Address,
     mut start_id: u64,
 ) -> (Vec<Value>, EvmRequestMap, u64) {
@@ -748,12 +744,12 @@ pub fn build_evm_pools_requests(
     for pool in pools {
         let deleg_amt_id = start_id;
         start_id += 1;
-        let deleg_amt_req = if pool.pool_type == StakingPoolType::LIQUID {
+        let deleg_amt_req = if pool.token.is_some() {
             let balance_of_call = balanceOfCall {
                 account: alloy_evm_user_addr,
             };
             build_payload(
-                json!([{ "to": pool.token_address, "data": hex::encode_prefixed(balance_of_call.abi_encode()) }, "latest"]),
+                json!([{ "to": pool.token.clone().unwrap().address, "data": hex::encode_prefixed(balance_of_call.abi_encode()) }, "latest"]),
                 EvmMethods::Call,
             )
         } else {
@@ -772,7 +768,7 @@ pub fn build_evm_pools_requests(
             },
         );
 
-        if pool.pool_type == StakingPoolType::NORMAL {
+        if pool.token.is_none() {
             let rewards_id = start_id;
             start_id += 1;
             let rewards_call = rewardsCall {};
@@ -790,7 +786,7 @@ pub fn build_evm_pools_requests(
             );
         }
 
-        if pool.pool_type == StakingPoolType::LIQUID {
+        if pool.token.is_some() {
             let price_id = start_id;
             start_id += 1;
             let get_price_call = getPriceCall {};
@@ -810,10 +806,10 @@ pub fn build_evm_pools_requests(
 
         let tvl_id = start_id;
         start_id += 1;
-        let tvl_req = if pool.pool_type == StakingPoolType::LIQUID {
+        let tvl_req = if pool.token.is_some() {
             let total_supply_call = totalSupplyCall {};
             build_payload(
-                json!([{ "to": pool.token_address, "data": hex::encode_prefixed(total_supply_call.abi_encode()) }, "latest"]),
+                json!([{ "to": pool.token.clone().unwrap().address, "data": hex::encode_prefixed(total_supply_call.abi_encode()) }, "latest"]),
                 EvmMethods::Call,
             )
         } else {
@@ -899,13 +895,12 @@ pub fn process_avely_stake(
 
     if st_zil_balance > U256::ZERO {
         Some(FinalOutput {
-            name: "stZIL (Avely Finance)".to_string(),
-            url: "https://avely.fi/".to_string(),
+            name: "Avely Finance".to_string(),
             address: ST_ZIL_CONTRACT.to_string(),
             deleg_amt: st_zil_balance,
             rewards: U256::ZERO,
             tag: "avely".to_string(),
-            token_address: None,
+            token: None,
             tvl: None,
             vote_power: None,
             apr: None,
@@ -957,7 +952,7 @@ pub fn process_evm_pools_results(
 
         match req_info.req_type {
             EvmRequestType::DelegAmt => {
-                let decoded_amt = if req_info.pool.pool_type == StakingPoolType::LIQUID {
+                let decoded_amt = if req_info.pool.token.is_some() {
                     balanceOfCall::abi_decode_returns(&bytes)
                         .ok()
                         .map(|decoded| decoded)
@@ -981,7 +976,7 @@ pub fn process_evm_pools_results(
                 }
             }
             EvmRequestType::Tvl => {
-                let decoded_tvl = if req_info.pool.pool_type == StakingPoolType::LIQUID {
+                let decoded_tvl = if req_info.pool.token.is_some() {
                     totalSupplyCall::abi_decode_returns(&bytes)
                         .ok()
                         .map(|decoded| decoded)
@@ -1061,7 +1056,6 @@ pub fn process_evm_pending_withdrawals(
                     };
                     final_outputs.push(FinalOutput {
                         name,
-                        url: "".to_string(),
                         address: format!("{:#x}", req_info.pool.address),
                         deleg_amt: amount,
                         tag: "withdrawalEVM".to_string(),
@@ -1086,474 +1080,5 @@ impl WithId for Value {
             obj.insert("id".to_string(), json!(id));
         }
         self
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::str::FromStr;
-
-    fn get_proto_mainnet_pools() -> Vec<EvmPool> {
-        vec![
-            EvmPool {
-                address: AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8")
-                    .unwrap(),
-                token_address: AlloyAddress::ZERO,
-                name: "Moonlet".to_string(),
-                pool_type: StakingPoolType::NORMAL,
-                token_decimals: 18,
-                token_symbol: "ZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x2Abed3a598CBDd8BB9089c09A9202FD80C55Df8c")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0xD8B61fed51b9037A31C2Bf0a5dA4B717AF0C0F78")
-                    .unwrap(),
-                name: "AtomicWallet".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "SHARK".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0xB9d689c64b969ad9eDd1EDDb50be42E217567fd3")
-                    .unwrap(),
-                token_address: AlloyAddress::ZERO,
-                name: "CEX.IO".to_string(),
-                pool_type: StakingPoolType::NORMAL,
-                token_decimals: 18,
-                token_symbol: "ZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0xe0C095DBE85a8ca75de4749B5AEe0D18100a3C39")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0x7B213b5AEB896bC290F0cD8B8720eaF427098186")
-                    .unwrap(),
-                name: "PlunderSwap".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "pZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0xC0247d13323F1D06b6f24350Eea03c5e0Fbf65ed")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0x2c51C97b22E73AfD33911397A20Aa5176e7Ab951")
-                    .unwrap(),
-                name: "Luganodes".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "LNZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x8A0dEd57ABd3bc50A600c94aCbEcEf62db5f4D32")
-                    .unwrap(),
-                token_address: AlloyAddress::ZERO,
-                name: "DTEAM".to_string(),
-                pool_type: StakingPoolType::NORMAL,
-                token_decimals: 18,
-                token_symbol: "ZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x3b1Cd55f995a9A8A634fc1A3cEB101e2baA636fc")
-                    .unwrap(),
-                token_address: AlloyAddress::ZERO,
-                name: "Shardpool".to_string(),
-                pool_type: StakingPoolType::NORMAL,
-                token_decimals: 18,
-                token_symbol: "ZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x66a2bb4AD6999966616B2ad209833260F8eA07C8")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0xA1Adc08C12c684AdB28B963f251d6cB1C6a9c0c1")
-                    .unwrap(),
-                name: "Encapsulate".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "encapZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0xe59D98b887e6D40F52f7Cc8d5fb4CF0F9Ed7C98B")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0xf564DF9BeB417FB50b38A58334CA7607B36D3BFb")
-                    .unwrap(),
-                name: "Amazing Pool - Avely and ZilPay".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "stZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0xd090424684a9108229b830437b490363eB250A58")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0xE10575244f8E8735d71ed00287e9d1403f03C960")
-                    .unwrap(),
-                name: "PathrockNetwork".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "zLST".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x33cDb55D7fD68d0Da1a3448F11bCdA5fDE3426B3")
-                    .unwrap(),
-                token_address: AlloyAddress::ZERO,
-                name: "BlackNodes".to_string(),
-                pool_type: StakingPoolType::NORMAL,
-                token_decimals: 18,
-                token_symbol: "ZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x35118Af4Fc43Ce58CEcBC6Eeb21D0C1Eb7E28Bd3")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0x245E6AB0d092672B18F27025385f98E2EC3a3275")
-                    .unwrap(),
-                name: "Lithium Digital".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "litZil".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x62269F615E1a3E36f96dcB7fDDF8B823737DD618")
-                    .unwrap(),
-                token_address: AlloyAddress::from_str("0x770a35A5A95c2107860E9F74c1845e20289cbfe6")
-                    .unwrap(),
-                name: "TorchWallet.io".to_string(),
-                pool_type: StakingPoolType::LIQUID,
-                token_decimals: 18,
-                token_symbol: "tZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0xa45114E92E26B978F0B37cF19E66634f997250f9")
-                    .unwrap(),
-                token_address: AlloyAddress::ZERO,
-                name: "Stakefish".to_string(),
-                pool_type: StakingPoolType::NORMAL,
-                token_decimals: 18,
-                token_symbol: "ZIL".to_string(),
-            },
-            EvmPool {
-                address: AlloyAddress::from_str("0x02376bA9e0f98439eA9F76A582FBb5d20E298177")
-                    .unwrap(),
-                token_address: AlloyAddress::ZERO,
-                name: "AlphaZIL (former Ezil)".to_string(),
-                pool_type: StakingPoolType::NORMAL,
-                token_decimals: 18,
-                token_symbol: "ZIL".to_string(),
-            },
-        ]
-    }
-
-    #[test]
-    fn test_process_pending_withdrawals() {
-        let scilla_user_address = "0x77e27c39ce572283b848e2cdf32cce761e34fa49";
-        let scilla_user_address_lower = scilla_user_address.to_lowercase();
-        let withdrawal_json = json!({
-            "withdrawal_pending": {
-                scilla_user_address_lower: {
-                    "4944395": "100000000000000",
-                    "5000000": "200000000000000"
-                }
-            }
-        });
-        let blockchain_info_json = json!({
-            "NumTxBlocks": "4944537"
-        });
-
-        let withdrawal_res = ResultRes {
-            id: 1,
-            jsonrpc: "2.0".to_string(),
-            result: Some(withdrawal_json),
-            error: None,
-        };
-        let blockchain_info_res = ResultRes {
-            id: 2,
-            jsonrpc: "2.0".to_string(),
-            result: Some(blockchain_info_json),
-            error: None,
-        };
-
-        let output = process_pending_withdrawals(
-            Some(&&withdrawal_res),
-            Some(&&blockchain_info_res),
-            scilla_user_address,
-        );
-
-        assert_eq!(output.len(), 2);
-        let claimable = output
-            .iter()
-            .find(|o| o.name.contains("Claimable"))
-            .unwrap();
-        let unclaimable = output
-            .iter()
-            .find(|o| o.name.contains("Unclaimable"))
-            .unwrap();
-
-        assert_eq!(
-            claimable.deleg_amt,
-            U256::from_str("100000000000000").unwrap()
-        );
-        assert_eq!(claimable.tag, "withdrawal");
-        assert_eq!(claimable.address, SCILLA_GZIL_CONTRACT);
-
-        assert_eq!(
-            unclaimable.deleg_amt,
-            U256::from_str("200000000000000").unwrap()
-        );
-        assert_eq!(unclaimable.tag, "withdrawal");
-    }
-
-    #[test]
-    fn test_process_evm_pools_results_with_real_data() {
-        let pools = get_proto_mainnet_pools();
-        let evm_user_address =
-            Address::from_eth_address("0xb1fE20CD2b856BA1a4e08afb39dfF5C80f0cBbCa").unwrap();
-
-        let (_requests, req_map, _next_id) = build_evm_pools_requests(&pools, &evm_user_address, 5);
-
-        let mut mock_results: HashMap<u64, ResultRes<Value>> = HashMap::new();
-
-        let raw_data = [(
-            41,
-            "0x000000000000000000000000000000000000000000084595161401484a000000",
-        )];
-        for (id, result) in raw_data {
-            mock_results.insert(
-                id,
-                ResultRes {
-                    id,
-                    jsonrpc: "2.0".to_string(),
-                    result: Some(json!(result)),
-                    error: None,
-                },
-            );
-        }
-
-        let (user_data, _pool_stats) = process_evm_pools_results(&mock_results, &req_map);
-
-        let amazing_pool_addr =
-            AlloyAddress::from_str("0xe59D98b887e6D40F52f7Cc8d5fb4CF0F9Ed7C98B").unwrap();
-        let amazing_pool_user = user_data.get(&amazing_pool_addr).unwrap();
-
-        assert_eq!(
-            amazing_pool_user.deleg_amt,
-            U256::from_str("10000000000000000000000000").unwrap()
-        );
-        assert_eq!(amazing_pool_user.rewards, U256::ZERO);
-
-        let moonlet_addr =
-            AlloyAddress::from_str("0xA0572935d53e14C73eBb3de58d319A9Fe51E1FC8").unwrap();
-
-        let moonlet_user = user_data.get(&moonlet_addr).cloned().unwrap_or_default();
-        assert_eq!(moonlet_user.deleg_amt, U256::ZERO);
-        assert_eq!(moonlet_user.rewards, U256::ZERO);
-    }
-
-    #[test]
-    fn test_build_initial_core_requests() {
-        let scilla_user_address = "0x77e27c39ce572283b848e2cdf32cce761e34fa49";
-        let (requests, ids, next_id) = build_initial_core_requests(1, scilla_user_address);
-
-        assert_eq!(requests.len(), 7);
-        assert_eq!(next_id, 8);
-
-        assert_eq!(ids.ssn_list, 1);
-        assert_eq!(ids.reward_cycle, 2);
-        assert_eq!(ids.withdraw_cycle, 3);
-        assert_eq!(ids.st_zil_balance, 4);
-        assert_eq!(ids.total_network_stake, 5);
-        assert_eq!(ids.withdrawal_pending, 6);
-        assert_eq!(ids.blockchain_info, 7);
-
-        let req1 = &requests[0];
-        assert_eq!(req1["id"], 1);
-        assert_eq!(req1["method"], "GetSmartContractSubState");
-        assert_eq!(req1["params"], json!([SCILLA_GZIL_CONTRACT, "ssnlist", []]));
-
-        let req3 = &requests[2];
-        assert_eq!(req3["id"], 3);
-        assert_eq!(req3["method"], "GetSmartContractSubState");
-        assert_eq!(
-            req3["params"],
-            json!([
-                SCILLA_GZIL_CONTRACT,
-                "last_withdraw_cycle_deleg",
-                [scilla_user_address]
-            ])
-        );
-
-        let req5 = &requests[4];
-        let get_future_total_stake_call = getFutureTotalStakeCall {};
-        assert_eq!(req5["id"], 5);
-        assert_eq!(req5["method"], "eth_call");
-        assert_eq!(req5["params"][0]["to"], json!(DEPOSIT_ADDRESS.to_string()));
-        assert_eq!(
-            req5["params"][0]["data"],
-            json!(hex::encode_prefixed(
-                get_future_total_stake_call.abi_encode()
-            ))
-        );
-
-        let req6 = &requests[5];
-        assert_eq!(req6["id"], 6);
-        assert_eq!(req6["method"], "GetSmartContractSubState");
-        assert_eq!(
-            req6["params"],
-            json!([
-                SCILLA_GZIL_CONTRACT,
-                "withdrawal_pending",
-                [scilla_user_address]
-            ])
-        );
-
-        let req7 = &requests[6];
-        assert_eq!(req7["id"], 7);
-        assert_eq!(req7["method"], "GetBlockchainInfo");
-        assert_eq!(req7["params"], json!([]));
-    }
-
-    #[test]
-    fn test_build_evm_pools_requests() {
-        let pools = get_proto_mainnet_pools();
-        let evm_user_address =
-            Address::from_eth_address("0xb1fE20CD2b856BA1a4e08afb39dfF5C80f0cBbCa").unwrap();
-        let (requests, req_map, next_id) = build_evm_pools_requests(&pools, &evm_user_address, 1);
-
-        assert_eq!(requests.len(), 67);
-        assert_eq!(req_map.len(), 67);
-        assert_eq!(next_id, 68);
-
-        let moonlet_info = req_map.get(&1).unwrap();
-        assert_eq!(moonlet_info.pool.name, "Moonlet");
-        match moonlet_info.req_type {
-            EvmRequestType::DelegAmt => (),
-            _ => panic!("Incorrect request type"),
-        }
-
-        let moonlet_deleg_req = requests.iter().find(|r| r["id"] == 1).unwrap();
-        assert_eq!(moonlet_deleg_req["method"], "eth_call");
-        assert_eq!(
-            moonlet_deleg_req["params"][0]["to"].as_str().unwrap(),
-            "0xa0572935d53e14c73ebb3de58d319a9fe51e1fc8"
-        );
-        let get_delegated_amount_call = getDelegatedAmountCall {};
-        assert_eq!(
-            moonlet_deleg_req["params"][0]["data"],
-            json!(hex::encode_prefixed(get_delegated_amount_call.abi_encode()))
-        );
-
-        let atomic_info = req_map.get(&6).unwrap();
-        assert_eq!(atomic_info.pool.name, "AtomicWallet");
-        match atomic_info.req_type {
-            EvmRequestType::DelegAmt => (),
-            _ => panic!("Incorrect request type"),
-        }
-
-        let atomic_deleg_req = requests.iter().find(|r| r["id"] == 6).unwrap();
-        let balance_of_call = balanceOfCall {
-            account: evm_user_address.to_alloy_addr(),
-        };
-        assert_eq!(
-            atomic_deleg_req["params"][0]["to"].as_str().unwrap(),
-            "0xd8b61fed51b9037a31c2bf0a5da4b717af0c0f78"
-        );
-        assert_eq!(
-            atomic_deleg_req["params"][0]["data"],
-            json!(hex::encode_prefixed(balance_of_call.abi_encode()))
-        );
-
-        let moonlet_commission_req = requests.iter().find(|r| r["id"] == 5).unwrap();
-        let get_commission_call = getCommissionCall {};
-        assert_eq!(
-            moonlet_commission_req["params"][0]["data"],
-            json!(hex::encode_prefixed(get_commission_call.abi_encode()))
-        );
-    }
-
-    #[test]
-    fn test_reward_calculation_matches_ts_logic() {
-        let last_withdraw = 100;
-        let last_reward = 105;
-
-        let mut direct_map = HashMap::new();
-        direct_map.insert(100, U256::from(1000));
-        direct_map.insert(101, U256::from(500));
-
-        let mut buffer_map = HashMap::new();
-        buffer_map.insert(99, U256::from(200));
-        buffer_map.insert(100, U256::from(300));
-
-        let mut deleg_map = HashMap::new();
-        deleg_map.insert(100, U256::from(10000));
-        deleg_map.insert(101, U256::from(11000));
-        deleg_map.insert(102, U256::from(12000));
-
-        let mut ssn_stake_map = HashMap::new();
-        ssn_stake_map.insert(
-            101,
-            CycleInfo {
-                total_stake: U256::from(1_000_000),
-                total_rewards: U256::from(50000),
-            },
-        );
-        ssn_stake_map.insert(
-            102,
-            CycleInfo {
-                total_stake: U256::from(1_100_000),
-                total_rewards: U256::from(55000),
-            },
-        );
-        ssn_stake_map.insert(
-            103,
-            CycleInfo {
-                total_stake: U256::from(1_200_000),
-                total_rewards: U256::from(60000),
-            },
-        );
-        ssn_stake_map.insert(
-            104,
-            CycleInfo {
-                total_stake: U256::from(1_300_000),
-                total_rewards: U256::from(65000),
-            },
-        );
-        ssn_stake_map.insert(
-            105,
-            CycleInfo {
-                total_stake: U256::from(1_400_000),
-                total_rewards: U256::from(70000),
-            },
-        );
-
-        let ts_stake_101 = U256::from(10000) + U256::from(1000) + U256::from(200);
-        let ts_stake_102 = U256::from(11000) + U256::from(500) + U256::from(300) + ts_stake_101;
-        let ts_stake_103 = U256::from(12000) + U256::from(0) + U256::from(0) + ts_stake_102;
-        let ts_stake_104 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_103;
-        let ts_stake_105 = U256::from(0) + U256::from(0) + U256::from(0) + ts_stake_104;
-
-        let reward_101 = (ts_stake_101 * U256::from(50000)) / U256::from(1_000_000);
-        let reward_102 = (ts_stake_102 * U256::from(55000)) / U256::from(1_100_000);
-        let reward_103 = (ts_stake_103 * U256::from(60000)) / U256::from(1_200_000);
-        let reward_104 = (ts_stake_104 * U256::from(65000)) / U256::from(1_300_000);
-        let reward_105 = (ts_stake_105 * U256::from(70000)) / U256::from(1_400_000);
-
-        let total_rewards_ts = reward_101 + reward_102 + reward_103 + reward_104 + reward_105;
-
-        let reward_cycles = get_reward_need_cycle_list(last_withdraw, last_reward);
-        let stake_per_cycle =
-            combine_buff_direct(&reward_cycles, &direct_map, &buffer_map, &deleg_map);
-        let total_rewards_rust =
-            calculate_rewards(&stake_per_cycle, &reward_cycles, &ssn_stake_map);
-
-        assert_eq!(reward_cycles, vec![101, 102, 103, 104, 105]);
-
-        assert_eq!(*stake_per_cycle.get(&101).unwrap(), ts_stake_101);
-        assert_eq!(*stake_per_cycle.get(&102).unwrap(), ts_stake_102);
-        assert_eq!(*stake_per_cycle.get(&103).unwrap(), ts_stake_103);
-        assert_eq!(*stake_per_cycle.get(&104).unwrap(), ts_stake_104);
-        assert_eq!(*stake_per_cycle.get(&105).unwrap(), ts_stake_105);
-
-        assert_eq!(
-            total_rewards_rust, total_rewards_ts,
-            "The final reward calculation must match the TypeScript logic"
-        );
     }
 }

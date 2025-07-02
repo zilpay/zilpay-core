@@ -4,7 +4,7 @@ use crate::{
         assemble_evm_final_output, build_claim_reward_request, build_claim_unstake_request,
         build_evm_pools_requests, build_initial_core_requests, build_stake_request,
         build_unstake_request, process_avely_stake, process_evm_pending_withdrawals,
-        process_evm_pools_results, process_pending_withdrawals, process_scilla_stakes, EvmPool,
+        process_evm_pools_results, process_pending_withdrawals, process_scilla_stakes, EvmPoolV2,
         FinalOutput,
     },
 };
@@ -26,7 +26,7 @@ use std::collections::HashMap;
 
 #[async_trait]
 pub trait ZilliqaStakeing {
-    async fn get_zq2_providers(&self) -> Result<Vec<EvmPool>, NetworkErrors>;
+    async fn get_zq2_providers(&self) -> Result<Vec<EvmPoolV2>, NetworkErrors>;
     async fn get_all_stakes(&self, pub_key: &PubKey) -> Result<Vec<FinalOutput>, NetworkErrors>;
     fn build_tx_scilla_claim(
         &self,
@@ -308,8 +308,8 @@ impl ZilliqaStakeing for NetworkProvider {
         Ok(req_tx)
     }
 
-    async fn get_zq2_providers(&self) -> Result<Vec<EvmPool>, NetworkErrors> {
-        let url = "https://api.zilpay.io/api/v1/stake/pools";
+    async fn get_zq2_providers(&self) -> Result<Vec<EvmPoolV2>, NetworkErrors> {
+        let url = "https://api.zilpay.io/api/v2/stake/pools";
         let client = reqwest::Client::new();
         let response = client.get(url).send().await.map_err(|e| match e.status() {
             Some(status) => NetworkErrors::HttpError(status.as_u16(), e.to_string()),
@@ -324,7 +324,7 @@ impl ZilliqaStakeing for NetworkProvider {
         }
 
         response
-            .json::<Vec<EvmPool>>()
+            .json::<Vec<EvmPoolV2>>()
             .await
             .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))
     }
@@ -411,45 +411,6 @@ impl ZilliqaStakeing for NetworkProvider {
             process_evm_pending_withdrawals(&results_by_id, &evm_req_map, current_block);
         final_output.extend(evm_pending_withdrawals);
 
-        fn tag_to_priority(tag: &str) -> u8 {
-            match tag {
-                "withdrawal" | "withdrawalEVM" => 0,
-                "avely" => 1,
-                "scilla" => 2,
-                "evm" => 3,
-                _ => 4,
-            }
-        }
-
-        final_output.sort_by(|a, b| {
-            tag_to_priority(&a.tag)
-                .cmp(&tag_to_priority(&b.tag))
-                .then_with(|| b.deleg_amt.cmp(&a.deleg_amt))
-                .then_with(|| {
-                    let a_has_avely = a.name.to_lowercase().contains("avely");
-                    let b_has_avely = b.name.to_lowercase().contains("avely");
-                    b_has_avely.cmp(&a_has_avely)
-                })
-                .then_with(|| {
-                    b.vote_power
-                        .partial_cmp(&a.vote_power)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .then_with(|| {
-                    b.apr
-                        .partial_cmp(&a.apr)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .then_with(|| match (a.commission, b.commission) {
-                    (Some(a_comm), Some(b_comm)) => a_comm
-                        .partial_cmp(&b_comm)
-                        .unwrap_or(std::cmp::Ordering::Equal),
-                    (Some(_), None) => std::cmp::Ordering::Less,
-                    (None, Some(_)) => std::cmp::Ordering::Greater,
-                    (None, None) => std::cmp::Ordering::Equal,
-                })
-        });
-
         Ok(final_output)
     }
 }
@@ -502,8 +463,6 @@ mod tests {
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
         let result = provider.get_all_stakes(&pubkey).await;
-
-        assert!(result.is_ok(), "Function should execute without errors");
         let final_output = result.unwrap();
 
         assert!(!final_output.is_empty(), "Should return some staking data");
