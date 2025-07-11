@@ -36,13 +36,13 @@ pub trait ZilliqaStakeing {
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_scilla_complete_withdrawal(&self) -> Result<TransactionRequest, NetworkErrors>;
+    fn build_tx_scilla_complete_withdrawal(
+        &self,
+        contract: Address,
+    ) -> Result<TransactionRequest, NetworkErrors>;
     fn build_tx_scilla_withdraw_stake_avely(
         &self,
         stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_scilla_complete_withdrawal_avely(
-        &self,
     ) -> Result<TransactionRequest, NetworkErrors>;
 
     fn build_tx_evm_stake_request(
@@ -183,39 +183,14 @@ impl ZilliqaStakeing for NetworkProvider {
         Ok(req_tx)
     }
 
-    fn build_tx_scilla_complete_withdrawal_avely(
+    fn build_tx_scilla_complete_withdrawal(
         &self,
+        contract: Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
-        let params = json!({
-          "_tag": "CompleteWithdrawal",
-          "params": []
-        });
-        let contract = Address::from_zil_base16(ST_ZIL_CONTRACT)?;
-        let zil_tx = ZILTransactionRequest {
-            chain_id: self.config.chain_ids[1] as u16,
-            nonce: 0,
-            gas_price: 2000000050,
-            gas_limit: 100000,
-            to_addr: contract,
-            amount: 0,
-            code: vec![],
-            data: params.to_string().into_bytes(),
-        };
-        let metdata = TransactionMetadata {
-            chain_hash: self.config.hash(),
-            ..Default::default()
-        };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
-
-        Ok(req_tx)
-    }
-
-    fn build_tx_scilla_complete_withdrawal(&self) -> Result<TransactionRequest, NetworkErrors> {
         let params = json!({
             "_tag": "CompleteWithdrawal",
             "params": []
         });
-        let contract = Address::from_zil_base16(SCILLA_STAKE_PROXY)?;
         let zil_tx = ZILTransactionRequest {
             chain_id: self.config.chain_ids[1] as u16,
             nonce: 0,
@@ -464,9 +439,6 @@ mod tests {
         let pools = provider.get_zq2_providers().await.unwrap();
         assert!(!pools.is_empty());
         assert!(pools.iter().any(|p| p.name == "Moonlet"));
-        assert!(pools
-            .iter()
-            .any(|p| p.name == "Amazing Pool - Avely and ZilPay"));
     }
 
     #[tokio::test]

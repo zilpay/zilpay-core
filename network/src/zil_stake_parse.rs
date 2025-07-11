@@ -64,6 +64,9 @@ pub struct EvmPoolV2 {
     pub address: AlloyAddress,
     pub token: Option<LPToken>,
     pub name: String,
+    pub hide: bool,
+    pub uptime: u8,
+    pub can_stake: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -151,6 +154,9 @@ pub struct FinalOutput {
     pub tag: String,
     pub current_block: Option<u64>,
     pub pending_withdrawals: Vec<PendingWithdrawal>,
+    pub hide: bool,
+    pub uptime: u8,
+    pub can_stake: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -475,6 +481,9 @@ pub fn assemble_evm_final_output(
             deleg_amt: user_entry.deleg_amt,
             rewards: user_entry.rewards,
             tag: "evm".to_string(),
+            hide: pool.hide,
+            uptime: pool.uptime,
+            can_stake: pool.can_stake,
             ..Default::default()
         };
 
