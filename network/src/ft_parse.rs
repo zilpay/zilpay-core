@@ -133,7 +133,6 @@ fn build_zil_requests<'a>(
     let base16_contract = contract
         .get_zil_base16()
         .map_err(TokenError::InvalidContractAddress)?;
-    // Add metadata request
     requests.push((
         RpcProvider::<ChainConfig>::build_payload(
             json!([base16_contract]),
@@ -142,7 +141,6 @@ fn build_zil_requests<'a>(
         RequestType::Metadata(MetadataField::Name),
     ));
 
-    // Build balance requests
     for account in accounts {
         let base16_account = match &account {
             Address::Secp256k1Sha256(_) => &account

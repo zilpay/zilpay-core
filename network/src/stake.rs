@@ -388,7 +388,6 @@ impl ZilliqaStakeing for NetworkProvider {
             final_output.extend(scilla_stakes);
         }
 
-        let withdrawal_pending_result = results_by_id.get(&core_ids.withdrawal_pending);
         let blockchain_info_result = results_by_id.get(&core_ids.blockchain_info);
 
         let current_block = blockchain_info_result
@@ -417,8 +416,12 @@ impl ZilliqaStakeing for NetworkProvider {
 
         final_output.extend(evm_stakes);
 
+        let withdrawal_pending_result = results_by_id.get(&core_ids.withdrawal_pending);
+        let unbonded_withdrawal_result = results_by_id.get(&core_ids.unbonded_withdrawal);
+
         let pending_withdrawals = process_pending_withdrawals(
             withdrawal_pending_result.as_ref(),
+            unbonded_withdrawal_result.as_ref(),
             blockchain_info_result.as_ref(),
             &scilla_user_address,
         );
@@ -469,7 +472,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_all_stakes_orchestration() {
         let pubkey = PubKey::from_str(
-            "0002f006b10b35ed60ac7cb79866b228a048b7d820561ec917b1ad3d2e5a851cedb9",
+            "000269c1a51cbc0d3e86468fdbe2cdd7f4cae98df1278a205e4cfb7631373944532f",
         )
         .unwrap();
 

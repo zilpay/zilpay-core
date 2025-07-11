@@ -5,7 +5,9 @@ use alloy::{
     sol,
     sol_types::SolCall,
 };
-use config::contracts::{DEPOSIT_ADDRESS, SCILLA_GZIL_CONTRACT, ST_ZIL_CONTRACT};
+use config::contracts::{
+    DEPOSIT_ADDRESS, SCILLA_GZIL_CONTRACT, SCILLA_STAKE_PROXY, ST_ZIL_CONTRACT,
+};
 use errors::network::NetworkErrors;
 use proto::{address::Address, tx::ETHTransactionRequest};
 use rpc::{
@@ -35,6 +37,11 @@ sol! {
     function claim() external;
     function withdrawAllRewards() external;
     function stakeRewards() external;
+}
+
+#[derive(Deserialize, Debug)]
+struct WithdrawalUnbonded {
+    pub arguments: (String, String),
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq, Clone)]
@@ -73,6 +80,7 @@ pub struct InitialCoreIds {
     pub st_zil_balance: u64,
     pub total_network_stake: u64,
     pub withdrawal_pending: u64,
+    pub unbonded_withdrawal: u64,
     pub blockchain_info: u64,
 }
 
@@ -296,6 +304,8 @@ pub fn build_initial_core_requests(
     start_id += 1;
     let withdrawal_pending_id = start_id;
     start_id += 1;
+    let unbonded_withdrawal_id = start_id;
+    start_id += 1;
     let blockchain_info_id = start_id;
     start_id += 1;
 
@@ -306,6 +316,7 @@ pub fn build_initial_core_requests(
         st_zil_balance: st_zil_balance_id,
         total_network_stake: total_network_stake_id,
         withdrawal_pending: withdrawal_pending_id,
+        unbonded_withdrawal: unbonded_withdrawal_id,
         blockchain_info: blockchain_info_id,
     };
 
@@ -338,6 +349,15 @@ pub fn build_initial_core_requests(
         )
         .with_id(st_zil_balance_id),
         RpcProvider::<ChainConfig>::build_payload(
+            json!([
+                ST_ZIL_CONTRACT,
+                "withdrawal_unbonded",
+                [scilla_user_address]
+            ]),
+            ZilMethods::GetSmartContractSubState,
+        )
+        .with_id(unbonded_withdrawal_id),
+        RpcProvider::<ChainConfig>::build_payload(
             json!([{
                 "to": DEPOSIT_ADDRESS,
                 "data": hex::encode_prefixed(get_future_total_stake_call.abi_encode())
@@ -363,6 +383,7 @@ pub fn build_initial_core_requests(
 
 pub fn process_pending_withdrawals(
     withdrawal_pending_result: Option<&&ResultRes<Value>>,
+    unbonded_withdrawal_result: Option<&&ResultRes<Value>>,
     blockchain_info_result: Option<&&ResultRes<Value>>,
     scilla_user_address: &str,
 ) -> Vec<FinalOutput> {
@@ -373,6 +394,8 @@ pub fn process_pending_withdrawals(
         .unwrap_or(0);
 
     let scilla_user_address_lower = scilla_user_address.to_lowercase();
+    let mut outputs = Vec::new();
+
     let withdrawals: HashMap<String, String> = withdrawal_pending_result
         .and_then(|res| res.result.as_ref())
         .and_then(|r| r.get("withdrawal_pending"))
@@ -380,30 +403,49 @@ pub fn process_pending_withdrawals(
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_default();
 
-    let mut pending_withdrawal = PendingWithdrawal {
-        amount: Default::default(),
-        withdrawal_block: 0,
-        claimable: true,
-    };
-
     for (block_str, amount_str) in withdrawals {
         if let (Ok(block), Ok(amount)) = (block_str.parse::<u64>(), amount_str.parse::<U256>()) {
-            pending_withdrawal.withdrawal_block = block;
-            pending_withdrawal.amount = amount;
+            if amount > U256::ZERO {
+                outputs.push(FinalOutput {
+                    current_block: Some(current_block),
+                    name: "Pending Withdrawal (Claimable)".to_string(),
+                    address: SCILLA_STAKE_PROXY.to_string(),
+                    tag: "scilla".to_string(),
+                    pending_withdrawals: vec![PendingWithdrawal {
+                        amount,
+                        withdrawal_block: block,
+                        claimable: true,
+                    }],
+                    ..Default::default()
+                });
+            }
         }
     }
 
-    let mut outputs = Vec::new();
+    let unbonded_withdrawal: Option<WithdrawalUnbonded> = unbonded_withdrawal_result
+        .and_then(|res| res.result.as_ref())
+        .and_then(|r| r.get("withdrawal_unbonded"))
+        .and_then(|wu| wu.get(&scilla_user_address_lower))
+        .and_then(|v| serde_json::from_value(v.clone()).ok());
 
-    if pending_withdrawal.amount > U256::ZERO {
-        outputs.push(FinalOutput {
-            current_block: Some(current_block),
-            name: "Pending Withdrawal (Claimable)".to_string(),
-            address: SCILLA_GZIL_CONTRACT.to_string(),
-            tag: "withdrawal".to_string(),
-            pending_withdrawals: vec![pending_withdrawal],
-            ..Default::default()
-        });
+    if let Some(unbonded) = unbonded_withdrawal {
+        let zil = unbonded.arguments.1.parse::<U256>().unwrap_or_default();
+        let st_zil = unbonded.arguments.0.parse::<U256>().unwrap_or_default();
+
+        if zil > U256::ZERO {
+            outputs.push(FinalOutput {
+                name: "Avely Claim".to_string(),
+                address: ST_ZIL_CONTRACT.to_string(),
+                tag: "scilla".to_string(),
+                rewards: st_zil,
+                pending_withdrawals: vec![PendingWithdrawal {
+                    amount: zil,
+                    withdrawal_block: 0,
+                    claimable: true,
+                }],
+                ..Default::default()
+            });
+        }
     }
 
     outputs
@@ -908,7 +950,7 @@ pub fn process_avely_stake(
             address: ST_ZIL_CONTRACT.to_string(),
             deleg_amt: st_zil_balance,
             rewards: U256::ZERO,
-            tag: "avely".to_string(),
+            tag: "scilla".to_string(),
             token: None,
             tvl: None,
             vote_power: None,

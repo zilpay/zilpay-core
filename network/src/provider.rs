@@ -600,7 +600,7 @@ mod tests_network {
             logo: String::new(),
             diff_block_time: 0,
             testnet: None,
-            chain_ids: [1, 0],
+            chain_ids: [1, 1],
             name: "Zilliqa".to_string(),
             chain: "ZIL".to_string(),
             short_name: String::new(),
