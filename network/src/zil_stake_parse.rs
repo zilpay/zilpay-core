@@ -1,4 +1,8 @@
-use crate::provider::NetworkProvider;
+use crate::stake::FinalOutput;
+use crate::{
+    provider::NetworkProvider,
+    stake::{LPToken, PendingWithdrawal},
+};
 use alloy::{
     hex,
     primitives::{utils::format_units, Address as AlloyAddress, TxKind, U256},
@@ -42,21 +46,6 @@ sol! {
 #[derive(Deserialize, Debug)]
 struct WithdrawalUnbonded {
     pub arguments: (String, String),
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Clone)]
-pub struct PendingWithdrawal {
-    pub amount: U256,
-    pub withdrawal_block: u64,
-    pub claimable: bool,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct LPToken {
-    pub name: String,
-    pub symbol: String,
-    pub decimals: u8,
-    pub address: AlloyAddress,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -136,27 +125,6 @@ pub struct ScillaStakedNode {
     pub node: SSNode,
     pub deleg_amt: U256,
     pub rewards: U256,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct FinalOutput {
-    pub name: String,
-    pub address: String,
-    pub token: Option<LPToken>,
-    pub deleg_amt: U256,
-    pub rewards: U256,
-    pub tvl: Option<u128>,
-    pub vote_power: Option<f64>,
-    pub apr: Option<f64>,
-    pub price: Option<f64>,
-    pub commission: Option<f64>,
-    pub tag: String,
-    pub current_block: Option<u64>,
-    pub pending_withdrawals: Vec<PendingWithdrawal>,
-    pub hide: bool,
-    pub uptime: u8,
-    pub can_stake: bool,
 }
 
 #[derive(Debug, Default, Clone)]

@@ -8,42 +8,61 @@ use crate::{
         FinalOutput,
     },
 };
-use alloy::primitives::U256;
+use alloy::primitives::{Address as AlloyAddress, U256};
 use async_trait::async_trait;
-use config::contracts::{SCILLA_STAKE_PROXY, ST_ZIL_CONTRACT};
 use errors::network::NetworkErrors;
 use proto::{
     address::Address,
     pubkey::PubKey,
     tx::{TransactionMetadata, TransactionRequest},
-    zil_tx::ZILTransactionRequest,
 };
 use rpc::{
     common::JsonRPC, network_config::ChainConfig, provider::RpcProvider, zil_interfaces::ResultRes,
 };
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
+
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq, Clone)]
+pub struct PendingWithdrawal {
+    pub amount: U256,
+    pub withdrawal_block: u64,
+    pub claimable: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct LPToken {
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u8,
+    pub address: AlloyAddress,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FinalOutput {
+    pub name: String,
+    pub address: String,
+    pub token: Option<LPToken>,
+    pub deleg_amt: U256,
+    pub rewards: U256,
+    pub tvl: Option<u128>,
+    pub vote_power: Option<f64>,
+    pub apr: Option<f64>,
+    pub price: Option<f64>,
+    pub commission: Option<f64>,
+    pub tag: String,
+    pub current_block: Option<u64>,
+    pub pending_withdrawals: Vec<PendingWithdrawal>,
+    pub hide: bool,
+    pub uptime: u8,
+    pub can_stake: bool,
+}
 
 #[async_trait]
 pub trait ZilliqaStakeing {
     async fn get_zq2_providers(&self) -> Result<Vec<EvmPoolV2>, NetworkErrors>;
     async fn get_all_stakes(&self, pub_key: &PubKey) -> Result<Vec<FinalOutput>, NetworkErrors>;
-    fn build_tx_scilla_claim(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_scilla_init_unstake(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_scilla_complete_withdrawal(
-        &self,
-        contract: Address,
-    ) -> Result<TransactionRequest, NetworkErrors>;
-    fn build_tx_scilla_withdraw_stake_avely(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors>;
 
     fn build_tx_evm_stake_request(
         &self,
@@ -145,140 +164,6 @@ impl ZilliqaStakeing for NetworkProvider {
             ..Default::default()
         };
         let req_tx = TransactionRequest::Ethereum((tx, metdata));
-
-        Ok(req_tx)
-    }
-
-    fn build_tx_scilla_withdraw_stake_avely(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors> {
-        let params = json!({
-          "_tag": "WithdrawTokensAmt",
-          "params": [
-            {
-              "vname": "amount",
-              "type": "Uint128",
-              "value": stake.deleg_amt.to_string()
-            }
-          ]
-        });
-        let contract = Address::from_zil_base16(ST_ZIL_CONTRACT)?;
-        let zil_tx = ZILTransactionRequest {
-            chain_id: self.config.chain_ids[1] as u16,
-            nonce: 0,
-            gas_price: 2000000050,
-            gas_limit: 5000,
-            to_addr: contract,
-            amount: 0,
-            code: vec![],
-            data: params.to_string().into_bytes(),
-        };
-        let metdata = TransactionMetadata {
-            chain_hash: self.config.hash(),
-            ..Default::default()
-        };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
-
-        Ok(req_tx)
-    }
-
-    fn build_tx_scilla_complete_withdrawal(
-        &self,
-        contract: Address,
-    ) -> Result<TransactionRequest, NetworkErrors> {
-        let params = json!({
-            "_tag": "CompleteWithdrawal",
-            "params": []
-        });
-        let zil_tx = ZILTransactionRequest {
-            chain_id: self.config.chain_ids[1] as u16,
-            nonce: 0,
-            gas_price: 2000000050,
-            gas_limit: 100000,
-            to_addr: contract,
-            amount: 0,
-            code: vec![],
-            data: params.to_string().into_bytes(),
-        };
-        let metdata = TransactionMetadata {
-            chain_hash: self.config.hash(),
-            ..Default::default()
-        };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
-
-        Ok(req_tx)
-    }
-
-    fn build_tx_scilla_init_unstake(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors> {
-        let params = json!({
-          "_tag": "WithdrawStakeAmt",
-          "params": [
-            {
-              "vname": "ssnaddr",
-              "type": "ByStr20",
-              "value": stake.address
-            },
-            {
-              "vname": "amt",
-              "type": "Uint128",
-              "value": stake.deleg_amt.to_string()
-            }
-          ]
-        });
-        let contract = Address::from_zil_base16(SCILLA_STAKE_PROXY)?;
-        let zil_tx = ZILTransactionRequest {
-            chain_id: self.config.chain_ids[1] as u16,
-            nonce: 0,
-            gas_price: 2000000050,
-            gas_limit: 5000,
-            to_addr: contract,
-            amount: 0,
-            code: vec![],
-            data: params.to_string().into_bytes(),
-        };
-        let metdata = TransactionMetadata {
-            chain_hash: self.config.hash(),
-            ..Default::default()
-        };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
-
-        Ok(req_tx)
-    }
-
-    fn build_tx_scilla_claim(
-        &self,
-        stake: &FinalOutput,
-    ) -> Result<TransactionRequest, NetworkErrors> {
-        let params = json!({
-            "_tag": "WithdrawStakeRewards",
-            "params": [
-                {
-                    "vname": "ssnaddr",
-                    "type": "ByStr20",
-                    "value": stake.address
-                }
-            ]
-        });
-        let contract = Address::from_zil_base16(SCILLA_STAKE_PROXY)?;
-        let zil_tx = ZILTransactionRequest {
-            chain_id: self.config.chain_ids[1] as u16,
-            nonce: 0,
-            gas_price: 2000000050,
-            gas_limit: 100000,
-            to_addr: contract,
-            amount: 0,
-            code: vec![],
-            data: params.to_string().into_bytes(),
-        };
-        let metdata = TransactionMetadata {
-            chain_hash: self.config.hash(),
-            ..Default::default()
-        };
-        let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
 
         Ok(req_tx)
     }

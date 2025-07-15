@@ -9,6 +9,7 @@ pub mod gas_parse;
 pub mod nonce_parser;
 pub mod provider;
 pub mod rates;
+pub mod scilla_stake;
 pub mod stake;
 pub mod tx_parse;
 pub mod zil_stake_parse;
