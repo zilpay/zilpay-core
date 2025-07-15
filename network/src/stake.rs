@@ -5,7 +5,6 @@ use crate::{
         build_evm_pools_requests, build_initial_core_requests, build_stake_request,
         build_unstake_request, process_avely_stake, process_evm_pending_withdrawals,
         process_evm_pools_results, process_pending_withdrawals, process_scilla_stakes, EvmPoolV2,
-        FinalOutput,
     },
 };
 use alloy::primitives::{Address as AlloyAddress, U256};
