@@ -9,6 +9,10 @@ use proto::{
     tx::{TransactionMetadata, TransactionRequest},
     zil_tx::ZILTransactionRequest,
 };
+use rpc::{
+    common::JsonRPC, methods::ZilMethods, network_config::ChainConfig, provider::RpcProvider,
+    zil_interfaces::ResultRes,
+};
 use serde_json::{json, Value};
 
 use crate::{provider::NetworkProvider, stake::FinalOutput};
@@ -40,6 +44,11 @@ pub trait ZilliqaScillaStakeing {
         &self,
         stake: &FinalOutput,
     ) -> Result<TransactionRequest, NetworkErrors>;
+
+    async fn batch_query(
+        &self,
+        queries: &[(&str, &str, Vec<String>)],
+    ) -> Result<Vec<ResultRes<Value>>, NetworkErrors>;
 }
 
 #[async_trait]
@@ -176,6 +185,42 @@ impl ZilliqaScillaStakeing for NetworkProvider {
         let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
 
         Ok(req_tx)
+    }
+
+    async fn batch_query(
+        &self,
+        queries: &[(&str, &str, Vec<String>)],
+    ) -> Result<Vec<ResultRes<Value>>, NetworkErrors> {
+        if queries.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let request_body_final = queries
+            .iter()
+            .map(|query| {
+                let params_values: Vec<Value> =
+                    query.2.iter().map(|s| Value::from(s.clone())).collect();
+
+                RpcProvider::<ChainConfig>::build_payload(
+                    json!([query.0, query.1, params_values]),
+                    ZilMethods::GetSmartContractSubState,
+                )
+            })
+            .collect::<Vec<Value>>();
+        let json_response = provider
+            .req::<Vec<ResultRes<Value>>>(request_body_final.into())
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        for res in &json_response {
+            if let Some(errors) = &res.error {
+                let error = errors.to_string();
+                return Err(NetworkErrors::RPCError(error));
+            }
+        }
+
+        Ok(json_response)
     }
 }
 
