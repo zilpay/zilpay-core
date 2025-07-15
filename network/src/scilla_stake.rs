@@ -13,12 +13,18 @@ use rpc::{
     common::JsonRPC, methods::ZilMethods, network_config::ChainConfig, provider::RpcProvider,
     zil_interfaces::ResultRes,
 };
+use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
     provider::NetworkProvider,
     stake::{FinalOutput, PendingWithdrawal},
 };
+
+#[derive(Deserialize, Debug)]
+struct WithdrawalUnbonded {
+    pub arguments: (String, String),
+}
 
 #[derive(Debug, Default)]
 struct RewardCalculationData {
@@ -224,26 +230,59 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                 "withdrawal_pending",
                 vec![wallet_address.to_string()],
             ),
+            (
+                ST_ZIL_CONTRACT,
+                "withdrawal_unbonded",
+                vec![wallet_address.to_string()],
+            ),
         ];
         let initial_results = self.batch_query(&initial_queries).await?;
         let deposits_result = initial_results
             .get(0)
-            .and_then(|r| r.result.clone())
-            .unwrap_or_default();
+            .and_then(|r| r.result.as_ref())
+            .unwrap_or(&Value::Null);
         let ssn_list_result = initial_results
             .get(1)
-            .and_then(|r| r.result.clone())
+            .and_then(|r| r.result.as_ref())
             .ok_or_else(|| NetworkErrors::ParseHttpError("ssnlist".into()))?;
         let last_reward_cycle_result = initial_results
             .get(2)
-            .and_then(|r| r.result.clone())
+            .and_then(|r| r.result.as_ref())
             .ok_or_else(|| NetworkErrors::ParseHttpError("lastrewardcycle".into()))?;
         let last_withdraw_result = initial_results
             .get(3)
-            .and_then(|r| r.result.clone())
-            .unwrap_or_default();
-        let st_zil_balance_result = initial_results.get(4).and_then(|r| r.result.clone());
-        let withdrawal_pending_result = initial_results.get(5).and_then(|r| r.result.clone());
+            .and_then(|r| r.result.as_ref())
+            .unwrap_or(&Value::Null);
+        let st_zil_balance_result = initial_results.get(4).and_then(|r| r.result.as_ref());
+        let withdrawal_pending_result = initial_results.get(5).and_then(|r| r.result.as_ref());
+        let unbonded_withdrawal_result = initial_results.get(6).and_then(|r| r.result.as_ref());
+        let unbonded_withdrawal: Option<WithdrawalUnbonded> = unbonded_withdrawal_result
+            .and_then(|r| r.get("withdrawal_unbonded"))
+            .and_then(|wu| wu.get(&wallet_address))
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+
+        if let Some(unbonded) = unbonded_withdrawal {
+            let zil = unbonded.arguments.1.parse::<U256>().unwrap_or_default();
+            let st_zil = unbonded.arguments.0.parse::<U256>().unwrap_or_default();
+
+            if zil > U256::ZERO {
+                staked_nodes.push(FinalOutput {
+                    name: "Avely (legacy) Claim".to_string(),
+                    address: ST_ZIL_CONTRACT.to_string(),
+                    tag: "scilla".to_string(),
+                    rewards: st_zil,
+                    pending_withdrawals: vec![PendingWithdrawal {
+                        amount: zil,
+                        withdrawal_block: 0,
+                        claimable: true,
+                    }],
+                    hide: false,
+                    uptime: 0,
+                    can_stake: false,
+                    ..Default::default()
+                });
+            }
+        }
 
         if let Some(result) = st_zil_balance_result {
             if let Some(balances_map) = result.get("balances") {
@@ -316,7 +355,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                     .unwrap_or("0")
                     .parse()
                     .unwrap_or(0),
-                last_withdraw_cycle_map: last_withdraw_result,
+                last_withdraw_cycle_map: last_withdraw_result.to_owned(),
                 ..Default::default()
             };
 
@@ -375,7 +414,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                     vote_power: None,
                     apr: None,
                     price: None,
-                    commission: Some(f64::from(commission_rate)),
+                    commission: Some(f64::from(commission_rate) / 10000000.0),
                     tag: "scilla".to_string(),
                     current_block: None,
                     pending_withdrawals: vec![],
