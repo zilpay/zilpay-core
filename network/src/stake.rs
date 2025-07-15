@@ -294,6 +294,8 @@ impl ZilliqaStakeing for NetworkProvider {
 mod tests {
     use std::str::FromStr;
 
+    use crate::scilla_stake::ZilliqaScillaStakeing;
+
     use super::*;
     use rpc::network_config::ChainConfig;
 
@@ -338,6 +340,18 @@ mod tests {
         let final_output = result.unwrap();
 
         assert!(!final_output.is_empty(), "Should return some staking data");
+
+        println!("{:#?}", final_output);
+    }
+
+    #[tokio::test]
+    async fn test_get_scilla_stake() {
+        let addr = Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap();
+
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+        let result = provider.fetch_scilla_stake(&addr).await;
+        let final_output = result.unwrap();
 
         println!("{:#?}", final_output);
     }

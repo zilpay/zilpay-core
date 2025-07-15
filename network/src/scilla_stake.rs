@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use alloy::primitives::U256;
 use async_trait::async_trait;
-use config::contracts::{SCILLA_STAKE_PROXY, ST_ZIL_CONTRACT};
+use config::contracts::{SCILLA_GZIL_CONTRACT, SCILLA_STAKE_PROXY, ST_ZIL_CONTRACT};
 use errors::network::NetworkErrors;
 use proto::{
     address::Address,
@@ -15,7 +15,10 @@ use rpc::{
 };
 use serde_json::{json, Value};
 
-use crate::{provider::NetworkProvider, stake::FinalOutput};
+use crate::{
+    provider::NetworkProvider,
+    stake::{FinalOutput, PendingWithdrawal},
+};
 
 #[derive(Debug, Default)]
 struct RewardCalculationData {
@@ -49,6 +52,11 @@ pub trait ZilliqaScillaStakeing {
         &self,
         queries: &[(&str, &str, Vec<String>)],
     ) -> Result<Vec<ResultRes<Value>>, NetworkErrors>;
+
+    async fn fetch_scilla_stake(
+        &self,
+        wallet_address: &Address,
+    ) -> Result<Vec<FinalOutput>, NetworkErrors>;
 }
 
 #[async_trait]
@@ -185,6 +193,239 @@ impl ZilliqaScillaStakeing for NetworkProvider {
         let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
 
         Ok(req_tx)
+    }
+
+    async fn fetch_scilla_stake(
+        &self,
+        user_address: &Address,
+    ) -> Result<Vec<FinalOutput>, NetworkErrors> {
+        let wallet_address = user_address.get_zil_check_sum_addr()?.to_lowercase();
+        let mut staked_nodes: Vec<FinalOutput> = Vec::new();
+        let initial_queries = [
+            (
+                SCILLA_GZIL_CONTRACT,
+                "deposit_amt_deleg",
+                vec![wallet_address.to_string()],
+            ),
+            (SCILLA_GZIL_CONTRACT, "ssnlist", vec![]),
+            (SCILLA_GZIL_CONTRACT, "lastrewardcycle", vec![]),
+            (
+                SCILLA_GZIL_CONTRACT,
+                "last_withdraw_cycle_deleg",
+                vec![wallet_address.to_string()],
+            ),
+            (
+                ST_ZIL_CONTRACT,
+                "balances",
+                vec![wallet_address.to_string()],
+            ),
+            (
+                SCILLA_GZIL_CONTRACT,
+                "withdrawal_pending",
+                vec![wallet_address.to_string()],
+            ),
+        ];
+        let initial_results = self.batch_query(&initial_queries).await?;
+        let deposits_result = initial_results
+            .get(0)
+            .and_then(|r| r.result.clone())
+            .unwrap_or_default();
+        let ssn_list_result = initial_results
+            .get(1)
+            .and_then(|r| r.result.clone())
+            .ok_or_else(|| NetworkErrors::ParseHttpError("ssnlist".into()))?;
+        let last_reward_cycle_result = initial_results
+            .get(2)
+            .and_then(|r| r.result.clone())
+            .ok_or_else(|| NetworkErrors::ParseHttpError("lastrewardcycle".into()))?;
+        let last_withdraw_result = initial_results
+            .get(3)
+            .and_then(|r| r.result.clone())
+            .unwrap_or_default();
+        let st_zil_balance_result = initial_results.get(4).and_then(|r| r.result.clone());
+        let withdrawal_pending_result = initial_results.get(5).and_then(|r| r.result.clone());
+
+        if let Some(result) = st_zil_balance_result {
+            if let Some(balances_map) = result.get("balances") {
+                if let Some(balance_str) =
+                    balances_map.get(&wallet_address).and_then(|v| v.as_str())
+                {
+                    staked_nodes.push(FinalOutput {
+                        name: "Avely (legacy)".to_string(),
+                        address: ST_ZIL_CONTRACT.to_string(),
+                        token: None,
+                        deleg_amt: balance_str.parse().unwrap_or(U256::ZERO),
+                        rewards: U256::ZERO,
+                        tvl: None,
+                        vote_power: None,
+                        apr: None,
+                        price: None,
+                        commission: None,
+                        tag: "scilla".to_string(),
+                        current_block: None,
+                        pending_withdrawals: vec![],
+                        hide: false,
+                        uptime: 0,
+                        can_stake: false,
+                    });
+                }
+            }
+        }
+
+        let user_deposits: HashMap<String, String> = deposits_result
+            .get("deposit_amt_deleg")
+            .and_then(|m| m.get(&wallet_address))
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+
+        let mut total_staked = U256::ZERO;
+        let mut total_rewards = U256::ZERO;
+
+        if !user_deposits.is_empty() {
+            let ssn_list = ssn_list_result
+                .get("ssnlist")
+                .and_then(|v| v.as_object())
+                .ok_or_else(|| NetworkErrors::ParseHttpError("ssnlist map".into()))?;
+
+            let staked_ssn_addresses: Vec<_> = user_deposits.keys().cloned().collect();
+            let mut reward_queries: Vec<(&str, &str, Vec<String>)> = Vec::new();
+
+            for ssn_addr in &staked_ssn_addresses {
+                reward_queries.push((
+                    &SCILLA_GZIL_CONTRACT,
+                    "stake_ssn_per_cycle",
+                    vec![ssn_addr.clone()],
+                ));
+                reward_queries.push((
+                    &SCILLA_GZIL_CONTRACT,
+                    "direct_deposit_deleg",
+                    vec![wallet_address.to_string(), ssn_addr.clone()],
+                ));
+                reward_queries.push((
+                    &SCILLA_GZIL_CONTRACT,
+                    "buff_deposit_deleg",
+                    vec![wallet_address.to_string(), ssn_addr.clone()],
+                ));
+            }
+
+            let reward_query_results = self.batch_query(&reward_queries).await?;
+
+            let mut reward_data = RewardCalculationData {
+                last_reward_cycle: last_reward_cycle_result["lastrewardcycle"]
+                    .as_str()
+                    .unwrap_or("0")
+                    .parse()
+                    .unwrap_or(0),
+                last_withdraw_cycle_map: last_withdraw_result,
+                ..Default::default()
+            };
+
+            let mut query_iter = reward_query_results.into_iter();
+            for ssn_addr in &staked_ssn_addresses {
+                reward_data.stake_ssn_per_cycle_maps.insert(
+                    ssn_addr.clone(),
+                    query_iter.next().unwrap().result.unwrap_or_default(),
+                );
+                reward_data.direct_deposit_maps.insert(
+                    ssn_addr.clone(),
+                    query_iter.next().unwrap().result.unwrap_or_default(),
+                );
+                reward_data.buff_deposit_maps.insert(
+                    ssn_addr.clone(),
+                    query_iter.next().unwrap().result.unwrap_or_default(),
+                );
+            }
+
+            let rewards_by_ssn = calculate_rewards(&wallet_address, &user_deposits, &reward_data);
+
+            for (ssn_address, stake_amount_str) in &user_deposits {
+                let ssn_info = match ssn_list.get(ssn_address) {
+                    Some(info) => info,
+                    None => {
+                        continue;
+                    }
+                };
+
+                let ssn_args = ssn_info
+                    .get("arguments")
+                    .and_then(|a| a.as_array())
+                    .unwrap();
+                let ssn_name = ssn_args[3].as_str().unwrap_or("Неизвестно").to_string();
+                let commission_rate = ssn_args[7]
+                    .as_str()
+                    .unwrap_or("0")
+                    .parse()
+                    .unwrap_or(U256::ZERO);
+                let stake_amount = stake_amount_str.parse().unwrap_or(U256::ZERO);
+                let rewards_amount = rewards_by_ssn
+                    .get(ssn_address)
+                    .cloned()
+                    .unwrap_or(U256::ZERO);
+
+                total_staked += &stake_amount;
+                total_rewards += &rewards_amount;
+
+                staked_nodes.push(FinalOutput {
+                    name: ssn_name,
+                    address: ssn_address.to_string(),
+                    token: None,
+                    deleg_amt: stake_amount,
+                    rewards: rewards_amount,
+                    tvl: None,
+                    vote_power: None,
+                    apr: None,
+                    price: None,
+                    commission: Some(f64::from(commission_rate)),
+                    tag: "scilla".to_string(),
+                    current_block: None,
+                    pending_withdrawals: vec![],
+                    hide: false,
+                    uptime: 0,
+                    can_stake: false,
+                });
+            }
+        }
+
+        if let Some(wp_res) = withdrawal_pending_result {
+            if let Some(pending_map) = wp_res
+                .get("withdrawal_pending")
+                .and_then(|m| m.get(&wallet_address))
+                .and_then(|v| v.as_object())
+            {
+                if !pending_map.is_empty() {
+                    for (_, amount) in pending_map {
+                        let amount = amount
+                            .as_str()
+                            .and_then(|v| v.parse().ok())
+                            .unwrap_or(U256::ZERO);
+                        staked_nodes.push(FinalOutput {
+                            name: "Scilla Withdrawals".to_string(),
+                            address: SCILLA_STAKE_PROXY.to_string(),
+                            token: None,
+                            deleg_amt: amount,
+                            rewards: U256::ZERO,
+                            tvl: None,
+                            vote_power: None,
+                            apr: None,
+                            price: None,
+                            commission: None,
+                            tag: "scilla".to_string(),
+                            current_block: None,
+                            pending_withdrawals: vec![PendingWithdrawal {
+                                amount,
+                                withdrawal_block: 0,
+                                claimable: true,
+                            }],
+                            hide: false,
+                            uptime: 0,
+                            can_stake: false,
+                        });
+                    }
+                }
+            }
+        }
+
+        Ok(staked_nodes)
     }
 
     async fn batch_query(
