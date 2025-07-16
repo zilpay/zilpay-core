@@ -55,8 +55,9 @@ pub struct FinalOutput {
 #[cfg(test)]
 mod tests {
     use crate::{
-        provider::NetworkProvider, scilla_stake::ZilliqaScillaStakeing,
-        zil_stake_evm::get_zq2_providers,
+        provider::NetworkProvider,
+        scilla_stake::ZilliqaScillaStakeing,
+        zil_stake_evm::{get_zq2_providers, ZilliqaEVMStakeing},
     };
 
     use proto::address::Address;
@@ -95,6 +96,18 @@ mod tests {
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
         let result = provider.fetch_scilla_stake(&addr).await;
+        let final_output = result.unwrap();
+
+        println!("{:#?}", final_output);
+    }
+
+    #[tokio::test]
+    async fn test_get_evm_stake() {
+        let addr = Address::from_eth_address("0xEC6bB19886c9D5f5125DfC739362Bf54AA23d51F").unwrap();
+
+        let net_conf = create_zilliqa_config();
+        let provider = NetworkProvider::new(net_conf);
+        let result = provider.fetch_evm_stake(&addr).await;
         let final_output = result.unwrap();
 
         println!("{:#?}", final_output);

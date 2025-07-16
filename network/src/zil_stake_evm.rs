@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use alloy::{
     hex,
     primitives::{Address as AlloyAddress, TxKind},
@@ -11,7 +13,10 @@ use proto::{
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
     U256,
 };
-use rpc::{methods::EvmMethods, network_config::ChainConfig, provider::RpcProvider};
+use rpc::{
+    common::JsonRPC, methods::EvmMethods, network_config::ChainConfig, provider::RpcProvider,
+    zil_interfaces::ResultRes,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -120,8 +125,11 @@ pub trait ZilliqaEVMStakeing {
         provider: &Address,
         from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
+
+    async fn fetch_evm_stake(&self, addr: &Address) -> Result<Vec<FinalOutput>, NetworkErrors>;
 }
 
+#[async_trait]
 impl ZilliqaEVMStakeing for NetworkProvider {
     fn build_tx_evm_stake_request(
         &self,
@@ -227,6 +235,165 @@ impl ZilliqaEVMStakeing for NetworkProvider {
 
         Ok(req_tx)
     }
+
+    async fn fetch_evm_stake(&self, addr: &Address) -> Result<Vec<FinalOutput>, NetworkErrors> {
+        let pools_res = get_zq2_providers().await?;
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+
+        let mut calls: Vec<Value> = Vec::new();
+        let mut call_map: HashMap<usize, (usize, String, PoolMethod)> = HashMap::new();
+        let mut call_id = 0;
+
+        for (pool_idx, pool) in pools_res.iter().enumerate() {
+            let is_liquid = pool.token.is_some();
+
+            let base_methods = vec![
+                PoolMethod::DecodedVersion,
+                PoolMethod::GetStake,
+                PoolMethod::GetRewards,
+                PoolMethod::GetCommission,
+                PoolMethod::UnbondingPeriod,
+                PoolMethod::Validators,
+            ];
+
+            for method in base_methods {
+                let calldata = get_calldata(method, is_liquid)?;
+                calls.push(RpcProvider::<ChainConfig>::build_payload(
+                    json!([{
+                        "to": pool.address,
+                        "data": hex::encode_prefixed(&calldata)},
+                        "latest"
+                    ]),
+                    EvmMethods::Call,
+                ));
+                call_map.insert(call_id, (pool_idx, "base".to_string(), method));
+                call_id += 1;
+            }
+
+            if is_liquid {
+                let method = PoolMethod::GetPrice;
+                let calldata = get_calldata(method, is_liquid)?;
+                calls.push(RpcProvider::<ChainConfig>::build_payload(
+                    json!([{
+                        "to": pool.address,
+                        "data": hex::encode_prefixed(&calldata)},
+                        "latest"
+                    ]),
+                    EvmMethods::Call,
+                ));
+                call_map.insert(call_id, (pool_idx, "liquid".to_string(), method));
+                call_id += 1;
+            } else {
+                let method = PoolMethod::GetDelegatedAmount;
+                let calldata = get_calldata(method, is_liquid)?;
+                calls.push(RpcProvider::<ChainConfig>::build_payload(
+                    json!([{
+                        "to": pool.address,
+                        "data": hex::encode_prefixed(&calldata)},
+                        "latest"
+                    ]),
+                    EvmMethods::Call,
+                ));
+                call_map.insert(call_id, (pool_idx, "nonliquid".to_string(), method));
+                call_id += 1;
+            }
+
+            let user_addr = addr.to_alloy_addr();
+            for method in [PoolMethod::GetClaimable, PoolMethod::GetPendingClaims] {
+                let calldata = get_calldata(method, is_liquid)?;
+                calls.push(RpcProvider::<ChainConfig>::build_payload(
+                    json!([{
+                        "from": user_addr,
+                        "to": pool.address,
+                        "data": hex::encode_prefixed(&calldata)},
+                        "latest"
+                    ]),
+                    EvmMethods::Call,
+                ));
+                call_map.insert(call_id, (pool_idx, "user".to_string(), method));
+                call_id += 1;
+            }
+
+            if !is_liquid {
+                let method = PoolMethod::Rewards;
+                let calldata = get_calldata(method, is_liquid)?;
+                calls.push(RpcProvider::<ChainConfig>::build_payload(
+                    json!([{
+                        "from": user_addr,
+                        "to": pool.address,
+                        "data": hex::encode_prefixed(&calldata)},
+                        "latest"
+                    ]),
+                    EvmMethods::Call,
+                ));
+                call_map.insert(call_id, (pool_idx, "user".to_string(), method));
+                call_id += 1;
+            } else if let Some(ref token) = pool.token {
+                let calldata = LST::balanceOfCall { account: user_addr }.abi_encode();
+                calls.push(RpcProvider::<ChainConfig>::build_payload(
+                    json!([{
+                        "to": token.address,
+                        "data": hex::encode_prefixed(&calldata)},
+                        "latest"
+                    ]),
+                    EvmMethods::Call,
+                ));
+                call_map.insert(
+                    call_id,
+                    (pool_idx, "lst".to_string(), PoolMethod::BalanceOf),
+                );
+                call_id += 1;
+            }
+        }
+
+        if calls.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let batch_res = provider
+            .req::<Vec<ResultRes<Value>>>(calls.into())
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let mut pools_data: Vec<FinalOutput> = pools_res
+            .into_iter()
+            .map(|pool| FinalOutput {
+                name: pool.name,
+                address: pool.address.to_string(),
+                token: pool.token,
+                hide: pool.hide,
+                uptime: pool.uptime,
+                can_stake: pool.can_stake,
+                tag: "evm".to_string(),
+                ..Default::default()
+            })
+            .collect();
+
+        for (idx, res) in batch_res.iter().enumerate() {
+            let result = res
+                .result
+                .as_ref()
+                .and_then(|v| v.as_str())
+                .map(|r| hex::decode(&r).ok())
+                .unwrap_or(None);
+
+            if let Some(bytes_result) = result {
+                if let Some(&(pool_idx, _, method)) = call_map.get(&idx) {
+                    let is_liquid = pools_data[pool_idx].token.is_some();
+                    if let Ok(decoded) = decode_result(method, &bytes_result, is_liquid) {
+                        process_decoded(&mut pools_data[pool_idx], method, decoded, is_liquid);
+                    }
+                }
+            }
+        }
+
+        Ok(pools_data
+            .into_iter()
+            .filter(|pd| {
+                pd.total_stake.is_some() || pd.deleg_amt > U256::ZERO || pd.rewards > U256::ZERO
+            })
+            .collect())
+    }
 }
 
 pub async fn get_zq2_providers() -> Result<Vec<EvmPoolV2>, NetworkErrors> {
@@ -250,13 +417,7 @@ pub async fn get_zq2_providers() -> Result<Vec<EvmPoolV2>, NetworkErrors> {
         .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))
 }
 
-fn process_decoded(
-    data: &mut FinalOutput,
-    method: PoolMethod,
-    decoded: Value,
-    pool: &EvmPoolV2,
-    is_liquid: bool,
-) {
+fn process_decoded(data: &mut FinalOutput, method: PoolMethod, decoded: Value, is_liquid: bool) {
     match method {
         PoolMethod::DecodedVersion => {
             if let Value::Array(arr) = decoded {
@@ -316,6 +477,7 @@ fn process_decoded(
                         .and_then(|v| v.as_str())
                         .and_then(|v| Some(v.to_string()))
                         .unwrap_or_default();
+                    data.can_stake = data.can_stake && status;
                     data.validators.push(ZilValidator {
                         future_stake,
                         pending_withdrawals,
@@ -382,4 +544,117 @@ fn process_decoded(
             }
         }
     }
+}
+
+fn get_calldata(method: PoolMethod, is_liquid: bool) -> Result<Vec<u8>, NetworkErrors> {
+    let calldata = match method {
+        PoolMethod::DecodedVersion => BaseDelegation::decodedVersionCall {}.abi_encode(),
+        PoolMethod::GetStake => BaseDelegation::getStakeCall {}.abi_encode(),
+        PoolMethod::GetRewards => BaseDelegation::getRewardsCall {}.abi_encode(),
+        PoolMethod::GetCommission => BaseDelegation::getCommissionCall {}.abi_encode(),
+        PoolMethod::UnbondingPeriod => BaseDelegation::unbondingPeriodCall {}.abi_encode(),
+        PoolMethod::Validators => BaseDelegation::validatorsCall {}.abi_encode(),
+        PoolMethod::GetClaimable => BaseDelegation::getClaimableCall {}.abi_encode(),
+        PoolMethod::GetPendingClaims => BaseDelegation::getPendingClaimsCall {}.abi_encode(),
+        PoolMethod::GetPrice if is_liquid => LiquidDelegation::getPriceCall {}.abi_encode(),
+        PoolMethod::GetDelegatedAmount if !is_liquid => {
+            NonLiquidDelegation::getDelegatedAmountCall {}.abi_encode()
+        }
+        PoolMethod::Rewards if !is_liquid => NonLiquidDelegation::rewardsCall {}.abi_encode(),
+        _ => {
+            return Err(NetworkErrors::ParseHttpError(
+                "Invalid method or type".to_string(),
+            ))
+        }
+    };
+    Ok(calldata)
+}
+
+fn decode_result(method: PoolMethod, data: &[u8], is_liquid: bool) -> Result<Value, NetworkErrors> {
+    let decoded = match method {
+        PoolMethod::DecodedVersion => {
+            let ret = BaseDelegation::decodedVersionCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!([ret._0, ret._1, ret._2])
+        }
+        PoolMethod::GetStake => {
+            let ret = BaseDelegation::getStakeCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        PoolMethod::GetRewards => {
+            let ret = BaseDelegation::getRewardsCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        PoolMethod::GetCommission => {
+            let ret = BaseDelegation::getCommissionCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!([ret._0.to_string(), ret._1.to_string()])
+        }
+        PoolMethod::UnbondingPeriod => {
+            let ret = BaseDelegation::unbondingPeriodCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        PoolMethod::Validators => {
+            let ret = BaseDelegation::validatorsCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            let mut arr: Vec<Value> = Vec::new();
+            for v in ret {
+                arr.push(json!({
+                    "blsPubKey": hex::encode(v.blsPubKey),
+                    "futureStake": v.futureStake.to_string(),
+                    "rewardAddress": v.rewardAddress.to_string(),
+                    "controlAddress": v.controlAddress.to_string(),
+                    "pendingWithdrawals": v.pendingWithdrawals.to_string(),
+                    "status": v.status as u64
+                }));
+            }
+            json!(arr)
+        }
+        PoolMethod::GetClaimable => {
+            let ret = BaseDelegation::getClaimableCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        PoolMethod::GetPendingClaims => {
+            let ret = BaseDelegation::getPendingClaimsCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            let mut arr: Vec<Value> = Vec::new();
+            for c in ret {
+                arr.push(json!({
+                    "blockNumber": c.blockNumber.to_string(),
+                    "amount": c.amount.to_string()
+                }));
+            }
+            json!(arr)
+        }
+        PoolMethod::GetPrice if is_liquid => {
+            let ret = LiquidDelegation::getPriceCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        PoolMethod::GetDelegatedAmount if !is_liquid => {
+            let ret = NonLiquidDelegation::getDelegatedAmountCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        PoolMethod::Rewards if !is_liquid => {
+            let ret = NonLiquidDelegation::rewardsCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        PoolMethod::BalanceOf if is_liquid => {
+            let ret = LST::balanceOfCall::abi_decode_returns(data)
+                .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))?;
+            json!(ret.to_string())
+        }
+        _ => {
+            return Err(NetworkErrors::ParseHttpError(
+                "Invalid method or type".to_string(),
+            ))
+        }
+    };
+    Ok(decoded)
 }
