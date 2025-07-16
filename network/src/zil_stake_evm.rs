@@ -89,6 +89,7 @@ enum PoolMethod {
     GetDelegatedAmount,
     Rewards,
     BalanceOf,
+    BlockNumber,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -243,6 +244,17 @@ impl ZilliqaEVMStakeing for NetworkProvider {
         let mut calls: Vec<Value> = Vec::new();
         let mut call_map: HashMap<usize, (usize, String, PoolMethod)> = HashMap::new();
         let mut call_id = 0;
+        let mut current_block: Option<u64> = None;
+
+        calls.push(RpcProvider::<ChainConfig>::build_payload(
+            json!([]),
+            EvmMethods::BlockNumber,
+        ));
+        call_map.insert(
+            call_id,
+            (0, "block_number".to_string(), PoolMethod::BlockNumber),
+        );
+        call_id += 1;
 
         for (pool_idx, pool) in pools_res.iter().enumerate() {
             let is_liquid = pool.token.is_some();
@@ -377,8 +389,19 @@ impl ZilliqaEVMStakeing for NetworkProvider {
                 .map(|r| hex::decode(&r).ok())
                 .unwrap_or(None);
 
-            if let Some(bytes_result) = result {
-                if let Some(&(pool_idx, _, method)) = call_map.get(&idx) {
+            if let Some(&(pool_idx, _, method)) = call_map.get(&idx) {
+                if method == PoolMethod::BlockNumber {
+                    if let Some(bytes_result) = result {
+                        let block_number = u64::from_be_bytes({
+                            let mut arr = [0u8; 8];
+                            arr[5..].copy_from_slice(&bytes_result);
+                            arr
+                        });
+                        current_block = Some(block_number);
+                    }
+                    continue;
+                } else if let Some(bytes_result) = result {
+                    pools_data[pool_idx].current_block = current_block;
                     let is_liquid = pools_data[pool_idx].token.is_some();
                     if let Ok(decoded) = decode_result(method, &bytes_result, is_liquid) {
                         process_decoded(&mut pools_data[pool_idx], method, decoded, is_liquid);
@@ -419,6 +442,7 @@ pub async fn get_zq2_providers() -> Result<Vec<EvmPoolV2>, NetworkErrors> {
 
 fn process_decoded(data: &mut FinalOutput, method: PoolMethod, decoded: Value, is_liquid: bool) {
     match method {
+        PoolMethod::BlockNumber => {}
         PoolMethod::DecodedVersion => {
             if let Value::Array(arr) = decoded {
                 if arr.len() == 3 {
@@ -519,7 +543,12 @@ fn process_decoded(data: &mut FinalOutput, method: PoolMethod, decoded: Value, i
                     data.pending_withdrawals.push(PendingWithdrawal {
                         amount,
                         withdrawal_block,
-                        claimable: false,
+                        claimable: data
+                            .current_block
+                            .and_then(|current_block_number| {
+                                Some(current_block_number > withdrawal_block)
+                            })
+                            .unwrap_or(false),
                     });
                 }
             }
