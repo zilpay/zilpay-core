@@ -144,60 +144,6 @@ pub struct EvmPoolStats {
 
 pub type EvmRequestMap = HashMap<u64, EvmRequestInfo>;
 
-pub fn build_stake_request(amount: U256, delegator_address: AlloyAddress) -> ETHTransactionRequest {
-    let stake_call = stakeCall {};
-    let to = TxKind::Call(delegator_address);
-    let req_tx = ETHTransactionRequest {
-        value: Some(amount),
-        to: Some(to),
-        input: stake_call.abi_encode().into(),
-        ..Default::default()
-    };
-
-    return req_tx;
-}
-
-pub fn build_unstake_request(
-    amount_to_unstake: U256,
-    provider: AlloyAddress,
-) -> ETHTransactionRequest {
-    let unstake_call = unstakeCall {
-        shares: amount_to_unstake,
-    };
-    let to = TxKind::Call(provider);
-    let req_tx = ETHTransactionRequest {
-        input: unstake_call.abi_encode().into(),
-        to: Some(to),
-        ..Default::default()
-    };
-
-    return req_tx;
-}
-
-pub fn build_claim_unstake_request(delegator_address: AlloyAddress) -> ETHTransactionRequest {
-    let claim_call = claimCall {};
-    let to = TxKind::Call(delegator_address);
-    let req_tx = ETHTransactionRequest {
-        input: claim_call.abi_encode().into(),
-        to: Some(to),
-        ..Default::default()
-    };
-
-    return req_tx;
-}
-
-pub fn build_claim_reward_request(delegator_address: AlloyAddress) -> ETHTransactionRequest {
-    let withdraw_rewards_call = withdrawAllRewardsCall {};
-    let to = TxKind::Call(delegator_address);
-    let req_tx = ETHTransactionRequest {
-        input: withdraw_rewards_call.abi_encode().into(),
-        to: Some(to),
-        ..Default::default()
-    };
-
-    return req_tx;
-}
-
 pub fn get_reward_need_cycle_list(last_withdraw_cycle: u64, last_reward_cycle: u64) -> Vec<u64> {
     if last_reward_cycle <= last_withdraw_cycle {
         return Vec::new();
