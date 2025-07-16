@@ -310,8 +310,10 @@ impl ZilliqaEVMStakeing for NetworkProvider {
             } else {
                 let method = PoolMethod::GetDelegatedAmount;
                 let calldata = get_calldata(method, is_liquid)?;
+                let user_addr = addr.to_alloy_addr();
                 calls.push(RpcProvider::<ChainConfig>::build_payload(
                     json!([{
+                        "from": user_addr,
                         "to": pool.address,
                         "data": hex::encode_prefixed(&calldata)},
                         "latest"
