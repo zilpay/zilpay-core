@@ -36,7 +36,6 @@ pub struct FinalOutput {
     pub claimable_amount: U256,
     pub vote_power: Option<f64>,
     pub apr: Option<f64>,
-    pub price: Option<f64>,
     pub commission: Option<f64>,
     pub total_rewards: Option<U256>,
     pub total_stake: Option<U256>,

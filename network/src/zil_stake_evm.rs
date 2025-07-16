@@ -504,6 +504,10 @@ fn process_decoded(data: &mut FinalOutput, method: PoolMethod, decoded: Value, i
                     commission_den,
                     data.total_network_stake.unwrap_or_default(),
                 );
+                data.vote_power = calculate_vote_power(
+                    data.total_stake.unwrap_or_default(),
+                    data.total_network_stake.unwrap_or_default(),
+                );
             }
         }
         PoolMethod::UnbondingPeriod => {
@@ -535,7 +539,6 @@ fn process_decoded(data: &mut FinalOutput, method: PoolMethod, decoded: Value, i
                         .and_then(|v| v.as_str())
                         .and_then(|v| Some(v.to_string()))
                         .unwrap_or_default();
-                    data.can_stake = data.can_stake && status;
                     data.validators.push(ZilValidator {
                         future_stake,
                         pending_withdrawals,
