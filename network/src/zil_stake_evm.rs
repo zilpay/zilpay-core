@@ -67,8 +67,6 @@ pub trait ZilliqaEVMStakeing {
         provider: &Address,
         from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors>;
-
-    async fn get_zq2_providers(&self) -> Result<Vec<EvmPoolV2>, NetworkErrors>;
 }
 
 impl ZilliqaEVMStakeing for NetworkProvider {
@@ -176,25 +174,25 @@ impl ZilliqaEVMStakeing for NetworkProvider {
 
         Ok(req_tx)
     }
+}
 
-    async fn get_zq2_providers(&self) -> Result<Vec<EvmPoolV2>, NetworkErrors> {
-        let url = "https://api.zilpay.io/api/v2/stake/pools";
-        let client = reqwest::Client::new();
-        let response = client.get(url).send().await.map_err(|e| match e.status() {
-            Some(status) => NetworkErrors::HttpError(status.as_u16(), e.to_string()),
-            None => NetworkErrors::HttpNetworkError(e.to_string()),
-        })?;
+pub async fn get_zq2_providers() -> Result<Vec<EvmPoolV2>, NetworkErrors> {
+    let url = "https://api.zilpay.io/api/v2/stake/pools";
+    let client = reqwest::Client::new();
+    let response = client.get(url).send().await.map_err(|e| match e.status() {
+        Some(status) => NetworkErrors::HttpError(status.as_u16(), e.to_string()),
+        None => NetworkErrors::HttpNetworkError(e.to_string()),
+    })?;
 
-        if !response.status().is_success() {
-            return Err(NetworkErrors::HttpError(
-                response.status().as_u16(),
-                format!("API request failed: {}", response.status()),
-            ));
-        }
-
-        response
-            .json::<Vec<EvmPoolV2>>()
-            .await
-            .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))
+    if !response.status().is_success() {
+        return Err(NetworkErrors::HttpError(
+            response.status().as_u16(),
+            format!("API request failed: {}", response.status()),
+        ));
     }
+
+    response
+        .json::<Vec<EvmPoolV2>>()
+        .await
+        .map_err(|e| NetworkErrors::ParseHttpError(e.to_string()))
 }
