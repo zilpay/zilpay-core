@@ -306,6 +306,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                         hide: false,
                         uptime: 0,
                         can_stake: false,
+                        ..Default::default()
                     });
                 }
             }
@@ -421,6 +422,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                     hide: false,
                     uptime: 0,
                     can_stake: false,
+                    ..Default::default()
                 });
             }
         }
@@ -458,6 +460,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                             hide: false,
                             uptime: 0,
                             can_stake: false,
+                            ..Default::default()
                         });
                     }
                 }

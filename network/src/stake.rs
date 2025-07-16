@@ -14,6 +14,15 @@ pub struct LPToken {
     pub symbol: String,
     pub decimals: u8,
     pub address: AlloyAddress,
+    pub price: Option<f64>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
+pub struct ZilValidator {
+    pub future_stake: U256,
+    pub pending_withdrawals: U256,
+    pub reward_address: String,
+    pub status: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -24,14 +33,20 @@ pub struct FinalOutput {
     pub token: Option<LPToken>,
     pub deleg_amt: U256,
     pub rewards: U256,
+    pub claimable_amount: U256,
     pub tvl: Option<u128>,
     pub vote_power: Option<f64>,
     pub apr: Option<f64>,
     pub price: Option<f64>,
     pub commission: Option<f64>,
+    pub total_rewards: Option<U256>,
+    pub total_stake: Option<U256>,
+    pub version: Option<String>,
+    pub unbonding_period: Option<U256>,
     pub tag: String,
     pub current_block: Option<u64>,
     pub pending_withdrawals: Vec<PendingWithdrawal>,
+    pub validators: Vec<ZilValidator>,
     pub hide: bool,
     pub uptime: u8,
     pub can_stake: bool,
