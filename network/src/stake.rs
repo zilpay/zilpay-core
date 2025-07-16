@@ -41,7 +41,7 @@ pub struct FinalOutput {
     pub total_stake: Option<U256>,
     pub total_network_stake: Option<U256>,
     pub version: Option<String>,
-    pub unbonding_period: Option<U256>,
+    pub unbonding_period: Option<u64>,
     pub tag: String,
     pub current_block: Option<u64>,
     pub pending_withdrawals: Vec<PendingWithdrawal>,
