@@ -70,7 +70,7 @@ sol! {
     }
 
     function stake() external payable;
-    function unstake(uint256 shares) external;
+    function unstake(uint256 amount) external;
     function claim() external;
     function withdrawAllRewards() external;
     function stakeRewards() external;
@@ -170,7 +170,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
         from: &Address,
     ) -> Result<TransactionRequest, NetworkErrors> {
         let unstake_call = unstakeCall {
-            shares: amount_to_unstake,
+            amount: amount_to_unstake,
         };
         let to = TxKind::Call(provider.to_alloy_addr());
         let mut tx = ETHTransactionRequest {
