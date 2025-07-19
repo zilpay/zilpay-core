@@ -102,7 +102,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_evm_stake() {
-        let addr = Address::from_eth_address("0x8bd81306F248307c3fa1bb40fbD59baa86FFb2BA").unwrap();
+        let addr = Address::from_eth_address("0x61485Bbb4693fBb5Cb1A2c5083493b2D4370EaF4").unwrap();
 
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
