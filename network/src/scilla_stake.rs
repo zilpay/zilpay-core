@@ -289,23 +289,27 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                 if let Some(balance_str) =
                     balances_map.get(&wallet_address).and_then(|v| v.as_str())
                 {
-                    staked_nodes.push(FinalOutput {
-                        name: "Avely (legacy)".to_string(),
-                        address: ST_ZIL_CONTRACT.to_string(),
-                        token: None,
-                        deleg_amt: balance_str.parse().unwrap_or(U256::ZERO),
-                        rewards: U256::ZERO,
-                        vote_power: None,
-                        apr: None,
-                        commission: None,
-                        tag: "scilla".to_string(),
-                        current_block: None,
-                        pending_withdrawals: vec![],
-                        hide: false,
-                        uptime: 0,
-                        can_stake: false,
-                        ..Default::default()
-                    });
+                    let balance = balance_str.parse().unwrap_or(U256::ZERO);
+
+                    if balance > U256::ZERO {
+                        staked_nodes.push(FinalOutput {
+                            name: "Avely (legacy)".to_string(),
+                            address: ST_ZIL_CONTRACT.to_string(),
+                            token: None,
+                            deleg_amt: balance,
+                            rewards: U256::ZERO,
+                            vote_power: None,
+                            apr: None,
+                            commission: None,
+                            tag: "scilla".to_string(),
+                            current_block: None,
+                            pending_withdrawals: vec![],
+                            hide: false,
+                            uptime: 0,
+                            can_stake: false,
+                            ..Default::default()
+                        });
+                    }
                 }
             }
         }

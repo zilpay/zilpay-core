@@ -90,7 +90,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_scilla_stake() {
-        let addr = Address::from_zil_bech32("zil1gmk7xpsyxthczk202a0yavhxk56mqch0ghl02f").unwrap();
+        let addr = Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap();
 
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
@@ -102,7 +102,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_evm_stake() {
-        let addr = Address::from_eth_address("0xEC6bB19886c9D5f5125DfC739362Bf54AA23d51F").unwrap();
+        let addr = Address::from_eth_address("0x8bd81306F248307c3fa1bb40fbD59baa86FFb2BA").unwrap();
 
         let net_conf = create_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
