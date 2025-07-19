@@ -146,6 +146,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
         let mut tx = ETHTransactionRequest {
             value: Some(amount),
             to: Some(to),
+            from: Some(from.to_alloy_addr()),
             input: stake_call.abi_encode().into(),
             ..Default::default()
         }
@@ -175,6 +176,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
         let mut tx = ETHTransactionRequest {
             input: unstake_call.abi_encode().into(),
             to: Some(to),
+            from: Some(from.to_alloy_addr()),
             ..Default::default()
         }
         .from(from.to_alloy_addr());
