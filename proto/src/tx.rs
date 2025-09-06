@@ -198,7 +198,7 @@ impl TransactionRequest {
         pub_key: &PubKey,
     ) -> Result<TransactionReceipt, TransactionErrors> {
         match self {
-            TransactionRequest::Ethereum((tx, metadata)) => {
+            TransactionRequest::Ethereum((tx, mut metadata)) => {
                 let sig = EthersSignature::from_raw(&signature_bytes)
                     .map_err(|_| TransactionErrors::BuildErrorEthSig)?;
                 let typed_tx = tx
@@ -216,6 +216,8 @@ impl TransactionRequest {
                     }
                     TypedTransaction::Eip7702(tx) => TxEnvelope::Eip7702(tx.into_signed(sig)),
                 };
+
+                metadata.signer = Some(PubKey::Secp256k1Keccak256(pub_key.as_bytes()));
 
                 Ok(TransactionReceipt::Ethereum((signed_tx, metadata)))
             }
