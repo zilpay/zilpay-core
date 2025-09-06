@@ -47,6 +47,7 @@ where
         const TIME_OUT_SEC: u64 = 5;
         let client = reqwest::Client::new();
         let mut last_error = None;
+        let mut errors = String::with_capacity(200);
 
         for url in self.get_nodes() {
             let res = client
@@ -61,21 +62,22 @@ where
                     Ok(text) => match serde_json::from_str::<SR>(&text) {
                         Ok(json) => return Ok(json),
                         Err(e) => {
-                            last_error = Some(RpcError::InvalidJson(format!(
+                            errors.push_str(&format!(
                                 "Failed to parse JSON: {}. Response: {}",
                                 e, text
-                            )));
+                            ));
+                            last_error = Some(RpcError::InvalidJson(errors.to_string()));
                         }
                     },
                     Err(e) => {
-                        last_error = Some(RpcError::BadRequest(format!(
-                            "Failed to get response text: {}",
-                            e
-                        )));
+                        errors.push_str(&format!("Failed to get response text: {}", e));
+
+                        last_error = Some(RpcError::BadRequest(errors.to_string()));
                     }
                 },
                 Err(e) => {
-                    last_error = Some(RpcError::BadRequest(format!("Request failed: {}", e)));
+                    errors.push_str(&format!("Request failed: {}", e.to_string()));
+                    last_error = Some(RpcError::BadRequest(errors.to_string()));
                 }
             }
         }
@@ -156,7 +158,7 @@ mod tests {
             name: "Binance Smart Chain".to_string(),
             chain: "BSC".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://bsc-dataseed.binance.org".to_string()],
+            rpc: vec!["https://data-seed-prebsc-1-s1.binance.org:8545/".to_string()],
             features: vec![155, 1559],
             slip_44: 60,
             ens: None,
