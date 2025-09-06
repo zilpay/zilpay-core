@@ -238,7 +238,7 @@ mod tests_background_transactions {
             name: "Zilliqa(testnet)".to_string(),
             chain: "ZIL".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://dev-api.zilliqa.com".to_string()],
+            rpc: vec!["https://api.testnet.zilliqa.com".to_string()],
             features: vec![],
             slip_44: slip44::ZILLIQA,
             ens: None,
@@ -344,7 +344,7 @@ mod tests_background_transactions {
         let zil_tx = ZILTransactionRequest {
             nonce: nonce + 1,
             chain_id: provider.config.chain_id() as u16,
-            gas_price: 2000000000,
+            gas_price: 2000000100,
             gas_limit: 1000,
             to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
                 .unwrap(),
