@@ -1187,7 +1187,7 @@ mod tests_network {
             .await
             .unwrap();
 
-        assert_eq!(params.gas_price, U256::from(2000000000));
+        assert_eq!(params.gas_price, U256::from(2000000016));
         assert!(params.nonce > 66519);
 
         let block_diff_time = provider.estimate_block_time(&from).await.unwrap();
