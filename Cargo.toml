@@ -59,7 +59,7 @@ alloy = { version = "1.0.3", features = ["eips", "eip712", "consensus", "signer-
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 sha2 = "0.10.8"
-tokio = { version = "1.39.2", features = ["macros"], default-features = false }
+tokio = { version = "1.47.1", features = ["macros"], default-features = false }
 ntrulp = { version = "0.2.3", features = ["ntrup761", "std"] }
 reqwest = { version = "0.12.23", features = ["rustls-tls", "json", "socks", "gzip", "brotli"], default-features = false }
 ripemd = "0.1.3"
