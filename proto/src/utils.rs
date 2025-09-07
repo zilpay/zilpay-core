@@ -57,8 +57,121 @@ pub fn safe_chunk_transaction(
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        tx::{ETHTransactionRequest, TransactionRequest},
+        AlloyBytes,
+    };
+
     use super::*;
+    use alloy::primitives::{Address, U256};
     use hex;
+
+    fn get_rlp_from_request(
+        tx_request: ETHTransactionRequest,
+    ) -> Result<Vec<u8>, TransactionErrors> {
+        let req = TransactionRequest::Ethereum((tx_request, Default::default()));
+        let dummy_pk = crate::pubkey::PubKey::Secp256k1Keccak256([0; 33]);
+        req.to_rlp_encode(&dummy_pk)
+    }
+
+    #[test]
+    fn test_single_chunk_for_small_transaction() {
+        let derivation_path_buff =
+            hex::decode("058000002c8000003c800000008000000000000000").unwrap();
+
+        let raw_tx = ETHTransactionRequest {
+            to: Some(Address::ZERO.into()),
+            nonce: Some(0),
+            value: Some(U256::from(0)),
+            gas_price: Some(1),
+            gas: Some(21000),
+            chain_id: Some(1),
+            ..Default::default()
+        };
+
+        let rlp_buff = get_rlp_from_request(raw_tx).unwrap();
+
+        assert!(
+            rlp_buff.len() + derivation_path_buff.len() <= 255,
+            "Test setup failed: Transaction is too big"
+        );
+
+        let payload = [derivation_path_buff.as_slice(), rlp_buff.as_slice()].concat();
+        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, None).unwrap();
+
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0], payload);
+    }
+
+    #[test]
+    fn test_multiple_255b_chunks_for_typed_transaction() {
+        let derivation_path_buff =
+            hex::decode("058000002c8000003c800000008000000000000000").unwrap();
+
+        let raw_tx = ETHTransactionRequest {
+            to: Some(Address::ZERO.into()),
+            nonce: Some(0),
+            value: Some(U256::from(0)),
+            gas_price: Some(1),
+            gas: Some(21000),
+            input: vec![0u8; 256].into(),
+            chain_id: Some(1),
+            transaction_type: Some(1), // EIP-2930
+            ..Default::default()
+        };
+
+        let rlp_buff = get_rlp_from_request(raw_tx).unwrap();
+        assert!(
+            rlp_buff.len() + derivation_path_buff.len() > 255,
+            "Test setup failed: Transaction is too small"
+        );
+
+        let payload = [derivation_path_buff.as_slice(), rlp_buff.as_slice()].concat();
+        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, Some(1)).unwrap();
+
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0].len(), 255);
+        assert_eq!(chunks[0], &payload[0..255]);
+        assert_eq!(chunks[1], &payload[255..]);
+    }
+
+    #[test]
+    fn test_variable_chunks_for_legacy_transaction() {
+        let derivation_path_buff =
+            hex::decode("058000002c8000003c800000008000000000000000").unwrap();
+        let data = AlloyBytes::from(vec![0u8; 458]);
+
+        let raw_tx = ETHTransactionRequest {
+            to: Some(Address::ZERO.into()),
+            nonce: Some(0),
+            value: Some(U256::from(0)),
+            gas_price: Some(1),
+            gas: Some(2),
+            input: data.into(),
+            chain_id: Some(127),
+            ..Default::default() // Legacy transaction
+        };
+
+        let rlp_buff = get_rlp_from_request(raw_tx).unwrap();
+        let payload = [derivation_path_buff.as_slice(), rlp_buff.as_slice()].concat();
+
+        assert_eq!(
+            payload.len(),
+            513,
+            "Test setup failed: incorrect payload length"
+        );
+
+        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, None).unwrap();
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].len(), 254);
+        assert_eq!(chunks[1].len(), 254);
+        assert_eq!(chunks[2].len(), 5);
+
+        assert_eq!(chunks[0], &payload[0..254]);
+        assert_eq!(chunks[1], &payload[254..508]);
+        assert_eq!(chunks[2], &payload[508..]);
+    }
 
     #[test]
     fn test_legacy_transaction_chunking() {
