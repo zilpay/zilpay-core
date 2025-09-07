@@ -16,4 +16,7 @@ pub enum Bip329Errors {
 
     #[error("Invalid slip44 number: {0}")]
     InvalidSlip44(u32),
+
+    #[error("Invalid slip44 component: {0}")]
+    InvalidComponent(String),
 }
