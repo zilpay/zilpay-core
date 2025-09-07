@@ -1,10 +1,13 @@
-use alloy::rlp::{decode_exact, encode_list, Bytes};
+use alloy::{
+    consensus::TxType,
+    rlp::{decode_exact, encode_list, Bytes},
+};
 use errors::tx::TransactionErrors;
 
 pub fn safe_chunk_transaction(
     transaction_rlp: &[u8],
     derivation_path: &[u8],
-    transaction_type: Option<u8>,
+    transaction_type: TxType,
 ) -> Result<Vec<Vec<u8>>, TransactionErrors> {
     const MAX_CHUNK_SIZE: usize = 255;
     let payload = [derivation_path, transaction_rlp].concat();
@@ -13,46 +16,47 @@ pub fn safe_chunk_transaction(
         return Ok(vec![payload]);
     }
 
-    if transaction_type.is_some() {
-        return Ok(payload
-            .chunks(MAX_CHUNK_SIZE)
-            .map(|chunk| chunk.to_vec())
-            .collect());
-    }
+    match transaction_type {
+        TxType::Legacy => {
+            // --- Legacy Transaction Logic ---
+            let decoded: Vec<Bytes> =
+                decode_exact(transaction_rlp).map_err(|_| TransactionErrors::EncodeTxRlpError)?;
+            let vrs = &decoded[decoded.len() - 3..];
 
-    // --- Legacy Transaction Logic ---
+            let mut encoded_vrs_buffer = Vec::new();
+            encode_list::<_, [u8]>(vrs, &mut encoded_vrs_buffer);
 
-    let decoded: Vec<Bytes> =
-        decode_exact(transaction_rlp).map_err(|_| TransactionErrors::EncodeTxRlpError)?;
-    let vrs = &decoded[decoded.len() - 3..];
+            let encoded_vrs_payload = &encoded_vrs_buffer[1..];
+            let mut chunk_size = MAX_CHUNK_SIZE;
+            let last_chunk_len = payload.len() % MAX_CHUNK_SIZE;
 
-    let mut encoded_vrs_buffer = Vec::new();
-    encode_list::<_, [u8]>(vrs, &mut encoded_vrs_buffer);
+            if last_chunk_len != 0 && last_chunk_len <= encoded_vrs_payload.len() {
+                for i in 1..=MAX_CHUNK_SIZE {
+                    let proposed_size = MAX_CHUNK_SIZE - i;
+                    if proposed_size == 0 {
+                        continue;
+                    }
 
-    let encoded_vrs_payload = &encoded_vrs_buffer[1..];
-
-    let mut chunk_size = MAX_CHUNK_SIZE;
-    let last_chunk_len = payload.len() % MAX_CHUNK_SIZE;
-
-    if last_chunk_len != 0 && last_chunk_len <= encoded_vrs_payload.len() {
-        for i in 1..=MAX_CHUNK_SIZE {
-            let proposed_size = MAX_CHUNK_SIZE - i;
-            if proposed_size == 0 {
-                continue;
+                    let new_last_chunk_len = payload.len() % proposed_size;
+                    if new_last_chunk_len == 0 || new_last_chunk_len > encoded_vrs_payload.len() {
+                        chunk_size = proposed_size;
+                        break;
+                    }
+                }
             }
-
-            let new_last_chunk_len = payload.len() % proposed_size;
-            if new_last_chunk_len == 0 || new_last_chunk_len > encoded_vrs_payload.len() {
-                chunk_size = proposed_size;
-                break;
-            }
+            Ok(payload
+                .chunks(chunk_size)
+                .map(|chunk| chunk.to_vec())
+                .collect())
+        }
+        _ => {
+            // --- EIP-2718 and other transaction types ---
+            Ok(payload
+                .chunks(MAX_CHUNK_SIZE)
+                .map(|chunk| chunk.to_vec())
+                .collect())
         }
     }
-
-    Ok(payload
-        .chunks(chunk_size)
-        .map(|chunk| chunk.to_vec())
-        .collect())
 }
 
 #[cfg(test)]
@@ -97,7 +101,8 @@ mod tests {
         );
 
         let payload = [derivation_path_buff.as_slice(), rlp_buff.as_slice()].concat();
-        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, None).unwrap();
+        let chunks =
+            safe_chunk_transaction(&rlp_buff, &derivation_path_buff, TxType::Legacy).unwrap();
 
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0], payload);
@@ -127,7 +132,8 @@ mod tests {
         );
 
         let payload = [derivation_path_buff.as_slice(), rlp_buff.as_slice()].concat();
-        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, Some(1)).unwrap();
+        let chunks =
+            safe_chunk_transaction(&rlp_buff, &derivation_path_buff, TxType::Eip1559).unwrap();
 
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].len(), 255);
@@ -161,7 +167,8 @@ mod tests {
             "Test setup failed: incorrect payload length"
         );
 
-        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, None).unwrap();
+        let chunks =
+            safe_chunk_transaction(&rlp_buff, &derivation_path_buff, TxType::Legacy).unwrap();
 
         assert_eq!(chunks.len(), 3);
         assert_eq!(chunks[0].len(), 254);
@@ -182,8 +189,8 @@ mod tests {
             hex::decode(derivation_path_hex).expect("Failed to decode derivation path");
         let rlp_buff = hex::decode(&rlp_hex[2..]).expect("Failed to decode RLP");
         let payload = [derivation_path_buff.as_slice(), rlp_buff.as_slice()].concat();
-        let tx_type: Option<u8> = None;
-        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, tx_type).unwrap();
+        let chunks =
+            safe_chunk_transaction(&rlp_buff, &derivation_path_buff, TxType::Legacy).unwrap();
 
         assert_eq!(
             &[
