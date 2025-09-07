@@ -6,6 +6,7 @@ pub mod pubkey;
 pub mod secret_key;
 pub mod signature;
 pub mod tx;
+pub mod utils;
 pub mod zil_address;
 pub mod zil_tx;
 pub mod zq1_proto;
