@@ -1,28 +1,29 @@
 use alloy::rlp::{decode_exact, encode_list, Bytes};
+use errors::tx::TransactionErrors;
 
 pub fn safe_chunk_transaction(
     transaction_rlp: &[u8],
     derivation_path: &[u8],
     transaction_type: Option<u8>,
-) -> Vec<Vec<u8>> {
+) -> Result<Vec<Vec<u8>>, TransactionErrors> {
     const MAX_CHUNK_SIZE: usize = 255;
     let payload = [derivation_path, transaction_rlp].concat();
 
     if payload.len() <= MAX_CHUNK_SIZE {
-        return vec![payload];
+        return Ok(vec![payload]);
     }
 
     if transaction_type.is_some() {
-        return payload
+        return Ok(payload
             .chunks(MAX_CHUNK_SIZE)
             .map(|chunk| chunk.to_vec())
-            .collect();
+            .collect());
     }
 
     // --- Legacy Transaction Logic ---
 
     let decoded: Vec<Bytes> =
-        decode_exact(transaction_rlp).expect("Failed to decode transaction RLP as a list of bytes");
+        decode_exact(transaction_rlp).map_err(|_| TransactionErrors::EncodeTxRlpError)?;
     let vrs = &decoded[decoded.len() - 3..];
 
     let mut encoded_vrs_buffer = Vec::new();
@@ -48,10 +49,10 @@ pub fn safe_chunk_transaction(
         }
     }
 
-    payload
+    Ok(payload
         .chunks(chunk_size)
         .map(|chunk| chunk.to_vec())
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
@@ -69,7 +70,7 @@ mod tests {
         let rlp_buff = hex::decode(&rlp_hex[2..]).expect("Failed to decode RLP");
         let payload = [derivation_path_buff.as_slice(), rlp_buff.as_slice()].concat();
         let tx_type: Option<u8> = None;
-        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, tx_type);
+        let chunks = safe_chunk_transaction(&rlp_buff, &derivation_path_buff, tx_type).unwrap();
 
         assert_eq!(
             &[
