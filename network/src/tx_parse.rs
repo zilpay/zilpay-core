@@ -1,7 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::Result;
-use alloy::eips::eip2718::Encodable2718;
+use alloy::rlp::Encodable;
 use errors::{network::NetworkErrors, tx::TransactionErrors};
 use history::{
     status::TransactionStatus,
@@ -22,8 +22,8 @@ pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
             RpcProvider::<ChainConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
         }
         TransactionReceipt::Ethereum((eth, _)) => {
-            let mut encoded = Vec::with_capacity(eth.eip2718_encoded_length());
-            eth.encode_2718(&mut encoded);
+            let mut encoded = Vec::with_capacity(eth.length());
+            eth.encode(&mut encoded);
             let hex_tx = alloy::hex::encode_prefixed(encoded);
 
             RpcProvider::<ChainConfig>::build_payload(

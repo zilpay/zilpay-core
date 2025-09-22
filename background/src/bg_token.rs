@@ -151,7 +151,11 @@ impl TokensManagement for Background {
             .collect::<Vec<&Address>>();
         let selected = &data.accounts[data.selected_account];
         let provider = self.get_provider(selected.chain_hash)?;
-        let token_meta = provider.ftoken_meta(contract, &accounts).await?;
+        let mut token_meta = provider.ftoken_meta(contract, &accounts).await?;
+
+        if let Some(t) = w.get_ftokens()?.into_iter().next() {
+            token_meta.logo = t.logo;
+        }
 
         Ok(token_meta)
     }
