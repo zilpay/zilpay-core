@@ -52,6 +52,32 @@ impl WalletFeatures {
     const DEFUALT_CURRENCY_CONVERT: &str = "BTC";
 }
 
+impl TokenQuotesAPIOptions {
+    pub fn from_code(value: u8) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::Coingecko,
+            _ => Self::None,
+        }
+    }
+
+    pub fn code(&self) -> u8 {
+        match self {
+            Self::None => 0,
+            Self::Coingecko => 1,
+        }
+    }
+}
+
+impl std::fmt::Display for TokenQuotesAPIOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenQuotesAPIOptions::None => write!(f, "None"),
+            TokenQuotesAPIOptions::Coingecko => write!(f, "Coingecko"),
+        }
+    }
+}
+
 impl Default for WalletSettings {
     fn default() -> Self {
         Self {
