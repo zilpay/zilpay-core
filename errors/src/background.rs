@@ -10,7 +10,6 @@ use crate::{
     session::SessionErrors,
     storage::LocalStorageError,
     token::TokenError,
-    token_quotes::TokenQuotesError,
     tx::TransactionErrors,
     wallet::WalletErrors,
 };
@@ -102,9 +101,6 @@ pub enum BackgroundError {
     #[error("unable verify transaction")]
     TransactionInvalidSig,
 
-    #[error("token rates error: {0}")]
-    TokenQuotesError(TokenQuotesError),
-
     #[error("Bincode Error: {0}")]
     BincodeError(String),
 
@@ -125,12 +121,6 @@ pub enum BackgroundError {
 
     #[error("Bip39 error: {0}")]
     Bip39Error(Bip39Error),
-}
-
-impl From<TokenQuotesError> for BackgroundError {
-    fn from(error: TokenQuotesError) -> Self {
-        BackgroundError::TokenQuotesError(error)
-    }
 }
 
 impl From<SecretKeyError> for BackgroundError {

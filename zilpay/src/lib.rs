@@ -12,5 +12,4 @@ pub use qrcodes;
 pub use rpc;
 pub use settings;
 pub use token;
-pub use token_quotes;
 pub use wallet;

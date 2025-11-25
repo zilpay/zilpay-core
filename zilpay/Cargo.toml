@@ -19,4 +19,3 @@ history = { path = "../history" }
 network = { path = "../network" }
 cache = { path = "../cache" }
 qrcodes = { path = "../qrcodes" }
-token_quotes = { path = "../token_quotes" }

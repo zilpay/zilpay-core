@@ -26,7 +26,7 @@ members = [
   "wallet",
   "errors",
   "rpc",
-  "zilpay", "token", "history", "cache", "qrcodes", "intl", "token_quotes",
+  "zilpay", "token", "history", "cache", "qrcodes", "intl",
 ]
 
 [dependencies]
@@ -45,7 +45,6 @@ cipher = { path = "./cipher" }
 network = { path = "./network" }
 intl = { path = "./intl" }
 cache = { path = "./cache" }
-token_quotes = { path = "./token_quotes" }
 qrcodes = { path = "./qrcodes" }
 
 [workspace.dependencies]

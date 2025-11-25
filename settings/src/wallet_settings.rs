@@ -1,8 +1,14 @@
 use cipher::options::CipherOrders;
 use serde::{Deserialize, Serialize};
-use token_quotes::TokenQuotesAPIOptions;
 
 use crate::argon2::ArgonParams;
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone, Default)]
+pub enum TokenQuotesAPIOptions {
+    None,
+    #[default]
+    Coingecko,
+}
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub struct WalletSettings {
