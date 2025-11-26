@@ -377,4 +377,139 @@ mod tests_background_worker {
             }
         }
     }
+
+    fn gen_zilliqa_mainnet_conf() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            short_name: String::new(),
+            rpc: vec!["https://api.zilliqa.com".to_string()],
+            features: vec![155],
+            slip_44: slip44::ZILLIQA,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        }
+    }
+
+    fn gen_zil_token(chain_hash: u64) -> FToken {
+        FToken {
+            rate: 0f64,
+            chain_hash,
+            default: true,
+            name: "Zilliqa".to_string(),
+            symbol: "ZIL".to_string(),
+            decimals: 12,
+            addr: Address::Secp256k1Sha256([0u8; ADDR_LEN]),
+            logo: None,
+            balances: HashMap::new(),
+            native: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_zilliqa_scilla_txns_status() {
+        let (mut bg, _dir) = setup_test_background();
+
+        let words = Background::gen_bip39(24).unwrap();
+        let accounts = [(
+            DerivationPath::new(slip44::ZILLIQA, 0),
+            "Zilliqa account 1".to_string(),
+        )];
+        let net_config = gen_zilliqa_mainnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: &words,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![gen_zil_token(net_config.hash())],
+        })
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+
+        let tx_hash_success = "0x571dd6dc2b531c11b495492ead20181f52ed3da9cb4c32aaadda870ec63a05cd";
+        let tx_hash_failed = "0x575bb9d1de9efca7e0f279534b25f5dedf3b7f590c3800bf9ca94334999223bc";
+
+        wallet
+            .save_history(&[
+                HistoricalTransaction {
+                    metadata: proto::tx::TransactionMetadata {
+                        chain_hash: net_config.hash(),
+                        hash: Some(tx_hash_success.to_string()),
+                        ..Default::default()
+                    },
+                    scilla: Some(
+                        serde_json::json!({
+                            "hash": tx_hash_success,
+                            "receipt": null,
+                        })
+                        .to_string(),
+                    ),
+                    ..Default::default()
+                },
+                HistoricalTransaction {
+                    metadata: proto::tx::TransactionMetadata {
+                        chain_hash: net_config.hash(),
+                        hash: Some(tx_hash_failed.to_string()),
+                        ..Default::default()
+                    },
+                    scilla: Some(
+                        serde_json::json!({
+                            "hash": tx_hash_failed,
+                            "receipt": null,
+                        })
+                        .to_string(),
+                    ),
+                    ..Default::default()
+                },
+            ])
+            .unwrap();
+
+        let (tx, mut rx) = mpsc::channel(10);
+        let handle = bg.start_txns_track_job(0, tx).await.unwrap();
+
+        while let Some(msg) = rx.recv().await {
+            match msg {
+                JobMessage::Tx => {
+                    let history = wallet.get_history().unwrap();
+
+                    assert_eq!(
+                        history[0].status,
+                        TransactionStatus::Success,
+                        "Transaction {} should be Success",
+                        tx_hash_success
+                    );
+                    assert_eq!(
+                        history[1].status,
+                        TransactionStatus::Failed,
+                        "Transaction {} should be Failed",
+                        tx_hash_failed
+                    );
+
+                    handle.abort();
+                    break;
+                }
+                JobMessage::Error(e) => {
+                    println!("error: {:?}", e);
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+    }
 }

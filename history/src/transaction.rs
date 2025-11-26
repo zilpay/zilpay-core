@@ -271,7 +271,16 @@ impl HistoricalTransaction {
     }
 
     fn update_scilla_status(&mut self, scilla: &Value) {
-        if let Some(receipt) = scilla.get("receipt") {
+        if let Some(status) = scilla.get("status").and_then(|s| s.as_u64()) {
+            match status {
+                3 => self.status = TransactionStatus::Success,
+                1 | 2 | 4 | 5 | 6 => self.status = TransactionStatus::Pending,
+                _ => self.status = TransactionStatus::Failed,
+            }
+            return;
+        }
+
+        if let Some(receipt) = scilla.get("receipt").filter(|r| !r.is_null()) {
             let success = receipt
                 .get("success")
                 .and_then(|s| s.as_bool())
@@ -281,12 +290,6 @@ impl HistoricalTransaction {
             } else {
                 TransactionStatus::Failed
             };
-        } else if let Some(status) = scilla.get("status").and_then(|s| s.as_u64()) {
-            match status {
-                3 => self.status = TransactionStatus::Success,
-                1 | 2 | 4 | 5 | 6 => self.status = TransactionStatus::Pending,
-                _ => self.status = TransactionStatus::Failed,
-            }
         }
     }
 }
