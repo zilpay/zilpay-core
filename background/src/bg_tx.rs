@@ -34,6 +34,8 @@ pub trait TransactionsManagement {
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
         message: &str,
+        title: Option<String>,
+        icon: Option<String>,
     ) -> std::result::Result<(PubKey, Signature), Self::Error>;
 
     fn prepare_message(
@@ -55,6 +57,8 @@ pub trait TransactionsManagement {
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
         message: &str,
+        title: Option<String>,
+        icon: Option<String>,
     ) -> std::result::Result<(PubKey, Signature), Self::Error>;
 }
 
@@ -107,14 +111,33 @@ impl TransactionsManagement for Background {
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
         typed_data_json: &str,
+        title: Option<String>,
+        icon: Option<String>,
     ) -> Result<(PubKey, Signature)> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
+        let data = wallet.get_wallet_data()?;
+        let account = data
+            .accounts
+            .get(account_index)
+            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let typed_data: TypedData = serde_json::from_str(&typed_data_json.to_string())
             .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
         let signature = key_pair.sign_typed_data_eip712(typed_data).await?;
+        let pub_key = key_pair.get_pubkey()?;
 
-        Ok((key_pair.get_pubkey()?, signature))
+        let history_entry = HistoricalTransaction::from_signed_typed_data(
+            typed_data_json,
+            &signature.to_hex_prefixed(),
+            &pub_key.as_hex_str(),
+            &account.addr.auto_format(),
+            title,
+            icon,
+            account.chain_hash,
+        );
+        wallet.add_history(&[history_entry])?;
+
+        Ok((pub_key, signature))
     }
 
     fn sign_message(
@@ -124,6 +147,8 @@ impl TransactionsManagement for Background {
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
         message: &str,
+        title: Option<String>,
+        icon: Option<String>,
     ) -> Result<(PubKey, Signature)> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
@@ -143,8 +168,20 @@ impl TransactionsManagement for Background {
             }
             Address::Secp256k1Keccak256(_) => key_pair.sign_message(message.as_bytes())?,
         };
+        let pub_key = key_pair.get_pubkey()?;
 
-        Ok((key_pair.get_pubkey()?, signature))
+        let history_entry = HistoricalTransaction::from_signed_message(
+            message,
+            &signature.to_hex_prefixed(),
+            &pub_key.as_hex_str(),
+            &account.addr.auto_format(),
+            title,
+            icon,
+            account.chain_hash,
+        );
+        wallet.add_history(&[history_entry])?;
+
+        Ok((pub_key, signature))
     }
 
     async fn check_pending_txns(&self, wallet_index: usize) -> Result<Vec<HistoricalTransaction>> {
@@ -672,7 +709,9 @@ mod tests_background_transactions {
         .unwrap();
 
         let message = "Hello, Zilliqa!";
-        let (pubkey, signature) = bg.sign_message(0, 0, &argon_seed, None, message).unwrap();
+        let (pubkey, signature) = bg
+            .sign_message(0, 0, &argon_seed, None, message, None, None)
+            .unwrap();
 
         let hashed_message = Sha256::digest(message.as_bytes());
         let key_pair = bg

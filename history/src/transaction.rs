@@ -20,6 +20,7 @@ pub struct HistoricalTransaction {
     pub metadata: TransactionMetadata,
     pub evm: Option<String>,
     pub scilla: Option<String>,
+    pub signed_message: Option<String>,
     pub timestamp: u64,
 }
 
@@ -38,6 +39,92 @@ impl HistoricalTransaction {
 
     pub fn set_scilla(&mut self, value: Value) {
         self.scilla = serde_json::to_string(&value).ok();
+    }
+
+    pub fn get_signed_message(&self) -> Option<Value> {
+        self.signed_message
+            .as_ref()
+            .and_then(|s| serde_json::from_str(s).ok())
+    }
+
+    pub fn set_signed_message(&mut self, value: Value) {
+        self.signed_message = serde_json::to_string(&value).ok();
+    }
+
+    pub fn from_signed_message(
+        message: &str,
+        signature: &str,
+        pub_key: &str,
+        signer_address: &str,
+        title: Option<String>,
+        icon: Option<String>,
+        chain_hash: u64,
+    ) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let signed_msg = json!({
+            "type": "personal_sign",
+            "message": message,
+            "signature": signature,
+            "pubKey": pub_key,
+            "signer": signer_address,
+        });
+
+        Self {
+            status: TransactionStatus::Success,
+            metadata: TransactionMetadata {
+                chain_hash,
+                title,
+                icon,
+                ..Default::default()
+            },
+            evm: None,
+            scilla: None,
+            signed_message: serde_json::to_string(&signed_msg).ok(),
+            timestamp,
+        }
+    }
+
+    pub fn from_signed_typed_data(
+        typed_data_json: &str,
+        signature: &str,
+        pub_key: &str,
+        signer_address: &str,
+        title: Option<String>,
+        icon: Option<String>,
+        chain_hash: u64,
+    ) -> Self {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
+        let typed_data: Value = serde_json::from_str(typed_data_json).unwrap_or(Value::Null);
+
+        let signed_msg = json!({
+            "type": "eth_signTypedData_v4",
+            "typedData": typed_data,
+            "signature": signature,
+            "pubKey": pub_key,
+            "signer": signer_address,
+        });
+
+        Self {
+            status: TransactionStatus::Success,
+            metadata: TransactionMetadata {
+                chain_hash,
+                title,
+                icon,
+                ..Default::default()
+            },
+            evm: None,
+            scilla: None,
+            signed_message: serde_json::to_string(&signed_msg).ok(),
+            timestamp,
+        }
     }
 
     pub fn from_transaction_receipt(
@@ -81,6 +168,7 @@ impl HistoricalTransaction {
                     metadata,
                     evm: None,
                     scilla: serde_json::to_string(&scilla).ok(),
+                    signed_message: None,
                     timestamp,
                 })
             }
@@ -131,6 +219,7 @@ impl HistoricalTransaction {
                     metadata,
                     evm: serde_json::to_string(&evm).ok(),
                     scilla: None,
+                    signed_message: None,
                     timestamp,
                 })
             }
