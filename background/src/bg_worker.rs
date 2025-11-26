@@ -75,7 +75,7 @@ impl WorkerManager for Background {
                             let mut matching_transactions = Vec::with_capacity(history.len());
 
                             for tx in history.iter_mut() {
-                                if tx.chain_hash == chain_ref.config.hash() && tx.status == TransactionStatus::Pending {
+                                if tx.metadata.chain_hash == chain_ref.config.hash() && tx.status == TransactionStatus::Pending {
                                     matching_transactions.push(tx);
                                 }
                             }
@@ -313,30 +313,42 @@ mod tests_background_worker {
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
 
+        let tx_hash_1 = "0x8f1494d1b48938a88d46752bfbc4e962ed22d5dedefda27c92fce24bf7b9d587";
+        let tx_hash_2 = "0x08a35d883bb2fc936888ea229d5b8b0941fb8f968fa07cae0c7317e74167ac68";
+        let tx_hash_3 = "0xe2559de243272ca8f1322788c9b6fd25288593ec6d72ac9f9d52b8aa198fa403";
         wallet
             .save_history(&[
                 HistoricalTransaction {
-                    transaction_hash:
-                        "0x8f1494d1b48938a88d46752bfbc4e962ed22d5dedefda27c92fce24bf7b9d587"
-                            .to_string(),
-                    chain_type: history::transaction::ChainType::EVM,
-                    chain_hash: net_config.hash(),
+                    metadata: proto::tx::TransactionMetadata {
+                        chain_hash: net_config.hash(),
+                        hash: Some(tx_hash_1.to_string()),
+                        ..Default::default()
+                    },
+                    evm: Some(serde_json::json!({
+                        "transactionHash": tx_hash_1,
+                    }).to_string()),
                     ..Default::default()
                 },
                 HistoricalTransaction {
-                    transaction_hash:
-                        "0x08a35d883bb2fc936888ea229d5b8b0941fb8f968fa07cae0c7317e74167ac68"
-                            .to_string(),
-                    chain_type: history::transaction::ChainType::EVM,
-                    chain_hash: net_config.hash(),
+                    metadata: proto::tx::TransactionMetadata {
+                        chain_hash: net_config.hash(),
+                        hash: Some(tx_hash_2.to_string()),
+                        ..Default::default()
+                    },
+                    evm: Some(serde_json::json!({
+                        "transactionHash": tx_hash_2,
+                    }).to_string()),
                     ..Default::default()
                 },
                 HistoricalTransaction {
-                    transaction_hash:
-                        "0xe2559de243272ca8f1322788c9b6fd25288593ec6d72ac9f9d52b8aa198fa403"
-                            .to_string(),
-                    chain_type: history::transaction::ChainType::EVM,
-                    chain_hash: net_config.hash(),
+                    metadata: proto::tx::TransactionMetadata {
+                        chain_hash: net_config.hash(),
+                        hash: Some(tx_hash_3.to_string()),
+                        ..Default::default()
+                    },
+                    evm: Some(serde_json::json!({
+                        "transactionHash": tx_hash_3,
+                    }).to_string()),
                     ..Default::default()
                 },
             ])
@@ -350,9 +362,9 @@ mod tests_background_worker {
                 JobMessage::Tx => {
                     let history = wallet.get_history().unwrap();
 
-                    assert_eq!(history[0].status, TransactionStatus::Confirmed);
-                    assert_eq!(history[1].status, TransactionStatus::Rejected);
-                    assert_eq!(history[2].status, TransactionStatus::Confirmed);
+                    assert_eq!(history[0].status, TransactionStatus::Success);
+                    assert_eq!(history[1].status, TransactionStatus::Failed);
+                    assert_eq!(history[2].status, TransactionStatus::Success);
 
                     handle.abort();
                 }

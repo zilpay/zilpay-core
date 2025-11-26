@@ -157,7 +157,9 @@ impl TransactionsManagement for Background {
         let mut matching_transactions = Vec::with_capacity(history.len());
 
         for tx in history.iter_mut() {
-            if tx.chain_hash == account.chain_hash && tx.status == TransactionStatus::Pending {
+            if tx.metadata.chain_hash == account.chain_hash
+                && tx.status == TransactionStatus::Pending
+            {
                 matching_transactions.push(tx);
             }
         }
@@ -371,7 +373,7 @@ mod tests_background_transactions {
         assert_eq!(txns.len(), 1);
 
         for tx in txns {
-            assert!(!tx.transaction_hash.is_empty());
+            assert!(tx.metadata.hash.is_some());
         }
     }
 
@@ -522,7 +524,7 @@ mod tests_background_transactions {
         assert_eq!(txns.len(), 1);
 
         for tx in txns {
-            assert!(!tx.transaction_hash.is_empty());
+            assert!(tx.metadata.hash.is_some());
         }
     }
 
@@ -576,21 +578,29 @@ mod tests_background_transactions {
         })
         .unwrap();
 
+        let tx_hash_1 = "0x3c5c16b756adf898dc9623445de94df709ffa2c1761d7579270dd292319981e5";
+        let tx_hash_2 = "0x6f3c4cb8145acf658db0a8fcf628c1294263d7ed4f9a2bbd92f7bf0e2846fb29";
         let tx_history = vec![
             HistoricalTransaction {
-                transaction_hash: String::from(
-                    "0x3c5c16b756adf898dc9623445de94df709ffa2c1761d7579270dd292319981e5",
-                ),
-                chain_hash: net_hash,
-                chain_type: history::transaction::ChainType::EVM,
+                metadata: proto::tx::TransactionMetadata {
+                    chain_hash: net_hash,
+                    hash: Some(tx_hash_1.to_string()),
+                    ..Default::default()
+                },
+                evm: Some(serde_json::json!({
+                    "transactionHash": tx_hash_1,
+                }).to_string()),
                 ..Default::default()
             },
             HistoricalTransaction {
-                transaction_hash: String::from(
-                    "0x6f3c4cb8145acf658db0a8fcf628c1294263d7ed4f9a2bbd92f7bf0e2846fb29",
-                ),
-                chain_hash: net_hash,
-                chain_type: history::transaction::ChainType::EVM,
+                metadata: proto::tx::TransactionMetadata {
+                    chain_hash: net_hash,
+                    hash: Some(tx_hash_2.to_string()),
+                    ..Default::default()
+                },
+                evm: Some(serde_json::json!({
+                    "transactionHash": tx_hash_2,
+                }).to_string()),
                 ..Default::default()
             },
         ];
@@ -603,19 +613,19 @@ mod tests_background_transactions {
             .get_history()
             .unwrap()
             .into_iter()
-            .filter(|t| t.chain_hash == net_hash)
+            .filter(|t| t.metadata.chain_hash == net_hash)
             .collect::<Vec<HistoricalTransaction>>();
 
         assert_eq!(
-            filterd_history[0].transaction_hash,
-            tx_history[0].transaction_hash
+            filterd_history[0].metadata.hash,
+            tx_history[0].metadata.hash
         );
         assert_eq!(
-            filterd_history[1].transaction_hash,
-            tx_history[1].transaction_hash
+            filterd_history[1].metadata.hash,
+            tx_history[1].metadata.hash
         );
-        assert_eq!(filterd_history[0].status, TransactionStatus::Confirmed);
-        assert_eq!(filterd_history[1].status, TransactionStatus::Rejected);
+        assert_eq!(filterd_history[0].status, TransactionStatus::Success);
+        assert_eq!(filterd_history[1].status, TransactionStatus::Failed);
     }
 
     #[tokio::test]

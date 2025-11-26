@@ -2693,6 +2693,7 @@ dependencies = [
  "errors",
  "proto",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

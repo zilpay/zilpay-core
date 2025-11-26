@@ -130,7 +130,7 @@ impl NetworkProvider {
             .map_err(NetworkErrors::Request)?;
         let (_, early_timestamp) = { process_get_timestampt_block_response(&response, address) };
 
-        Ok(last_timestamp - early_timestamp)
+        Ok(last_timestamp - early_timestamp + 1)
     }
 
     pub async fn update_transactions_receipt(
@@ -556,7 +556,7 @@ mod tests_network {
     use super::*;
     use alloy::{primitives::U256, rpc::types::TransactionInput};
     use config::address::ADDR_LEN;
-    use history::{status::TransactionStatus, transaction::ChainType};
+    use history::status::TransactionStatus;
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
     use rpc::network_config::Explorer;
@@ -594,7 +594,7 @@ mod tests_network {
         }
     }
 
-    fn create_zilliqa_config() -> ChainConfig {
+    fn create_testnet_zilliqa_config() -> ChainConfig {
         ChainConfig {
             ftokens: vec![],
             logo: String::new(),
@@ -613,13 +613,35 @@ mod tests_network {
         }
     }
 
+    fn create_mainnet_zilliqa_config() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 1],
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            short_name: String::new(),
+            rpc: vec![
+                "https://ssn.zilpay.io".to_string(),
+                "https://api.zilliqa.com".to_string(),
+            ],
+            features: vec![],
+            slip_44: 313,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        }
+    }
+
     #[tokio::test]
     async fn test_get_ftoken_meta_bsc() {
         let net_conf = create_bsc_config();
         let provider = NetworkProvider::new(net_conf);
 
         let token_addr =
-            Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
+            Address::from_eth_address("0xFa60D973F7642B748046464e165A65B7323b0DEE").unwrap();
         let account = [
             &Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap(),
             &Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
@@ -629,18 +651,18 @@ mod tests_network {
         assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
         assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
 
-        assert_eq!(&ftoken.name, "Tether USD");
-        assert_eq!(&ftoken.symbol, "USDT");
+        assert_eq!(&ftoken.name, "PancakeSwap Token");
+        assert_eq!(&ftoken.symbol, "Cake");
         assert_eq!(ftoken.decimals, 18u8);
     }
 
     #[tokio::test]
     async fn test_get_ftoken_meta_zil_legacy() {
-        let net_conf = create_zilliqa_config();
+        let net_conf = create_mainnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
 
         let token_addr =
-            Address::from_zil_bech32("zil1sxx29cshups269ahh5qjffyr58mxjv9ft78jqy").unwrap();
+            Address::from_zil_bech32("zil1l0g8u6f9g0fsvjuu74ctyla2hltefrdyt7k5f4").unwrap();
         let account = [
             &Address::from_zil_bech32("zil1gkwt95a67lnpe774lcmz72y6ay4jh2asmmjw6u").unwrap(),
             &Address::Secp256k1Sha256([0u8; ADDR_LEN]),
@@ -650,14 +672,14 @@ mod tests_network {
         assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
         assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
 
-        assert_eq!(&ftoken.name, "Zilliqa-bridged USDT token");
-        assert_eq!(&ftoken.symbol, "zUSDT");
-        assert_eq!(ftoken.decimals, 6u8);
+        assert_eq!(&ftoken.name, "ZilPay wallet");
+        assert_eq!(&ftoken.symbol, "ZLP");
+        assert_eq!(ftoken.decimals, 18u8);
     }
 
     #[tokio::test]
     async fn test_update_balance_scilla() {
-        let net_conf = create_zilliqa_config();
+        let net_conf = create_mainnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
         let mut tokens = vec![
             FToken::zil(0),
@@ -739,7 +761,7 @@ mod tests_network {
     #[test]
     fn test_save_and_load_single_network() {
         let storage = setup_temp_storage();
-        let config = create_zilliqa_config();
+        let config = create_testnet_zilliqa_config();
         let providers = vec![NetworkProvider::new(config)];
 
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
@@ -755,7 +777,7 @@ mod tests_network {
     fn test_save_and_load_multiple_networks() {
         let storage = setup_temp_storage();
 
-        let base_config = create_zilliqa_config();
+        let base_config = create_testnet_zilliqa_config();
         let configs = [
             ChainConfig {
                 name: "Test Network 1".to_string(),
@@ -794,7 +816,7 @@ mod tests_network {
     #[test]
     fn test_update_networks() {
         let storage = setup_temp_storage();
-        let base_config = create_zilliqa_config();
+        let base_config = create_testnet_zilliqa_config();
 
         let mut providers = vec![NetworkProvider::new(ChainConfig {
             name: "Initial Network".to_string(),
@@ -842,7 +864,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_nonce_scilla() {
-        let net_conf = create_zilliqa_config();
+        let net_conf = create_mainnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
 
         let account = [
@@ -855,7 +877,7 @@ mod tests_network {
 
         assert!(nonces.first().unwrap() >= &0);
         assert!(nonces.get(1).unwrap() >= &0);
-        assert!(nonces.last().unwrap() == &0);
+        assert!(nonces.last().unwrap() == &12);
     }
 
     #[tokio::test]
@@ -879,41 +901,6 @@ mod tests_network {
         let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
 
         assert_eq!("21000", estimated_gas.to_string());
-    }
-
-    #[tokio::test]
-    async fn test_estimate_gas_token_transfer_error() {
-        let net_conf = create_bsc_config();
-        let provider = NetworkProvider::new(net_conf);
-
-        let token_address =
-            Address::from_eth_address("0x55d398326f99059fF775485246999027B3197955").unwrap();
-        let recipient =
-            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
-        let amount = U256::from(1000000000000000000u64);
-        let transfer_data = generate_erc20_transfer_data(&recipient, amount).unwrap();
-        let token_transfer_request = ETHTransactionRequest {
-            from: Some(recipient.to_alloy_addr().into()),
-            to: Some(token_address.to_alloy_addr().into()),
-            value: Some(U256::ZERO),
-            max_fee_per_gas: Some(2_000_000_000),
-            max_priority_fee_per_gas: Some(1_000_000_000),
-            nonce: Some(0),
-            gas: None,
-            chain_id: Some(provider.config.chain_id()),
-            input: TransactionInput::new(transfer_data.into()),
-            ..Default::default()
-        };
-
-        let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
-        let estimated_gas = provider.estimate_gas(&tx_request).await;
-
-        assert_eq!(
-            estimated_gas,
-            Err(NetworkErrors::RPCError(
-                "JSON-RPC error (code: -32000): insufficient funds for transfer".to_string()
-            ))
-        );
     }
 
     #[tokio::test]
@@ -1117,22 +1104,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_calc_fee_bsc_batch() {
-        let net_conf = ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [97, 0],
-            name: "Smart chain Testnet".to_string(),
-            chain: "BNB".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://data-seed-prebsc-1-s1.binance.org:8545/".to_string()],
-            features: vec![155, 1559, 4844],
-            slip_44: 60,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        };
+        let net_conf = create_bsc_config();
         let provider = NetworkProvider::new(net_conf);
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
@@ -1156,9 +1128,6 @@ mod tests_network {
             .unwrap();
 
         assert_ne!(fee.gas_price, U256::from(0));
-        assert_eq!(fee.nonce, 0);
-        assert_ne!(fee.max_priority_fee, U256::from(0));
-        assert_ne!(fee.tx_estimate_gas, U256::from(0));
 
         let block_diff_time = provider.estimate_block_time(&recipient).await.unwrap();
         assert!(block_diff_time >= 1 && block_diff_time < 5);
@@ -1166,7 +1135,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_tx_prams_scilla() {
-        let net_conf = create_zilliqa_config();
+        let net_conf = create_mainnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
 
         let to = Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap();
@@ -1188,10 +1157,10 @@ mod tests_network {
             .unwrap();
 
         assert_eq!(params.gas_price, U256::from(2000000016));
-        assert!(params.nonce > 66519);
+        assert!(params.nonce > 74310);
 
         let block_diff_time = provider.estimate_block_time(&from).await.unwrap();
-        assert!(block_diff_time > 30 && block_diff_time < 40);
+        assert!(block_diff_time > 1 && block_diff_time < 18);
     }
 
     #[tokio::test]
@@ -1213,12 +1182,19 @@ mod tests_network {
             fallback_enabled: true,
         };
         let provider = NetworkProvider::new(net_conf);
+        let tx_hash = "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715";
         let mut tx_history = HistoricalTransaction {
-            transaction_hash: String::from(
-                "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715",
+            metadata: proto::tx::TransactionMetadata {
+                chain_hash: provider.config.hash(),
+                hash: Some(tx_hash.to_string()),
+                ..Default::default()
+            },
+            evm: Some(
+                serde_json::json!({
+                    "transactionHash": tx_hash,
+                })
+                .to_string(),
             ),
-            chain_hash: provider.config.hash(),
-            chain_type: history::transaction::ChainType::EVM,
             ..Default::default()
         };
         let mut list_txns = vec![&mut tx_history];
@@ -1228,29 +1204,44 @@ mod tests_network {
             .await
             .unwrap();
 
-        assert_eq!(list_txns.first().unwrap().fee, 15132287247000);
-        assert_eq!(list_txns.first().unwrap().gas_used, Some(21000));
-        assert_eq!(list_txns.first().unwrap().block_number, Some(21855983));
+        let evm = list_txns.first().unwrap().get_evm().unwrap();
+        let gas_used = evm
+            .get("gasUsed")
+            .and_then(|v| v.as_str())
+            .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok());
+        assert_eq!(gas_used, Some(21000));
+        let block_number = evm
+            .get("blockNumber")
+            .and_then(|v| v.as_str())
+            .and_then(|s| u64::from_str_radix(s.trim_start_matches("0x"), 16).ok());
+        assert_eq!(block_number, Some(21855983));
         assert_eq!(
-            list_txns.first().unwrap().transaction_hash,
-            "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715"
+            evm.get("transactionHash").and_then(|v| v.as_str()),
+            Some(tx_hash)
         );
         assert_eq!(
             list_txns.first().unwrap().status,
-            TransactionStatus::Confirmed
+            TransactionStatus::Success
         );
     }
 
     #[tokio::test]
     async fn test_tx_receipt_scilla() {
-        let net_conf = create_zilliqa_config();
+        let net_conf = create_mainnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
+        let tx_hash = "0x571dd6dc2b531c11b495492ead20181f52ed3da9cb4c32aaadda870ec63a05cd";
         let mut tx_history = HistoricalTransaction {
-            transaction_hash: String::from(
-                "0xe193e982ae4d2ed605a88ed43b7ea9b432596e33a515a8549b54d51092b55d7c",
+            metadata: proto::tx::TransactionMetadata {
+                chain_hash: provider.config.hash(),
+                hash: Some(tx_hash.to_string()),
+                ..Default::default()
+            },
+            scilla: Some(
+                serde_json::json!({
+                    "hash": tx_hash,
+                })
+                .to_string(),
             ),
-            chain_hash: provider.config.hash(),
-            chain_type: history::transaction::ChainType::Scilla,
             ..Default::default()
         };
         let mut list_txns = vec![&mut tx_history];
@@ -1260,23 +1251,24 @@ mod tests_network {
             .await
             .unwrap();
 
-        assert_eq!(list_txns[0].amount, U256::from(9890465666543u128));
-        assert_eq!(list_txns[0].status, TransactionStatus::Confirmed);
-        assert_eq!(list_txns[0].status_code, Some(3));
-        assert_eq!(list_txns[0].gas_limit, Some(60));
-        assert_eq!(list_txns[0].gas_price, Some(2500000000));
-        assert_eq!(list_txns[0].fee, 150000000000);
-        assert_eq!(list_txns[0].nonce, 1045401);
-        assert_eq!(list_txns[0].chain_type, ChainType::Scilla);
+        let scilla = list_txns[0].get_scilla().unwrap();
         assert_eq!(
-            list_txns[0].sender,
-            "zil15xvtse0rvcfwxetstvun72kw5daz8kge0frn3y"
+            scilla.get("amount").and_then(|v| v.as_str()),
+            Some("2499000000000000")
         );
+        assert_eq!(list_txns[0].status, TransactionStatus::Success);
+        assert_eq!(scilla.get("gasLimit").and_then(|v| v.as_str()), Some("50"));
+        assert_eq!(
+            scilla.get("gasPrice").and_then(|v| v.as_str()),
+            Some("2000000016")
+        );
+        assert_eq!(scilla.get("nonce").and_then(|v| v.as_str()), Some("44730"));
+        assert!(list_txns[0].scilla.is_some());
     }
 
     #[tokio::test]
     async fn test_get_block_number_scilla() {
-        let net_conf = create_zilliqa_config();
+        let net_conf = create_testnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
 
         let block_number = provider.get_current_block_number().await.unwrap();

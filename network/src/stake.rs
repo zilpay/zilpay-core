@@ -72,7 +72,10 @@ mod tests {
             name: "Zilliqa".to_string(),
             chain: "ZIL".to_string(),
             short_name: String::new(),
-            rpc: vec!["https://api.zilliqa.com".to_string()],
+            rpc: vec![
+                "https://ssn.zilpay.io".to_string(),
+                "https://api.zilliqa.com".to_string(),
+            ],
             features: vec![],
             slip_44: 313,
             ens: None,

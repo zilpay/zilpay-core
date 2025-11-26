@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TransactionStatus {
     #[default]
     Pending,
-    Confirmed,
-    Rejected,
+    Success,
+    Failed,
 }
