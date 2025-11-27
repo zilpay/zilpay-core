@@ -274,7 +274,7 @@ impl HistoricalTransaction {
         if let Some(status) = scilla.get("status").and_then(|s| s.as_u64()) {
             match status {
                 3 => self.status = TransactionStatus::Success,
-                1 | 2 | 4 | 5 | 6 => self.status = TransactionStatus::Pending,
+                0 | 1 | 2 | 4 | 5 | 6 => self.status = TransactionStatus::Pending,
                 _ => self.status = TransactionStatus::Failed,
             }
             return;
