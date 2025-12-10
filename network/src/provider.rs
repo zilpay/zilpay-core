@@ -1229,7 +1229,7 @@ mod tests_network {
     async fn test_tx_receipt_scilla() {
         let net_conf = create_mainnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
-        let tx_hash = "0x571dd6dc2b531c11b495492ead20181f52ed3da9cb4c32aaadda870ec63a05cd";
+        let tx_hash = "0x1d8cc783b73c2771e52ee3b6744c3a2a48b63cdfb160549f91523ce30baf8854";
         let mut tx_history = HistoricalTransaction {
             metadata: proto::tx::TransactionMetadata {
                 chain_hash: provider.config.hash(),
@@ -1252,17 +1252,17 @@ mod tests_network {
             .unwrap();
 
         let scilla = list_txns[0].get_scilla().unwrap();
-        assert_eq!(
-            scilla.get("amount").and_then(|v| v.as_str()),
-            Some("2499000000000000")
-        );
+        assert_eq!(scilla.get("amount").and_then(|v| v.as_str()), Some("0"));
         assert_eq!(list_txns[0].status, TransactionStatus::Success);
-        assert_eq!(scilla.get("gasLimit").and_then(|v| v.as_str()), Some("50"));
+        assert_eq!(
+            scilla.get("gasLimit").and_then(|v| v.as_str()),
+            Some("5000")
+        );
         assert_eq!(
             scilla.get("gasPrice").and_then(|v| v.as_str()),
             Some("2000000016")
         );
-        assert_eq!(scilla.get("nonce").and_then(|v| v.as_str()), Some("44730"));
+        assert_eq!(scilla.get("nonce").and_then(|v| v.as_str()), Some("1175"));
         assert!(list_txns[0].scilla.is_some());
     }
 

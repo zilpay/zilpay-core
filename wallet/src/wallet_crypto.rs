@@ -17,10 +17,10 @@ pub trait WalletCrypto {
         seed_bytes: &Argon2Seed,
         passphrase: Option<&str>,
     ) -> std::result::Result<KeyPair, Self::Error>;
-    fn reveal_mnemonic(
+    fn reveal_mnemonic<'a>(
         &self,
         seed_bytes: &Argon2Seed,
-    ) -> std::result::Result<Mnemonic, Self::Error>;
+    ) -> std::result::Result<Mnemonic<'a>, Self::Error>;
     fn sign_message(
         &self,
         msg: &[u8],
@@ -92,7 +92,7 @@ impl WalletCrypto for Wallet {
         }
     }
 
-    fn reveal_mnemonic(&self, seed_bytes: &Argon2Seed) -> Result<Mnemonic> {
+    fn reveal_mnemonic<'a>(&self, seed_bytes: &Argon2Seed) -> Result<Mnemonic<'a>> {
         let data = self.get_wallet_data()?;
 
         match data.wallet_type {

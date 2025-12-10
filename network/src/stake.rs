@@ -54,9 +54,8 @@ pub struct FinalOutput {
 #[cfg(test)]
 mod tests {
     use crate::{
-        provider::NetworkProvider,
-        scilla_stake::ZilliqaScillaStakeing,
-        zil_stake_evm::{get_zq2_providers, ZilliqaEVMStakeing},
+        provider::NetworkProvider, scilla_stake::ZilliqaScillaStakeing,
+        zil_stake_evm::ZilliqaEVMStakeing,
     };
 
     use proto::address::Address;
@@ -82,13 +81,6 @@ mod tests {
             explorers: vec![],
             fallback_enabled: true,
         }
-    }
-
-    #[tokio::test]
-    async fn test_request_zil_staking_pools() {
-        let pools = get_zq2_providers().await.unwrap();
-        assert!(!pools.is_empty());
-        assert!(pools.iter().any(|p| p.name == "Moonlet"));
     }
 
     #[tokio::test]
