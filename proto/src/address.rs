@@ -139,7 +139,11 @@ impl Address {
 
                 Ok(addr)
             }
-            _ => Err(AddressError::InvalidSecp256k1Sha256Type),
+            Address::Secp256k1Keccak256(v) => {
+                let addr = hex::encode(v);
+
+                Ok(addr)
+            }
         }
     }
 
@@ -150,7 +154,11 @@ impl Address {
 
                 to_checksum_address(&addr)
             }
-            _ => Err(AddressError::InvalidSecp256k1Sha256Type),
+            Address::Secp256k1Keccak256(v) => {
+                let addr = hex::encode(v);
+
+                to_checksum_address(&addr)
+            }
         }
     }
 }
