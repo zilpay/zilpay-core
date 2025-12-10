@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::{
     account::AccountErrors,
+    address::AddressError,
     cipher::CipherErrors,
     keychain::KeyChainErrors,
     keypair::{KeyPairError, PubKeyError, SecretKeyError},
@@ -121,6 +122,15 @@ pub enum BackgroundError {
 
     #[error("Bip39 error: {0}")]
     Bip39Error(Bip39Error),
+
+    #[error("address error: {0}")]
+    AddressError(AddressError),
+}
+
+impl From<AddressError> for BackgroundError {
+    fn from(error: AddressError) -> Self {
+        BackgroundError::AddressError(error)
+    }
 }
 
 impl From<SecretKeyError> for BackgroundError {

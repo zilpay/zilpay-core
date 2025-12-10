@@ -111,10 +111,7 @@ impl TokensManagement for Background {
                         data: Vec::with_capacity(0),
                     }
                 } else {
-                    let base_16_to = to
-                        .get_zil_check_sum_addr()
-                        .unwrap_or_default()
-                        .to_lowercase();
+                    let base_16_to = to.get_zil_check_sum_addr()?.to_lowercase();
                     let payload = json!({
                         "_tag": "Transfer",
                         "params": [
@@ -127,7 +124,7 @@ impl TokensManagement for Background {
                         nonce: 0,
                         chain_id: sender.chain_id as u16,
                         gas_price: 2000000000,
-                        gas_limit: 2000, // ZIL legacy cannot calc aporx gaslLimit
+                        gas_limit: 5000,
                         to_addr: token.addr.clone(),
                         amount: 0,
                         code: Vec::with_capacity(0),
@@ -404,6 +401,91 @@ mod tests_background_tokens {
             assert!(token.balances.contains_key(&4));
             assert!(token.balances.contains_key(&5));
             assert!(token.balances.contains_key(&6));
+        }
+    }
+
+    fn gen_zil_net_conf() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [1, 0],
+            name: "Zilliqa".to_string(),
+            chain: "ZIL".to_string(),
+            short_name: "zil".to_string(),
+            rpc: vec!["https://api.zilliqa.com/".to_string()],
+            features: vec![],
+            slip_44: slip44::ZILLIQA,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_build_token_transfer_zil() {
+        let (mut bg, _dir) = setup_test_background();
+
+        let words = Background::gen_bip39(24).unwrap();
+        let accounts = [(
+            DerivationPath::new(slip44::ZILLIQA, 0),
+            "Zil account 1".to_string(),
+        )];
+        let net_config = gen_zil_net_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let zlp_token = FToken::zlp(net_config.hash());
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: PASSWORD,
+            mnemonic_check: true,
+            chain_hash: net_config.hash(),
+            mnemonic_str: &words,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            device_indicators: &[String::from("apple"), String::from("0000")],
+            ftokens: vec![zlp_token.clone()],
+        })
+        .unwrap();
+
+        let recipient = "0xEC6bB19886c9D5f5125DfC739362Bf54AA23d51F";
+        let to_addr = Address::from_zil_base16(recipient).unwrap();
+        let amount = U256::from(1000000000000u64);
+
+        let wallet = bg.wallets.first().unwrap();
+        let account = &wallet.get_wallet_data().unwrap().accounts[0];
+
+        let txn_req = bg
+            .build_token_transfer(&zlp_token, account, to_addr.clone(), amount)
+            .unwrap();
+
+        match txn_req {
+            TransactionRequest::Zilliqa((req, _meta)) => {
+                assert_eq!(req.to_addr, zlp_token.addr);
+                assert_eq!(req.amount, 0);
+                assert_eq!(req.gas_limit, 5000);
+
+                let base_16_to = to_addr
+                    .get_zil_check_sum_addr()
+                    .unwrap_or_default()
+                    .to_lowercase();
+                let payload = json!({
+                    "_tag": "Transfer",
+                    "params": [
+                        { "vname": "to", "type": "ByStr20", "value": base_16_to },
+                        { "vname": "amount", "type": "Uint128", "value": amount.to_string() }
+                    ]
+                })
+                .to_string();
+
+                assert_eq!(req.data, payload.as_bytes().to_vec());
+            }
+            _ => panic!("Expected Zilliqa transaction request"),
         }
     }
 }
