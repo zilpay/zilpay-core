@@ -28,8 +28,9 @@ type Result<T> = std::result::Result<T, KeyPairError>;
 
 #[derive(Debug, PartialEq)]
 pub enum KeyPair {
-    Secp256k1Sha256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])), // ZILLIQA
-    Secp256k1Keccak256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])), // Ethereum
+    Secp256k1Sha256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
+    Secp256k1Keccak256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
+    Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
 }
 
 impl KeyPair {
@@ -45,10 +46,17 @@ impl KeyPair {
         Ok(Self::Secp256k1Keccak256(keys))
     }
 
+    pub fn gen_bitcoin() -> Result<Self> {
+        let keys = Self::gen_keys_bytes()?;
+
+        Ok(Self::Secp256k1Bitcoin(keys))
+    }
+
     pub fn to_sha256(self) -> Self {
         match self {
             Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Sha256(vlaue),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Sha256(value),
+            Self::Secp256k1Bitcoin(value) => Self::Secp256k1Sha256(value),
         }
     }
 
@@ -56,6 +64,15 @@ impl KeyPair {
         match self {
             Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Keccak256(vlaue),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Keccak256(value),
+            Self::Secp256k1Bitcoin(value) => Self::Secp256k1Keccak256(value),
+        }
+    }
+
+    pub fn to_bitcoin(self) -> Self {
+        match self {
+            Self::Secp256k1Sha256(value) => Self::Secp256k1Bitcoin(value),
+            Self::Secp256k1Keccak256(value) => Self::Secp256k1Bitcoin(value),
+            Self::Secp256k1Bitcoin(value) => Self::Secp256k1Bitcoin(value),
         }
     }
 
@@ -108,6 +125,7 @@ impl KeyPair {
                 Ok(KeyPair::Secp256k1Keccak256((pub_key, sk)))
             }
             SecretKey::Secp256k1Sha256Zilliqa(sk) => Ok(KeyPair::Secp256k1Sha256((pub_key, sk))),
+            SecretKey::Secp256k1Bitcoin(sk) => Ok(KeyPair::Secp256k1Bitcoin((pub_key, sk))),
         }
     }
 
@@ -146,6 +164,7 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((_, sk)) => Ok(SecretKey::Secp256k1Sha256Zilliqa(*sk)),
             KeyPair::Secp256k1Keccak256((_, sk)) => Ok(SecretKey::Secp256k1Keccak256Ethereum(*sk)),
+            KeyPair::Secp256k1Bitcoin((_, sk)) => Ok(SecretKey::Secp256k1Bitcoin(*sk)),
         }
     }
 
@@ -153,6 +172,7 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((pk, _)) => Ok(PubKey::Secp256k1Sha256(*pk)),
             KeyPair::Secp256k1Keccak256((pk, _)) => Ok(PubKey::Secp256k1Keccak256(*pk)),
+            KeyPair::Secp256k1Bitcoin((pk, _)) => Ok(PubKey::Secp256k1Bitcoin(*pk)),
         }
     }
 
@@ -160,6 +180,7 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((pk, _)) => pk,
             KeyPair::Secp256k1Keccak256((pk, _)) => pk,
+            KeyPair::Secp256k1Bitcoin((pk, _)) => pk,
         }
     }
 
@@ -167,6 +188,7 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((_, sk)) => *sk,
             KeyPair::Secp256k1Keccak256((_, sk)) => *sk,
+            KeyPair::Secp256k1Bitcoin((_, sk)) => *sk,
         }
     }
 
@@ -204,6 +226,16 @@ impl KeyPair {
 
                 Ok(sig)
             }
+            KeyPair::Secp256k1Bitcoin((_, _sk)) => {
+                let signer = self.get_local_eth_siger()?;
+                let sig = signer
+                    .sign_message_sync(msg)
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?
+                    .try_into()
+                    .map_err(KeyPairError::InvalidSignature)?;
+
+                Ok(sig)
+            }
         }
     }
 
@@ -225,6 +257,21 @@ impl KeyPair {
                 Ok(sig)
             }
             KeyPair::Secp256k1Sha256((_, _)) => Err(KeyPairError::InvalidSecp256k1Sha256),
+            KeyPair::Secp256k1Bitcoin((_, _)) => {
+                let signer = self.get_local_eth_siger()?;
+                let signing_hash = data
+                    .eip712_signing_hash()
+                    .map_err(|e| KeyPairError::Eip712Error(e.to_string()))?;
+                let signature = signer
+                    .sign_hash(&signing_hash)
+                    .await
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+                let sig = signature
+                    .try_into()
+                    .map_err(KeyPairError::InvalidSignature)?;
+
+                Ok(sig)
+            }
         }
     }
 
@@ -257,6 +304,11 @@ impl KeyPair {
                 result[1..PUB_KEY_SIZE + 1].copy_from_slice(pk);
                 result[PUB_KEY_SIZE + 1..].copy_from_slice(sk);
             }
+            KeyPair::Secp256k1Bitcoin((pk, sk)) => {
+                result[0] = 2;
+                result[1..PUB_KEY_SIZE + 1].copy_from_slice(pk);
+                result[PUB_KEY_SIZE + 1..].copy_from_slice(sk);
+            }
         };
 
         Ok(result)
@@ -278,6 +330,7 @@ impl KeyPair {
         match key_type {
             0 => Ok(KeyPair::Secp256k1Sha256((pk, sk))),
             1 => Ok(KeyPair::Secp256k1Keccak256((pk, sk))),
+            2 => Ok(KeyPair::Secp256k1Bitcoin((pk, sk))),
             _ => Err(KeyPairError::InvalidKeyType),
         }
     }
@@ -345,7 +398,7 @@ mod tests_keypair {
     #[test]
     fn test_from_bytes_invalid_key_type() {
         let mut bytes = vec![0u8; KEYPAIR_BYTES_SIZE];
-        bytes[0] = 2;
+        bytes[0] = 3;
         let result = KeyPair::from_bytes(Cow::Borrowed(&bytes));
         assert!(matches!(result, Err(KeyPairError::InvalidKeyType)));
     }
@@ -534,5 +587,204 @@ mod tests_keypair {
         let typed_data: TypedData = serde_json::from_str(&typed_data_json.to_string()).unwrap();
         let result = key_pair.sign_typed_data_eip712(typed_data).await;
         assert!(matches!(result, Err(KeyPairError::InvalidSecp256k1Sha256)));
+    }
+
+    #[test]
+    fn test_gen_bitcoin_keypair() {
+        let keypair = KeyPair::gen_bitcoin().unwrap();
+        assert!(matches!(keypair, KeyPair::Secp256k1Bitcoin(_)));
+
+        let pubkey = keypair.get_pubkey().unwrap();
+        assert!(matches!(pubkey, PubKey::Secp256k1Bitcoin(_)));
+
+        let secret_key = keypair.get_secretkey().unwrap();
+        assert!(matches!(secret_key, SecretKey::Secp256k1Bitcoin(_)));
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_get_addr() {
+        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let addr = keypair.get_addr().unwrap();
+
+        assert!(matches!(addr, Address::Secp256k1Bitcoin(_)));
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_to_bytes() {
+        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let bytes = keypair.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 2);
+        assert_eq!(bytes.len(), KEYPAIR_BYTES_SIZE);
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_from_bytes() {
+        let original = KeyPair::gen_bitcoin().unwrap();
+        let bytes = original.to_bytes().unwrap();
+        let recovered = KeyPair::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_sign_message() {
+        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let message = b"Hello Bitcoin!";
+
+        let signature = keypair.sign_message(message);
+        assert!(signature.is_ok());
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_conversion() {
+        let keypair_zil = KeyPair::gen_sha256().unwrap();
+        let keypair_btc = keypair_zil.to_bitcoin();
+
+        assert!(matches!(keypair_btc, KeyPair::Secp256k1Bitcoin(_)));
+    }
+
+    #[test]
+    fn test_bitcoin_from_secret_key() {
+        let sk = SecretKey::Secp256k1Bitcoin([42u8; SECRET_KEY_SIZE]);
+        let result = KeyPair::from_secret_key(sk);
+
+        assert!(result.is_ok());
+        let keypair = result.unwrap();
+        assert!(matches!(keypair, KeyPair::Secp256k1Bitcoin(_)));
+    }
+
+    #[test]
+    fn test_bitcoin_address_generation() {
+        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let address = keypair.get_addr().unwrap();
+
+        let p2pkh = address.to_btc_p2pkh().unwrap();
+        assert!(p2pkh.starts_with('1'));
+
+        let bech32 = address.to_btc_bech32().unwrap();
+        assert!(bech32.starts_with("bc1"));
+    }
+
+    #[test]
+    fn test_bitcoin_known_key_address_derivation() {
+        let public_key_hex = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let expected_address = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH";
+        let expected_hash160 = "751e76e8199196d454941c45d1b3a323f1433bd6";
+
+        let pk_bytes = hex::decode(public_key_hex).unwrap();
+        let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
+        let pubkey = PubKey::Secp256k1Bitcoin(pk_array);
+
+        let address = Address::from_pubkey(&pubkey).unwrap();
+
+        let hash160_hex = hex::encode(address.addr_bytes());
+        assert_eq!(hash160_hex, expected_hash160);
+
+        let btc_address = address.to_btc_p2pkh().unwrap();
+        assert_eq!(btc_address, expected_address);
+    }
+
+    #[test]
+    fn test_bitcoin_derived_addresses_from_csv() {
+        let test_cases = vec![
+            (
+                "024447e68ff4efc6dccac32b60c9af9421654763a93d9573d7284567b70f7993ef",
+                "183jY8BqANQctEHNB7z3KfCxbBKav6C2Xb",
+            ),
+            (
+                "0344d7472c77f5400f2671c9e6fc1a167c9fa98d2d0c98c5253dd8a11771b232d4",
+                "14WTRqxezCyjJ8bGLMey8FAUeucQyBGvqj",
+            ),
+            (
+                "03ef8ac6029411ae46a2cdb4d15a87a318f3bd68b91aa9d08869bc778b9e8e19cf",
+                "1wi5gLfdxVbfmCHrYe9YeV5VrZQiUAuB2",
+            ),
+            (
+                "02edbcf32cbdf36bf161cbf4aa10e5b6704320e6bcd8abdaf4a301adb1acd65150",
+                "14X5Y28wnQkYNcHekFjixbVkZjXpScvwvc",
+            ),
+            (
+                "0371f0511f34bd3875bdf0565eb73940fea335caf991fcf09c9a09d5074eaa21c2",
+                "1EJpWTHGfoX3azrA5Z8VCBmwp5J8YQ3SA9",
+            ),
+        ];
+
+        for (pubkey_hex, expected_addr) in test_cases {
+            let pk_bytes = hex::decode(pubkey_hex).unwrap();
+            let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
+            let pubkey = PubKey::Secp256k1Bitcoin(pk_array);
+
+            let address = Address::from_pubkey(&pubkey).unwrap();
+            let btc_address = address.to_btc_p2pkh().unwrap();
+
+            assert_eq!(
+                btc_address, expected_addr,
+                "Failed for pubkey: {}",
+                pubkey_hex
+            );
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_wif_private_key_decode() {
+        let wif = "KwDiBf89QgGbjEhKnhXJuH7LrciVrZi3qYjgd9M7rFU73sVHnoWn";
+        let expected_pubkey = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let expected_address = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH";
+
+        let decoded = bs58::decode(wif).into_vec().unwrap();
+
+        assert_eq!(decoded[0], 0x80);
+        assert_eq!(decoded.len(), 38);
+
+        let private_key_bytes: [u8; SECRET_KEY_SIZE] = decoded[1..33].try_into().unwrap();
+
+        let keypair = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
+        let keypair_btc = KeyPair::Secp256k1Bitcoin(keypair);
+
+        let pubkey = keypair_btc.get_pubkey().unwrap();
+        let pubkey_hex = hex::encode(pubkey.as_bytes());
+        assert_eq!(pubkey_hex, expected_pubkey);
+
+        let address = keypair_btc.get_addr().unwrap();
+        let btc_address = address.to_btc_p2pkh().unwrap();
+        assert_eq!(btc_address, expected_address);
+    }
+
+    #[test]
+    fn test_bitcoin_multiple_wif_keys() {
+        let test_cases = vec![
+            (
+                "L1NQXBsdws444VbdxGqztar6nf1GcmZNXZWDYetAUJ9NE47SRWxN",
+                "024447e68ff4efc6dccac32b60c9af9421654763a93d9573d7284567b70f7993ef",
+                "183jY8BqANQctEHNB7z3KfCxbBKav6C2Xb",
+            ),
+            (
+                "L4PvnB6kR8bmrMvUS86RESUeDFWGNB5UmH6663yJCGgrhEgJdyq3",
+                "0344d7472c77f5400f2671c9e6fc1a167c9fa98d2d0c98c5253dd8a11771b232d4",
+                "14WTRqxezCyjJ8bGLMey8FAUeucQyBGvqj",
+            ),
+            (
+                "L2NZxVEQmDc4fDrLvX7NDsCMSTugKZxZ6vrX61UJvZLkWgXrACoe",
+                "03ef8ac6029411ae46a2cdb4d15a87a318f3bd68b91aa9d08869bc778b9e8e19cf",
+                "1wi5gLfdxVbfmCHrYe9YeV5VrZQiUAuB2",
+            ),
+        ];
+
+        for (wif, expected_pubkey, expected_address) in test_cases {
+            let decoded = bs58::decode(wif).into_vec().unwrap();
+            let private_key_bytes: [u8; SECRET_KEY_SIZE] = decoded[1..33].try_into().unwrap();
+
+            let keypair = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
+            let keypair_btc = KeyPair::Secp256k1Bitcoin(keypair);
+
+            let pubkey = keypair_btc.get_pubkey().unwrap();
+            let pubkey_hex = hex::encode(pubkey.as_bytes());
+            assert_eq!(pubkey_hex, expected_pubkey, "Failed for WIF: {}", wif);
+
+            let address = keypair_btc.get_addr().unwrap();
+            let btc_address = address.to_btc_p2pkh().unwrap();
+            assert_eq!(btc_address, expected_address, "Failed for WIF: {}", wif);
+        }
     }
 }

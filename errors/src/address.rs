@@ -38,6 +38,24 @@ pub enum AddressError {
     #[error("Invalid Bech32 length")]
     InvalidBech32Len,
 
+    #[error("Invalid Base58 encoding")]
+    InvalidBase58,
+
+    #[error("Invalid checksum")]
+    InvalidChecksum,
+
+    #[error("Invalid version byte")]
+    InvalidVersion,
+
+    #[error("Invalid address type for this operation")]
+    InvalidAddressType,
+
+    #[error("Bech32 error: {0}")]
+    Bech32Error(String),
+
+    #[error("Invalid HRP")]
+    InvalidHrp,
+
     #[error("Not implemented")]
     NotImpl,
 }

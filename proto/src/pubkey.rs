@@ -53,7 +53,16 @@ impl PubKey {
                 Ok(addr.into())
             }
             PubKey::Secp256k1Sha256(pk) => from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey)),
-            PubKey::Secp256k1Bitcoin(_) => Err(PubKeyError::NotImpl),
+            PubKey::Secp256k1Bitcoin(pk) => {
+                use crate::btc_addr::public_key_to_bitcoin_address;
+
+                let btc_addr = public_key_to_bitcoin_address(pk, 0x00);
+                let hash160: [u8; ADDR_LEN] = btc_addr[1..21]
+                    .try_into()
+                    .or(Err(PubKeyError::InvalidPubKey))?;
+
+                Ok(hash160)
+            }
             PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
         }
     }
@@ -77,7 +86,7 @@ impl PubKey {
         match self {
             PubKey::Secp256k1Keccak256(_) => Ok(Address::Secp256k1Keccak256(buf)),
             PubKey::Secp256k1Sha256(_) => Ok(Address::Secp256k1Sha256(buf)),
-            PubKey::Secp256k1Bitcoin(_) => Err(PubKeyError::NotImpl),
+            PubKey::Secp256k1Bitcoin(_) => Ok(Address::Secp256k1Bitcoin(buf)),
             PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
         }
     }
