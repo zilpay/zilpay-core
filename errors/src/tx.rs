@@ -43,6 +43,27 @@ pub enum TransactionErrors {
 
     #[error("KeyPair error: {0}")]
     KeyPairError(KeyPairError),
+
+    #[error("Invalid transaction ID")]
+    InvalidTxId,
+
+    #[error("Invalid address")]
+    InvalidAddress,
+
+    #[error("Invalid input index")]
+    InvalidInputIndex,
+
+    #[error("Invalid secret key")]
+    InvalidSecretKey,
+
+    #[error("Sighash computation failed")]
+    SighashComputationFailed,
+
+    #[error("Invalid public key")]
+    InvalidPublicKey,
+
+    #[error("Invalid signature")]
+    InvalidSignature,
 }
 
 impl From<PubKeyError> for TransactionErrors {

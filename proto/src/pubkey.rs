@@ -54,14 +54,16 @@ impl PubKey {
             }
             PubKey::Secp256k1Sha256(pk) => from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey)),
             PubKey::Secp256k1Bitcoin(pk) => {
-                use crate::btc_addr::public_key_to_bitcoin_address;
+                use bitcoin::secp256k1::PublicKey as Secp256k1PublicKey;
+                use bitcoin::PublicKey as BitcoinPublicKey;
+                use bitcoin::hashes::{Hash as BitcoinHash, hash160};
 
-                let btc_addr = public_key_to_bitcoin_address(pk, 0x00);
-                let hash160: [u8; ADDR_LEN] = btc_addr[1..21]
-                    .try_into()
+                let secp_pubkey = Secp256k1PublicKey::from_slice(pk)
                     .or(Err(PubKeyError::InvalidPubKey))?;
+                let btc_pubkey = BitcoinPublicKey::new(secp_pubkey);
+                let hash = hash160::Hash::hash(&btc_pubkey.to_bytes());
 
-                Ok(hash160)
+                Ok(*hash.as_ref())
             }
             PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
         }

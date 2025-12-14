@@ -18,6 +18,7 @@ bs58.workspace = true
 k256.workspace = true
 hmac.workspace = true
 tokio.workspace = true
+bitcoin.workspace = true
 prost = "0.13.5"
 
 crypto = { path = "../crypto" }
