@@ -45,13 +45,11 @@ impl Signature {
                 let parity = sig[64] % 2 != 1;
                 let signature = EthersSignature::from_bytes_and_parity(sig, parity);
 
-                let signer_address = pk
-                    .get_bytes_addr()
-                    .map_err(SignatureError::FailIntoPubKey)?;
+                let signer_address = pk.get_addr().map_err(SignatureError::FailIntoPubKey)?;
                 let recovered_address = signature
                     .recover_address_from_msg(msg_bytes)
                     .map_err(|e| SignatureError::FailParseRecover(e.to_string()))?;
-                let signer_address = alloy::primitives::Address::from_slice(&signer_address);
+                let signer_address = signer_address.to_alloy_addr();
 
                 Ok(recovered_address == signer_address)
             }
