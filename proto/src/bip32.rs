@@ -156,4 +156,90 @@ mod tests {
             "Secret key is invalid"
         );
     }
+
+    #[test]
+    fn bip39_to_btc_bip44_legacy() {
+        use crate::address::Address;
+        use crate::keypair::KeyPair;
+        use crate::secret_key::SecretKey;
+
+        let phrase = "test test test test test test test test test test test junk";
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
+        let seed = mnemonic.to_seed("").unwrap();
+
+        // BIP44 Bitcoin path: m/44'/0'/0'/0/0 (Legacy P2PKH)
+        let btc_secret_key = derive_private_key(&seed, "m/44'/0'/0'/0/0").unwrap();
+
+        // Create Bitcoin keypair
+        let sk_bytes = btc_secret_key.to_bytes();
+        let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin(sk_bytes.into()))
+            .unwrap();
+
+        // Get Bitcoin address
+        let address = keypair.get_addr().unwrap();
+
+        // Verify it's a Bitcoin address type
+        assert!(
+            matches!(address, Address::Secp256k1Bitcoin(_)),
+            "Address should be Bitcoin type"
+        );
+
+        // Get P2PKH address (legacy format starting with 1)
+        let p2pkh_address = address.to_btc_p2pkh().unwrap();
+        assert!(
+            p2pkh_address.starts_with('1'),
+            "P2PKH address should start with '1'"
+        );
+
+        println!("BIP44 P2PKH Address: {}", p2pkh_address);
+        println!("Public Key: {}", hex::encode(keypair.get_pubkey_bytes()));
+    }
+
+    #[test]
+    fn bip39_to_btc_bip84_native_segwit() {
+        use crate::address::Address;
+        use crate::keypair::KeyPair;
+        use crate::secret_key::SecretKey;
+
+        let phrase = "test test test test test test test test test test test junk";
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
+        let seed = mnemonic.to_seed("").unwrap();
+
+        // BIP84 Bitcoin path: m/84'/0'/0'/0/0 (Native SegWit - most modern)
+        let btc_secret_key = derive_private_key(&seed, "m/84'/0'/0'/0/0").unwrap();
+
+        // Create Bitcoin keypair
+        let sk_bytes = btc_secret_key.to_bytes();
+        let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin(sk_bytes.into()))
+            .unwrap();
+
+        // Get Bitcoin address
+        let address = keypair.get_addr().unwrap();
+
+        // Verify it's a Bitcoin address type
+        assert!(
+            matches!(address, Address::Secp256k1Bitcoin(_)),
+            "Address should be Bitcoin type"
+        );
+
+        // Get native SegWit address (bech32 format starting with bc1)
+        let bech32_address = address.to_btc_bech32().unwrap();
+        assert!(
+            bech32_address.starts_with("bc1"),
+            "Bech32 address should start with 'bc1'"
+        );
+
+        // Expected values for the test mnemonic with BIP84 path
+        let expected_bech32 = "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te";
+
+        println!("BIP84 Native SegWit Address: {}", bech32_address);
+        println!("Expected: {}", expected_bech32);
+        println!("Public Key: {}", hex::encode(keypair.get_pubkey_bytes()));
+
+        // Verify address matches expected value
+        assert_eq!(
+            bech32_address, expected_bech32,
+            "Native SegWit address does not match expected value"
+        );
+    }
 }
