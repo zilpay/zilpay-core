@@ -1,4 +1,3 @@
-use config::address::ADDR_LEN;
 use config::key::PUB_KEY_SIZE;
 use errors::keypair::PubKeyError;
 use k256::PublicKey as K256PublicKey;
@@ -6,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 
 use crate::address::Address;
-use crate::zil_address::from_zil_pub_key;
+use crate::btc_utils::ByteCodec;
 
 type Result<T> = std::result::Result<T, PubKeyError>;
 
@@ -14,7 +13,7 @@ type Result<T> = std::result::Result<T, PubKeyError>;
 pub enum PubKey {
     Secp256k1Sha256([u8; PUB_KEY_SIZE]),    // ZILLIQA
     Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
-    Secp256k1Bitcoin([u8; PUB_KEY_SIZE]),   // Bitcoin
+    Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)), // Bitcoin
     Ed25519Solana([u8; PUB_KEY_SIZE]),      // Solana
 }
 
@@ -43,68 +42,50 @@ impl PubKey {
 }
 
 impl PubKey {
-    pub fn get_bytes_addr(&self) -> Result<[u8; ADDR_LEN]> {
-        match self {
-            PubKey::Secp256k1Keccak256(pk) => {
-                let k256_pubkey = alloy::signers::k256::ecdsa::VerifyingKey::from_sec1_bytes(pk)
-                    .map_err(|e| PubKeyError::InvalidVerifyingKey(e.to_string()))?;
-                let addr = alloy::primitives::Address::from_public_key(&k256_pubkey);
-
-                Ok(addr.into())
-            }
-            PubKey::Secp256k1Sha256(pk) => from_zil_pub_key(pk).or(Err(PubKeyError::InvalidPubKey)),
-            PubKey::Secp256k1Bitcoin(pk) => {
-                use bitcoin::secp256k1::PublicKey as Secp256k1PublicKey;
-                use bitcoin::PublicKey as BitcoinPublicKey;
-                use bitcoin::hashes::{Hash as BitcoinHash, hash160};
-
-                let secp_pubkey = Secp256k1PublicKey::from_slice(pk)
-                    .or(Err(PubKeyError::InvalidPubKey))?;
-                let btc_pubkey = BitcoinPublicKey::new(secp_pubkey);
-                let hash = hash160::Hash::hash(&btc_pubkey.to_bytes());
-
-                Ok(*hash.as_ref())
-            }
-            PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
-        }
-    }
-
     pub fn as_hex_str(&self) -> String {
         hex::encode(self.as_bytes())
     }
 
-    pub fn as_bytes(&self) -> [u8; PUB_KEY_SIZE] {
+    pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
         match self {
-            PubKey::Secp256k1Keccak256(v) => *v,
-            PubKey::Secp256k1Sha256(v) => *v,
-            PubKey::Secp256k1Bitcoin(v) => *v,
-            PubKey::Ed25519Solana(v) => *v,
+            PubKey::Secp256k1Keccak256(v) => v,
+            PubKey::Secp256k1Sha256(v) => v,
+            PubKey::Secp256k1Bitcoin((v, _, _)) => v,
+            PubKey::Ed25519Solana(v) => v,
         }
     }
 
     pub fn get_addr(&self) -> Result<Address> {
-        let buf = self.get_bytes_addr()?;
+        let addr = Address::from_pubkey(&self)?;
 
-        match self {
-            PubKey::Secp256k1Keccak256(_) => Ok(Address::Secp256k1Keccak256(buf)),
-            PubKey::Secp256k1Sha256(_) => Ok(Address::Secp256k1Sha256(buf)),
-            PubKey::Secp256k1Bitcoin(_) => Ok(Address::Secp256k1Bitcoin(buf)),
-            PubKey::Ed25519Solana(_) => Err(PubKeyError::NotImpl),
-        }
+        Ok(addr)
     }
 
-    pub fn to_bytes(&self) -> Result<[u8; PUB_KEY_SIZE + 1]> {
-        let mut result = [0u8; PUB_KEY_SIZE + 1];
-
-        result[0] = match self {
-            PubKey::Secp256k1Sha256(_) => 0,
-            PubKey::Secp256k1Keccak256(_) => 1,
-            PubKey::Secp256k1Bitcoin(_) => 2,
-            PubKey::Ed25519Solana(_) => 3,
-        };
-        result[1..].copy_from_slice(self.as_ref());
-
-        Ok(result)
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        match self {
+            PubKey::Secp256k1Sha256(pk) => {
+                let mut result = vec![0u8];
+                result.extend_from_slice(pk);
+                Ok(result)
+            }
+            PubKey::Secp256k1Keccak256(pk) => {
+                let mut result = vec![1u8];
+                result.extend_from_slice(pk);
+                Ok(result)
+            }
+            PubKey::Secp256k1Bitcoin((pk, network, addr_type)) => {
+                let mut result = vec![2u8];
+                result.push(network.to_byte());
+                result.push(addr_type.to_byte());
+                result.extend_from_slice(pk);
+                Ok(result)
+            }
+            PubKey::Ed25519Solana(pk) => {
+                let mut result = vec![3u8];
+                result.extend_from_slice(pk);
+                Ok(result)
+            }
+        }
     }
 }
 
@@ -124,6 +105,23 @@ impl TryFrom<&PubKey> for K256PublicKey {
 
     fn try_from(pk: &PubKey) -> Result<Self> {
         K256PublicKey::from_sec1_bytes(pk.as_ref()).map_err(|_| PubKeyError::FailIntoPubKey)
+    }
+}
+
+impl TryFrom<&PubKey> for alloy::signers::k256::ecdsa::VerifyingKey {
+    type Error = PubKeyError;
+
+    fn try_from(pk: &PubKey) -> Result<Self> {
+        alloy::signers::k256::ecdsa::VerifyingKey::from_sec1_bytes(pk.as_ref())
+            .map_err(|e| PubKeyError::InvalidVerifyingKey(e.to_string()))
+    }
+}
+
+impl TryFrom<&PubKey> for bitcoin::PublicKey {
+    type Error = PubKeyError;
+
+    fn try_from(pk: &PubKey) -> Result<Self> {
+        bitcoin::PublicKey::from_slice(pk.as_ref()).map_err(|_| PubKeyError::FailIntoPubKey)
     }
 }
 
@@ -152,37 +150,46 @@ impl<'de> Deserialize<'de> for PubKey {
     }
 }
 
-impl From<[u8; PUB_KEY_SIZE + 1]> for PubKey {
-    fn from(bytes: [u8; PUB_KEY_SIZE + 1]) -> Self {
-        let key_type = bytes[0];
-        let key_data: [u8; PUB_KEY_SIZE] = bytes[1..].try_into().unwrap();
-
-        match key_type {
-            0 => PubKey::Secp256k1Sha256(key_data),
-            1 => PubKey::Secp256k1Keccak256(key_data),
-            2 => PubKey::Secp256k1Bitcoin(key_data),
-            3 => PubKey::Ed25519Solana(key_data),
-            _ => panic!("Invalid key type"),
-        }
-    }
-}
-
 impl TryFrom<&[u8]> for PubKey {
     type Error = PubKeyError;
 
     fn try_from(slice: &[u8]) -> Result<Self> {
-        if slice.len() != PUB_KEY_SIZE + 1 {
+        if slice.is_empty() {
             return Err(PubKeyError::InvalidLength);
         }
 
         let key_type = slice[0];
-        let key_data: [u8; PUB_KEY_SIZE] = slice[1..]
-            .try_into()
-            .map_err(|_| PubKeyError::InvalidLength)?;
 
         match key_type {
-            0 => Ok(PubKey::Secp256k1Sha256(key_data)),
-            1 => Ok(PubKey::Secp256k1Keccak256(key_data)),
+            0 | 1 | 3 => {
+                // Zilliqa, Ethereum, Solana: 1 + 33 bytes
+                if slice.len() != PUB_KEY_SIZE + 1 {
+                    return Err(PubKeyError::InvalidLength);
+                }
+                let key_data: [u8; PUB_KEY_SIZE] = slice[1..]
+                    .try_into()
+                    .map_err(|_| PubKeyError::InvalidLength)?;
+
+                match key_type {
+                    0 => Ok(PubKey::Secp256k1Sha256(key_data)),
+                    1 => Ok(PubKey::Secp256k1Keccak256(key_data)),
+                    3 => Ok(PubKey::Ed25519Solana(key_data)),
+                    _ => unreachable!(),
+                }
+            }
+            2 => {
+                // Bitcoin: 1 + 1 + 1 + 33 bytes
+                if slice.len() != PUB_KEY_SIZE + 3 {
+                    return Err(PubKeyError::InvalidLength);
+                }
+                let network = bitcoin::Network::from_byte(slice[1])?;
+                let addr_type = bitcoin::AddressType::from_byte(slice[2])?;
+                let key_data: [u8; PUB_KEY_SIZE] = slice[3..]
+                    .try_into()
+                    .map_err(|_| PubKeyError::InvalidLength)?;
+
+                Ok(PubKey::Secp256k1Bitcoin((key_data, network, addr_type)))
+            }
             _ => Err(PubKeyError::InvalidKeyType),
         }
     }
@@ -193,7 +200,7 @@ impl AsRef<[u8]> for PubKey {
         match self {
             PubKey::Secp256k1Sha256(data) => data,
             PubKey::Secp256k1Keccak256(data) => data,
-            PubKey::Secp256k1Bitcoin(data) => data,
+            PubKey::Secp256k1Bitcoin((data, _, _)) => data,
             PubKey::Ed25519Solana(data) => data,
         }
     }
@@ -204,18 +211,7 @@ impl FromStr for PubKey {
 
     fn from_str(s: &str) -> Result<Self> {
         let data = hex::decode(s).map_err(|_| PubKeyError::InvalidHex)?;
-        let bytes: [u8; PUB_KEY_SIZE] = data[1..]
-            .try_into()
-            .map_err(|_| PubKeyError::InvalidLength)?;
-        let prefix = data[0];
-
-        match prefix {
-            0 => Ok(PubKey::Secp256k1Sha256(bytes)),
-            1 => Ok(PubKey::Secp256k1Keccak256(bytes)),
-            2 => Ok(PubKey::Secp256k1Bitcoin(bytes)),
-            3 => Ok(PubKey::Ed25519Solana(bytes)),
-            _ => Err(PubKeyError::InvalidKeyType),
-        }
+        PubKey::try_from(data.as_slice())
     }
 }
 
@@ -225,11 +221,11 @@ mod tests {
 
     #[test]
     fn test_from_bytes() {
-        let zil_bytes = [0u8; PUB_KEY_SIZE + 1];
-        let eth_bytes = [1u8; PUB_KEY_SIZE + 1];
+        let zil_bytes = vec![0u8; PUB_KEY_SIZE + 1];
+        let eth_bytes = vec![1u8; PUB_KEY_SIZE + 1];
 
-        let zil_key = PubKey::from(zil_bytes);
-        let eth_key = PubKey::from(eth_bytes);
+        let zil_key: PubKey = zil_bytes.as_slice().try_into().unwrap();
+        let eth_key: PubKey = eth_bytes.as_slice().try_into().unwrap();
 
         assert!(matches!(zil_key, PubKey::Secp256k1Sha256(_)));
         assert!(matches!(eth_key, PubKey::Secp256k1Keccak256(_)));
@@ -294,8 +290,8 @@ mod tests {
         let zil_bytes = zil_key.to_bytes().unwrap();
         let eth_bytes = eth_key.to_bytes().unwrap();
 
-        let zil_key_roundtrip = PubKey::from(zil_bytes);
-        let eth_key_roundtrip = PubKey::from(eth_bytes);
+        let zil_key_roundtrip: PubKey = zil_bytes.as_slice().try_into().unwrap();
+        let eth_key_roundtrip: PubKey = eth_bytes.as_slice().try_into().unwrap();
 
         assert_eq!(zil_key, zil_key_roundtrip);
         assert_eq!(eth_key, eth_key_roundtrip);
@@ -327,30 +323,6 @@ mod tests {
                 "0030303150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
             ),
             Err(PubKeyError::InvalidHex)
-        );
-    }
-
-    #[test]
-    fn test_str_pubkey() {
-        let pubkey_eth: PubKey =
-            "0103150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
-                .parse()
-                .unwrap();
-        let pubkey_zil: PubKey =
-            "0003150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
-                .parse()
-                .unwrap();
-
-        let addr_eth = pubkey_eth.get_bytes_addr().unwrap();
-        let addr_zil = pubkey_zil.get_bytes_addr().unwrap();
-
-        assert_eq!(
-            hex::encode(addr_eth),
-            "c315295101461753b838e0be8688e744cf52dd6b"
-        );
-        assert_eq!(
-            hex::encode(addr_zil),
-            "ebd8b370dddb636faf641040d2181c55190840fb"
         );
     }
 }

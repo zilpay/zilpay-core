@@ -11,6 +11,9 @@ pub enum TransactionErrors {
     #[error("PubKeyError error: {0}")]
     PubKeyError(PubKeyError),
 
+    #[error("address error: {0}")]
+    AddressError(AddressError),
+
     #[error("InvalidHash")]
     InvalidHash,
 
@@ -34,9 +37,6 @@ pub enum TransactionErrors {
 
     #[error("SignatureError error: {0}")]
     SignatureError(SignatureError),
-
-    #[error("AddressError error: {0}")]
-    AddressError(AddressError),
 
     #[error("Invalid tx hash")]
     InvalidTxHash,

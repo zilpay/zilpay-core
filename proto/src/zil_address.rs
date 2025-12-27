@@ -61,7 +61,7 @@ pub fn from_zil_bech32_address(address: &str) -> Result<[u8; ADDR_LEN]> {
     Ok(bytes)
 }
 
-pub fn to_bech32(hrp: &str, value: &[u8; ADDR_LEN]) -> Result<String> {
+pub fn to_bech32(hrp: &str, value: &[u8]) -> Result<String> {
     let hrp = Hrp::parse(hrp).map_err(|_| AddressError::InvalidHRP)?;
 
     bech32::encode::<Bech32>(hrp, value).map_err(|_| AddressError::InvalidBech32Len)

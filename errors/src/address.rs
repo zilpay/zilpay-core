@@ -1,6 +1,8 @@
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+use crate::keypair::PubKeyError;
+
+#[derive(Debug, Error, PartialEq)]
 pub enum AddressError {
     #[error("invalid eth address: {0}")]
     InvalidETHAddress(String),
@@ -53,9 +55,21 @@ pub enum AddressError {
     #[error("Bech32 error: {0}")]
     Bech32Error(String),
 
+    #[error("bitcoin address error: {0}")]
+    BTCAddrError(String),
+
     #[error("Invalid HRP")]
     InvalidHrp,
 
     #[error("Not implemented")]
     NotImpl,
+
+    #[error("pubKey error {0}")]
+    PubKeyError(String),
+}
+
+impl From<PubKeyError> for AddressError {
+    fn from(error: PubKeyError) -> Self {
+        AddressError::PubKeyError(error.to_string())
+    }
 }

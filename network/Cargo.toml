@@ -11,6 +11,7 @@ serde.workspace = true
 reqwest.workspace = true
 async-trait.workspace = true
 bincode.workspace = true
+electrum-client.workspace = true
 storage = { path = "../storage" }
 history = { path = "../history" }
 token = { path = "../token" }

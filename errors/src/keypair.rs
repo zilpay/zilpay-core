@@ -76,6 +76,9 @@ pub enum PubKeyError {
     #[error("Invalid VerifyingKey {0}")]
     InvalidVerifyingKey(String),
 
+    #[error("address error {0}")]
+    AddressError(AddressError),
+
     #[error("Invalid length")]
     InvalidLength,
 
@@ -93,4 +96,10 @@ pub enum PubKeyError {
 
     #[error("Not implemented")]
     NotImpl,
+}
+
+impl From<AddressError> for PubKeyError {
+    fn from(error: AddressError) -> Self {
+        PubKeyError::AddressError(error)
+    }
 }

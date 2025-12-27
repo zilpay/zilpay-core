@@ -9,6 +9,8 @@ use alloy::consensus::{SignableTransaction, TxEip4844Variant, TxEnvelope, TypedT
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{TxKind, U256};
 use alloy::signers::Signature as EthersSignature;
+use config::address::ADDR_LEN;
+use config::key::PUB_KEY_SIZE;
 use config::sha::SHA512_SIZE;
 use crypto::schnorr::sign as zil_sign;
 use errors::crypto::SignatureError;
@@ -109,10 +111,22 @@ impl TransactionRequest {
                 let signature = zil_sign(&bytes, &secret_key)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
                 let signature = signature.to_bytes().into();
+                let to_addr: [u8; ADDR_LEN] = tx
+                    .to_addr
+                    .addr_bytes()
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| TransactionErrors::InvalidAddress)?;
+                let pub_key: [u8; PUB_KEY_SIZE] = pub_key
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| TransactionErrors::InvalidPublicKey)?;
+
                 let tx = ZILTransactionReceipt {
                     signature,
-                    to_addr: *tx.to_addr.addr_bytes(),
-                    pub_key: pub_key.as_bytes(),
+                    to_addr,
+                    pub_key,
                     version: version_from_chainid(tx.chain_id),
                     nonce: tx.nonce,
                     gas_price: tx.gas_price.to_be_bytes(),
@@ -219,7 +233,7 @@ impl TransactionRequest {
                     TypedTransaction::Eip7702(tx) => TxEnvelope::Eip7702(tx.into_signed(sig)),
                 };
 
-                metadata.signer = Some(PubKey::Secp256k1Keccak256(pub_key.as_bytes()));
+                metadata.signer = Some(pub_key.clone());
 
                 Ok(TransactionReceipt::Ethereum((signed_tx, metadata)))
             }
@@ -227,10 +241,22 @@ impl TransactionRequest {
                 let signature: [u8; SHA512_SIZE] = signature_bytes
                     .try_into()
                     .map_err(|_| SignatureError::InvalidLength)?;
+                let pub_key: [u8; PUB_KEY_SIZE] = pub_key
+                    .as_bytes()
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| TransactionErrors::InvalidPublicKey)?;
+                let to_addr: [u8; ADDR_LEN] = tx
+                    .to_addr
+                    .addr_bytes()
+                    .to_vec()
+                    .try_into()
+                    .map_err(|_| TransactionErrors::InvalidAddress)?;
+
                 let signed_tx = ZILTransactionReceipt {
                     signature,
-                    to_addr: *tx.to_addr.addr_bytes(),
-                    pub_key: pub_key.as_bytes(),
+                    to_addr,
+                    pub_key,
                     version: version_from_chainid(tx.chain_id),
                     nonce: tx.nonce,
                     gas_price: tx.gas_price.to_be_bytes(),
@@ -377,11 +403,12 @@ mod tests_tx {
 
         let blob_versioned_hashes = vec![versioned_hash];
 
-        let sidecar = BlobTransactionSidecar {
-            blobs: vec![[0u8; 131072].into()],
-            commitments: vec![[0u8; 48].into()],
-            proofs: vec![[0u8; 48].into()],
-        };
+        let sidecar =
+            alloy::eips::eip7594::BlobTransactionSidecarVariant::Eip4844(BlobTransactionSidecar {
+                blobs: vec![[0u8; 131072].into()],
+                commitments: vec![[0u8; 48].into()],
+                proofs: vec![[0u8; 48].into()],
+            });
 
         let eip4844_request = ETHTransactionRequest {
             to: Some(eth_addr.to_alloy_addr().into()),

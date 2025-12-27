@@ -2,7 +2,7 @@ use thiserror::Error;
 
 use crate::address::AddressError;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq)]
 pub enum TokenError {
     #[error("Invalid token contract data")]
     InvalidContractData,

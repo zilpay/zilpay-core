@@ -1,11 +1,11 @@
 use crate::{
+    btc_utils::create_btc_address,
     pubkey::PubKey,
     zil_address::{
         from_zil_base16, from_zil_bech32_address, from_zil_pub_key, to_bech32, to_checksum_address,
     },
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sha2::Digest;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
@@ -18,7 +18,7 @@ type Result<T> = std::result::Result<T, AddressError>;
 pub enum Address {
     Secp256k1Sha256([u8; ADDR_LEN]),    // ZILLIQA
     Secp256k1Keccak256([u8; ADDR_LEN]), // Ethereum
-    Secp256k1Bitcoin([u8; ADDR_LEN]),   // Bitcoin (hash160)
+    Secp256k1Bitcoin(Vec<u8>),          // Bitcoin (UTF-8 encoded address string)
 }
 
 impl Address {
@@ -35,7 +35,7 @@ impl Address {
         match self {
             Address::Secp256k1Sha256(_) => self.get_zil_bech32().unwrap_or_default(),
             Address::Secp256k1Keccak256(_) => self.to_eth_checksummed().unwrap_or_default(),
-            Address::Secp256k1Bitcoin(_) => self.to_btc_bech32().unwrap_or_default(),
+            Address::Secp256k1Bitcoin(data) => String::from_utf8(data.clone()).unwrap_or_default(),
         }
     }
 
@@ -82,15 +82,15 @@ impl Address {
         alloy::primitives::Address::from_slice(self.as_ref())
     }
 
-    pub fn to_bitcoin_addr(&self, network: bitcoin::Network) -> Result<bitcoin::Address> {
+    pub fn to_bitcoin_addr(&self) -> Result<bitcoin::Address> {
         match self {
-            Address::Secp256k1Bitcoin(hash160) => {
-                use bitcoin::hashes::Hash as BitcoinHash;
+            Address::Secp256k1Bitcoin(data) => {
+                let addr_str = String::from_utf8(data.clone())
+                    .map_err(|e| AddressError::BTCAddrError(e.to_string()))?;
+                let addr = bitcoin::Address::from_str(&addr_str)
+                    .map_err(|e| AddressError::BTCAddrError(e.to_string()))?
+                    .assume_checked();
 
-                let hash = bitcoin::hashes::hash160::Hash::from_slice(hash160)
-                    .map_err(|_| AddressError::InvalidAddressType)?;
-                let pubkey_hash = bitcoin::PubkeyHash::from_raw_hash(hash);
-                let addr = bitcoin::Address::p2pkh(pubkey_hash, network);
                 Ok(addr)
             }
             _ => Err(AddressError::InvalidAddressType),
@@ -111,24 +111,18 @@ impl Address {
 
                 Ok(Self::Secp256k1Sha256(addr))
             }
-            PubKey::Secp256k1Keccak256(pk) => {
-                let k256_pubkey = alloy::signers::k256::ecdsa::VerifyingKey::from_sec1_bytes(pk)
-                    .map_err(|e| AddressError::InvalidVerifyingKey(e.to_string()))?;
+            PubKey::Secp256k1Keccak256(_) => {
+                let k256_pubkey: alloy::signers::k256::ecdsa::VerifyingKey = pk.try_into()?;
                 let addr = alloy::primitives::Address::from_public_key(&k256_pubkey);
 
                 Ok(Self::Secp256k1Keccak256(addr.into()))
             }
-            PubKey::Secp256k1Bitcoin(pk) => {
-                use bitcoin::hashes::{hash160, Hash as BitcoinHash};
-                use bitcoin::secp256k1::PublicKey as Secp256k1PublicKey;
-                use bitcoin::PublicKey as BitcoinPublicKey;
+            PubKey::Secp256k1Bitcoin((pk_bytes, network, addr_type)) => {
+                let addr = create_btc_address(pk_bytes, *network, *addr_type)
+                    .map_err(|_| AddressError::InvalidPubKey)?;
+                let addr_string = addr.to_string();
 
-                let secp_pubkey =
-                    Secp256k1PublicKey::from_slice(pk).map_err(|_| AddressError::InvalidPubKey)?;
-                let btc_pubkey = BitcoinPublicKey::new(secp_pubkey);
-                let hash = <hash160::Hash as BitcoinHash>::hash(&btc_pubkey.to_bytes());
-
-                Ok(Self::Secp256k1Bitcoin(*hash.as_ref()))
+                Ok(Self::Secp256k1Bitcoin(addr_string.into_bytes()))
             }
             PubKey::Ed25519Solana(_) => Err(AddressError::NotImpl),
         }
@@ -142,14 +136,13 @@ impl Address {
         }
     }
 
-    pub fn to_bytes(&self) -> [u8; ADDR_LEN + 1] {
-        let mut result = [0u8; ADDR_LEN + 1];
-        result[0] = self.prefix_type();
-        result[1..].copy_from_slice(self.as_ref());
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut result = vec![self.prefix_type()];
+        result.extend_from_slice(self.as_ref());
         result
     }
 
-    pub fn addr_bytes(&self) -> &[u8; ADDR_LEN] {
+    pub fn addr_bytes<'a>(&'a self) -> &'a [u8] {
         match self {
             Address::Secp256k1Sha256(v) => v,
             Address::Secp256k1Keccak256(v) => v,
@@ -194,101 +187,6 @@ impl Address {
             Address::Secp256k1Bitcoin(_) => Err(AddressError::InvalidAddressType),
         }
     }
-
-    pub fn to_btc_p2pkh(&self) -> Result<String> {
-        match self {
-            Address::Secp256k1Bitcoin(hash160) => {
-                let mut payload = [0u8; 21];
-                payload[0] = 0x00;
-                payload[1..].copy_from_slice(hash160);
-
-                let checksum = sha2::Sha256::digest(sha2::Sha256::digest(&payload));
-                let mut full_payload = [0u8; 25];
-                full_payload[..21].copy_from_slice(&payload);
-                full_payload[21..].copy_from_slice(&checksum[..4]);
-
-                Ok(bs58::encode(&full_payload).into_string())
-            }
-            _ => Err(AddressError::InvalidAddressType),
-        }
-    }
-
-    pub fn to_btc_bech32(&self) -> Result<String> {
-        self.to_btc_bech32_with_hrp("bc")
-    }
-
-    pub fn to_btc_bech32_testnet(&self) -> Result<String> {
-        self.to_btc_bech32_with_hrp("tb")
-    }
-
-    fn to_btc_bech32_with_hrp(&self, hrp_str: &str) -> Result<String> {
-        use bech32::{segwit, Hrp};
-
-        match self {
-            Address::Secp256k1Bitcoin(hash160) => {
-                let hrp = Hrp::parse(hrp_str).map_err(|_| AddressError::InvalidHrp)?;
-                let addr = segwit::encode(hrp, segwit::VERSION_0, hash160)
-                    .map_err(|e| AddressError::Bech32Error(e.to_string()))?;
-
-                Ok(addr)
-            }
-            _ => Err(AddressError::InvalidAddressType),
-        }
-    }
-
-    pub fn from_btc_p2pkh(addr: &str) -> Result<Self> {
-        let decoded = bs58::decode(addr)
-            .into_vec()
-            .map_err(|_| AddressError::InvalidBase58)?;
-
-        if decoded.len() != 25 {
-            return Err(AddressError::InvalidLength);
-        }
-
-        let payload = &decoded[..21];
-        let checksum = &decoded[21..];
-        let expected_checksum = sha2::Sha256::digest(sha2::Sha256::digest(payload));
-
-        if checksum != &expected_checksum[..4] {
-            return Err(AddressError::InvalidChecksum);
-        }
-
-        if decoded[0] != 0x00 {
-            return Err(AddressError::InvalidVersion);
-        }
-
-        let hash160: [u8; ADDR_LEN] = decoded[1..21]
-            .try_into()
-            .map_err(|_| AddressError::InvalidLength)?;
-
-        Ok(Address::Secp256k1Bitcoin(hash160))
-    }
-
-    pub fn from_btc_bech32(addr: &str) -> Result<Self> {
-        use bech32::segwit;
-
-        let (hrp, version, program) =
-            segwit::decode(addr).map_err(|e| AddressError::Bech32Error(e.to_string()))?;
-
-        let hrp_str = hrp.as_str();
-        if hrp_str != "bc" && hrp_str != "tb" {
-            return Err(AddressError::InvalidHrp);
-        }
-
-        if version != segwit::VERSION_0 {
-            return Err(AddressError::InvalidVersion);
-        }
-
-        if program.len() != ADDR_LEN {
-            return Err(AddressError::InvalidLength);
-        }
-
-        let hash160: [u8; ADDR_LEN] = program
-            .try_into()
-            .map_err(|_| AddressError::InvalidLength)?;
-
-        Ok(Address::Secp256k1Bitcoin(hash160))
-    }
 }
 
 impl std::fmt::Display for Address {
@@ -302,7 +200,7 @@ impl std::fmt::Display for Address {
                 write!(f, "{}", h.to_checksum(None))
             }
             Self::Secp256k1Bitcoin(_) => {
-                write!(f, "{}", self.to_btc_bech32().unwrap_or_default())
+                write!(f, "{}", self.auto_format())
             }
         }
     }
@@ -319,7 +217,7 @@ impl std::fmt::Debug for Address {
                 write!(f, "{}", h.to_checksum(None))
             }
             Self::Secp256k1Bitcoin(_) => {
-                write!(f, "{}", self.to_btc_bech32().unwrap_or_default())
+                write!(f, "{}", self.auto_format())
             }
         }
     }
@@ -362,31 +260,7 @@ impl FromStr for Address {
 
     fn from_str(s: &str) -> Result<Self> {
         let data = hex::decode(s).map_err(|_| AddressError::InvalidHex)?;
-        let bytes: [u8; ADDR_LEN] = data[1..]
-            .try_into()
-            .map_err(|_| AddressError::InvalidLength)?;
-        let prefix = data[0];
-
-        match prefix {
-            0 => Ok(Address::Secp256k1Sha256(bytes)),
-            1 => Ok(Address::Secp256k1Keccak256(bytes)),
-            2 => Ok(Address::Secp256k1Bitcoin(bytes)),
-            _ => Err(AddressError::InvalidKeyType),
-        }
-    }
-}
-
-impl From<[u8; ADDR_LEN + 1]> for Address {
-    fn from(bytes: [u8; ADDR_LEN + 1]) -> Self {
-        let key_type = bytes[0];
-        let key_data: [u8; ADDR_LEN] = bytes[1..].try_into().unwrap();
-
-        match key_type {
-            0 => Address::Secp256k1Sha256(key_data),
-            1 => Address::Secp256k1Keccak256(key_data),
-            2 => Address::Secp256k1Bitcoin(key_data),
-            _ => panic!("Invalid key type"),
-        }
+        Address::try_from(data.as_slice())
     }
 }
 
@@ -394,19 +268,31 @@ impl TryFrom<&[u8]> for Address {
     type Error = AddressError;
 
     fn try_from(slice: &[u8]) -> Result<Self> {
-        if slice.len() != ADDR_LEN + 1 {
+        if slice.is_empty() {
             return Err(AddressError::InvalidLength);
         }
 
         let key_type = slice[0];
-        let key_data: [u8; ADDR_LEN] = slice[1..]
-            .try_into()
-            .map_err(|_| AddressError::InvalidLength)?;
 
         match key_type {
-            0 => Ok(Address::Secp256k1Sha256(key_data)),
-            1 => Ok(Address::Secp256k1Keccak256(key_data)),
-            2 => Ok(Address::Secp256k1Bitcoin(key_data)),
+            0 | 1 => {
+                if slice.len() != ADDR_LEN + 1 {
+                    return Err(AddressError::InvalidLength);
+                }
+                let key_data: [u8; ADDR_LEN] = slice[1..]
+                    .try_into()
+                    .map_err(|_| AddressError::InvalidLength)?;
+
+                match key_type {
+                    0 => Ok(Address::Secp256k1Sha256(key_data)),
+                    1 => Ok(Address::Secp256k1Keccak256(key_data)),
+                    _ => unreachable!(),
+                }
+            }
+            2 => {
+                let addr_bytes = slice[1..].to_vec();
+                Ok(Address::Secp256k1Bitcoin(addr_bytes))
+            }
             _ => Err(AddressError::InvalidKeyType),
         }
     }
@@ -425,7 +311,6 @@ impl AsRef<[u8]> for Address {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use config::key::PUB_KEY_SIZE;
 
     #[test]
     fn test_address_creation() {
@@ -471,7 +356,7 @@ mod tests {
         zil_bytes[0] = 0;
         zil_bytes[1..].fill(1);
 
-        let addr = Address::from(zil_bytes);
+        let addr: Address = zil_bytes.as_slice().try_into().unwrap();
         assert!(matches!(addr, Address::Secp256k1Sha256(_)));
         assert_eq!(addr.as_ref(), &zil_bytes[1..]);
     }
@@ -511,7 +396,7 @@ mod tests {
         let original_data = [1u8; ADDR_LEN];
         let addr = Address::Secp256k1Sha256(original_data);
         let bytes = addr.to_bytes();
-        let roundtrip_addr = Address::from(bytes);
+        let roundtrip_addr = bytes.as_slice().try_into().unwrap();
         assert_eq!(addr, roundtrip_addr);
     }
 
@@ -565,8 +450,8 @@ mod tests {
 
     #[test]
     fn test_bitcoin_address_creation() {
-        let btc_data = [42u8; ADDR_LEN];
-        let btc_addr = Address::Secp256k1Bitcoin(btc_data);
+        let btc_data = vec![42u8; ADDR_LEN];
+        let btc_addr = Address::Secp256k1Bitcoin(btc_data.clone());
 
         assert_eq!(btc_addr.as_ref(), &btc_data);
         assert_eq!(btc_addr.prefix_type(), 2);
@@ -574,8 +459,8 @@ mod tests {
 
     #[test]
     fn test_bitcoin_to_bytes() {
-        let btc_data = [42u8; ADDR_LEN];
-        let btc_addr = Address::Secp256k1Bitcoin(btc_data);
+        let btc_data = vec![42u8; ADDR_LEN];
+        let btc_addr = Address::Secp256k1Bitcoin(btc_data.clone());
         let btc_bytes = btc_addr.to_bytes();
 
         assert_eq!(btc_bytes[0], 2);
@@ -588,189 +473,18 @@ mod tests {
         btc_bytes[0] = 2;
         btc_bytes[1..].fill(42);
 
-        let addr = Address::from(btc_bytes);
+        let addr: Address = btc_bytes.as_slice().try_into().unwrap();
         assert!(matches!(addr, Address::Secp256k1Bitcoin(_)));
         assert_eq!(addr.as_ref(), &btc_bytes[1..]);
     }
 
     #[test]
-    fn test_bitcoin_p2pkh_encoding_decoding() {
-        let hash160 = [
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
-            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13,
-        ];
-        let btc_addr = Address::Secp256k1Bitcoin(hash160);
-
-        let p2pkh = btc_addr.to_btc_p2pkh().unwrap();
-        assert!(p2pkh.starts_with('1'));
-
-        let decoded = Address::from_btc_p2pkh(&p2pkh).unwrap();
-        assert_eq!(decoded, btc_addr);
-    }
-
-    #[test]
-    fn test_bitcoin_from_pubkey() {
-        let pk = PubKey::Secp256k1Bitcoin([
-            0x03, 0x15, 0x0a, 0x7f, 0x37, 0x06, 0x3b, 0x13, 0x4c, 0xde, 0x30, 0x07, 0x04, 0x31,
-            0xa6, 0x91, 0x48, 0xd6, 0x0b, 0x25, 0x2f, 0x4c, 0x7b, 0x38, 0xde, 0x33, 0xd8, 0x13,
-            0xd3, 0x29, 0xa7, 0xb7, 0xda,
-        ]);
-
-        let addr = Address::from_pubkey(&pk).unwrap();
-        assert!(matches!(addr, Address::Secp256k1Bitcoin(_)));
-    }
-
-    #[test]
     fn test_bitcoin_address_roundtrip() {
-        let original_data = [123u8; ADDR_LEN];
-        let addr = Address::Secp256k1Bitcoin(original_data);
+        let original_data = vec![123u8; ADDR_LEN];
+        let addr = Address::Secp256k1Bitcoin(original_data.clone());
         let bytes = addr.to_bytes();
-        let roundtrip_addr = Address::from(bytes);
+        let roundtrip_addr: Address = bytes.as_slice().try_into().unwrap();
 
         assert_eq!(addr, roundtrip_addr);
-    }
-
-    #[test]
-    fn test_bitcoin_p2pkh_valid_address() {
-        let valid_btc_addr = "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa";
-        let result = Address::from_btc_p2pkh(valid_btc_addr);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_bitcoin_display() {
-        let hash160 = [1u8; ADDR_LEN];
-        let btc_addr = Address::Secp256k1Bitcoin(hash160);
-        let display_str = btc_addr.to_string();
-
-        assert!(!display_str.is_empty());
-    }
-
-    #[test]
-    fn test_bitcoin_native_segwit_testnet() {
-        let public_key_hex = "028b9b0e596dbefb2055c0bfd7bb34b90d491030df81a2659ca5dbf941647e28ea";
-        let expected_segwit_hash = "36d653232e46b66c576c98983172a9531e8278ea";
-        let expected_native_address = "tb1qxmt9xgewg6mxc4mvnzvrzu4f2v0gy782fydg0w";
-
-        let pk_bytes = hex::decode(public_key_hex).unwrap();
-        let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
-        let pubkey = PubKey::Secp256k1Bitcoin(pk_array);
-
-        let address = Address::from_pubkey(&pubkey).unwrap();
-
-        let hash160_hex = hex::encode(address.addr_bytes());
-        assert_eq!(hash160_hex, expected_segwit_hash);
-
-        let testnet_addr = address.to_btc_bech32_testnet().unwrap();
-        assert_eq!(testnet_addr, expected_native_address);
-        assert!(testnet_addr.starts_with("tb1q"));
-    }
-
-    #[test]
-    fn test_bitcoin_native_segwit_mainnet() {
-        let hash160 = hex::decode("36d653232e46b66c576c98983172a9531e8278ea").unwrap();
-        let hash160_array: [u8; ADDR_LEN] = hash160.try_into().unwrap();
-        let address = Address::Secp256k1Bitcoin(hash160_array);
-
-        let mainnet_addr = address.to_btc_bech32().unwrap();
-        assert!(mainnet_addr.starts_with("bc1q"));
-
-        let testnet_addr = address.to_btc_bech32_testnet().unwrap();
-        assert!(testnet_addr.starts_with("tb1q"));
-        assert_eq!(testnet_addr, "tb1qxmt9xgewg6mxc4mvnzvrzu4f2v0gy782fydg0w");
-    }
-
-    #[test]
-    fn test_bitcoin_bech32_roundtrip_testnet() {
-        let original_addr = "tb1qxmt9xgewg6mxc4mvnzvrzu4f2v0gy782fydg0w";
-        let decoded = Address::from_btc_bech32(original_addr).unwrap();
-        let encoded = decoded.to_btc_bech32_testnet().unwrap();
-
-        assert_eq!(encoded, original_addr);
-    }
-
-    #[test]
-    fn test_bitcoin_bech32_roundtrip_mainnet() {
-        let hash160 = [42u8; ADDR_LEN];
-        let address = Address::Secp256k1Bitcoin(hash160);
-
-        let bech32_addr = address.to_btc_bech32().unwrap();
-        assert!(bech32_addr.starts_with("bc1"));
-
-        let decoded = Address::from_btc_bech32(&bech32_addr).unwrap();
-        assert_eq!(decoded, address);
-    }
-
-    #[test]
-    fn test_bitcoin_segwit_hash_from_pubkey() {
-        let public_key_hex = "028b9b0e596dbefb2055c0bfd7bb34b90d491030df81a2659ca5dbf941647e28ea";
-        let expected_hash = "36d653232e46b66c576c98983172a9531e8278ea";
-
-        let pk_bytes = hex::decode(public_key_hex).unwrap();
-        let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
-        let pubkey = PubKey::Secp256k1Bitcoin(pk_array);
-
-        let address = Address::from_pubkey(&pubkey).unwrap();
-        let hash_hex = hex::encode(address.addr_bytes());
-
-        assert_eq!(hash_hex, expected_hash);
-    }
-
-    #[test]
-    fn test_bitcoin_multiple_address_formats() {
-        let hash160 = hex::decode("36d653232e46b66c576c98983172a9531e8278ea").unwrap();
-        let hash160_array: [u8; ADDR_LEN] = hash160.try_into().unwrap();
-        let address = Address::Secp256k1Bitcoin(hash160_array);
-
-        let p2pkh = address.to_btc_p2pkh().unwrap();
-        assert!(p2pkh.starts_with('1'));
-
-        let bech32_mainnet = address.to_btc_bech32().unwrap();
-        assert!(bech32_mainnet.starts_with("bc1"));
-
-        let bech32_testnet = address.to_btc_bech32_testnet().unwrap();
-        assert!(bech32_testnet.starts_with("tb1"));
-        assert_eq!(bech32_testnet, "tb1qxmt9xgewg6mxc4mvnzvrzu4f2v0gy782fydg0w");
-    }
-
-    #[test]
-    fn test_bitcoin_p2wpkh_mainnet_from_python() {
-        let public_key_hex = "024447e68ff4efc6dccac32b60c9af9421654763a93d9573d7284567b70f7993ef";
-        let expected_segwit_hash = "4d4d385e7877c07ccf49e1cac94322ea182e58e7";
-        let expected_native_address = "bc1qf4xnshncwlq8en6fu89vjsezagvzuk88php8q3";
-
-        let pk_bytes = hex::decode(public_key_hex).unwrap();
-        let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
-        let pubkey = PubKey::Secp256k1Bitcoin(pk_array);
-
-        let address = Address::from_pubkey(&pubkey).unwrap();
-
-        let hash160_hex = hex::encode(address.addr_bytes());
-        assert_eq!(hash160_hex, expected_segwit_hash);
-
-        let mainnet_addr = address.to_btc_bech32().unwrap();
-        assert_eq!(mainnet_addr, expected_native_address);
-        assert!(mainnet_addr.starts_with("bc1q"));
-    }
-
-    #[test]
-    fn test_bitcoin_bech32_roundtrip_python_address() {
-        let original_addr = "bc1qf4xnshncwlq8en6fu89vjsezagvzuk88php8q3";
-        let decoded = Address::from_btc_bech32(original_addr).unwrap();
-        let encoded = decoded.to_btc_bech32().unwrap();
-
-        assert_eq!(encoded, original_addr);
-
-        let expected_hash = hex::decode("4d4d385e7877c07ccf49e1cac94322ea182e58e7").unwrap();
-        let expected_hash_array: [u8; ADDR_LEN] = expected_hash.try_into().unwrap();
-        assert_eq!(decoded.addr_bytes(), &expected_hash_array);
-    }
-
-    #[test]
-    fn test_bitcoin_bech32_invalid_hrp() {
-        let invalid_addr = "ltc1qxmt9xgewg6mxc4mvnzvrzu4f2v0gy782abc123";
-        let result = Address::from_btc_bech32(invalid_addr);
-
-        assert!(result.is_err());
     }
 }
