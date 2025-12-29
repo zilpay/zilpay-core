@@ -30,6 +30,7 @@ pub fn build_last_block_header_request(address: &Address, block_number: Option<u
                 EvmMethods::GetBlockByNumber,
             )
         }
+        Address::Secp256k1Bitcoin(_) => Value::Null,
     }
 }
 

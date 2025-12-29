@@ -330,4 +330,150 @@ mod tests {
             Err(PubKeyError::InvalidHex)
         );
     }
+
+    #[test]
+    fn test_bitcoin_pubkey_to_bytes() {
+        let pk_data = [42u8; PUB_KEY_SIZE];
+        let network = bitcoin::Network::Bitcoin;
+        let addr_type = bitcoin::AddressType::P2wpkh;
+        let btc_key = PubKey::Secp256k1Bitcoin((pk_data, network, addr_type));
+
+        let bytes = btc_key.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 2);
+        assert_eq!(bytes[1], network.to_byte());
+        assert_eq!(bytes[2], addr_type.to_byte());
+        assert_eq!(&bytes[3..], &pk_data);
+        assert_eq!(bytes.len(), PUB_KEY_SIZE + 3);
+    }
+
+    #[test]
+    fn test_bitcoin_pubkey_from_bytes() {
+        let pk_data = [42u8; PUB_KEY_SIZE];
+        let network = bitcoin::Network::Bitcoin;
+        let addr_type = bitcoin::AddressType::P2wpkh;
+        let btc_key = PubKey::Secp256k1Bitcoin((pk_data, network, addr_type));
+
+        let bytes = btc_key.to_bytes().unwrap();
+        let recovered: PubKey = bytes.as_slice().try_into().unwrap();
+
+        assert_eq!(btc_key, recovered);
+    }
+
+    #[test]
+    fn test_bitcoin_pubkey_roundtrip_all_networks() {
+        let pk_data = [111u8; PUB_KEY_SIZE];
+        let networks = vec![
+            bitcoin::Network::Bitcoin,
+            bitcoin::Network::Testnet,
+            bitcoin::Network::Testnet4,
+            bitcoin::Network::Signet,
+            bitcoin::Network::Regtest,
+        ];
+
+        for network in networks {
+            let btc_key = PubKey::Secp256k1Bitcoin((pk_data, network, bitcoin::AddressType::P2wpkh));
+            let bytes = btc_key.to_bytes().unwrap();
+            let recovered: PubKey = bytes.as_slice().try_into().unwrap();
+
+            assert_eq!(btc_key, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_pubkey_roundtrip_all_address_types() {
+        let pk_data = [222u8; PUB_KEY_SIZE];
+        let addr_types = vec![
+            bitcoin::AddressType::P2pkh,
+            bitcoin::AddressType::P2sh,
+            bitcoin::AddressType::P2wpkh,
+            bitcoin::AddressType::P2wsh,
+            bitcoin::AddressType::P2tr,
+            bitcoin::AddressType::P2a,
+        ];
+
+        for addr_type in addr_types {
+            let btc_key = PubKey::Secp256k1Bitcoin((pk_data, bitcoin::Network::Bitcoin, addr_type));
+            let bytes = btc_key.to_bytes().unwrap();
+            let recovered: PubKey = bytes.as_slice().try_into().unwrap();
+
+            assert_eq!(btc_key, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_pubkey_roundtrip_combinations() {
+        let pk_data = [99u8; PUB_KEY_SIZE];
+        let test_cases = vec![
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh),
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2tr),
+            (bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh),
+            (bitcoin::Network::Testnet, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Signet, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Regtest, bitcoin::AddressType::P2pkh),
+        ];
+
+        for (network, addr_type) in test_cases {
+            let btc_key = PubKey::Secp256k1Bitcoin((pk_data, network, addr_type));
+            let bytes = btc_key.to_bytes().unwrap();
+            let recovered: PubKey = bytes.as_slice().try_into().unwrap();
+
+            assert_eq!(btc_key, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_pubkey_to_string_roundtrip() {
+        let pk_data = [123u8; PUB_KEY_SIZE];
+        let btc_key = PubKey::Secp256k1Bitcoin((
+            pk_data,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        ));
+
+        let btc_str = btc_key.to_string();
+        let recovered = PubKey::from_str(&btc_str).unwrap();
+
+        assert_eq!(btc_key, recovered);
+    }
+
+    #[test]
+    fn test_bitcoin_pubkey_invalid_length() {
+        let bytes = vec![2u8; PUB_KEY_SIZE + 2];
+        let result = PubKey::try_from(bytes.as_slice());
+        assert!(matches!(result, Err(PubKeyError::InvalidLength)));
+
+        let bytes = vec![2u8; PUB_KEY_SIZE + 1];
+        let result = PubKey::try_from(bytes.as_slice());
+        assert!(matches!(result, Err(PubKeyError::InvalidLength)));
+    }
+
+    #[test]
+    fn test_all_pubkey_types_roundtrip() {
+        let data = [55u8; PUB_KEY_SIZE];
+
+        let zil = PubKey::Secp256k1Sha256(data);
+        let eth = PubKey::Secp256k1Keccak256(data);
+        let btc = PubKey::Secp256k1Bitcoin((data, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh));
+        let sol = PubKey::Ed25519Solana(data);
+
+        for key in [zil, eth, btc, sol] {
+            let bytes = key.to_bytes().unwrap();
+            let recovered: PubKey = bytes.as_slice().try_into().unwrap();
+            assert_eq!(key, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_pubkey_as_bytes() {
+        let pk_data = [77u8; PUB_KEY_SIZE];
+        let btc_key = PubKey::Secp256k1Bitcoin((
+            pk_data,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        ));
+
+        assert_eq!(btc_key.as_bytes(), &pk_data);
+    }
 }

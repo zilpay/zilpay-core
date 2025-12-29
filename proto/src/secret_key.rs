@@ -101,3 +101,181 @@ impl FromStr for SecretKey {
         SecretKey::from_bytes(std::borrow::Cow::Borrowed(&data))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use config::key::SECRET_KEY_SIZE;
+
+    #[test]
+    fn test_secret_key_to_bytes_zilliqa() {
+        let sk_data = [42u8; SECRET_KEY_SIZE];
+        let sk = SecretKey::Secp256k1Sha256Zilliqa(sk_data);
+
+        let bytes = sk.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 0);
+        assert_eq!(&bytes[1..], &sk_data);
+        assert_eq!(bytes.len(), SECRET_KEY_SIZE + 1);
+    }
+
+    #[test]
+    fn test_secret_key_to_bytes_ethereum() {
+        let sk_data = [69u8; SECRET_KEY_SIZE];
+        let sk = SecretKey::Secp256k1Keccak256Ethereum(sk_data);
+
+        let bytes = sk.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 1);
+        assert_eq!(&bytes[1..], &sk_data);
+        assert_eq!(bytes.len(), SECRET_KEY_SIZE + 1);
+    }
+
+    #[test]
+    fn test_secret_key_to_bytes_bitcoin() {
+        let sk_data = [123u8; SECRET_KEY_SIZE];
+        let network = bitcoin::Network::Bitcoin;
+        let addr_type = bitcoin::AddressType::P2wpkh;
+        let sk = SecretKey::Secp256k1Bitcoin((sk_data, network, addr_type));
+
+        let bytes = sk.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 2);
+        assert_eq!(bytes[1], network.to_byte());
+        assert_eq!(bytes[2], addr_type.to_byte());
+        assert_eq!(&bytes[3..], &sk_data);
+        assert_eq!(bytes.len(), SECRET_KEY_SIZE + 3);
+    }
+
+    #[test]
+    fn test_secret_key_from_bytes_zilliqa() {
+        let sk_data = [42u8; SECRET_KEY_SIZE];
+        let sk = SecretKey::Secp256k1Sha256Zilliqa(sk_data);
+        let bytes = sk.to_bytes().unwrap();
+
+        let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+        assert_eq!(sk, recovered);
+    }
+
+    #[test]
+    fn test_secret_key_from_bytes_ethereum() {
+        let sk_data = [69u8; SECRET_KEY_SIZE];
+        let sk = SecretKey::Secp256k1Keccak256Ethereum(sk_data);
+        let bytes = sk.to_bytes().unwrap();
+
+        let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+        assert_eq!(sk, recovered);
+    }
+
+    #[test]
+    fn test_secret_key_from_bytes_bitcoin() {
+        let sk_data = [123u8; SECRET_KEY_SIZE];
+        let network = bitcoin::Network::Bitcoin;
+        let addr_type = bitcoin::AddressType::P2wpkh;
+        let sk = SecretKey::Secp256k1Bitcoin((sk_data, network, addr_type));
+        let bytes = sk.to_bytes().unwrap();
+
+        let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+        assert_eq!(sk, recovered);
+    }
+
+    #[test]
+    fn test_bitcoin_roundtrip_all_networks() {
+        let sk_data = [111u8; SECRET_KEY_SIZE];
+        let networks = vec![
+            bitcoin::Network::Bitcoin,
+            bitcoin::Network::Testnet,
+            bitcoin::Network::Testnet4,
+            bitcoin::Network::Signet,
+            bitcoin::Network::Regtest,
+        ];
+
+        for network in networks {
+            let sk = SecretKey::Secp256k1Bitcoin((sk_data, network, bitcoin::AddressType::P2wpkh));
+            let bytes = sk.to_bytes().unwrap();
+            let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+            assert_eq!(sk, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_roundtrip_all_address_types() {
+        let sk_data = [222u8; SECRET_KEY_SIZE];
+        let addr_types = vec![
+            bitcoin::AddressType::P2pkh,
+            bitcoin::AddressType::P2sh,
+            bitcoin::AddressType::P2wpkh,
+            bitcoin::AddressType::P2wsh,
+            bitcoin::AddressType::P2tr,
+            bitcoin::AddressType::P2a,
+        ];
+
+        for addr_type in addr_types {
+            let sk = SecretKey::Secp256k1Bitcoin((sk_data, bitcoin::Network::Bitcoin, addr_type));
+            let bytes = sk.to_bytes().unwrap();
+            let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+            assert_eq!(sk, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_roundtrip_combinations() {
+        let sk_data = [99u8; SECRET_KEY_SIZE];
+        let test_cases = vec![
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh),
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2tr),
+            (bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh),
+            (bitcoin::Network::Testnet, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Signet, bitcoin::AddressType::P2wpkh),
+        ];
+
+        for (network, addr_type) in test_cases {
+            let sk = SecretKey::Secp256k1Bitcoin((sk_data, network, addr_type));
+            let bytes = sk.to_bytes().unwrap();
+            let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+            assert_eq!(sk, recovered);
+        }
+    }
+
+    #[test]
+    fn test_from_bytes_invalid_length() {
+        let bytes = vec![0u8; SECRET_KEY_SIZE];
+        let result = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes));
+        assert!(matches!(result, Err(SecretKeyError::InvalidLength)));
+
+        let bytes = vec![2u8; SECRET_KEY_SIZE + 2];
+        let result = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes));
+        assert!(matches!(result, Err(SecretKeyError::InvalidLength)));
+    }
+
+    #[test]
+    fn test_from_bytes_invalid_key_type() {
+        let mut bytes = vec![0u8; SECRET_KEY_SIZE + 1];
+        bytes[0] = 99;
+        let result = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes));
+        assert!(matches!(result, Err(SecretKeyError::InvalidKeyType)));
+    }
+
+    #[test]
+    fn test_secret_key_display() {
+        let sk_data = [42u8; SECRET_KEY_SIZE];
+        let sk_zil = SecretKey::Secp256k1Sha256Zilliqa(sk_data);
+        let sk_eth = SecretKey::Secp256k1Keccak256Ethereum(sk_data);
+        let sk_btc = SecretKey::Secp256k1Bitcoin((sk_data, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh));
+
+        let zil_str = sk_zil.to_string();
+        let eth_str = sk_eth.to_string();
+        let btc_str = sk_btc.to_string();
+
+        assert_eq!(SecretKey::from_str(&zil_str).unwrap(), sk_zil);
+        assert_eq!(SecretKey::from_str(&eth_str).unwrap(), sk_eth);
+        assert_eq!(SecretKey::from_str(&btc_str).unwrap(), sk_btc);
+    }
+}

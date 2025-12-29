@@ -264,21 +264,7 @@ impl KeyPair {
                 Ok(sig)
             }
             KeyPair::Secp256k1Sha256((_, _)) => Err(KeyPairError::InvalidSecp256k1Sha256),
-            KeyPair::Secp256k1Bitcoin((_, _, _, _)) => {
-                let signer = self.get_local_eth_siger()?;
-                let signing_hash = data
-                    .eip712_signing_hash()
-                    .map_err(|e| KeyPairError::Eip712Error(e.to_string()))?;
-                let signature = signer
-                    .sign_hash(&signing_hash)
-                    .await
-                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
-                let sig = signature
-                    .try_into()
-                    .map_err(KeyPairError::InvalidSignature)?;
-
-                Ok(sig)
-            }
+            KeyPair::Secp256k1Bitcoin((_, _, _, _)) => Err(KeyPairError::InvalidSecp256k1Bitcoin),
         }
     }
 
@@ -622,6 +608,39 @@ mod tests_keypair {
         assert!(matches!(result, Err(KeyPairError::InvalidSecp256k1Sha256)));
     }
 
+    #[tokio::test]
+    async fn test_sign_typed_data_eip712_bitcoin_not_supported() {
+        let key_pair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let typed_data_json = json!({
+            "types": {
+                "EIP712Domain": [
+                    {"name": "name", "type": "string"},
+                    {"name": "version", "type": "string"},
+                    {"name": "chainId", "type": "uint256"},
+                    {"name": "verifyingContract", "type": "address"}
+                ],
+                "Person": [
+                    {"name": "name", "type": "string"},
+                    {"name": "wallet", "type": "address"}
+                ]
+            },
+            "primaryType": "Person",
+            "domain": {
+                "name": "Ether Mail",
+                "version": "1",
+                "chainId": 1,
+                "verifyingContract": "0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC"
+            },
+            "message": {
+                "name": "Bob",
+                "wallet": "0xbBbBBBBbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB"
+            }
+        });
+        let typed_data: TypedData = serde_json::from_str(&typed_data_json.to_string()).unwrap();
+        let result = key_pair.sign_typed_data_eip712(typed_data).await;
+        assert!(matches!(result, Err(KeyPairError::InvalidSecp256k1Bitcoin)));
+    }
+
     #[test]
     fn test_gen_bitcoin_keypair() {
         let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
@@ -811,6 +830,139 @@ mod tests_keypair {
             let address = keypair_btc.get_addr().unwrap();
             let btc_address = address.auto_format();
             assert_eq!(btc_address, expected_address, "Failed for WIF: {}", wif);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_roundtrip_all_networks() {
+        let networks = vec![
+            bitcoin::Network::Bitcoin,
+            bitcoin::Network::Testnet,
+            bitcoin::Network::Testnet4,
+            bitcoin::Network::Signet,
+            bitcoin::Network::Regtest,
+        ];
+
+        for network in networks {
+            let original = KeyPair::gen_bitcoin(network, bitcoin::AddressType::P2wpkh).unwrap();
+            let bytes = original.to_bytes().unwrap();
+            let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
+
+            assert_eq!(original, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_roundtrip_all_address_types() {
+        let addr_types = vec![
+            bitcoin::AddressType::P2pkh,
+            bitcoin::AddressType::P2sh,
+            bitcoin::AddressType::P2wpkh,
+            bitcoin::AddressType::P2wsh,
+            bitcoin::AddressType::P2tr,
+            bitcoin::AddressType::P2a,
+        ];
+
+        for addr_type in addr_types {
+            let original = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, addr_type).unwrap();
+            let bytes = original.to_bytes().unwrap();
+            let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
+
+            assert_eq!(original, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_roundtrip_combinations() {
+        let test_cases = vec![
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh),
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2tr),
+            (bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh),
+            (bitcoin::Network::Testnet, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Signet, bitcoin::AddressType::P2wpkh),
+            (bitcoin::Network::Regtest, bitcoin::AddressType::P2pkh),
+        ];
+
+        for (network, addr_type) in test_cases {
+            let original = KeyPair::gen_bitcoin(network, addr_type).unwrap();
+            let bytes = original.to_bytes().unwrap();
+            let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
+
+            assert_eq!(original, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_to_bytes_structure() {
+        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let bytes = keypair.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 2); // Bitcoin variant
+        assert_eq!(bytes[1], bitcoin::Network::Bitcoin.to_byte());
+        assert_eq!(bytes[2], bitcoin::AddressType::P2wpkh.to_byte());
+        assert_eq!(bytes.len(), PUB_KEY_SIZE + SECRET_KEY_SIZE + 3);
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_conversion_roundtrip() {
+        let zil_keypair = KeyPair::gen_sha256().unwrap();
+        let btc_keypair = zil_keypair.to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh);
+
+        let bytes = btc_keypair.to_bytes().unwrap();
+        let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
+
+        assert_eq!(btc_keypair, recovered);
+    }
+
+    #[test]
+    fn test_all_keypair_types_roundtrip() {
+        let zil = KeyPair::gen_sha256().unwrap();
+        let eth = KeyPair::gen_keccak256().unwrap();
+        let btc = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+
+        for keypair in [zil, eth, btc] {
+            let bytes = keypair.to_bytes().unwrap();
+            let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
+            assert_eq!(keypair, recovered);
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_network_preservation() {
+        let networks = vec![
+            bitcoin::Network::Bitcoin,
+            bitcoin::Network::Testnet,
+            bitcoin::Network::Regtest,
+        ];
+
+        for network in networks {
+            let keypair = KeyPair::gen_bitcoin(network, bitcoin::AddressType::P2wpkh).unwrap();
+
+            if let KeyPair::Secp256k1Bitcoin((_, _, recovered_network, _)) = keypair {
+                assert_eq!(recovered_network, network);
+            } else {
+                panic!("Expected Bitcoin keypair");
+            }
+        }
+    }
+
+    #[test]
+    fn test_bitcoin_keypair_address_type_preservation() {
+        let addr_types = vec![
+            bitcoin::AddressType::P2pkh,
+            bitcoin::AddressType::P2wpkh,
+            bitcoin::AddressType::P2tr,
+        ];
+
+        for addr_type in addr_types {
+            let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, addr_type).unwrap();
+
+            if let KeyPair::Secp256k1Bitcoin((_, _, _, recovered_addr_type)) = keypair {
+                assert_eq!(recovered_addr_type, addr_type);
+            } else {
+                panic!("Expected Bitcoin keypair");
+            }
         }
     }
 }
