@@ -170,10 +170,13 @@ mod tests {
         // BIP44 Bitcoin path: m/44'/0'/0'/0/0 (Legacy P2PKH)
         let btc_secret_key = derive_private_key(&seed, "m/44'/0'/0'/0/0").unwrap();
 
-        // Create Bitcoin keypair
         let sk_bytes = btc_secret_key.to_bytes();
-        let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin(sk_bytes.into()))
-            .unwrap();
+        let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin((
+            sk_bytes.into(),
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2pkh,
+        )))
+        .unwrap();
 
         // Get Bitcoin address
         let address = keypair.get_addr().unwrap();
@@ -184,8 +187,7 @@ mod tests {
             "Address should be Bitcoin type"
         );
 
-        // Get P2PKH address (legacy format starting with 1)
-        let p2pkh_address = address.to_btc_p2pkh().unwrap();
+        let p2pkh_address = address.auto_format();
         assert!(
             p2pkh_address.starts_with('1'),
             "P2PKH address should start with '1'"
@@ -208,22 +210,22 @@ mod tests {
         // BIP84 Bitcoin path: m/84'/0'/0'/0/0 (Native SegWit - most modern)
         let btc_secret_key = derive_private_key(&seed, "m/84'/0'/0'/0/0").unwrap();
 
-        // Create Bitcoin keypair
         let sk_bytes = btc_secret_key.to_bytes();
-        let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin(sk_bytes.into()))
-            .unwrap();
+        let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin((
+            sk_bytes.into(),
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        )))
+        .unwrap();
 
-        // Get Bitcoin address
         let address = keypair.get_addr().unwrap();
 
-        // Verify it's a Bitcoin address type
         assert!(
             matches!(address, Address::Secp256k1Bitcoin(_)),
             "Address should be Bitcoin type"
         );
 
-        // Get native SegWit address (bech32 format starting with bc1)
-        let bech32_address = address.to_btc_bech32().unwrap();
+        let bech32_address = address.auto_format();
         assert!(
             bech32_address.starts_with("bc1"),
             "Bech32 address should start with 'bc1'"

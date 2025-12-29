@@ -75,7 +75,9 @@ pub fn create_proto_tx(txn: &ZILTransactionRequest, pub_key: &PubKey) -> ProtoTr
     ProtoTransactionCoreInfo {
         version: version_from_chainid(txn.chain_id),
         toaddr: txn.to_addr.addr_bytes().to_vec(),
-        senderpubkey: Some(pub_key.as_bytes().into()),
+        senderpubkey: Some(ByteArray {
+            data: pub_key.as_bytes().to_vec(),
+        }),
         amount: Some(txn.amount.to_be_bytes().into()),
         gasprice: Some(txn.gas_price.to_be_bytes().into()),
         gaslimit: txn.gas_limit,

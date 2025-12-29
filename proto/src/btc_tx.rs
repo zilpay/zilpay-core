@@ -206,17 +206,23 @@ mod tests {
             BitcoinPrivateKey::from_wif("cTALNpTpRbbxTCJ2A5Vq88UxT44w1PE2cYqiB3n4hRvzyCev1Wwo")
                 .unwrap();
         let sk1_bytes = wif1.inner.secret_bytes();
-        let sk1 =
-            KeyPair::from_secret_key(crate::secret_key::SecretKey::Secp256k1Bitcoin(sk1_bytes))
-                .unwrap();
+        let sk1 = KeyPair::from_secret_key(crate::secret_key::SecretKey::Secp256k1Bitcoin((
+            sk1_bytes,
+            bitcoin::Network::Testnet,
+            bitcoin::AddressType::P2pkh,
+        )))
+        .unwrap();
 
         let wif2 =
             BitcoinPrivateKey::from_wif("cVf3kGh6552jU2rLaKwXTKq5APHPoZqCP4GQzQirWGHFoHQ9rEVt")
                 .unwrap();
         let sk2_bytes = wif2.inner.secret_bytes();
-        let sk2 =
-            KeyPair::from_secret_key(crate::secret_key::SecretKey::Secp256k1Bitcoin(sk2_bytes))
-                .unwrap();
+        let sk2 = KeyPair::from_secret_key(crate::secret_key::SecretKey::Secp256k1Bitcoin((
+            sk2_bytes,
+            bitcoin::Network::Testnet,
+            bitcoin::AddressType::P2pkh,
+        )))
+        .unwrap();
 
         let addr1_decoded = bs58::decode("n4bkvTyU1dVdzsrhWBqBw8fEMbHjJvtmJR")
             .into_vec()

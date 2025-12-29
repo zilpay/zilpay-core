@@ -235,7 +235,8 @@ mod tests {
     fn test_try_from_slice() {
         let zil_slice = &[0u8; PUB_KEY_SIZE + 1][..];
         let eth_slice = &[1u8; PUB_KEY_SIZE + 1][..];
-        let invalid_slice = &[2u8; PUB_KEY_SIZE + 1][..];
+        let btc_wrong_length_slice = &[2u8; PUB_KEY_SIZE + 1][..];
+        let invalid_type_slice = &[99u8; PUB_KEY_SIZE + 1][..];
         let short_slice = &[0u8; PUB_KEY_SIZE][..];
 
         assert!(matches!(
@@ -247,7 +248,11 @@ mod tests {
             Ok(PubKey::Secp256k1Keccak256(_))
         ));
         assert!(matches!(
-            PubKey::try_from(invalid_slice),
+            PubKey::try_from(btc_wrong_length_slice),
+            Err(PubKeyError::InvalidLength)
+        ));
+        assert!(matches!(
+            PubKey::try_from(invalid_type_slice),
             Err(PubKeyError::InvalidKeyType)
         ));
         assert!(matches!(

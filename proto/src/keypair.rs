@@ -11,6 +11,7 @@ use k256::SecretKey as K256SecretKey;
 use crate::{
     address::Address,
     bip32::derive_private_key,
+    btc_utils::ByteCodec,
     pubkey::PubKey,
     signature::Signature,
     tx::{TransactionReceipt, TransactionRequest},
@@ -30,7 +31,7 @@ type Result<T> = std::result::Result<T, KeyPairError>;
 pub enum KeyPair {
     Secp256k1Sha256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
     Secp256k1Keccak256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
-    Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
+    Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)),
 }
 
 impl KeyPair {
@@ -46,17 +47,17 @@ impl KeyPair {
         Ok(Self::Secp256k1Keccak256(keys))
     }
 
-    pub fn gen_bitcoin() -> Result<Self> {
-        let keys = Self::gen_keys_bytes()?;
+    pub fn gen_bitcoin(network: bitcoin::Network, addr_type: bitcoin::AddressType) -> Result<Self> {
+        let (pk, sk) = Self::gen_keys_bytes()?;
 
-        Ok(Self::Secp256k1Bitcoin(keys))
+        Ok(Self::Secp256k1Bitcoin((pk, sk, network, addr_type)))
     }
 
     pub fn to_sha256(self) -> Self {
         match self {
             Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Sha256(vlaue),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Sha256(value),
-            Self::Secp256k1Bitcoin(value) => Self::Secp256k1Sha256(value),
+            Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Sha256((pk, sk)),
         }
     }
 
@@ -64,15 +65,15 @@ impl KeyPair {
         match self {
             Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Keccak256(vlaue),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Keccak256(value),
-            Self::Secp256k1Bitcoin(value) => Self::Secp256k1Keccak256(value),
+            Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Keccak256((pk, sk)),
         }
     }
 
-    pub fn to_bitcoin(self) -> Self {
+    pub fn to_bitcoin(self, network: bitcoin::Network, addr_type: bitcoin::AddressType) -> Self {
         match self {
-            Self::Secp256k1Sha256(value) => Self::Secp256k1Bitcoin(value),
-            Self::Secp256k1Keccak256(value) => Self::Secp256k1Bitcoin(value),
-            Self::Secp256k1Bitcoin(value) => Self::Secp256k1Bitcoin(value),
+            Self::Secp256k1Sha256((pk, sk)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
+            Self::Secp256k1Keccak256((pk, sk)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
+            Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
         }
     }
 
@@ -125,7 +126,9 @@ impl KeyPair {
                 Ok(KeyPair::Secp256k1Keccak256((pub_key, sk)))
             }
             SecretKey::Secp256k1Sha256Zilliqa(sk) => Ok(KeyPair::Secp256k1Sha256((pub_key, sk))),
-            SecretKey::Secp256k1Bitcoin(sk) => Ok(KeyPair::Secp256k1Bitcoin((pub_key, sk))),
+            SecretKey::Secp256k1Bitcoin((sk, network, addr_type)) => {
+                Ok(KeyPair::Secp256k1Bitcoin((pub_key, sk, network, addr_type)))
+            }
         }
     }
 
@@ -164,7 +167,9 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((_, sk)) => Ok(SecretKey::Secp256k1Sha256Zilliqa(*sk)),
             KeyPair::Secp256k1Keccak256((_, sk)) => Ok(SecretKey::Secp256k1Keccak256Ethereum(*sk)),
-            KeyPair::Secp256k1Bitcoin((_, sk)) => Ok(SecretKey::Secp256k1Bitcoin(*sk)),
+            KeyPair::Secp256k1Bitcoin((_, sk, network, addr_type)) => {
+                Ok(SecretKey::Secp256k1Bitcoin((*sk, *network, *addr_type)))
+            }
         }
     }
 
@@ -172,7 +177,9 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((pk, _)) => Ok(PubKey::Secp256k1Sha256(*pk)),
             KeyPair::Secp256k1Keccak256((pk, _)) => Ok(PubKey::Secp256k1Keccak256(*pk)),
-            KeyPair::Secp256k1Bitcoin((pk, _)) => Ok(PubKey::Secp256k1Bitcoin(*pk)),
+            KeyPair::Secp256k1Bitcoin((pk, _, network, addr_type)) => {
+                Ok(PubKey::Secp256k1Bitcoin((*pk, *network, *addr_type)))
+            }
         }
     }
 
@@ -180,7 +187,7 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((pk, _)) => pk,
             KeyPair::Secp256k1Keccak256((pk, _)) => pk,
-            KeyPair::Secp256k1Bitcoin((pk, _)) => pk,
+            KeyPair::Secp256k1Bitcoin((pk, _, _, _)) => pk,
         }
     }
 
@@ -188,7 +195,7 @@ impl KeyPair {
         match self {
             KeyPair::Secp256k1Sha256((_, sk)) => *sk,
             KeyPair::Secp256k1Keccak256((_, sk)) => *sk,
-            KeyPair::Secp256k1Bitcoin((_, sk)) => *sk,
+            KeyPair::Secp256k1Bitcoin((_, sk, _, _)) => *sk,
         }
     }
 
@@ -226,7 +233,7 @@ impl KeyPair {
 
                 Ok(sig)
             }
-            KeyPair::Secp256k1Bitcoin((_, _sk)) => {
+            KeyPair::Secp256k1Bitcoin((_, _sk, _, _)) => {
                 let signer = self.get_local_eth_siger()?;
                 let sig = signer
                     .sign_message_sync(msg)
@@ -257,7 +264,7 @@ impl KeyPair {
                 Ok(sig)
             }
             KeyPair::Secp256k1Sha256((_, _)) => Err(KeyPairError::InvalidSecp256k1Sha256),
-            KeyPair::Secp256k1Bitcoin((_, _)) => {
+            KeyPair::Secp256k1Bitcoin((_, _, _, _)) => {
                 let signer = self.get_local_eth_siger()?;
                 let signing_hash = data
                     .eip712_signing_hash()
@@ -290,47 +297,73 @@ impl KeyPair {
             .map_err(|e| KeyPairError::TransactionErrors(e.to_string()))
     }
 
-    pub fn to_bytes(&self) -> Result<[u8; KEYPAIR_BYTES_SIZE]> {
-        let mut result = [0u8; KEYPAIR_BYTES_SIZE];
-
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
         match self {
             KeyPair::Secp256k1Sha256((pk, sk)) => {
-                result[0] = 0;
-                result[1..PUB_KEY_SIZE + 1].copy_from_slice(pk);
-                result[PUB_KEY_SIZE + 1..].copy_from_slice(sk);
+                let mut result = vec![0u8];
+                result.extend_from_slice(pk);
+                result.extend_from_slice(sk);
+                Ok(result)
             }
             KeyPair::Secp256k1Keccak256((pk, sk)) => {
-                result[0] = 1;
-                result[1..PUB_KEY_SIZE + 1].copy_from_slice(pk);
-                result[PUB_KEY_SIZE + 1..].copy_from_slice(sk);
+                let mut result = vec![1u8];
+                result.extend_from_slice(pk);
+                result.extend_from_slice(sk);
+                Ok(result)
             }
-            KeyPair::Secp256k1Bitcoin((pk, sk)) => {
-                result[0] = 2;
-                result[1..PUB_KEY_SIZE + 1].copy_from_slice(pk);
-                result[PUB_KEY_SIZE + 1..].copy_from_slice(sk);
+            KeyPair::Secp256k1Bitcoin((pk, sk, network, addr_type)) => {
+                let mut result = vec![2u8];
+                result.push(network.to_byte());
+                result.push(addr_type.to_byte());
+                result.extend_from_slice(pk);
+                result.extend_from_slice(sk);
+                Ok(result)
             }
-        };
-
-        Ok(result)
+        }
     }
 
     pub fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Result<Self> {
-        if bytes.len() != KEYPAIR_BYTES_SIZE {
+        if bytes.is_empty() {
             return Err(KeyPairError::InvalidLength);
         }
 
         let key_type = bytes[0];
-        let pk: [u8; PUB_KEY_SIZE] = bytes[1..PUB_KEY_SIZE + 1]
-            .try_into()
-            .map_err(|_| KeyPairError::InvalidPublicKey)?;
-        let sk: [u8; SECRET_KEY_SIZE] = bytes[PUB_KEY_SIZE + 1..]
-            .try_into()
-            .map_err(|_| KeyPairError::InvalidSecretKey)?;
 
         match key_type {
-            0 => Ok(KeyPair::Secp256k1Sha256((pk, sk))),
-            1 => Ok(KeyPair::Secp256k1Keccak256((pk, sk))),
-            2 => Ok(KeyPair::Secp256k1Bitcoin((pk, sk))),
+            0 | 1 => {
+                if bytes.len() != KEYPAIR_BYTES_SIZE {
+                    return Err(KeyPairError::InvalidLength);
+                }
+                let pk: [u8; PUB_KEY_SIZE] = bytes[1..PUB_KEY_SIZE + 1]
+                    .try_into()
+                    .map_err(|_| KeyPairError::InvalidPublicKey)?;
+                let sk: [u8; SECRET_KEY_SIZE] = bytes[PUB_KEY_SIZE + 1..]
+                    .try_into()
+                    .map_err(|_| KeyPairError::InvalidSecretKey)?;
+
+                match key_type {
+                    0 => Ok(KeyPair::Secp256k1Sha256((pk, sk))),
+                    1 => Ok(KeyPair::Secp256k1Keccak256((pk, sk))),
+                    _ => unreachable!(),
+                }
+            }
+            2 => {
+                if bytes.len() != PUB_KEY_SIZE + SECRET_KEY_SIZE + 3 {
+                    return Err(KeyPairError::InvalidLength);
+                }
+                let network = bitcoin::Network::from_byte(bytes[1])
+                    .map_err(|_| KeyPairError::InvalidKeyType)?;
+                let addr_type = bitcoin::AddressType::from_byte(bytes[2])
+                    .map_err(|_| KeyPairError::InvalidKeyType)?;
+                let pk: [u8; PUB_KEY_SIZE] = bytes[3..PUB_KEY_SIZE + 3]
+                    .try_into()
+                    .map_err(|_| KeyPairError::InvalidPublicKey)?;
+                let sk: [u8; SECRET_KEY_SIZE] = bytes[PUB_KEY_SIZE + 3..]
+                    .try_into()
+                    .map_err(|_| KeyPairError::InvalidSecretKey)?;
+
+                Ok(KeyPair::Secp256k1Bitcoin((pk, sk, network, addr_type)))
+            }
             _ => Err(KeyPairError::InvalidKeyType),
         }
     }
@@ -591,7 +624,7 @@ mod tests_keypair {
 
     #[test]
     fn test_gen_bitcoin_keypair() {
-        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         assert!(matches!(keypair, KeyPair::Secp256k1Bitcoin(_)));
 
         let pubkey = keypair.get_pubkey().unwrap();
@@ -603,7 +636,7 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_get_addr() {
-        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let addr = keypair.get_addr().unwrap();
 
         assert!(matches!(addr, Address::Secp256k1Bitcoin(_)));
@@ -611,16 +644,16 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_to_bytes() {
-        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let bytes = keypair.to_bytes().unwrap();
 
         assert_eq!(bytes[0], 2);
-        assert_eq!(bytes.len(), KEYPAIR_BYTES_SIZE);
+        assert_eq!(bytes.len(), PUB_KEY_SIZE + SECRET_KEY_SIZE + 3);
     }
 
     #[test]
     fn test_bitcoin_keypair_from_bytes() {
-        let original = KeyPair::gen_bitcoin().unwrap();
+        let original = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let bytes = original.to_bytes().unwrap();
         let recovered = KeyPair::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
 
@@ -629,7 +662,7 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_sign_message() {
-        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let message = b"Hello Bitcoin!";
 
         let signature = keypair.sign_message(message);
@@ -639,14 +672,14 @@ mod tests_keypair {
     #[test]
     fn test_bitcoin_keypair_conversion() {
         let keypair_zil = KeyPair::gen_sha256().unwrap();
-        let keypair_btc = keypair_zil.to_bitcoin();
+        let keypair_btc = keypair_zil.to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh);
 
         assert!(matches!(keypair_btc, KeyPair::Secp256k1Bitcoin(_)));
     }
 
     #[test]
     fn test_bitcoin_from_secret_key() {
-        let sk = SecretKey::Secp256k1Bitcoin([42u8; SECRET_KEY_SIZE]);
+        let sk = SecretKey::Secp256k1Bitcoin(([42u8; SECRET_KEY_SIZE], bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh));
         let result = KeyPair::from_secret_key(sk);
 
         assert!(result.is_ok());
@@ -656,32 +689,25 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_address_generation() {
-        let keypair = KeyPair::gen_bitcoin().unwrap();
+        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let address = keypair.get_addr().unwrap();
 
-        let p2pkh = address.to_btc_p2pkh().unwrap();
-        assert!(p2pkh.starts_with('1'));
-
-        let bech32 = address.to_btc_bech32().unwrap();
-        assert!(bech32.starts_with("bc1"));
+        let btc_addr = address.auto_format();
+        assert!(btc_addr.starts_with("bc1"));
     }
 
     #[test]
     fn test_bitcoin_known_key_address_derivation() {
         let public_key_hex = "0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
         let expected_address = "1BgGZ9tcN4rm9KBzDn7KprQz87SZ26SAMH";
-        let expected_hash160 = "751e76e8199196d454941c45d1b3a323f1433bd6";
 
         let pk_bytes = hex::decode(public_key_hex).unwrap();
         let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
-        let pubkey = PubKey::Secp256k1Bitcoin(pk_array);
+        let pubkey = PubKey::Secp256k1Bitcoin((pk_array, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
 
         let address = Address::from_pubkey(&pubkey).unwrap();
 
-        let hash160_hex = hex::encode(address.addr_bytes());
-        assert_eq!(hash160_hex, expected_hash160);
-
-        let btc_address = address.to_btc_p2pkh().unwrap();
+        let btc_address = address.auto_format();
         assert_eq!(btc_address, expected_address);
     }
 
@@ -713,10 +739,10 @@ mod tests_keypair {
         for (pubkey_hex, expected_addr) in test_cases {
             let pk_bytes = hex::decode(pubkey_hex).unwrap();
             let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
-            let pubkey = PubKey::Secp256k1Bitcoin(pk_array);
+            let pubkey = PubKey::Secp256k1Bitcoin((pk_array, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
 
             let address = Address::from_pubkey(&pubkey).unwrap();
-            let btc_address = address.to_btc_p2pkh().unwrap();
+            let btc_address = address.auto_format();
 
             assert_eq!(
                 btc_address, expected_addr,
@@ -739,15 +765,15 @@ mod tests_keypair {
 
         let private_key_bytes: [u8; SECRET_KEY_SIZE] = decoded[1..33].try_into().unwrap();
 
-        let keypair = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
-        let keypair_btc = KeyPair::Secp256k1Bitcoin(keypair);
+        let (pk, sk) = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
+        let keypair_btc = KeyPair::Secp256k1Bitcoin((pk, sk, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
 
         let pubkey = keypair_btc.get_pubkey().unwrap();
         let pubkey_hex = hex::encode(pubkey.as_bytes());
         assert_eq!(pubkey_hex, expected_pubkey);
 
         let address = keypair_btc.get_addr().unwrap();
-        let btc_address = address.to_btc_p2pkh().unwrap();
+        let btc_address = address.auto_format();
         assert_eq!(btc_address, expected_address);
     }
 
@@ -775,15 +801,15 @@ mod tests_keypair {
             let decoded = bs58::decode(wif).into_vec().unwrap();
             let private_key_bytes: [u8; SECRET_KEY_SIZE] = decoded[1..33].try_into().unwrap();
 
-            let keypair = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
-            let keypair_btc = KeyPair::Secp256k1Bitcoin(keypair);
+            let (pk, sk) = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
+            let keypair_btc = KeyPair::Secp256k1Bitcoin((pk, sk, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
 
             let pubkey = keypair_btc.get_pubkey().unwrap();
             let pubkey_hex = hex::encode(pubkey.as_bytes());
             assert_eq!(pubkey_hex, expected_pubkey, "Failed for WIF: {}", wif);
 
             let address = keypair_btc.get_addr().unwrap();
-            let btc_address = address.to_btc_p2pkh().unwrap();
+            let btc_address = address.auto_format();
             assert_eq!(btc_address, expected_address, "Failed for WIF: {}", wif);
         }
     }
