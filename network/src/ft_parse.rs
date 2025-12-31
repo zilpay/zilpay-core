@@ -16,7 +16,7 @@ use rpc::{
 use serde_json::{json, Value};
 use token::Result;
 
-type RequestResult<'a> = std::result::Result<Vec<(Value, RequestType<'a>)>, TokenError>;
+type RequestResult<'a, T = Value> = std::result::Result<Vec<(T, RequestType<'a>)>, TokenError>;
 
 trait ResponseValidator {
     fn validate(&self) -> Result<&Self>;
@@ -109,6 +109,7 @@ pub fn build_token_requests<'a>(
     let size = match contract {
         Address::Secp256k1Sha256(_) => 1 + accounts.len(),
         Address::Secp256k1Keccak256(_) => 3 + accounts.len(),
+        _ => 0,
     };
     let mut requests = Vec::with_capacity(size);
 
@@ -118,6 +119,12 @@ pub fn build_token_requests<'a>(
         }
         Address::Secp256k1Keccak256(_) => {
             build_eth_requests(contract, accounts, native, &mut requests)?;
+        }
+        Address::Secp256k1Bitcoin(_) => {
+            // Bitcoin support not yet implemented
+            return Err(TokenError::NetworkError(
+                "Bitcoin tokens not yet supported".to_string(),
+            ))?;
         }
     }
 
@@ -150,6 +157,11 @@ fn build_zil_requests<'a>(
             Address::Secp256k1Keccak256(_) => &account
                 .to_eth_checksummed()
                 .map_err(TokenError::InvalidContractAddress)?,
+            _ => {
+                return Err(TokenError::InvalidContractAddress(
+                    errors::address::AddressError::InvalidKeyType,
+                ))
+            }
         };
 
         let request = if native {

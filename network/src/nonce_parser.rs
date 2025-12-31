@@ -29,6 +29,7 @@ pub fn build_nonce_request(address: &Address) -> Value {
                 EvmMethods::GetTransactionCount,
             )
         }
+        _ => Value::Null,
     }
 }
 
@@ -46,5 +47,6 @@ pub fn process_nonce_response(response: &ResultRes<Value>, address_type: &Addres
             .and_then(|v| v.as_str())
             .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
             .unwrap_or_default()),
+        _ => Err(errors::network::NetworkErrors::InvlaidChainConfig),
     }
 }
