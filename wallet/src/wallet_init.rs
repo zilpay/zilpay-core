@@ -241,6 +241,7 @@ mod tests {
     use rand::Rng;
     use rpc::network_config::ChainConfig;
     use storage::LocalStorage;
+    use test_data::{ANVIL_MNEMONIC, TEST_PASSWORD};
 
     use crate::{
         wallet_crypto::WalletCrypto, wallet_data::AuthMethod, wallet_init::WalletInit,
@@ -248,9 +249,6 @@ mod tests {
         Wallet, WalletConfig,
     };
 
-    const MNEMONIC_STR: &str =
-        "green process gate doctor slide whip priority shrug diamond crumble average help";
-    const PASSWORD: &[u8] = b"Test_password";
     const PASSPHRASE: &str = "";
 
     fn setup_test_storage() -> (Arc<LocalStorage>, String) {
@@ -266,9 +264,9 @@ mod tests {
     fn test_init_from_bip39_zil() {
         let (storage, _dir) = setup_test_storage();
 
-        let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
-        let mnemonic = Mnemonic::parse_str(&EN_WORDS, MNEMONIC_STR).unwrap();
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
             (
                 DerivationPath::new(slip44::ZILLIQA, i),
@@ -322,7 +320,7 @@ mod tests {
     fn test_init_from_sk() {
         let (storage, _dir) = setup_test_storage();
 
-        let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let storage = Arc::new(storage);

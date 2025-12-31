@@ -70,6 +70,7 @@ mod tests_wallet_tokens {
     use rpc::network_config::ChainConfig;
     use settings::wallet_settings::WalletSettings;
     use storage::LocalStorage;
+    use test_data::TEST_PASSWORD;
     use token::ft::FToken;
 
     use crate::{
@@ -77,8 +78,6 @@ mod tests_wallet_tokens {
         wallet_storage::StorageOperations, wallet_token::TokenManagement, SecretKeyParams, Wallet,
         WalletConfig,
     };
-
-    const PASSWORD: &[u8] = b"Test_password";
 
     fn gen_bsc_token() -> FToken {
         FToken {
@@ -110,7 +109,7 @@ mod tests_wallet_tokens {
 
         let settings = WalletSettings::default();
         let argon_seed =
-            derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+            derive_key(TEST_PASSWORD.as_bytes(), PROOF_SALT, &settings.argon_params.into_config()).unwrap();
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
@@ -203,7 +202,7 @@ mod tests_wallet_tokens {
 
         let settings = WalletSettings::default();
         let argon_seed =
-            derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+            derive_key(TEST_PASSWORD.as_bytes(), PROOF_SALT, &settings.argon_params.into_config()).unwrap();
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
@@ -318,7 +317,7 @@ mod tests_wallet_tokens {
 
         let settings = WalletSettings::default();
         let argon_seed =
-            derive_key(PASSWORD, PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+            derive_key(TEST_PASSWORD.as_bytes(), PROOF_SALT, &settings.argon_params.into_config()).unwrap();
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,

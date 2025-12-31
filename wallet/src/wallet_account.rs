@@ -153,10 +153,8 @@ mod tests {
     use rpc::network_config::ChainConfig;
     use std::sync::Arc;
     use storage::LocalStorage;
+    use test_data::{ANVIL_MNEMONIC, TEST_PASSWORD};
 
-    const MNEMONIC_STR: &str =
-        "green process gate doctor slide whip priority shrug diamond crumble average help";
-    const PASSWORD: &[u8] = b"Test_password";
     const PASSPHRASE: &str = "";
 
     fn setup_test_storage() -> (Arc<LocalStorage>, String) {
@@ -171,11 +169,11 @@ mod tests {
     #[test]
     fn test_select_account() {
         // Setup initial wallet with bip39 for multiple accounts
-        let argon_seed = derive_key(PASSWORD, "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
         let (storage, _dir) = setup_test_storage();
 
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
-        let mnemonic = Mnemonic::parse_str(&EN_WORDS, MNEMONIC_STR).unwrap();
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
 
         // Create wallet with 3 accounts
         let indexes = [0, 1, 2].map(|i| {

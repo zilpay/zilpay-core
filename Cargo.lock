@@ -6271,6 +6271,7 @@ dependencies = [
  "settings",
  "sha2",
  "storage",
+ "test_data",
  "token",
  "tokio",
 ]
