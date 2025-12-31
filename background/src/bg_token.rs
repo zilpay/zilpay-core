@@ -205,13 +205,13 @@ mod tests_background_tokens {
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
     };
     use config::address::ADDR_LEN;
-    use crypto::{bip49::DerivationPath, slip44};
+    use test_data::{gen_device_indicators, gen_eth_account, gen_zil_account, gen_zil_testnet_conf, TEST_PASSWORD};
+    use crypto::slip44;
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
     use tokio;
     use wallet::wallet_token::TokenManagement;
 
-    const PASSWORD: &str = "TEst password";
     const USDT_TOKEN: &str = "0x55d398326f99059fF775485246999027B3197955";
 
     fn setup_test_background() -> (Background, String) {
@@ -221,7 +221,7 @@ mod tests_background_tokens {
         (bg, dir)
     }
 
-    fn gen_net_conf() -> ChainConfig {
+    fn gen_bsc_mainnet_conf() -> ChainConfig {
         ChainConfig {
             ftokens: vec![],
             logo: String::new(),
@@ -245,7 +245,7 @@ mod tests_background_tokens {
         }
     }
 
-    fn gen_bsc_token(chain_hash: u64) -> FToken {
+    fn gen_bsc_mainnet_token(chain_hash: u64) -> FToken {
         FToken {
             rate: 0f64,
             chain_hash,
@@ -265,15 +265,13 @@ mod tests_background_tokens {
         let (mut bg, _dir) = setup_test_background();
 
         let words = Background::gen_bip39(24).unwrap();
-        let accounts = [(
-            DerivationPath::new(slip44::ETHEREUM, 0),
-            "Bsc account 1".to_string(),
-        )];
-        let net_config = gen_net_conf();
+        let accounts = [gen_eth_account(0, "Bsc account 1")];
+        let net_config = gen_bsc_mainnet_conf();
+        let device_indicators = gen_device_indicators("apple");
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: PASSWORD,
+            password: TEST_PASSWORD,
             mnemonic_check: true,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
@@ -282,8 +280,8 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("0000")],
-            ftokens: vec![gen_bsc_token(net_config.hash())],
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
         .unwrap();
         let providers = bg.get_providers();
@@ -329,41 +327,21 @@ mod tests_background_tokens {
 
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [
-            (
-                DerivationPath::new(slip44::ETHEREUM, 0),
-                "account 0".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 1),
-                "account 1".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 2),
-                "account 2".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 3),
-                "account 3".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 4),
-                "account 4".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 5),
-                "account 5".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 6),
-                "account 6".to_string(),
-            ),
+            gen_eth_account(0, "account 0"),
+            gen_eth_account(1, "account 1"),
+            gen_eth_account(2, "account 2"),
+            gen_eth_account(3, "account 3"),
+            gen_eth_account(4, "account 4"),
+            gen_eth_account(5, "account 5"),
+            gen_eth_account(6, "account 6"),
         ];
-        let net_config = gen_net_conf();
+        let net_config = gen_bsc_mainnet_conf();
+        let device_indicators = gen_device_indicators("test");
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: PASSWORD,
+            password: TEST_PASSWORD,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
@@ -371,8 +349,8 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("5435h"), String::from("0000")],
-            ftokens: vec![gen_bsc_token(net_config.hash())],
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
         .unwrap();
         let providers = bg.get_providers();
@@ -409,42 +387,21 @@ mod tests_background_tokens {
         }
     }
 
-    fn gen_zil_net_conf() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 0],
-            name: "Zilliqa".to_string(),
-            chain: "ZIL".to_string(),
-            short_name: "zil".to_string(),
-            rpc: vec!["https://api.zilliqa.com/".to_string()],
-            features: vec![],
-            slip_44: slip44::ZILLIQA,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        }
-    }
-
     #[tokio::test]
     async fn test_build_token_transfer_zil() {
         let (mut bg, _dir) = setup_test_background();
 
         let words = Background::gen_bip39(24).unwrap();
-        let accounts = [(
-            DerivationPath::new(slip44::ZILLIQA, 0),
-            "Zil account 1".to_string(),
-        )];
-        let net_config = gen_zil_net_conf();
+        let accounts = [gen_zil_account(0, "Zil account 1")];
+        let net_config = gen_zil_testnet_conf();
+        let device_indicators = gen_device_indicators("apple");
 
         bg.add_provider(net_config.clone()).unwrap();
 
         let zlp_token = FToken::zlp(net_config.hash());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: PASSWORD,
+            password: TEST_PASSWORD,
             mnemonic_check: true,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
@@ -453,7 +410,7 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("0000")],
+            device_indicators: &device_indicators,
             ftokens: vec![zlp_token.clone()],
         })
         .unwrap();

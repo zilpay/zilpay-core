@@ -1333,6 +1333,7 @@ dependencies = [
  "settings",
  "sha2",
  "storage",
+ "test_data",
  "token",
  "tokio",
  "wallet",
@@ -5571,6 +5572,17 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "test_data"
+version = "0.1.0"
+dependencies = [
+ "config",
+ "crypto",
+ "proto",
+ "rpc",
+ "token",
 ]
 
 [[package]]

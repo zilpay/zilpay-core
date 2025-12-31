@@ -1,0 +1,11 @@
+[package]
+name = "test_data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+config = { path = "../config" }
+crypto = { path = "../crypto" }
+proto = { path = "../proto" }
+rpc = { path = "../rpc" }
+token = { path = "../token" }
