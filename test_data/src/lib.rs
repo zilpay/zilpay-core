@@ -1,7 +1,7 @@
 use config::address::ADDR_LEN;
 use crypto::{bip49::DerivationPath, slip44};
 use proto::address::Address;
-use rpc::network_config::ChainConfig;
+use rpc::network_config::{ChainConfig, Explorer};
 use std::collections::HashMap;
 use token::ft::FToken;
 
@@ -93,6 +93,73 @@ pub fn gen_zil_account(index: u32, name: &str) -> (DerivationPath, String) {
 
 pub fn gen_device_indicators(device_name: &str) -> [String; 2] {
     [device_name.to_string(), "0000".to_string()]
+}
+
+pub fn gen_zil_mainnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [1, 0],
+        name: "Zilliqa".to_string(),
+        chain: "ZIL".to_string(),
+        short_name: String::new(),
+        rpc: vec!["https://api.zilliqa.com".to_string()],
+        features: vec![155],
+        slip_44: slip44::ZILLIQA,
+        ens: None,
+        explorers: vec![Explorer {
+            name: "ViewBlock".to_string(),
+            url: "https://viewblock.io/zilliqa".to_string(),
+            icon: None,
+            standard: 3091,
+        }],
+        fallback_enabled: true,
+    }
+}
+
+pub fn gen_bsc_testnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [97, 0],
+        name: "Binance-smart-chain".to_string(),
+        chain: "BSC".to_string(),
+        short_name: String::new(),
+        rpc: vec!["https://bsc-testnet-dataseed.bnbchain.org".to_string()],
+        features: vec![155],
+        slip_44: slip44::ETHEREUM,
+        ens: None,
+        explorers: vec![Explorer {
+            name: "BscScan".to_string(),
+            url: "https://bscscan.com".to_string(),
+            icon: None,
+            standard: 3091,
+        }],
+        fallback_enabled: true,
+    }
+}
+
+pub fn gen_eth_mainnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [1, 0],
+        name: "Ethereum".to_string(),
+        chain: "ETH".to_string(),
+        short_name: String::new(),
+        rpc: vec!["https://rpc.mevblocker.io".to_string()],
+        features: vec![155, 1559, 4844],
+        slip_44: slip44::ETHEREUM,
+        ens: None,
+        explorers: vec![],
+        fallback_enabled: true,
+    }
 }
 
 #[allow(dead_code)]

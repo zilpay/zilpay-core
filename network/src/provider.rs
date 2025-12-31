@@ -227,7 +227,7 @@ mod tests_network {
     use history::status::TransactionStatus;
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
-    use rpc::network_config::Explorer;
+    use test_data::{gen_anvil_net_conf, gen_bsc_testnet_conf, gen_eth_mainnet_conf, gen_zil_testnet_conf};
     use tokio;
 
     fn setup_temp_storage() -> Arc<LocalStorage> {
@@ -236,49 +236,6 @@ mod tests_network {
 
         let storage = LocalStorage::from(&dir).unwrap();
         Arc::new(storage)
-    }
-
-    fn create_bsc_config() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [97, 0],
-            name: "Binance-smart-chain".to_string(),
-            chain: "BSC".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://bsc-testnet-dataseed.bnbchain.org".to_string()],
-            features: vec![155],
-            slip_44: 60,
-            ens: None,
-            explorers: vec![Explorer {
-                name: "BscScan".to_string(),
-                url: "https://bscscan.com".to_string(),
-                icon: None,
-                standard: 3091,
-            }],
-            fallback_enabled: true,
-        }
-    }
-
-    fn create_testnet_zilliqa_config() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 1],
-            name: "Zilliqa".to_string(),
-            chain: "ZIL".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://api.testnet.zilliqa.com".to_string()],
-            features: vec![],
-            slip_44: 313,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        }
     }
 
     fn create_mainnet_zilliqa_config() -> ChainConfig {
@@ -305,7 +262,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_ftoken_meta_bsc() {
-        let net_conf = create_bsc_config();
+        let net_conf = gen_bsc_testnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let token_addr =
@@ -429,7 +386,7 @@ mod tests_network {
     #[test]
     fn test_save_and_load_single_network() {
         let storage = setup_temp_storage();
-        let config = create_testnet_zilliqa_config();
+        let config = gen_zil_testnet_conf();
         let providers = vec![NetworkProvider::new(config)];
 
         NetworkProvider::save_network_configs(&providers, Arc::clone(&storage)).unwrap();
@@ -437,15 +394,15 @@ mod tests_network {
         let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         assert_eq!(providers.len(), loaded_providers.len());
-        assert!(loaded_providers.iter().any(|p| p.config.name == "Zilliqa"));
-        assert!(loaded_providers.iter().any(|p| p.config.chain_id() == 1));
+        assert!(loaded_providers.iter().any(|p| p.config.name == "Zilliqa(testnet)"));
+        assert!(loaded_providers.iter().any(|p| p.config.chain_id() == 333));
     }
 
     #[test]
     fn test_save_and_load_multiple_networks() {
         let storage = setup_temp_storage();
 
-        let base_config = create_testnet_zilliqa_config();
+        let base_config = gen_zil_testnet_conf();
         let configs = [
             ChainConfig {
                 name: "Test Network 1".to_string(),
@@ -484,7 +441,7 @@ mod tests_network {
     #[test]
     fn test_update_networks() {
         let storage = setup_temp_storage();
-        let base_config = create_testnet_zilliqa_config();
+        let base_config = gen_zil_testnet_conf();
 
         let mut providers = vec![NetworkProvider::new(ChainConfig {
             name: "Initial Network".to_string(),
@@ -513,8 +470,8 @@ mod tests_network {
     }
 
     #[tokio::test]
-    async fn test_get_nonce_evm() {
-        let net_conf = create_bsc_config();
+    async fn test_get_nonce_anvil() {
+        let net_conf = gen_anvil_net_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let account = [
@@ -549,8 +506,8 @@ mod tests_network {
     }
 
     #[tokio::test]
-    async fn test_estimate_gas_payment() {
-        let net_conf = create_bsc_config();
+    async fn test_estimate_gas_payment_anvil() {
+        let net_conf = gen_anvil_net_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let recipient =
@@ -573,7 +530,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_estimate_gas_token_transfer() {
-        let net_conf = create_bsc_config();
+        let net_conf = gen_bsc_testnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let token_address =
@@ -604,22 +561,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_calc_fee_eth_batch() {
-        let net_conf = ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [56, 0],
-            name: "Ethereum".to_string(),
-            chain: "ETH".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://ethereum-rpc.publicnode.com".to_string()],
-            features: vec![155, 1559, 4844],
-            slip_44: 60,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        };
+        let net_conf = gen_eth_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let token_address =
             Address::from_eth_address("0x524bC91Dc82d6b90EF29F76A3ECAaBAffFD490Bc").unwrap();
@@ -657,22 +599,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_tx_params_payment() {
-        let net_conf = ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 0],
-            name: "Ethereum".to_string(),
-            chain: "ETH".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://rpc.mevblocker.io".to_string()],
-            features: vec![155, 1559, 4844],
-            slip_44: 60,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        };
+        let net_conf = gen_eth_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let recipient =
             Address::from_eth_address("0x451806FE45D9231eb1db3584494366edF05CB4AB").unwrap();
@@ -716,7 +643,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_calc_fee_bsc_batch() {
-        let net_conf = create_bsc_config();
+        let net_conf = gen_bsc_testnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
@@ -777,22 +704,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_tx_receipt_evm() {
-        let net_conf = ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 0],
-            name: "Ethereum".to_string(),
-            chain: "ETH".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://rpc.mevblocker.io".to_string()],
-            features: vec![155, 1559, 4844],
-            slip_44: 60,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        };
+        let net_conf = gen_eth_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let tx_hash = "0xbee2eb00d77c45be11e037efe8459ae5b61f36af1483d705ee89e9d40a1f3715";
         let mut tx_history = HistoricalTransaction {
@@ -880,7 +792,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_block_number_scilla() {
-        let net_conf = create_testnet_zilliqa_config();
+        let net_conf = gen_zil_testnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let block_number = provider.get_current_block_number().await.unwrap();
@@ -888,8 +800,8 @@ mod tests_network {
     }
 
     #[tokio::test]
-    async fn test_get_block_number_evm() {
-        let net_conf = create_bsc_config();
+    async fn test_get_block_number_anvil() {
+        let net_conf = gen_anvil_net_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let block_number = provider.get_current_block_number().await.unwrap();

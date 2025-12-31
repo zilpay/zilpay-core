@@ -24,4 +24,5 @@ rpc = { path = "../rpc" }
 [dev-dependencies]
 mockito = "1.5.0"
 rand.workspace = true
+test_data = { path = "../test_data" }
 
