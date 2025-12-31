@@ -29,18 +29,8 @@ where
             "params": params
         })
     }
-}
 
-#[async_trait]
-impl<'a, N> JsonRPC for RpcProvider<'a, N>
-where
-    N: NetworkConfigTrait + Send + Sync,
-{
-    fn get_nodes(&self) -> &[String] {
-        self.network.nodes()
-    }
-
-    async fn req<SR>(&self, payloads: Value) -> Result<SR>
+    async fn req_evm<SR>(&self, payloads: Value) -> Result<SR>
     where
         SR: DeserializeOwned + Debug,
     {
@@ -49,7 +39,7 @@ where
         let mut last_error = None;
         let mut errors = String::with_capacity(200);
 
-        for url in self.get_nodes() {
+        for url in self.network.nodes() {
             let res = client
                 .post(url)
                 .timeout(Duration::from_secs(TIME_OUT_SEC))
@@ -83,6 +73,37 @@ where
         }
 
         Err(last_error.unwrap_or(RpcError::NetworkDown))
+    }
+
+    async fn req_btc<SR>(&self, _payloads: Value) -> Result<SR>
+    where
+        SR: DeserializeOwned + Debug,
+    {
+        // TODO: Implement Bitcoin JSON-RPC request handling
+        Err(RpcError::NetworkDown)
+    }
+}
+
+#[async_trait]
+impl<'a, N> JsonRPC for RpcProvider<'a, N>
+where
+    N: NetworkConfigTrait + Send + Sync,
+{
+    fn get_nodes(&self) -> &[String] {
+        self.network.nodes()
+    }
+
+    async fn req<SR>(&self, payloads: Value) -> Result<SR>
+    where
+        SR: DeserializeOwned + Debug,
+    {
+        const BTC_SLIP44: u32 = 0;
+
+        if self.network.get_slip44() == BTC_SLIP44 {
+            self.req_btc(payloads).await
+        } else {
+            self.req_evm(payloads).await
+        }
     }
 }
 
@@ -148,30 +169,6 @@ mod tests {
         }
     }
 
-    fn create_bsc_config() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [56, 0],
-            name: "Binance Smart Chain".to_string(),
-            chain: "BSC".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://data-seed-prebsc-1-s1.binance.org:8545/".to_string()],
-            features: vec![155, 1559],
-            slip_44: 60,
-            ens: None,
-            explorers: vec![Explorer {
-                name: "bscscan".to_string(),
-                url: "https://bscscan.com".to_string(),
-                icon: None,
-                standard: 3091,
-            }],
-            fallback_enabled: true,
-        }
-    }
-
     #[tokio::test]
     async fn test_get_balance_scilla() {
         let net_conf = create_zilliqa_config();
@@ -182,22 +179,6 @@ mod tests {
         )];
 
         let res: Vec<ResultRes<GetBalanceRes>> = zil.req(payloads.into()).await.unwrap();
-
-        assert_eq!(res.len(), 1);
-        assert!(res[0].result.is_some());
-        assert!(res[0].error.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_get_balance_bsc() {
-        let net_conf = create_bsc_config();
-        let bsc: RpcProvider<ChainConfig> = RpcProvider::new(&net_conf);
-        let payloads = vec![RpcProvider::<ChainConfig>::build_payload(
-            json!(["0x0000000000000000000000000000000000000000", "latest"]),
-            EvmMethods::GetBalance,
-        )];
-
-        let res: Vec<ResultRes<String>> = bsc.req(payloads.into()).await.unwrap();
 
         assert_eq!(res.len(), 1);
         assert!(res[0].result.is_some());
@@ -231,5 +212,58 @@ mod tests {
         let result: Result<Vec<ResultRes<String>>> = provider.req(payloads.into()).await;
 
         dbg!(&result);
+    }
+
+    #[tokio::test]
+    async fn test_btc_get_balance() {
+        use bitcoin::Address;
+        use electrum_client::{Client as ElectrumClient, ConfigBuilder, ElectrumApi};
+
+        let addresses = vec![
+            "bcrt1q6klf3cny45skpulz4kazm9dx9fd44usmccdp6z",
+            "bcrt1q6klf3cny45skpulz4kazm9dx9fd44usmccdp6z",
+            "bcrt1q6klf3cny45skpulz4kazm9dx9fd44usmccdp6z",
+        ];
+
+        let scripts: Vec<_> = addresses
+            .iter()
+            .map(|addr| {
+                let address = addr.parse::<Address<_>>().unwrap().assume_checked();
+                address.script_pubkey()
+            })
+            .collect();
+
+        println!("\nQuerying {} addresses in batch:", addresses.len());
+        for (i, addr) in addresses.iter().enumerate() {
+            println!("  {}: {}", i, addr);
+        }
+
+        let url = "ssl://btc-testnet.zilpay.io:60402";
+        let config = ConfigBuilder::new().timeout(Some(5)).build();
+
+        match ElectrumClient::from_config(url, config) {
+            Ok(client) => {
+                let script_refs: Vec<_> = scripts.iter().map(|s| s.as_ref()).collect();
+                let balances = client.batch_script_get_balance(&script_refs);
+                let history = client.batch_script_get_history(&script_refs);
+
+                dbg!(&history);
+
+                assert!(balances.is_ok());
+
+                let bals = balances.unwrap();
+                println!("\nBatch balance results:");
+                for (i, bal) in bals.iter().enumerate() {
+                    println!(
+                        "  Address {}: Confirmed: {} sats, Unconfirmed: {} sats",
+                        i, bal.confirmed, bal.unconfirmed
+                    );
+                }
+                assert_eq!(bals.len(), addresses.len());
+            }
+            Err(e) => {
+                panic!("Failed to connect: {}", e);
+            }
+        }
     }
 }

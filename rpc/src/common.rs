@@ -11,6 +11,7 @@ pub trait RpcMethod: std::fmt::Display {
 }
 
 pub trait NetworkConfigTrait {
+    fn get_slip44(&self) -> u32;
     fn nodes(&self) -> &[String];
     fn default_node(&self) -> &str;
 

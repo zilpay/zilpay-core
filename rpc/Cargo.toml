@@ -12,6 +12,8 @@ hex.workspace = true
 reqwest.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
+electrum-client.workspace = true
+bitcoin.workspace = true
 errors = { path = "../errors" }
 config = { path = "../config" }
 crypto = { path = "../crypto" }

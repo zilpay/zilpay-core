@@ -12,6 +12,8 @@ hex.workspace = true
 pqbip39.workspace = true
 sha2.workspace = true
 tokio.workspace = true
+bincode.workspace = true
+bitcoin.workspace = true
 async-trait.workspace = true
 
 network = { path = "../network" }

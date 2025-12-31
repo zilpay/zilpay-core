@@ -84,6 +84,15 @@ impl WalletCrypto for Wallet {
                     Address::Secp256k1Keccak256(_) => {
                         keypair = keypair.to_keccak256();
                     }
+                    Address::Secp256k1Bitcoin(_) => match account.pub_key {
+                        proto::pubkey::PubKey::Secp256k1Bitcoin((_, net, addr_type)) => {
+                            keypair = keypair.to_bitcoin(net, addr_type);
+                        }
+                        _ => {
+                            keypair = keypair
+                                .to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2a);
+                        }
+                    },
                 }
 
                 Ok(keypair)

@@ -87,6 +87,11 @@ impl TokensManagement for Background {
         };
 
         match addr {
+            Address::Secp256k1Bitcoin(_) => {
+                return Err(BackgroundError::TokenError(
+                    errors::token::TokenError::ABIError("BTC not impl yet".to_string()),
+                ))
+            }
             Address::Secp256k1Keccak256(_) => {
                 let transfer_request = if token.native {
                     erc20_payment()

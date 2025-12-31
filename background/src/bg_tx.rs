@@ -80,6 +80,11 @@ impl TransactionsManagement for Background {
             .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
 
         match account.addr {
+            Address::Secp256k1Bitcoin(_) => {
+                return Err(BackgroundError::BincodeError(
+                    "BTC not impl yet".to_string(),
+                ));
+            }
             Address::Secp256k1Sha256(_) => {
                 let mut hasher = Sha256::new();
                 hasher.update(message.as_bytes());
@@ -159,6 +164,11 @@ impl TransactionsManagement for Background {
 
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let signature = match account.addr {
+            Address::Secp256k1Bitcoin(_) => {
+                return Err(BackgroundError::WalletError(
+                    WalletErrors::InvalidHexToWalletType,
+                ));
+            }
             Address::Secp256k1Sha256(_) => {
                 let mut hasher = Sha256::new();
                 hasher.update(message.as_bytes());
@@ -308,6 +318,25 @@ mod tests_background_transactions {
         }
     }
 
+    fn gen_anvil_net_conf() -> ChainConfig {
+        ChainConfig {
+            ftokens: vec![],
+            logo: String::new(),
+            diff_block_time: 0,
+            testnet: None,
+            chain_ids: [31337, 0], // Anvil default chain ID
+            name: "Anvil Local Network".to_string(),
+            chain: "ETH".to_string(),
+            short_name: String::new(),
+            rpc: vec!["http://127.0.0.1:8545".to_string()],
+            features: vec![155, 1559],
+            slip_44: slip44::ETHEREUM,
+            ens: None,
+            explorers: vec![],
+            fallback_enabled: false,
+        }
+    }
+
     fn gen_bsc_token() -> FToken {
         FToken {
             rate: 0f64,
@@ -320,6 +349,21 @@ mod tests_background_transactions {
             default: true,
             native: true,
             chain_hash: gen_bsc_net_conf().hash(),
+        }
+    }
+
+    fn gen_anvil_token() -> FToken {
+        FToken {
+            rate: 0f64,
+            name: "Anvil ETH".to_string(),
+            symbol: "ETH".to_string(),
+            decimals: 18,
+            addr: Address::Secp256k1Sha256(Address::ZERO),
+            logo: None,
+            balances: Default::default(),
+            default: true,
+            native: true,
+            chain_hash: gen_anvil_net_conf().hash(),
         }
     }
 
@@ -624,9 +668,12 @@ mod tests_background_transactions {
                     hash: Some(tx_hash_1.to_string()),
                     ..Default::default()
                 },
-                evm: Some(serde_json::json!({
-                    "transactionHash": tx_hash_1,
-                }).to_string()),
+                evm: Some(
+                    serde_json::json!({
+                        "transactionHash": tx_hash_1,
+                    })
+                    .to_string(),
+                ),
                 ..Default::default()
             },
             HistoricalTransaction {
@@ -635,9 +682,12 @@ mod tests_background_transactions {
                     hash: Some(tx_hash_2.to_string()),
                     ..Default::default()
                 },
-                evm: Some(serde_json::json!({
-                    "transactionHash": tx_hash_2,
-                }).to_string()),
+                evm: Some(
+                    serde_json::json!({
+                        "transactionHash": tx_hash_2,
+                    })
+                    .to_string(),
+                ),
                 ..Default::default()
             },
         ];

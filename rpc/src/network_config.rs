@@ -78,6 +78,10 @@ impl ChainConfig {
 }
 
 impl NetworkConfigTrait for ChainConfig {
+    fn get_slip44(&self) -> u32 {
+        self.slip_44
+    }
+
     fn add_node_group(&mut self, nodes: Vec<String>) -> Result<()> {
         for node in &nodes {
             if self.rpc.contains(node) {

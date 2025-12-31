@@ -1,5 +1,6 @@
 use crate::{bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
+use crypto::slip44::{ETHEREUM, ZILLIQA};
 use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::{common::Provider, provider::NetworkProvider};
 use proto::{address::Address, pubkey::PubKey};
@@ -143,7 +144,7 @@ impl ProvidersManagement for Background {
         }
 
         data.accounts.iter_mut().for_each(|a| {
-            if provider.config.slip_44 == 313 {
+            if provider.config.slip_44 == ZILLIQA {
                 match a.pub_key {
                     PubKey::Secp256k1Sha256(_pub_key) => {
                         if let Some(chain_id) = provider.config.chain_ids.last() {
@@ -157,9 +158,19 @@ impl ProvidersManagement for Background {
                     }
                     _ => {}
                 }
-            } else if provider.config.slip_44 == 60 {
-                a.pub_key = PubKey::Secp256k1Keccak256(a.pub_key.as_bytes());
-
+            } else if provider.config.slip_44 == ETHEREUM {
+                match a.pub_key {
+                    PubKey::Secp256k1Sha256(pk) => {
+                        a.pub_key = PubKey::Secp256k1Keccak256(pk);
+                    }
+                    PubKey::Secp256k1Bitcoin((pk, _, _)) => {
+                        a.pub_key = PubKey::Secp256k1Keccak256(pk);
+                    }
+                    PubKey::Ed25519Solana(pk) => {
+                        a.pub_key = PubKey::Secp256k1Keccak256(pk);
+                    }
+                    _ => {}
+                }
                 a.chain_id = provider.config.chain_id();
             } else {
                 a.chain_id = provider.config.chain_id();
