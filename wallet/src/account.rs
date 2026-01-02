@@ -166,4 +166,77 @@ mod tests {
         assert_eq!(res.addr, acc.addr);
         assert_eq!(res, acc);
     }
+
+    #[test]
+    fn test_from_btc_sk() {
+        use test_data::anvil_accounts::PRIVATE_KEY_0;
+
+        let sk_hex = PRIVATE_KEY_0.trim_start_matches("0x");
+        let sk_bytes_vec = hex::decode(sk_hex).unwrap();
+        let sk_bytes: [u8; 32] = sk_bytes_vec.try_into().unwrap();
+
+        let sk_segwit = SecretKey::Secp256k1Bitcoin((
+            sk_bytes,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        ));
+
+        let acc_segwit = Account::from_secret_key(
+            sk_segwit,
+            "Bitcoin SegWit".to_string(),
+            0,
+            0,
+            1,
+            slip44::BITCOIN,
+        )
+        .unwrap();
+
+        let addr_str = acc_segwit.addr.auto_format();
+        assert!(addr_str.starts_with("bc1q"));
+
+        let sk_legacy = SecretKey::Secp256k1Bitcoin((
+            sk_bytes,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2pkh,
+        ));
+
+        let acc_legacy = Account::from_secret_key(
+            sk_legacy,
+            "Bitcoin Legacy".to_string(),
+            0,
+            0,
+            1,
+            slip44::BITCOIN,
+        )
+        .unwrap();
+
+        let addr_legacy_str = acc_legacy.addr.auto_format();
+        assert!(addr_legacy_str.starts_with("1"));
+
+        let sk_taproot = SecretKey::Secp256k1Bitcoin((
+            sk_bytes,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2tr,
+        ));
+
+        let acc_taproot = Account::from_secret_key(
+            sk_taproot,
+            "Bitcoin Taproot".to_string(),
+            0,
+            0,
+            1,
+            slip44::BITCOIN,
+        )
+        .unwrap();
+
+        let addr_taproot_str = acc_taproot.addr.auto_format();
+        assert!(addr_taproot_str.starts_with("bc1p"));
+
+        let buf = acc_segwit.to_bytes().unwrap();
+        let res = Account::from_bytes(&buf).unwrap();
+
+        assert_eq!(res.pub_key, acc_segwit.pub_key);
+        assert_eq!(res.addr, acc_segwit.addr);
+        assert_eq!(res, acc_segwit);
+    }
 }
