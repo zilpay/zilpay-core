@@ -2,7 +2,7 @@ use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Backg
 use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
 use errors::{background::BackgroundError, wallet::WalletErrors};
-use network::ft_parse::generate_erc20_transfer_data;
+use network::evm::generate_erc20_transfer_data;
 use proto::{
     address::Address,
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
@@ -205,10 +205,13 @@ mod tests_background_tokens {
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
     };
     use config::address::ADDR_LEN;
-    use test_data::{gen_device_indicators, gen_eth_account, gen_zil_account, gen_zil_testnet_conf, TEST_PASSWORD};
     use crypto::slip44;
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
+    use test_data::{
+        gen_device_indicators, gen_eth_account, gen_zil_account, gen_zil_testnet_conf,
+        TEST_PASSWORD,
+    };
     use tokio;
     use wallet::wallet_token::TokenManagement;
 
