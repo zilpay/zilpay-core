@@ -71,6 +71,13 @@ pub fn create_btc_address(
     let addr = match addr_type {
         bitcoin::AddressType::P2pkh => bitcoin::Address::p2pkh(&compressed_pk, network),
         bitcoin::AddressType::P2wpkh => bitcoin::Address::p2wpkh(&compressed_pk, hrp),
+        bitcoin::AddressType::P2sh => {
+            // BIP49: P2SH-P2WPKH (Nested SegWit)
+            // Create a P2WPKH address and wrap it in P2SH
+            let wpkh = bitcoin::Address::p2wpkh(&compressed_pk, hrp);
+            bitcoin::Address::p2sh(&wpkh.script_pubkey(), network)
+                .map_err(|_| PubKeyError::InvalidKeyType)?
+        }
         bitcoin::AddressType::P2tr => {
             use bitcoin::secp256k1::{Secp256k1, XOnlyPublicKey};
             let x_only_pk = XOnlyPublicKey::from(compressed_pk.0);

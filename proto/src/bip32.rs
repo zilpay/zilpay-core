@@ -1,5 +1,4 @@
 use config::sha::SHA256_SIZE;
-use crypto::bip49::DerivationPath;
 use errors::bip32::Bip329Errors;
 use hmac::{Hmac, Mac};
 use k256::{
@@ -140,6 +139,7 @@ fn derive_child_key(
 mod tests {
     use super::*;
     use config::bip39::EN_WORDS;
+    use crypto::bip49::DerivationPath;
     use pqbip39::mnemonic::Mnemonic;
 
     #[test]
@@ -151,7 +151,8 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        let derivation_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let derivation_path =
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
         let account = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         assert_eq!(
@@ -172,7 +173,12 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP44_PURPOSE, Some(bitcoin::Network::Bitcoin));
+        let derivation_path = DerivationPath::new(
+            slip44::BITCOIN,
+            0,
+            DerivationPath::BIP44_PURPOSE,
+            Some(bitcoin::Network::Bitcoin),
+        );
         let btc_secret_key = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         let sk_bytes = btc_secret_key.to_bytes();
@@ -211,7 +217,12 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP84_PURPOSE, Some(bitcoin::Network::Bitcoin));
+        let derivation_path = DerivationPath::new(
+            slip44::BITCOIN,
+            0,
+            DerivationPath::BIP84_PURPOSE,
+            Some(bitcoin::Network::Bitcoin),
+        );
         let btc_secret_key = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         let sk_bytes = btc_secret_key.to_bytes();
