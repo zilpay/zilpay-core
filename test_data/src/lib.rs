@@ -162,6 +162,25 @@ pub fn gen_eth_mainnet_conf() -> ChainConfig {
     }
 }
 
+pub fn gen_btc_testnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [1, 0],
+        name: "Bitcoin(testnet)".to_string(),
+        chain: "BTC".to_string(),
+        short_name: "btc".to_string(),
+        rpc: vec!["ssl://btc-testnet.zilpay.io:60402".to_string()],
+        features: vec![],
+        slip_44: slip44::BITCOIN,
+        ens: None,
+        explorers: vec![],
+        fallback_enabled: false,
+    }
+}
+
 #[allow(dead_code)]
 pub mod anvil_accounts {
     pub const ACCOUNT_0: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
