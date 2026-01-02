@@ -178,7 +178,7 @@ mod tests {
         // Create wallet with 3 accounts
         let indexes = [0, 1, 2].map(|i| {
             (
-                DerivationPath::new(slip44::ZILLIQA, i),
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE),
                 format!("account {i}"),
             )
         });

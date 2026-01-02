@@ -405,7 +405,10 @@ mod tests_background {
 
         let password = "test_password";
         let words = Background::gen_bip39(12).unwrap();
-        let accounts = [(DerivationPath::new(slip44::ETHEREUM, 0), "Name".to_string())];
+        let accounts = [(
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE),
+            "Name".to_string(),
+        )];
         let net_conf = create_test_network_config();
 
         bg.add_provider(net_conf.clone()).unwrap();
@@ -444,7 +447,7 @@ mod tests_background {
 
         let words1 = Background::gen_bip39(12).unwrap();
         let accounts1 = [(
-            DerivationPath::new(slip44::ETHEREUM, 0),
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE),
             "Wallet1".to_string(),
         )];
 
@@ -466,7 +469,7 @@ mod tests_background {
         // Add second wallet
         let words2 = Background::gen_bip39(12).unwrap();
         let accounts2 = [(
-            DerivationPath::new(slip44::ETHEREUM, 0),
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE),
             "Wallet2".to_string(),
         )];
 
@@ -499,7 +502,7 @@ mod tests_background {
 
         let words1 = Background::gen_bip39(12).unwrap();
         let accounts1 = [(
-            DerivationPath::new(slip44::ETHEREUM, 0),
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE),
             "keystore wallet".to_string(),
         )];
 
@@ -580,11 +583,11 @@ mod tests_background {
         let words1 = Background::gen_bip39(12).unwrap();
         let accounts1 = [
             (
-                DerivationPath::new(slip44::ETHEREUM, 0),
+                DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE),
                 "keystore wallet 0".to_string(),
             ),
             (
-                DerivationPath::new(slip44::ETHEREUM, 1),
+                DerivationPath::new(slip44::ETHEREUM, 1, DerivationPath::BIP44_PURPOSE),
                 "keystore wallet 1".to_string(),
             ),
         ];

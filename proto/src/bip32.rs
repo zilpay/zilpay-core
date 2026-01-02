@@ -1,4 +1,5 @@
 use config::sha::SHA256_SIZE;
+use crypto::bip49::DerivationPath;
 use errors::bip32::Bip329Errors;
 use hmac::{Hmac, Mac};
 use k256::{
@@ -143,12 +144,15 @@ mod tests {
 
     #[test]
     fn bip39_to_address() {
+        use crypto::slip44;
+
         let phrase = "panda eyebrow bullet gorilla call smoke muffin taste mesh discover soft ostrich alcohol speed nation flash devote level hobby quick inner drive ghost inside";
         let expected_secret_key = b"\xff\x1e\x68\xeb\x7b\xf2\xf4\x86\x51\xc4\x7e\xf0\x17\x7e\xb8\x15\x85\x73\x22\x25\x7c\x58\x94\xbb\x4c\xfd\x11\x76\xc9\x98\x93\x14";
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        let account = derive_private_key(&seed, "m/44'/60'/0'/0/0").unwrap();
+        let derivation_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
+        let account = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         assert_eq!(
             expected_secret_key.to_vec(),
@@ -162,13 +166,14 @@ mod tests {
         use crate::address::Address;
         use crate::keypair::KeyPair;
         use crate::secret_key::SecretKey;
+        use crypto::slip44;
 
         let phrase = "test test test test test test test test test test test junk";
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        // BIP44 Bitcoin path: m/44'/0'/0'/0/0 (Legacy P2PKH)
-        let btc_secret_key = derive_private_key(&seed, "m/44'/0'/0'/0/0").unwrap();
+        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP44_PURPOSE);
+        let btc_secret_key = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         let sk_bytes = btc_secret_key.to_bytes();
         let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin((
@@ -178,10 +183,8 @@ mod tests {
         )))
         .unwrap();
 
-        // Get Bitcoin address
         let address = keypair.get_addr().unwrap();
 
-        // Verify it's a Bitcoin address type
         assert!(
             matches!(address, Address::Secp256k1Bitcoin(_)),
             "Address should be Bitcoin type"
@@ -202,13 +205,14 @@ mod tests {
         use crate::address::Address;
         use crate::keypair::KeyPair;
         use crate::secret_key::SecretKey;
+        use crypto::slip44;
 
         let phrase = "test test test test test test test test test test test junk";
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        // BIP84 Bitcoin path: m/84'/0'/0'/0/0 (Native SegWit - most modern)
-        let btc_secret_key = derive_private_key(&seed, "m/84'/0'/0'/0/0").unwrap();
+        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP84_PURPOSE);
+        let btc_secret_key = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         let sk_bytes = btc_secret_key.to_bytes();
         let keypair = KeyPair::from_secret_key(SecretKey::Secp256k1Bitcoin((
@@ -231,14 +235,12 @@ mod tests {
             "Bech32 address should start with 'bc1'"
         );
 
-        // Expected values for the test mnemonic with BIP84 path
         let expected_bech32 = "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te";
 
         println!("BIP84 Native SegWit Address: {}", bech32_address);
         println!("Expected: {}", expected_bech32);
         println!("Public Key: {}", hex::encode(keypair.get_pubkey_bytes()));
 
-        // Verify address matches expected value
         assert_eq!(
             bech32_address, expected_bech32,
             "Native SegWit address does not match expected value"

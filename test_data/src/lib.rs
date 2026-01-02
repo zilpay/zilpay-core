@@ -79,14 +79,22 @@ pub fn gen_zil_token() -> FToken {
 
 pub fn gen_eth_account(index: u32, name: &str) -> (DerivationPath, String) {
     (
-        DerivationPath::new(slip44::ETHEREUM, index as usize),
+        DerivationPath::new(
+            slip44::ETHEREUM,
+            index as usize,
+            DerivationPath::BIP44_PURPOSE,
+        ),
         name.to_string(),
     )
 }
 
 pub fn gen_zil_account(index: u32, name: &str) -> (DerivationPath, String) {
     (
-        DerivationPath::new(slip44::ZILLIQA, index as usize),
+        DerivationPath::new(
+            slip44::ZILLIQA,
+            index as usize,
+            DerivationPath::BIP44_PURPOSE,
+        ),
         name.to_string(),
     )
 }

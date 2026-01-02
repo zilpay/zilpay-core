@@ -5,6 +5,7 @@ use errors::bip32::Bip329Errors;
 #[derive(Debug, Clone, Copy)]
 pub struct DerivationPath {
     pub slip44: u32,
+    pub bip: u32,
     pub index: usize,
 }
 
@@ -48,16 +49,24 @@ pub fn components_to_derivation_path(components: &[u32]) -> Vec<u8> {
 }
 
 impl DerivationPath {
-    pub fn new(slip44: u32, index: usize) -> Self {
-        Self { slip44, index }
+    pub const BIP44_PURPOSE: u32 = 44;
+    pub const BIP49_PURPOSE: u32 = 49;
+    pub const BIP84_PURPOSE: u32 = 84;
+    pub const BIP86_PURPOSE: u32 = 86;
+
+    pub fn new(slip44: u32, index: usize, bip: u32) -> Self {
+        Self { slip44, index, bip }
     }
 
     pub fn get_path(&self) -> String {
-        format!("m/44'/{}'/{}'/{}/{}", self.slip44, 0, 0, self.index)
+        format!(
+            "m/{0}'/{1}'/{2}'/{3}/{4}",
+            self.bip, self.slip44, 0, 0, self.index
+        )
     }
 
     pub fn get_base_path(&self) -> String {
-        format!("m/44'/{}'/{}'/{}/", self.slip44, 0, 0)
+        format!("m/{0}'/{1}'/{2}'/{3}/", self.bip, self.slip44, 0, 0)
     }
 
     pub fn get_index(&self) -> usize {
@@ -78,28 +87,28 @@ mod tests {
 
     #[test]
     fn test_ethereum_path() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");
         assert_eq!(eth_path.get_base_path(), "m/44'/60'/0'/0/");
     }
 
     #[test]
     fn test_zilliqa_path() {
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE);
         assert_eq!(zil_path.get_path(), "m/44'/313'/0'/0/0");
         assert_eq!(zil_path.get_base_path(), "m/44'/313'/0'/0/");
     }
 
     #[test]
     fn test_different_indexes() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 5);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 5, DerivationPath::BIP44_PURPOSE);
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/5");
         assert_eq!(eth_path.get_index(), 5);
     }
 
     #[test]
     fn test_display() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
         assert_eq!(eth_path.to_string(), "m/44'/60'/0'/0/0");
     }
 

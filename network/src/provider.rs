@@ -27,7 +27,7 @@ pub struct NetworkProvider {
 
 impl NetworkProvider {
     pub fn get_bip49(&self, index: usize) -> DerivationPath {
-        DerivationPath::new(self.config.slip_44, index)
+        DerivationPath::new(self.config.slip_44, index, DerivationPath::BIP44_PURPOSE)
     }
 }
 

@@ -269,7 +269,7 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
             (
-                DerivationPath::new(slip44::ZILLIQA, i),
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE),
                 format!("account {i}"),
             )
         });

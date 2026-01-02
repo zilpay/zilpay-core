@@ -287,7 +287,7 @@ mod tests_background_worker {
 
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [(
-            DerivationPath::new(slip44::ETHEREUM, 0),
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE),
             "Bsc account 1".to_string(),
         )];
         let net_config = gen_bsc_mainnet_conf();

@@ -492,8 +492,8 @@ mod tests_keypair {
             seed
         );
 
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0);
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
 
         let zil_key_pair = KeyPair::from_bip39_seed(&seed, &zil_path).unwrap();
         let eth_key_pair = KeyPair::from_bip39_seed(&seed, &eth_path).unwrap();
@@ -539,8 +539,8 @@ mod tests_keypair {
 
     #[test]
     fn test_derivation_path_generation() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0);
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 1);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, 1, DerivationPath::BIP44_PURPOSE);
 
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");
         assert_eq!(zil_path.get_path(), "m/44'/313'/0'/0/1");

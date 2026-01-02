@@ -459,7 +459,7 @@ mod tests_background {
         let words = Background::gen_bip39(24).unwrap();
         let net_conf = create_test_net_conf();
         let accounts = [(
-            DerivationPath::new(slip44::ZILLIQA, 0),
+            DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE),
             "Zilliqa wallet".to_string(),
         )];
 
@@ -488,11 +488,11 @@ mod tests_background {
         let password = "newPassowrd";
         let accounts = [
             (
-                DerivationPath::new(slip44::ETHEREUM, 1),
+                DerivationPath::new(slip44::ETHEREUM, 1, DerivationPath::BIP44_PURPOSE),
                 "Eth Wallet".to_string(),
             ),
             (
-                DerivationPath::new(slip44::ETHEREUM, 2),
+                DerivationPath::new(slip44::ETHEREUM, 2, DerivationPath::BIP44_PURPOSE),
                 "account 1".to_string(),
             ),
         ];
@@ -527,7 +527,7 @@ mod tests_background {
         let words = Background::gen_bip39(24).unwrap();
         let net_conf = create_test_net_conf();
         let accounts = [(
-            DerivationPath::new(slip44::ZILLIQA, 0),
+            DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE),
             "Zilliqa wallet".to_string(),
         )];
         let keypair = KeyPair::gen_sha256().unwrap();
@@ -583,7 +583,7 @@ mod tests_background {
         bg.add_provider(net_conf.clone()).unwrap();
 
         let accounts = [(
-            DerivationPath::new(slip44::ZILLIQA, 0),
+            DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE),
             "Zilliqa wallet".to_string(),
         )];
 
@@ -628,7 +628,7 @@ mod tests_background {
         }
 
         for i in 1..20 {
-            let bip49 = DerivationPath::new(slip44::ZILLIQA, i);
+            let bip49 = DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE);
             wallet
                 .add_next_bip39_account(
                     format!("Zilliqa account {}", i),
