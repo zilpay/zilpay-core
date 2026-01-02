@@ -13,8 +13,7 @@ use self::ft_parse::{
     process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
 };
 use self::gas_parse::{
-    build_batch_gas_request, json_rpc_error, process_parse_fee_history_request,
-    EIP1559, EIP4844,
+    build_batch_gas_request, json_rpc_error, process_parse_fee_history_request, EIP1559, EIP4844,
 };
 use self::nonce_parser::{build_nonce_request, process_nonce_response};
 use self::tx_parse::{

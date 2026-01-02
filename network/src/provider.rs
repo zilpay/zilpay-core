@@ -94,7 +94,7 @@ impl NetworkProvider {
     pub async fn estimate_block_time(&self, address: &Address) -> Result<u64> {
         match self.config.slip_44 {
             slip44::ETHEREUM | slip44::ZILLIQA => self.evm_estimate_block_time(address).await,
-            slip44::BITCOIN => self.btc_estimate_block_time(address).await,
+            slip44::BITCOIN => self.btc_estimate_block_time().await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name

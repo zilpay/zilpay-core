@@ -53,7 +53,7 @@ pub trait BtcOperations {
     ) -> Result<RequiredTxParams>;
     async fn btc_estimate_gas(&self, tx: &TransactionRequest) -> Result<U256>;
     async fn btc_fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>>;
-    async fn btc_estimate_block_time(&self, address: &Address) -> Result<u64>;
+    async fn btc_estimate_block_time(&self) -> Result<u64>;
     async fn btc_update_transactions_receipt(
         &self,
         txns: &mut [&mut HistoricalTransaction],
@@ -105,10 +105,41 @@ impl BtcOperations for NetworkProvider {
         ))
     }
 
-    async fn btc_estimate_block_time(&self, _address: &Address) -> Result<u64> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
+    async fn btc_estimate_block_time(&self) -> Result<u64> {
+        const BLOCK_SAMPLE_SIZE: usize = 100;
+
+        self.with_electrum_client(|client| {
+            let current_header = client.block_headers_subscribe().map_err(|e| {
+                NetworkErrors::RPCError(format!("Failed to get current block: {}", e))
+            })?;
+
+            let current_height = current_header.height;
+            let start_height = current_height.saturating_sub(BLOCK_SAMPLE_SIZE);
+
+            let heights = vec![start_height as u32, current_height as u32];
+            let headers = client.batch_block_header(heights).map_err(|e| {
+                NetworkErrors::RPCError(format!("Failed to get block headers: {}", e))
+            })?;
+
+            if headers.len() < 2 {
+                return Ok(600);
+            }
+
+            let time_diff = headers[1].time.saturating_sub(headers[0].time);
+            let block_diff = current_height.saturating_sub(start_height);
+
+            if block_diff == 0 || time_diff == 0 {
+                return Ok(600);
+            }
+
+            let avg_block_time = time_diff as u64 / block_diff as u64;
+
+            if avg_block_time == 0 {
+                return Ok(1);
+            }
+
+            Ok(avg_block_time)
+        })
     }
 
     async fn btc_update_transactions_receipt(
@@ -214,5 +245,17 @@ mod tests {
 
         dbg!(&btc_token);
         assert!(btc_token.balances.contains_key(&0));
+    }
+
+    #[tokio::test]
+    async fn test_estimate_block_time_btc() {
+        let net_conf = gen_btc_testnet_conf();
+        let provider = NetworkProvider::new(net_conf);
+        let block_time = provider.btc_estimate_block_time().await.unwrap();
+
+        dbg!(&block_time);
+
+        assert!(block_time > 0);
+        assert!(block_time < 3600);
     }
 }
