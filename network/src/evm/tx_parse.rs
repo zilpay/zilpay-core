@@ -28,6 +28,9 @@ pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
                 EvmMethods::SendRawTransaction,
             )
         }
+        TransactionReceipt::Bitcoin(_) => {
+            json!({"error": "Bitcoin transactions not supported in EVM operations"})
+        }
     }
 }
 
@@ -35,18 +38,23 @@ pub fn build_payload_tx_receipt(tx: &HistoricalTransaction) -> Value {
     if tx.scilla.is_some() {
         let hash = tx
             .get_scilla()
-            .and_then(|s| s.get("hash").and_then(|h| h.as_str()).map(|s| s.to_string()))
+            .and_then(|s| {
+                s.get("hash")
+                    .and_then(|h| h.as_str())
+                    .map(|s| s.to_string())
+            })
             .unwrap_or_default();
         RpcProvider::<ChainConfig>::build_payload(json!([hash]), ZilMethods::GetTransactionStatus)
     } else {
         let hash = tx
             .get_evm()
-            .and_then(|e| e.get("transactionHash").and_then(|h| h.as_str()).map(|s| s.to_string()))
+            .and_then(|e| {
+                e.get("transactionHash")
+                    .and_then(|h| h.as_str())
+                    .map(|s| s.to_string())
+            })
             .unwrap_or_default();
-        RpcProvider::<ChainConfig>::build_payload(
-            json!([hash]),
-            EvmMethods::GetTransactionReceipt,
-        )
+        RpcProvider::<ChainConfig>::build_payload(json!([hash]), EvmMethods::GetTransactionReceipt)
     }
 }
 
@@ -143,5 +151,8 @@ pub fn process_tx_send_response(
                 Err(NetworkErrors::RPCError("Invalid response".to_string()))
             }
         }
+        TransactionReceipt::Bitcoin(_) => Err(NetworkErrors::RPCError(
+            "Bitcoin transactions not supported in EVM operations".to_string(),
+        )),
     }
 }

@@ -78,6 +78,9 @@ pub fn build_batch_gas_request(
                 EvmMethods::GasPrice,
             ));
         }
+        TransactionRequest::Bitcoin(_) => {
+            return Err(TransactionErrors::InvalidTransaction)?;
+        }
     }
 
     let tx_object = match tx {
@@ -86,6 +89,9 @@ pub fn build_batch_gas_request(
         }
         TransactionRequest::Ethereum((tx, _)) => serde_json::to_value(&tx)
             .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?,
+        TransactionRequest::Bitcoin(_) => {
+            return Err(TransactionErrors::InvalidTransaction)?;
+        }
     };
     let request_estimate_gas =
         RpcProvider::<ChainConfig>::build_payload(json!([tx_object]), EvmMethods::EstimateGas);

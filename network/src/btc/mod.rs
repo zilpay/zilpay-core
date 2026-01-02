@@ -10,6 +10,12 @@ use proto::address::Address;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use token::ft::FToken;
 
+const DEFAULT_FEE_RATE_BTC: f64 = 0.00001;
+const SATOSHIS_PER_BTC: f64 = 100_000_000.0;
+const BYTES_PER_KB: f64 = 1000.0;
+const DEFAULT_TX_SIZE_BYTES: u64 = 250;
+const DEFAULT_BLOCK_TARGET: u64 = 6;
+
 impl NetworkProvider {
     fn with_electrum_client<F, T>(&self, operation: F) -> Result<T>
     where
@@ -44,13 +50,7 @@ impl NetworkProvider {
 #[async_trait]
 pub trait BtcOperations {
     async fn btc_get_current_block_number(&self) -> Result<u64>;
-    async fn btc_estimate_params_batch(
-        &self,
-        tx: &TransactionRequest,
-        sender: &Address,
-        block_count: u64,
-        percentiles: Option<&[f64]>,
-    ) -> Result<RequiredTxParams>;
+    async fn btc_estimate_params_batch(&self, block_count: u64) -> Result<RequiredTxParams>;
     async fn btc_estimate_gas(&self, tx: &TransactionRequest) -> Result<U256>;
     async fn btc_fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>>;
     async fn btc_estimate_block_time(&self) -> Result<u64>;
@@ -80,16 +80,41 @@ impl BtcOperations for NetworkProvider {
         })
     }
 
-    async fn btc_estimate_params_batch(
-        &self,
-        _tx: &TransactionRequest,
-        _sender: &Address,
-        _block_count: u64,
-        _percentiles: Option<&[f64]>,
-    ) -> Result<RequiredTxParams> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
+    async fn btc_estimate_params_batch(&self, block_count: u64) -> Result<RequiredTxParams> {
+        use crate::evm::GasFeeHistory;
+
+        let target_blocks = if block_count == 0 {
+            DEFAULT_BLOCK_TARGET
+        } else {
+            block_count
+        };
+
+        self.with_electrum_client(|client| {
+            let fee_estimate = client
+                .estimate_fee(target_blocks as usize)
+                .map_err(|e| NetworkErrors::RPCError(format!("Failed to estimate fee: {}", e)))?;
+
+            let fee_rate_btc = if fee_estimate < 0.0 {
+                DEFAULT_FEE_RATE_BTC
+            } else {
+                fee_estimate
+            };
+
+            let fee_rate_sat_per_byte = (fee_rate_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64;
+
+            Ok(RequiredTxParams {
+                gas_price: U256::from(fee_rate_sat_per_byte),
+                max_priority_fee: U256::ZERO,
+                fee_history: GasFeeHistory {
+                    max_fee: U256::from(fee_rate_sat_per_byte),
+                    priority_fee: U256::ZERO,
+                    base_fee: U256::from(fee_rate_sat_per_byte),
+                },
+                tx_estimate_gas: U256::from(DEFAULT_TX_SIZE_BYTES),
+                blob_base_fee: U256::ZERO,
+                nonce: 0,
+            })
+        })
     }
 
     async fn btc_estimate_gas(&self, _tx: &TransactionRequest) -> Result<U256> {
@@ -250,5 +275,20 @@ mod tests {
 
         assert!(block_time > 0);
         assert!(block_time < 3600);
+    }
+
+    #[tokio::test]
+    async fn test_estimate_params_batch_btc() {
+        let net_conf = gen_btc_testnet_conf();
+        let provider = NetworkProvider::new(net_conf);
+
+        let params = provider.btc_estimate_params_batch(6).await.unwrap();
+
+        dbg!(&params);
+
+        assert!(params.gas_price > U256::ZERO);
+        assert_eq!(params.max_priority_fee, U256::ZERO);
+        assert_eq!(params.blob_base_fee, U256::ZERO);
+        assert_eq!(params.tx_estimate_gas, U256::from(DEFAULT_TX_SIZE_BYTES));
     }
 }

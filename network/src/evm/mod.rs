@@ -5,7 +5,7 @@ mod nonce_parser;
 mod tx_parse;
 
 pub use self::ft_parse::generate_erc20_transfer_data;
-pub use self::gas_parse::RequiredTxParams;
+pub use self::gas_parse::{GasFeeHistory, RequiredTxParams};
 
 use self::block_parse::{build_last_block_header_request, process_get_timestampt_block_response};
 use self::ft_parse::{
@@ -215,9 +215,9 @@ impl EvmOperations for NetworkProvider {
                 U256::from_str_radix(gas_str.trim_start_matches("0x"), 16)
                     .map_err(|_| NetworkErrors::ResponseParseError)
             }
-            TransactionRequest::Zilliqa(_) => Err(NetworkErrors::RPCError(
-                "Not an Ethereum transaction".to_string(),
-            )),
+            TransactionRequest::Zilliqa(_) | TransactionRequest::Bitcoin(_) => Err(
+                NetworkErrors::RPCError("Not an Ethereum transaction".to_string()),
+            ),
         }
     }
 

@@ -30,7 +30,9 @@ impl HistoricalTransaction {
     }
 
     pub fn get_scilla(&self) -> Option<Value> {
-        self.scilla.as_ref().and_then(|s| serde_json::from_str(s).ok())
+        self.scilla
+            .as_ref()
+            .and_then(|s| serde_json::from_str(s).ok())
     }
 
     pub fn set_evm(&mut self, value: Value) {
@@ -218,6 +220,27 @@ impl HistoricalTransaction {
                     status: TransactionStatus::Pending,
                     metadata,
                     evm: serde_json::to_string(&evm).ok(),
+                    scilla: None,
+                    signed_message: None,
+                    timestamp,
+                })
+            }
+            TransactionReceipt::Bitcoin((tx, metadata)) => {
+                let txid = tx.compute_txid();
+
+                let btc = json!({
+                    "transactionHash": metadata.hash.clone().unwrap_or_else(|| txid.to_string()),
+                    "txid": txid.to_string(),
+                    "version": tx.version.0,
+                    "lockTime": tx.lock_time.to_consensus_u32(),
+                    "inputsCount": tx.input.len(),
+                    "outputsCount": tx.output.len(),
+                });
+
+                Ok(Self {
+                    status: TransactionStatus::Pending,
+                    metadata,
+                    evm: serde_json::to_string(&btc).ok(),
                     scilla: None,
                     signed_message: None,
                     timestamp,
