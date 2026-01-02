@@ -159,6 +159,15 @@ impl KeyPair {
             slip44::ETHEREUM | slip44::ZILLIQA => {
                 Ok(Self::Secp256k1Keccak256((pub_key, secret_key)))
             }
+            slip44::BITCOIN => {
+                let network = bip49.network.ok_or(
+                    KeyPairError::ExtendedPrivKeyDeriveError(
+                        Bip329Errors::MissingBitcoinNetwork
+                    )
+                )?;
+                let addr_type = bip49.get_address_type();
+                Ok(Self::Secp256k1Bitcoin((pub_key, secret_key, network, addr_type)))
+            }
             _ => {
                 return Err(KeyPairError::ExtendedPrivKeyDeriveError(
                     Bip329Errors::InvalidSlip44(bip49.slip44),
@@ -476,24 +485,58 @@ mod tests_keypair {
     }
 
     #[test]
+    fn test_bip39_derivation_bitcoin() {
+        use test_data::ANVIL_MNEMONIC;
+
+        let m = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
+        let seed = m.to_seed("").unwrap();
+
+        let btc_bip84_path = DerivationPath::new(
+            slip44::BITCOIN,
+            0,
+            DerivationPath::BIP84_PURPOSE,
+            Some(bitcoin::Network::Bitcoin),
+        );
+        let btc_key_pair = KeyPair::from_bip39_seed(&seed, &btc_bip84_path).unwrap();
+        let btc_addr = btc_key_pair.get_addr().unwrap();
+
+        assert!(matches!(btc_key_pair, KeyPair::Secp256k1Bitcoin(_)));
+        assert!(matches!(btc_addr, Address::Secp256k1Bitcoin(_)));
+
+        let btc_addr_str = btc_addr.auto_format();
+        assert!(btc_addr_str.starts_with("bc1"));
+
+        let btc_bip44_path = DerivationPath::new(
+            slip44::BITCOIN,
+            0,
+            DerivationPath::BIP44_PURPOSE,
+            Some(bitcoin::Network::Bitcoin),
+        );
+        let btc_legacy_key_pair = KeyPair::from_bip39_seed(&seed, &btc_bip44_path).unwrap();
+        let btc_legacy_addr = btc_legacy_key_pair.get_addr().unwrap();
+        let btc_legacy_addr_str = btc_legacy_addr.auto_format();
+        assert!(btc_legacy_addr_str.starts_with("1"));
+    }
+
+    #[test]
     fn test_bip39_derivation() {
-        let mnemonic_str =
-            "green process gate doctor slide whip priority shrug diamond crumble average help";
-        let m = Mnemonic::parse_str(&EN_WORDS, mnemonic_str).unwrap();
+        use test_data::ANVIL_MNEMONIC;
+
+        let m = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
         let seed = m.to_seed("").unwrap();
 
         assert_eq!(
             [
-                143, 219, 233, 88, 72, 55, 94, 13, 19, 72, 66, 197, 121, 69, 163, 46, 15, 247, 4,
-                104, 60, 132, 106, 5, 135, 186, 182, 62, 54, 56, 209, 5, 182, 104, 244, 78, 184,
-                167, 36, 156, 3, 14, 212, 191, 102, 69, 11, 214, 43, 181, 138, 7, 21, 241, 122,
-                192, 73, 244, 36, 136, 187, 175, 159, 181,
+                157, 252, 60, 100, 194, 248, 190, 222, 21, 51, 182, 167, 159, 133, 112, 229, 148,
+                62, 11, 143, 209, 207, 119, 16, 122, 223, 123, 114, 206, 244, 33, 133, 213, 100,
+                163, 174, 226, 76, 171, 67, 248, 14, 60, 69, 56, 8, 125, 112, 252, 130, 78, 171,
+                186, 213, 150, 162, 60, 151, 182, 238, 131, 34, 204, 192,
             ],
             seed
         );
 
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE);
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
 
         let zil_key_pair = KeyPair::from_bip39_seed(&seed, &zil_path).unwrap();
         let eth_key_pair = KeyPair::from_bip39_seed(&seed, &eth_path).unwrap();
@@ -503,11 +546,11 @@ mod tests_keypair {
 
         assert_eq!(
             addr_eth.to_string(),
-            "0x7aa13D6AE95fb8E843d3bCC2eea365F71c3bACbe"
+            "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
         );
         assert_eq!(
             addr_zil.to_string(),
-            "0xC315295101461753b838E0BE8688E744cf52Dd6b"
+            "0xBE9390B088c7651Af28751CEb84e233Be3B8162D"
         );
 
         assert_ne!(
@@ -521,26 +564,26 @@ mod tests_keypair {
 
         assert_eq!(
             zil_key_pair.get_secretkey().unwrap().to_string(),
-            "01e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+            "01846513a18ccac9459cc9fd8567b3d763f0715bd84c9e9a6d1b08dd14d0f329ef"
         );
         assert_eq!(
             eth_key_pair.get_secretkey().unwrap().to_string(),
-            "01b8ef60193eec0a55db93ba692035a8b5a388579c8dc58acc62ea470aba529e1c"
+            "01ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
         );
         assert_eq!(
             eth_key_pair.get_pubkey().unwrap().to_string(),
-            "010315bd7b9301a2cde69ef8092d6fb275a077e3c94e5ed166c915426850cf606600"
+            "01038318535b54105d4a7aae60c08fc45f9687181b4fdfc625bd1a753fa7397fed75"
         );
         assert_eq!(
             zil_key_pair.get_pubkey().unwrap().to_string(),
-            "0103150a7f37063b134cde30070431a69148d60b252f4c7b38de33d813d329a7b7da"
+            "0102d8855750cd4a1b807e1f88069781d8197b7743b51c00e57e72f66258fa6c2333"
         );
     }
 
     #[test]
     fn test_derivation_path_generation() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 1, DerivationPath::BIP44_PURPOSE);
+        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, 1, DerivationPath::BIP44_PURPOSE, None);
 
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");
         assert_eq!(zil_path.get_path(), "m/44'/313'/0'/0/1");

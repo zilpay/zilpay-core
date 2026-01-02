@@ -83,6 +83,7 @@ pub fn gen_eth_account(index: u32, name: &str) -> (DerivationPath, String) {
             slip44::ETHEREUM,
             index as usize,
             DerivationPath::BIP44_PURPOSE,
+            None,
         ),
         name.to_string(),
     )
@@ -94,6 +95,7 @@ pub fn gen_zil_account(index: u32, name: &str) -> (DerivationPath, String) {
             slip44::ZILLIQA,
             index as usize,
             DerivationPath::BIP44_PURPOSE,
+            None,
         ),
         name.to_string(),
     )

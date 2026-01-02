@@ -269,7 +269,7 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
         let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
             (
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE),
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
                 format!("account {i}"),
             )
         });
@@ -314,6 +314,57 @@ mod tests {
 
         assert!(res_wallet.reveal_mnemonic(&[0u8; KEY_SIZE]).is_err());
         assert!(res_wallet.reveal_mnemonic(&argon_seed).is_ok());
+    }
+
+    #[test]
+    fn test_init_from_bip39_btc() {
+        let (storage, _dir) = setup_test_storage();
+
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let keychain = KeyChain::from_seed(&argon_seed).unwrap();
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
+        let indexes = [0, 1, 2].map(|i| {
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    i,
+                    DerivationPath::BIP84_PURPOSE,
+                    Some(bitcoin::Network::Bitcoin),
+                ),
+                format!("Bitcoin Account {i}"),
+            )
+        });
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&storage),
+            settings: Default::default(),
+        };
+        let chain_config = ChainConfig::default();
+        let wallet = Wallet::from_bip39_words(
+            Bip39Params {
+                chain_config: &chain_config,
+                proof,
+                mnemonic: &mnemonic,
+                passphrase: PASSPHRASE,
+                indexes: &indexes,
+                wallet_name: "Bitcoin Wallet".to_string(),
+                biometric_type: AuthMethod::Biometric,
+            },
+            wallet_config,
+            vec![],
+        )
+        .unwrap();
+
+        let data = wallet.get_wallet_data().unwrap();
+
+        assert_eq!(data.accounts.len(), indexes.len());
+
+        for account in &data.accounts {
+            assert_eq!(account.slip_44, slip44::BITCOIN);
+            let addr_str = account.addr.auto_format();
+            assert!(addr_str.starts_with("bc1"));
+        }
     }
 
     #[test]

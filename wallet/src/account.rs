@@ -147,7 +147,7 @@ mod tests {
             "green process gate doctor slide whip priority shrug diamond crumble average help";
         let name = "Account 0";
         let m = Mnemonic::parse_str(&EN_WORDS, mnemonic_str).unwrap();
-        let bip49 = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE);
+        let bip49 = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None);
         let seed = m.to_seed("").unwrap();
         let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0, 1, slip44::ZILLIQA).unwrap();
 

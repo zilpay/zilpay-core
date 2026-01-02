@@ -151,7 +151,7 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        let derivation_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE);
+        let derivation_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
         let account = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         assert_eq!(
@@ -172,7 +172,7 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP44_PURPOSE);
+        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP44_PURPOSE, Some(bitcoin::Network::Bitcoin));
         let btc_secret_key = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         let sk_bytes = btc_secret_key.to_bytes();
@@ -211,7 +211,7 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
         let seed = mnemonic.to_seed("").unwrap();
 
-        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP84_PURPOSE);
+        let derivation_path = DerivationPath::new(slip44::BITCOIN, 0, DerivationPath::BIP84_PURPOSE, Some(bitcoin::Network::Bitcoin));
         let btc_secret_key = derive_private_key(&seed, &derivation_path.get_path()).unwrap();
 
         let sk_bytes = btc_secret_key.to_bytes();
