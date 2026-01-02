@@ -10,7 +10,13 @@ type Result<T> = std::result::Result<T, SecretKeyError>;
 pub enum SecretKey {
     Secp256k1Sha256Zilliqa([u8; SECRET_KEY_SIZE]),
     Secp256k1Keccak256Ethereum([u8; SECRET_KEY_SIZE]),
-    Secp256k1Bitcoin(([u8; SECRET_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)),
+    Secp256k1Bitcoin(
+        (
+            [u8; SECRET_KEY_SIZE],
+            bitcoin::Network,
+            bitcoin::AddressType,
+        ),
+    ),
 }
 
 impl SecretKey {
@@ -268,7 +274,11 @@ mod tests {
         let sk_data = [42u8; SECRET_KEY_SIZE];
         let sk_zil = SecretKey::Secp256k1Sha256Zilliqa(sk_data);
         let sk_eth = SecretKey::Secp256k1Keccak256Ethereum(sk_data);
-        let sk_btc = SecretKey::Secp256k1Bitcoin((sk_data, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh));
+        let sk_btc = SecretKey::Secp256k1Bitcoin((
+            sk_data,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        ));
 
         let zil_str = sk_zil.to_string();
         let eth_str = sk_eth.to_string();

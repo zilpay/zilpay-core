@@ -108,8 +108,12 @@ mod tests_wallet_tokens {
         let (storage, _dir) = setup_test_storage();
 
         let settings = WalletSettings::default();
-        let argon_seed =
-            derive_key(TEST_PASSWORD.as_bytes(), PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+        let argon_seed = derive_key(
+            TEST_PASSWORD.as_bytes(),
+            PROOF_SALT,
+            &settings.argon_params.into_config(),
+        )
+        .unwrap();
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
@@ -201,8 +205,12 @@ mod tests_wallet_tokens {
         let (storage, _dir) = setup_test_storage();
 
         let settings = WalletSettings::default();
-        let argon_seed =
-            derive_key(TEST_PASSWORD.as_bytes(), PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+        let argon_seed = derive_key(
+            TEST_PASSWORD.as_bytes(),
+            PROOF_SALT,
+            &settings.argon_params.into_config(),
+        )
+        .unwrap();
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
@@ -316,8 +324,12 @@ mod tests_wallet_tokens {
         let (storage, _dir) = setup_test_storage();
 
         let settings = WalletSettings::default();
-        let argon_seed =
-            derive_key(TEST_PASSWORD.as_bytes(), PROOF_SALT, &settings.argon_params.into_config()).unwrap();
+        let argon_seed = derive_key(
+            TEST_PASSWORD.as_bytes(),
+            PROOF_SALT,
+            &settings.argon_params.into_config(),
+        )
+        .unwrap();
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,

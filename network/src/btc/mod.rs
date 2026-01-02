@@ -3,8 +3,11 @@ use crate::provider::NetworkProvider;
 use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
+use bitcoin::consensus::encode::serialize;
 use electrum_client::{Client as ElectrumClient, ConfigBuilder, ElectrumApi};
+use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
+use errors::tx::TransactionErrors;
 use history::transaction::HistoricalTransaction;
 use proto::address::Address;
 use proto::tx::TransactionReceipt;
@@ -163,11 +166,37 @@ impl BtcOperations for NetworkProvider {
 
     async fn btc_broadcast_signed_transactions(
         &self,
-        _txns: Vec<TransactionReceipt>,
+        mut txns: Vec<TransactionReceipt>,
     ) -> Result<Vec<TransactionReceipt>> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
+        for tx_receipt in &txns {
+            if !tx_receipt.verify()? {
+                return Err(TransactionErrors::SignatureError(
+                    SignatureError::InvalidLength,
+                ))?;
+            }
+        }
+
+        for tx_receipt in txns.iter_mut() {
+            if let TransactionReceipt::Bitcoin((tx, metadata)) = tx_receipt {
+                let raw_tx = serialize(tx);
+
+                let txid = self.with_electrum_client(|client| {
+                    let txid = client
+                        .transaction_broadcast_raw(&raw_tx)
+                        .map_err(|e| NetworkErrors::RPCError(format!("Failed to broadcast transaction: {}", e)))?;
+
+                    Ok(txid)
+                })?;
+
+                metadata.hash = Some(txid.to_string());
+            } else {
+                return Err(NetworkErrors::RPCError(
+                    "Expected Bitcoin transaction".to_string(),
+                ));
+            }
+        }
+
+        Ok(txns)
     }
 
     async fn btc_update_balances(

@@ -51,7 +51,7 @@ pub enum TransactionReceipt {
 pub enum TransactionRequest {
     Zilliqa((ZILTransactionRequest, TransactionMetadata)), // ZILLIQA
     Ethereum((ETHTransactionRequest, TransactionMetadata)), // Ethereum
-    Bitcoin((BTCTransactionRequest, TransactionMetadata)),  // Bitcoin
+    Bitcoin((BTCTransactionRequest, TransactionMetadata)), // Bitcoin
 }
 
 impl TransactionReceipt {
@@ -99,15 +99,18 @@ impl TransactionReceipt {
                             return Ok(false);
                         }
 
-                        if let (Ok(Instruction::PushBytes(sig_bytes)), Ok(Instruction::PushBytes(pk_bytes))) =
-                            (&instructions[0], &instructions[1]) {
-
+                        if let (
+                            Ok(Instruction::PushBytes(sig_bytes)),
+                            Ok(Instruction::PushBytes(pk_bytes)),
+                        ) = (&instructions[0], &instructions[1])
+                        {
                             if sig_bytes.is_empty() || pk_bytes.is_empty() {
                                 return Ok(false);
                             }
 
-                            let bitcoin_sig = BitcoinEcdsaSignature::from_slice(sig_bytes.as_bytes())
-                                .map_err(|_| TransactionErrors::InvalidSignature)?;
+                            let bitcoin_sig =
+                                BitcoinEcdsaSignature::from_slice(sig_bytes.as_bytes())
+                                    .map_err(|_| TransactionErrors::InvalidSignature)?;
 
                             let pubkey = BitcoinPublicKey::from_slice(pk_bytes.as_bytes())
                                 .map_err(|_| TransactionErrors::InvalidPublicKey)?;
@@ -115,12 +118,19 @@ impl TransactionReceipt {
                             let prev_script = ScriptBuf::new_p2pkh(&pubkey.pubkey_hash());
 
                             let sighash = SighashCache::new(tx)
-                                .legacy_signature_hash(index, &prev_script, bitcoin_sig.sighash_type.to_u32())
+                                .legacy_signature_hash(
+                                    index,
+                                    &prev_script,
+                                    bitcoin_sig.sighash_type.to_u32(),
+                                )
                                 .map_err(|_| TransactionErrors::SighashComputationFailed)?;
 
                             let message = Message::from_digest(*sighash.as_ref());
 
-                            if secp.verify_ecdsa(&message, &bitcoin_sig.signature, &pubkey.inner).is_err() {
+                            if secp
+                                .verify_ecdsa(&message, &bitcoin_sig.signature, &pubkey.inner)
+                                .is_err()
+                            {
                                 return Ok(false);
                             }
                         } else {
@@ -274,9 +284,7 @@ impl TransactionRequest {
 
                 Ok(rlp_bytes)
             }
-            TransactionRequest::Bitcoin((tx, _)) => {
-                Ok(bitcoin::consensus::encode::serialize(tx))
-            }
+            TransactionRequest::Bitcoin((tx, _)) => Ok(bitcoin::consensus::encode::serialize(tx)),
         }
     }
 
@@ -366,13 +374,16 @@ impl TransactionRequest {
             }
             TransactionRequest::Bitcoin((tx, metadata)) => {
                 if let Some(first_output) = tx.output.first() {
-                    let network = if let Some(PubKey::Secp256k1Bitcoin((_, net, _))) = &metadata.signer {
-                        *net
-                    } else {
-                        bitcoin::Network::Bitcoin
-                    };
+                    let network =
+                        if let Some(PubKey::Secp256k1Bitcoin((_, net, _))) = &metadata.signer {
+                            *net
+                        } else {
+                            bitcoin::Network::Bitcoin
+                        };
 
-                    if let Ok(addr) = bitcoin::Address::from_script(&first_output.script_pubkey, network) {
+                    if let Ok(addr) =
+                        bitcoin::Address::from_script(&first_output.script_pubkey, network)
+                    {
                         Address::Secp256k1Bitcoin(addr.to_string().as_bytes().to_vec())
                     } else {
                         Address::Secp256k1Bitcoin(Vec::new())
@@ -572,15 +583,18 @@ mod tests_tx {
 
     #[tokio::test]
     async fn test_sign_verify_btc_tx() {
-        use bitcoin::sighash::EcdsaSighashType;
         use bitcoin::script::PushBytesBuf;
         use bitcoin::secp256k1::{self, Message, Secp256k1};
+        use bitcoin::sighash::EcdsaSighashType;
         use bitcoin::{absolute::LockTime, transaction::Version, Amount, OutPoint, Sequence, Txid};
         use std::str::FromStr;
 
-        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh).unwrap();
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh).unwrap();
 
-        let txid = Txid::from_str("76464c2b9e2af4d63ef38a77964b3b77e629dddefc5cb9eb1a3645b1608b790f").unwrap();
+        let txid =
+            Txid::from_str("76464c2b9e2af4d63ef38a77964b3b77e629dddefc5cb9eb1a3645b1608b790f")
+                .unwrap();
         let input = bitcoin::TxIn {
             previous_output: OutPoint { txid, vout: 0 },
             script_sig: ScriptBuf::new(),
@@ -590,7 +604,9 @@ mod tests_tx {
 
         let output_addr = keypair.get_addr().unwrap();
         let output_addr_str = output_addr.auto_format();
-        let btc_addr = bitcoin::Address::from_str(&output_addr_str).unwrap().assume_checked();
+        let btc_addr = bitcoin::Address::from_str(&output_addr_str)
+            .unwrap()
+            .assume_checked();
 
         let output = bitcoin::TxOut {
             value: Amount::from_sat(30_000_000),

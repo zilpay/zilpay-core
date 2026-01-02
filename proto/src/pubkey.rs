@@ -372,7 +372,8 @@ mod tests {
         ];
 
         for network in networks {
-            let btc_key = PubKey::Secp256k1Bitcoin((pk_data, network, bitcoin::AddressType::P2wpkh));
+            let btc_key =
+                PubKey::Secp256k1Bitcoin((pk_data, network, bitcoin::AddressType::P2wpkh));
             let bytes = btc_key.to_bytes().unwrap();
             let recovered: PubKey = bytes.as_slice().try_into().unwrap();
 
@@ -455,7 +456,11 @@ mod tests {
 
         let zil = PubKey::Secp256k1Sha256(data);
         let eth = PubKey::Secp256k1Keccak256(data);
-        let btc = PubKey::Secp256k1Bitcoin((data, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh));
+        let btc = PubKey::Secp256k1Bitcoin((
+            data,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        ));
         let sol = PubKey::Ed25519Solana(data);
 
         for key in [zil, eth, btc, sol] {

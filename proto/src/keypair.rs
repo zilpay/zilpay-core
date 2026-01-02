@@ -31,7 +31,14 @@ type Result<T> = std::result::Result<T, KeyPairError>;
 pub enum KeyPair {
     Secp256k1Sha256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
     Secp256k1Keccak256(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
-    Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)),
+    Secp256k1Bitcoin(
+        (
+            [u8; PUB_KEY_SIZE],
+            [u8; SECRET_KEY_SIZE],
+            bitcoin::Network,
+            bitcoin::AddressType,
+        ),
+    ),
 }
 
 impl KeyPair {
@@ -72,8 +79,12 @@ impl KeyPair {
     pub fn to_bitcoin(self, network: bitcoin::Network, addr_type: bitcoin::AddressType) -> Self {
         match self {
             Self::Secp256k1Sha256((pk, sk)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
-            Self::Secp256k1Keccak256((pk, sk)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
-            Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
+            Self::Secp256k1Keccak256((pk, sk)) => {
+                Self::Secp256k1Bitcoin((pk, sk, network, addr_type))
+            }
+            Self::Secp256k1Bitcoin((pk, sk, _, _)) => {
+                Self::Secp256k1Bitcoin((pk, sk, network, addr_type))
+            }
         }
     }
 
@@ -610,7 +621,8 @@ mod tests_keypair {
 
     #[tokio::test]
     async fn test_sign_typed_data_eip712_bitcoin_not_supported() {
-        let key_pair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let key_pair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let typed_data_json = json!({
             "types": {
                 "EIP712Domain": [
@@ -643,7 +655,8 @@ mod tests_keypair {
 
     #[test]
     fn test_gen_bitcoin_keypair() {
-        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         assert!(matches!(keypair, KeyPair::Secp256k1Bitcoin(_)));
 
         let pubkey = keypair.get_pubkey().unwrap();
@@ -655,7 +668,8 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_get_addr() {
-        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let addr = keypair.get_addr().unwrap();
 
         assert!(matches!(addr, Address::Secp256k1Bitcoin(_)));
@@ -663,7 +677,8 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_to_bytes() {
-        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let bytes = keypair.to_bytes().unwrap();
 
         assert_eq!(bytes[0], 2);
@@ -672,7 +687,8 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_from_bytes() {
-        let original = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let original =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let bytes = original.to_bytes().unwrap();
         let recovered = KeyPair::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
 
@@ -681,7 +697,8 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_sign_message() {
-        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let message = b"Hello Bitcoin!";
 
         let signature = keypair.sign_message(message);
@@ -691,14 +708,19 @@ mod tests_keypair {
     #[test]
     fn test_bitcoin_keypair_conversion() {
         let keypair_zil = KeyPair::gen_sha256().unwrap();
-        let keypair_btc = keypair_zil.to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh);
+        let keypair_btc =
+            keypair_zil.to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh);
 
         assert!(matches!(keypair_btc, KeyPair::Secp256k1Bitcoin(_)));
     }
 
     #[test]
     fn test_bitcoin_from_secret_key() {
-        let sk = SecretKey::Secp256k1Bitcoin(([42u8; SECRET_KEY_SIZE], bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh));
+        let sk = SecretKey::Secp256k1Bitcoin((
+            [42u8; SECRET_KEY_SIZE],
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        ));
         let result = KeyPair::from_secret_key(sk);
 
         assert!(result.is_ok());
@@ -708,7 +730,8 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_address_generation() {
-        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let address = keypair.get_addr().unwrap();
 
         let btc_addr = address.auto_format();
@@ -722,7 +745,11 @@ mod tests_keypair {
 
         let pk_bytes = hex::decode(public_key_hex).unwrap();
         let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
-        let pubkey = PubKey::Secp256k1Bitcoin((pk_array, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
+        let pubkey = PubKey::Secp256k1Bitcoin((
+            pk_array,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2pkh,
+        ));
 
         let address = Address::from_pubkey(&pubkey).unwrap();
 
@@ -758,7 +785,11 @@ mod tests_keypair {
         for (pubkey_hex, expected_addr) in test_cases {
             let pk_bytes = hex::decode(pubkey_hex).unwrap();
             let pk_array: [u8; PUB_KEY_SIZE] = pk_bytes.try_into().unwrap();
-            let pubkey = PubKey::Secp256k1Bitcoin((pk_array, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
+            let pubkey = PubKey::Secp256k1Bitcoin((
+                pk_array,
+                bitcoin::Network::Bitcoin,
+                bitcoin::AddressType::P2pkh,
+            ));
 
             let address = Address::from_pubkey(&pubkey).unwrap();
             let btc_address = address.auto_format();
@@ -785,7 +816,12 @@ mod tests_keypair {
         let private_key_bytes: [u8; SECRET_KEY_SIZE] = decoded[1..33].try_into().unwrap();
 
         let (pk, sk) = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
-        let keypair_btc = KeyPair::Secp256k1Bitcoin((pk, sk, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
+        let keypair_btc = KeyPair::Secp256k1Bitcoin((
+            pk,
+            sk,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2pkh,
+        ));
 
         let pubkey = keypair_btc.get_pubkey().unwrap();
         let pubkey_hex = hex::encode(pubkey.as_bytes());
@@ -821,7 +857,12 @@ mod tests_keypair {
             let private_key_bytes: [u8; SECRET_KEY_SIZE] = decoded[1..33].try_into().unwrap();
 
             let (pk, sk) = KeyPair::from_sk_bytes(private_key_bytes).unwrap();
-            let keypair_btc = KeyPair::Secp256k1Bitcoin((pk, sk, bitcoin::Network::Bitcoin, bitcoin::AddressType::P2pkh));
+            let keypair_btc = KeyPair::Secp256k1Bitcoin((
+                pk,
+                sk,
+                bitcoin::Network::Bitcoin,
+                bitcoin::AddressType::P2pkh,
+            ));
 
             let pubkey = keypair_btc.get_pubkey().unwrap();
             let pubkey_hex = hex::encode(pubkey.as_bytes());
@@ -895,7 +936,8 @@ mod tests_keypair {
 
     #[test]
     fn test_bitcoin_keypair_to_bytes_structure() {
-        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
         let bytes = keypair.to_bytes().unwrap();
 
         assert_eq!(bytes[0], 2); // Bitcoin variant
@@ -907,7 +949,8 @@ mod tests_keypair {
     #[test]
     fn test_bitcoin_keypair_conversion_roundtrip() {
         let zil_keypair = KeyPair::gen_sha256().unwrap();
-        let btc_keypair = zil_keypair.to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh);
+        let btc_keypair =
+            zil_keypair.to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh);
 
         let bytes = btc_keypair.to_bytes().unwrap();
         let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
@@ -919,7 +962,8 @@ mod tests_keypair {
     fn test_all_keypair_types_roundtrip() {
         let zil = KeyPair::gen_sha256().unwrap();
         let eth = KeyPair::gen_keccak256().unwrap();
-        let btc = KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
+        let btc =
+            KeyPair::gen_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh).unwrap();
 
         for keypair in [zil, eth, btc] {
             let bytes = keypair.to_bytes().unwrap();

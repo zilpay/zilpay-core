@@ -180,10 +180,10 @@ mod tests_background_worker {
     use alloy::primitives::map::HashMap;
     use config::address::ADDR_LEN;
     use crypto::{bip49::DerivationPath, slip44};
-    use test_data::{gen_device_indicators, gen_eth_account, gen_zil_account, TEST_PASSWORD};
     use proto::address::Address;
     use rand::Rng;
     use rpc::network_config::ChainConfig;
+    use test_data::{gen_device_indicators, gen_eth_account, gen_zil_account, TEST_PASSWORD};
     use token::ft::FToken;
     use wallet::wallet_storage::StorageOperations;
 
@@ -321,9 +321,12 @@ mod tests_background_worker {
                         hash: Some(tx_hash_1.to_string()),
                         ..Default::default()
                     },
-                    evm: Some(serde_json::json!({
-                        "transactionHash": tx_hash_1,
-                    }).to_string()),
+                    evm: Some(
+                        serde_json::json!({
+                            "transactionHash": tx_hash_1,
+                        })
+                        .to_string(),
+                    ),
                     ..Default::default()
                 },
                 HistoricalTransaction {
@@ -332,9 +335,12 @@ mod tests_background_worker {
                         hash: Some(tx_hash_2.to_string()),
                         ..Default::default()
                     },
-                    evm: Some(serde_json::json!({
-                        "transactionHash": tx_hash_2,
-                    }).to_string()),
+                    evm: Some(
+                        serde_json::json!({
+                            "transactionHash": tx_hash_2,
+                        })
+                        .to_string(),
+                    ),
                     ..Default::default()
                 },
                 HistoricalTransaction {
@@ -343,9 +349,12 @@ mod tests_background_worker {
                         hash: Some(tx_hash_3.to_string()),
                         ..Default::default()
                     },
-                    evm: Some(serde_json::json!({
-                        "transactionHash": tx_hash_3,
-                    }).to_string()),
+                    evm: Some(
+                        serde_json::json!({
+                            "transactionHash": tx_hash_3,
+                        })
+                        .to_string(),
+                    ),
                     ..Default::default()
                 },
             ])

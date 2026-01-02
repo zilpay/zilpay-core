@@ -1,3 +1,4 @@
+use errors::crypto::SchorrError;
 pub use k256::{ecdsa::Signature, PublicKey, SecretKey};
 use k256::{
     elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint, Group, PrimeField},
@@ -6,7 +7,6 @@ use k256::{
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use sha2::{Digest, Sha256};
-use errors::crypto::SchorrError;
 
 pub const MAX_TRY_SIGN: usize = 100_000_000;
 
