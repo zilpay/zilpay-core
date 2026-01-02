@@ -226,7 +226,9 @@ mod tests_network {
     use history::status::TransactionStatus;
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
-    use test_data::{gen_anvil_net_conf, gen_bsc_testnet_conf, gen_eth_mainnet_conf, gen_zil_testnet_conf};
+    use test_data::{
+        gen_anvil_net_conf, gen_bsc_testnet_conf, gen_eth_mainnet_conf, gen_zil_testnet_conf,
+    };
     use tokio;
 
     fn setup_temp_storage() -> Arc<LocalStorage> {
@@ -393,7 +395,9 @@ mod tests_network {
         let loaded_providers = NetworkProvider::load_network_configs(Arc::clone(&storage));
 
         assert_eq!(providers.len(), loaded_providers.len());
-        assert!(loaded_providers.iter().any(|p| p.config.name == "Zilliqa(testnet)"));
+        assert!(loaded_providers
+            .iter()
+            .any(|p| p.config.name == "Zilliqa(testnet)"));
         assert!(loaded_providers.iter().any(|p| p.config.chain_id() == 333));
     }
 

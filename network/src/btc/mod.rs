@@ -131,12 +131,46 @@ impl BtcOperations for NetworkProvider {
 
     async fn btc_update_balances(
         &self,
-        _tokens: Vec<&mut FToken>,
-        _accounts: &[&Address],
+        mut tokens: Vec<&mut FToken>,
+        accounts: &[&Address],
     ) -> Result<()> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
+        if accounts.is_empty() || tokens.is_empty() {
+            return Ok(());
+        }
+
+        let mut scripts = Vec::with_capacity(accounts.len());
+        for addr in accounts {
+            let btc_addr = addr
+                .to_bitcoin_addr()
+                .map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
+            scripts.push(btc_addr.script_pubkey());
+        }
+
+        let script_refs: Vec<_> = scripts.iter().map(|s| s.as_ref()).collect();
+        let balances = self.with_electrum_client(|client| {
+            client
+                .batch_script_get_balance(&script_refs)
+                .map_err(|e| NetworkErrors::RPCError(format!("Failed to get balances: {}", e)))
+        })?;
+
+        for token in tokens.iter_mut() {
+            if token.native {
+                for (account_idx, balance) in balances.iter().enumerate() {
+                    let confirmed = balance.confirmed;
+                    let unconfirmed = if balance.unconfirmed < 0 {
+                        0u64
+                    } else {
+                        balance.unconfirmed as u64
+                    };
+                    let total_balance = confirmed + unconfirmed;
+                    token
+                        .balances
+                        .insert(account_idx, U256::from(total_balance));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn btc_ftoken_meta(&self, _contract: Address, _accounts: &[&Address]) -> Result<FToken> {
@@ -149,7 +183,7 @@ impl BtcOperations for NetworkProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test_data::gen_btc_testnet_conf;
+    use test_data::{gen_btc_testnet_conf, gen_btc_token};
 
     #[tokio::test]
     async fn test_get_block_number_btc() {
@@ -158,5 +192,27 @@ mod tests {
 
         let block_number = provider.btc_get_current_block_number().await.unwrap();
         assert!(block_number > 0);
+    }
+
+    #[tokio::test]
+    async fn test_update_balances_btc() {
+        let net_conf = gen_btc_testnet_conf();
+        let provider = NetworkProvider::new(net_conf);
+
+        let mut btc_token = gen_btc_token();
+
+        let test_addr = "bcrt1q6klf3cny45skpulz4kazm9dx9fd44usmccdp6z";
+        let addr = Address::Secp256k1Bitcoin(test_addr.as_bytes().to_vec());
+        let accounts = [&addr];
+
+        let tokens_refs = vec![&mut btc_token];
+
+        provider
+            .btc_update_balances(tokens_refs, &accounts)
+            .await
+            .unwrap();
+
+        dbg!(&btc_token);
+        assert!(btc_token.balances.contains_key(&0));
     }
 }

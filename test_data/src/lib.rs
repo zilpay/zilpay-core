@@ -181,6 +181,21 @@ pub fn gen_btc_testnet_conf() -> ChainConfig {
     }
 }
 
+pub fn gen_btc_token() -> FToken {
+    FToken {
+        rate: 0f64,
+        name: "Bitcoin".to_string(),
+        symbol: "BTC".to_string(),
+        decimals: 8,
+        addr: Address::Secp256k1Bitcoin(vec![]),
+        logo: None,
+        balances: HashMap::new(),
+        default: true,
+        native: true,
+        chain_hash: gen_btc_testnet_conf().hash(),
+    }
+}
+
 #[allow(dead_code)]
 pub mod anvil_accounts {
     pub const ACCOUNT_0: &str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
