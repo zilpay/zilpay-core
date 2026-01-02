@@ -195,7 +195,9 @@ impl NetworkProvider {
     pub async fn ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
         match self.config.slip_44 {
             slip44::ETHEREUM | slip44::ZILLIQA => self.evm_ftoken_meta(contract, accounts).await,
-            slip44::BITCOIN => self.btc_ftoken_meta(contract, accounts).await,
+            slip44::BITCOIN => Err(NetworkErrors::RPCError(
+                "Bitcoin does not support tokens".to_string(),
+            )),
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name

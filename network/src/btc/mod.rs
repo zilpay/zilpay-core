@@ -67,7 +67,6 @@ pub trait BtcOperations {
         tokens: Vec<&mut FToken>,
         accounts: &[&Address],
     ) -> Result<()>;
-    async fn btc_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken>;
 }
 
 #[async_trait]
@@ -202,12 +201,6 @@ impl BtcOperations for NetworkProvider {
         }
 
         Ok(())
-    }
-
-    async fn btc_ftoken_meta(&self, _contract: Address, _accounts: &[&Address]) -> Result<FToken> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
     }
 }
 
