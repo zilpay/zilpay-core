@@ -21,8 +21,8 @@ use rpc::{
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::provider::NetworkProvider;
 use super::stake::{FinalOutput, LPToken, PendingWithdrawal, ZilValidator};
+use crate::provider::NetworkProvider;
 
 sol! {
     struct Validator {

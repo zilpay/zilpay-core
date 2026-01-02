@@ -7,7 +7,7 @@ use electrum_client::{Client as ElectrumClient, ConfigBuilder, ElectrumApi};
 use errors::network::NetworkErrors;
 use history::transaction::HistoricalTransaction;
 use proto::address::Address;
-use proto::tx::{TransactionReceipt, TransactionRequest};
+use proto::tx::TransactionReceipt;
 use token::ft::FToken;
 
 const DEFAULT_FEE_RATE_BTC: f64 = 0.00001;
@@ -51,8 +51,6 @@ impl NetworkProvider {
 pub trait BtcOperations {
     async fn btc_get_current_block_number(&self) -> Result<u64>;
     async fn btc_estimate_params_batch(&self, block_count: u64) -> Result<RequiredTxParams>;
-    async fn btc_estimate_gas(&self, tx: &TransactionRequest) -> Result<U256>;
-    async fn btc_fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>>;
     async fn btc_estimate_block_time(&self) -> Result<u64>;
     async fn btc_update_transactions_receipt(
         &self,
@@ -115,18 +113,6 @@ impl BtcOperations for NetworkProvider {
                 nonce: 0,
             })
         })
-    }
-
-    async fn btc_estimate_gas(&self, _tx: &TransactionRequest) -> Result<U256> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
-    }
-
-    async fn btc_fetch_nonce(&self, _addresses: &[&Address]) -> Result<Vec<u64>> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
     }
 
     async fn btc_estimate_block_time(&self) -> Result<u64> {
@@ -283,8 +269,6 @@ mod tests {
         let provider = NetworkProvider::new(net_conf);
 
         let params = provider.btc_estimate_params_batch(6).await.unwrap();
-
-        dbg!(&params);
 
         assert!(params.gas_price > U256::ZERO);
         assert_eq!(params.max_priority_fee, U256::ZERO);

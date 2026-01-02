@@ -5,7 +5,6 @@ use rpc::{
     methods::{EvmMethods, ZilMethods},
     network_config::ChainConfig,
     provider::RpcProvider,
-    zil_interfaces::ErrorRes,
 };
 use serde_json::{json, Value};
 
@@ -30,21 +29,6 @@ pub struct RequiredTxParams {
 
 pub const EIP1559: u16 = 1559;
 pub const EIP4844: u16 = 4844;
-
-pub fn json_rpc_error(error: &ErrorRes) -> Result<(), NetworkErrors> {
-    let error_msg = format!(
-        "JSON-RPC error (code: {}): {}{}",
-        error.code,
-        error.message,
-        error
-            .data
-            .as_ref()
-            .map(|d| format!(", data: {}", d))
-            .unwrap_or_default()
-    );
-
-    return Err(NetworkErrors::RPCError(error_msg));
-}
 
 pub fn build_fee_history_request(block_count: u64, percentiles: &[f64]) -> Value {
     RpcProvider::<ChainConfig>::build_payload(

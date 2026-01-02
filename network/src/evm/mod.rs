@@ -13,9 +13,9 @@ use self::ft_parse::{
     process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
 };
 use self::gas_parse::{
-    build_batch_gas_request, json_rpc_error, process_parse_fee_history_request, EIP1559, EIP4844,
+    build_batch_gas_request, process_parse_fee_history_request, EIP1559, EIP4844,
 };
-use self::nonce_parser::{build_nonce_request, process_nonce_response};
+use self::nonce_parser::process_nonce_response;
 use self::tx_parse::{
     build_payload_tx_receipt, build_send_signed_tx_request, process_tx_receipt_response,
     process_tx_send_response,
@@ -50,8 +50,6 @@ pub trait EvmOperations {
         block_count: u64,
         percentiles: Option<&[f64]>,
     ) -> Result<RequiredTxParams>;
-    async fn evm_estimate_gas(&self, tx: &TransactionRequest) -> Result<U256>;
-    async fn evm_fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>>;
     async fn evm_estimate_block_time(&self, address: &Address) -> Result<u64>;
     async fn evm_update_transactions_receipt(
         &self,
@@ -184,65 +182,6 @@ impl EvmOperations for NetworkProvider {
             fee_history: fee_history_response,
             tx_estimate_gas: tx_estimate_gas_response,
         })
-    }
-
-    async fn evm_estimate_gas(&self, tx: &TransactionRequest) -> Result<U256> {
-        match tx {
-            TransactionRequest::Ethereum((tx, _metadata)) => {
-                let tx_object = serde_json::to_value(&tx)
-                    .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
-
-                let request = RpcProvider::<ChainConfig>::build_payload(
-                    json!([tx_object]),
-                    EvmMethods::EstimateGas,
-                );
-
-                let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-                let response = provider
-                    .req::<ResultRes<String>>(request)
-                    .await
-                    .map_err(NetworkErrors::Request)?;
-
-                if let Some(error) = &response.error {
-                    json_rpc_error(error)?;
-                }
-
-                let gas_str = response
-                    .result
-                    .as_ref()
-                    .ok_or(NetworkErrors::ResponseParseError)?;
-
-                U256::from_str_radix(gas_str.trim_start_matches("0x"), 16)
-                    .map_err(|_| NetworkErrors::ResponseParseError)
-            }
-            TransactionRequest::Zilliqa(_) | TransactionRequest::Bitcoin(_) => Err(
-                NetworkErrors::RPCError("Not an Ethereum transaction".to_string()),
-            ),
-        }
-    }
-
-    async fn evm_fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>> {
-        let total = addresses.len();
-        let mut all_requests = Vec::with_capacity(total);
-
-        for &addr in addresses {
-            let payload = build_nonce_request(addr);
-            all_requests.push(payload);
-        }
-
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-        let responses = provider
-            .req::<Vec<ResultRes<Value>>>(all_requests.into())
-            .await?;
-
-        let mut nonce_list = Vec::with_capacity(total);
-
-        for (&addr, response) in addresses.iter().zip(responses.iter()) {
-            let value = process_nonce_response(response, addr)?;
-            nonce_list.push(value);
-        }
-
-        Ok(nonce_list)
     }
 
     async fn evm_estimate_block_time(&self, address: &Address) -> Result<u64> {

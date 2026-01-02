@@ -136,17 +136,6 @@ impl NetworkProvider {
         }
     }
 
-    pub async fn estimate_gas(&self, tx: &TransactionRequest) -> Result<U256> {
-        match self.config.slip_44 {
-            slip44::ETHEREUM | slip44::ZILLIQA => self.evm_estimate_gas(tx).await,
-            slip44::BITCOIN => self.btc_estimate_gas(tx).await,
-            _ => Err(NetworkErrors::RPCError(format!(
-                "Unsupported network: {}",
-                self.config.slip_44
-            ))),
-        }
-    }
-
     pub async fn broadcast_signed_transactions(
         &self,
         txns: Vec<TransactionReceipt>,
@@ -159,17 +148,6 @@ impl NetworkProvider {
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
-            ))),
-        }
-    }
-
-    pub async fn fetch_nonce(&self, addresses: &[&Address]) -> Result<Vec<u64>> {
-        match self.config.slip_44 {
-            slip44::ETHEREUM | slip44::ZILLIQA => self.evm_fetch_nonce(addresses).await,
-            slip44::BITCOIN => self.btc_fetch_nonce(addresses).await,
-            _ => Err(NetworkErrors::RPCError(format!(
-                "Unsupported network: {}",
-                self.config.slip_44
             ))),
         }
     }
@@ -476,13 +454,28 @@ mod tests_network {
         let net_conf = gen_anvil_net_conf();
         let provider = NetworkProvider::new(net_conf);
 
-        let account = [
-            &Address::from_eth_address("0x2d09c57cB8EAf970dEEaf30546ec4dc3781c63cf").unwrap(),
-            &Address::from_eth_address("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8").unwrap(),
-            &Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
+        let accounts = [
+            Address::from_eth_address("0x2d09c57cB8EAf970dEEaf30546ec4dc3781c63cf").unwrap(),
+            Address::from_eth_address("0xBE0eB53F46cd790Cd13851d5EFf43D12404d33E8").unwrap(),
+            Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
         ];
 
-        let nonces = provider.fetch_nonce(&account).await.unwrap();
+        let payment_request = ETHTransactionRequest {
+            to: Some(accounts[0].to_alloy_addr().into()),
+            value: Some(U256::from(0u128)),
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((payment_request, Default::default()));
+
+        let mut nonces = Vec::new();
+        for account in &accounts {
+            let params = provider
+                .estimate_params_batch(&tx_request, account, 1, None)
+                .await
+                .unwrap();
+            nonces.push(params.nonce);
+        }
 
         assert!(nonces.first().unwrap() >= &0);
         assert!(nonces.get(1).unwrap() >= &0);
@@ -494,13 +487,32 @@ mod tests_network {
         let net_conf = create_mainnet_zilliqa_config();
         let provider = NetworkProvider::new(net_conf);
 
-        let account = [
-            &Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap(),
-            &Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap(),
-            &Address::Secp256k1Sha256([0u8; ADDR_LEN]),
+        let accounts = [
+            Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap(),
+            Address::from_zil_bech32("zil170u0aar9fjgu3hfma00wgk6axjl29l6hhnm2ua").unwrap(),
+            Address::Secp256k1Sha256([0u8; ADDR_LEN]),
         ];
 
-        let nonces = provider.fetch_nonce(&account).await.unwrap();
+        let zil_tx = ZILTransactionRequest {
+            chain_id: provider.config.chain_id() as u16,
+            nonce: 1,
+            gas_price: 2000 * 10u128.pow(6),
+            gas_limit: 100000,
+            to_addr: accounts[0].clone(),
+            amount: 0,
+            code: Vec::with_capacity(0),
+            data: Vec::with_capacity(0),
+        };
+        let tx_req = TransactionRequest::Zilliqa((zil_tx, Default::default()));
+
+        let mut nonces = Vec::new();
+        for account in &accounts {
+            let params = provider
+                .estimate_params_batch(&tx_req, account, 1, None)
+                .await
+                .unwrap();
+            nonces.push(params.nonce);
+        }
 
         assert!(nonces.first().unwrap() >= &0);
         assert!(nonces.get(1).unwrap() >= &0);
@@ -514,6 +526,8 @@ mod tests_network {
 
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let sender =
+            Address::from_eth_address("0x2d09c57cB8EAf970dEEaf30546ec4dc3781c63cf").unwrap();
         let payment_request = ETHTransactionRequest {
             to: Some(recipient.to_alloy_addr().into()),
             value: Some(U256::from(10u128)),
@@ -525,9 +539,12 @@ mod tests_network {
             ..Default::default()
         };
         let tx_request = TransactionRequest::Ethereum((payment_request, Default::default()));
-        let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
+        let params = provider
+            .estimate_params_batch(&tx_request, &sender, 1, None)
+            .await
+            .unwrap();
 
-        assert_eq!("21000", estimated_gas.to_string());
+        assert_eq!("21000", params.tx_estimate_gas.to_string());
     }
 
     #[tokio::test]
@@ -556,9 +573,12 @@ mod tests_network {
         };
 
         let tx_request = TransactionRequest::Ethereum((token_transfer_request, Default::default()));
-        let estimated_gas = provider.estimate_gas(&tx_request).await.unwrap();
+        let params = provider
+            .estimate_params_batch(&tx_request, &from, 1, None)
+            .await
+            .unwrap();
 
-        assert!(estimated_gas > U256::from(0));
+        assert!(params.tx_estimate_gas > U256::from(0));
     }
 
     #[tokio::test]

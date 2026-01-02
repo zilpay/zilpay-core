@@ -54,7 +54,7 @@ pub struct FinalOutput {
 #[cfg(test)]
 mod tests {
     use crate::provider::NetworkProvider;
-    use crate::zil::{ZilliqaScillaStakeing, ZilliqaEVMStakeing};
+    use crate::zil::{ZilliqaEVMStakeing, ZilliqaScillaStakeing};
 
     use proto::address::Address;
     use rpc::network_config::ChainConfig;
