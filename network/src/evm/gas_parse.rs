@@ -9,7 +9,7 @@ use rpc::{
 };
 use serde_json::{json, Value};
 
-use crate::nonce_parser::build_nonce_request;
+use super::nonce_parser::build_nonce_request;
 
 #[derive(Debug, Default)]
 pub struct GasFeeHistory {
@@ -51,25 +51,6 @@ pub fn build_fee_history_request(block_count: u64, percentiles: &[f64]) -> Value
         json!([block_count, "latest", percentiles]),
         EvmMethods::FeeHistory,
     )
-}
-
-pub fn build_evm_estimate_gas_request(tx: &TransactionRequest) -> Result<Value, NetworkErrors> {
-    match tx {
-        TransactionRequest::Ethereum((tx, _)) => {
-            let tx_object = serde_json::to_value(&tx)
-                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
-
-            let request = RpcProvider::<ChainConfig>::build_payload(
-                json!([tx_object]),
-                EvmMethods::EstimateGas,
-            );
-
-            Ok(request)
-        }
-        TransactionRequest::Zilliqa(_) => Err(NetworkErrors::RPCError(
-            "Zilliqa network doesn't support gas estimation".to_string(),
-        )),
-    }
 }
 
 pub fn build_batch_gas_request(

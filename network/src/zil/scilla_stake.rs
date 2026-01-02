@@ -16,10 +16,8 @@ use rpc::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{
-    provider::NetworkProvider,
-    stake::{FinalOutput, PendingWithdrawal},
-};
+use crate::provider::NetworkProvider;
+use super::stake::{FinalOutput, PendingWithdrawal};
 
 #[derive(Deserialize, Debug)]
 struct WithdrawalUnbonded {

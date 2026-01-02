@@ -34,7 +34,7 @@ impl<T> ResponseValidator for ResultRes<T> {
 
 #[derive(Debug)]
 pub enum RequestType<'a> {
-    Metadata(MetadataField),
+    Metadata,
     Balance(&'a Address),
 }
 
@@ -145,7 +145,7 @@ fn build_zil_requests<'a>(
             json!([base16_contract]),
             ZilMethods::GetSmartContractInit,
         ),
-        RequestType::Metadata(MetadataField::Name),
+        RequestType::Metadata,
     ));
 
     for account in accounts {
@@ -210,7 +210,7 @@ fn build_eth_requests<'a>(
         MetadataField::Decimals,
     ] {
         let data = erc20.encode_function_call(&field.to_string(), &[])?;
-        requests.push((build_eth_call(data), RequestType::Metadata(field)));
+        requests.push((build_eth_call(data), RequestType::Metadata));
     }
 
     // Build balance requests
@@ -435,7 +435,7 @@ mod ftoken_tests {
             let metadata_requests: Vec<_> = requests
                 .iter()
                 .filter_map(|(_, req_type)| match req_type {
-                    RequestType::Metadata(field) => Some(field),
+                    RequestType::Metadata => Some(true),
                     _ => None,
                 })
                 .collect();

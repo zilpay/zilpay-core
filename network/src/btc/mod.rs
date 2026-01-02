@@ -1,4 +1,4 @@
-use crate::gas_parse::RequiredTxParams;
+use crate::evm::RequiredTxParams;
 use crate::provider::NetworkProvider;
 use crate::Result;
 use alloy::primitives::U256;

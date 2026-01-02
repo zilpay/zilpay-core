@@ -1,18 +1,27 @@
-use crate::block_parse::{build_last_block_header_request, process_get_timestampt_block_response};
-use crate::ft_parse::{
+mod block_parse;
+mod ft_parse;
+mod gas_parse;
+mod nonce_parser;
+mod tx_parse;
+
+pub use self::ft_parse::generate_erc20_transfer_data;
+pub use self::gas_parse::RequiredTxParams;
+
+use self::block_parse::{build_last_block_header_request, process_get_timestampt_block_response};
+use self::ft_parse::{
     build_token_requests, process_eth_balance_response, process_eth_metadata_response,
     process_zil_balance_response, process_zil_metadata_response, MetadataField, RequestType,
 };
-use crate::gas_parse::{
-    build_batch_gas_request, json_rpc_error, process_parse_fee_history_request, RequiredTxParams,
+use self::gas_parse::{
+    build_batch_gas_request, json_rpc_error, process_parse_fee_history_request,
     EIP1559, EIP4844,
 };
-use crate::nonce_parser::{build_nonce_request, process_nonce_response};
-use crate::provider::NetworkProvider;
-use crate::tx_parse::{
+use self::nonce_parser::{build_nonce_request, process_nonce_response};
+use self::tx_parse::{
     build_payload_tx_receipt, build_send_signed_tx_request, process_tx_receipt_response,
     process_tx_send_response,
 };
+use crate::provider::NetworkProvider;
 use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
