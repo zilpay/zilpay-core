@@ -790,4 +790,72 @@ mod tests_background_transactions {
             hex::encode(&keypair.get_pubkey().unwrap().as_bytes())
         );
     }
+
+    #[tokio::test]
+    async fn test_sign_and_send_btc_tx() {
+        use crypto::{bip49::DerivationPath, slip44};
+        use test_data::gen_btc_testnet_conf;
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_btc_testnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        // Create Native SegWit Bech32 P2WPKH account (BIP84) for regtest
+        let accounts = [(
+            DerivationPath::new(
+                slip44::BITCOIN,
+                0,
+                DerivationPath::BIP84_PURPOSE,
+                Some(bitcoin::Network::Regtest),
+            ),
+            "BTC Acc 0".to_string(),
+        )];
+        let device_indicators = gen_device_indicators("btc_test");
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: TEST_PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "BTC wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![test_data::gen_btc_token()],
+        })
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let account = data.accounts.first().unwrap();
+
+        let addr_str = account.addr.auto_format();
+        assert_eq!("bcrt1q4qw42stdzjqs59xvlrlxr8526e3nunw7nwu08r", addr_str);
+
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
+
+        let addresses: Vec<&Address> = data.accounts.iter().map(|a| &a.addr).collect();
+        let mut ftokens = wallet.get_ftokens().unwrap();
+        let matching_tokens: Vec<&mut FToken> = ftokens
+            .iter_mut()
+            .filter(|token| token.chain_hash == net_config.hash())
+            .collect();
+
+        provider
+            .update_balances(matching_tokens, &addresses)
+            .await
+            .unwrap();
+        wallet.save_ftokens(&ftokens).unwrap();
+
+        let updated_tokens = wallet.get_ftokens().unwrap();
+        let btc_token = updated_tokens.first().unwrap();
+        assert!(btc_token.balances.get(&0).unwrap() > &U256::ZERO);
+
+        // TODO: Implement transaction creation
+        println!("Bitcoin account created with address: {}", addr_str);
+    }
 }
