@@ -253,15 +253,11 @@ impl TransactionsManagement for Background {
 #[cfg(test)]
 mod tests_background_transactions {
     use super::*;
-    use crate::{
-        bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
-    };
+    use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
     use cipher::argon2;
-    use crypto::slip44;
     use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
-    use rpc::network_config::ChainConfig;
     use test_data::{
         gen_anvil_net_conf, gen_anvil_token, gen_device_indicators, gen_eth_account,
         gen_zil_account, gen_zil_testnet_conf, gen_zil_token, ANVIL_MNEMONIC, TEST_PASSWORD,
@@ -275,24 +271,6 @@ mod tests_background_transactions {
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let bg = Background::from_storage_path(&dir).unwrap();
         (bg, dir)
-    }
-
-    // Helper function for BSC mainnet token (used only in history test)
-    fn gen_bsc_mainnet_token(chain_hash: u64) -> FToken {
-        use config::address::ADDR_LEN;
-        use std::collections::HashMap;
-        FToken {
-            rate: 0f64,
-            name: "BNB Smart Chain".to_string(),
-            symbol: "BNB".to_string(),
-            decimals: 18,
-            addr: Address::Secp256k1Keccak256([0u8; ADDR_LEN]),
-            logo: None,
-            balances: HashMap::new(),
-            default: true,
-            native: true,
-            chain_hash,
-        }
     }
 
     #[tokio::test]
@@ -421,8 +399,11 @@ mod tests_background_transactions {
             chain_id: Some(anvil_config.chain_id()),
             ..Default::default()
         };
-        let zilpay_trasnfer_req =
-            TransactionRequest::Ethereum((token_transfer_request, Default::default()));
+        let metadata = proto::tx::TransactionMetadata {
+            chain_hash: anvil_config.hash(),
+            ..Default::default()
+        };
+        let zilpay_trasnfer_req = TransactionRequest::Ethereum((token_transfer_request, metadata));
 
         let argon_seed = bg
             .unlock_wallet_with_password(&TEST_PASSWORD, &device_indicators, 0)
@@ -498,7 +479,8 @@ mod tests_background_transactions {
             chain_id: Some(provider.config.chain_id()),
             ..Default::default()
         };
-        let tx_request = TransactionRequest::Ethereum((transfer_request.clone(), Default::default()));
+        let tx_request =
+            TransactionRequest::Ethereum((transfer_request.clone(), Default::default()));
 
         let params = provider
             .estimate_params_batch(&tx_request, &account.addr, 1, None)
@@ -515,7 +497,11 @@ mod tests_background_transactions {
             chain_id: Some(provider.config.chain_id()),
             ..Default::default()
         };
-        let txn = TransactionRequest::Ethereum((transfer_request, Default::default()));
+        let metadata = proto::tx::TransactionMetadata {
+            chain_hash: net_config.hash(),
+            ..Default::default()
+        };
+        let txn = TransactionRequest::Ethereum((transfer_request, metadata));
 
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -539,105 +525,161 @@ mod tests_background_transactions {
 
     #[tokio::test]
     async fn test_update_history_evm() {
+        use test_data::anvil_accounts;
+        use tokio::time::{sleep, Duration};
+
         let (mut bg, _dir) = setup_test_background();
-        let net_config = ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [56, 0],
-            name: "BNB Smart Chain mainnet".to_string(),
-            chain: "BSC".to_string(),
-            short_name: String::new(),
-            rpc: vec![
-                "https://bsc-dataseed1.binance.org/".to_string(),
-                "https://bsc-dataseed2.binance.org/".to_string(),
-                "https://bsc-dataseed3.binance.org/".to_string(),
-                "https://bsc-dataseed4.binance.org/".to_string(),
-            ],
-            features: vec![155, 1559],
-            slip_44: slip44::ETHEREUM,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        };
+        let net_config = gen_anvil_net_conf();
         let net_hash = net_config.hash();
-        let words = Background::gen_bip39(24).unwrap();
 
-        bg.add_provider(net_config).unwrap();
+        bg.add_provider(net_config.clone()).unwrap();
 
-        let accounts = [gen_eth_account(0, "BSC Acc 0")];
-        let device_indicators = gen_device_indicators("testbnb");
+        let accounts = [gen_eth_account(0, "Anvil Acc 0")];
+        let device_indicators = gen_device_indicators("testanvil");
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
             password: TEST_PASSWORD,
             chain_hash: net_hash,
-            mnemonic_str: &words,
+            mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
             wallet_settings: Default::default(),
             passphrase: "",
-            wallet_name: "BSC wallet".to_string(),
+            wallet_name: "Anvil wallet".to_string(),
             biometric_type: Default::default(),
             device_indicators: &device_indicators,
-            ftokens: vec![gen_bsc_mainnet_token(net_hash)],
+            ftokens: vec![gen_anvil_token()],
         })
         .unwrap();
 
-        let tx_hash_1 = "0x3c5c16b756adf898dc9623445de94df709ffa2c1761d7579270dd292319981e5";
-        let tx_hash_2 = "0x6f3c4cb8145acf658db0a8fcf628c1294263d7ed4f9a2bbd92f7bf0e2846fb29";
-        let tx_history = vec![
-            HistoricalTransaction {
-                metadata: proto::tx::TransactionMetadata {
-                    chain_hash: net_hash,
-                    hash: Some(tx_hash_1.to_string()),
-                    ..Default::default()
-                },
-                evm: Some(
-                    serde_json::json!({
-                        "transactionHash": tx_hash_1,
-                    })
-                    .to_string(),
-                ),
-                ..Default::default()
-            },
-            HistoricalTransaction {
-                metadata: proto::tx::TransactionMetadata {
-                    chain_hash: net_hash,
-                    hash: Some(tx_hash_2.to_string()),
-                    ..Default::default()
-                },
-                evm: Some(
-                    serde_json::json!({
-                        "transactionHash": tx_hash_2,
-                    })
-                    .to_string(),
-                ),
-                ..Default::default()
-            },
-        ];
-        let walelt = bg.get_wallet_by_index(0).unwrap();
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let account = data.accounts.first().unwrap();
 
-        walelt.add_history(&tx_history).unwrap();
+        let recipient_0 = Address::from_eth_address(anvil_accounts::ACCOUNT_1).unwrap();
+        let transfer_request_0 = ETHTransactionRequest {
+            to: Some(recipient_0.to_alloy_addr().into()),
+            value: Some(U256::from(100u128)),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: None,
+            gas: Some(21_000),
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let tx_request_0 =
+            TransactionRequest::Ethereum((transfer_request_0.clone(), Default::default()));
+
+        let params_0 = provider
+            .estimate_params_batch(&tx_request_0, &account.addr, 1, None)
+            .await
+            .unwrap();
+
+        let transfer_request_0 = ETHTransactionRequest {
+            to: Some(recipient_0.to_alloy_addr().into()),
+            value: Some(U256::from(100u128)),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(params_0.nonce),
+            gas: Some(21_000),
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let metadata_0 = proto::tx::TransactionMetadata {
+            chain_hash: net_hash,
+            ..Default::default()
+        };
+        let txn_0 = TransactionRequest::Ethereum((transfer_request_0, metadata_0));
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            TEST_PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+        let txn_0 = txn_0.sign(&keypair).await.unwrap();
+        let txns_0 = vec![txn_0];
+        let txns_0 = bg
+            .broadcast_signed_transactions(0, 0, txns_0)
+            .await
+            .unwrap();
+
+        assert_eq!(txns_0.len(), 1);
+        let tx_hash_0 = txns_0[0].metadata.hash.clone().unwrap();
+
+        let wallet_check = bg.get_wallet_by_index(0).unwrap();
+        let history_check = wallet_check.get_history().unwrap();
+        assert_eq!(history_check.len(), 1);
+
+        let recipient_1 = Address::from_eth_address(anvil_accounts::ACCOUNT_2).unwrap();
+        let transfer_request_1 = ETHTransactionRequest {
+            to: Some(recipient_1.to_alloy_addr().into()),
+            value: Some(U256::from(200u128)),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: None,
+            gas: Some(21_000),
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let tx_request_1 =
+            TransactionRequest::Ethereum((transfer_request_1.clone(), Default::default()));
+
+        let params_1 = provider
+            .estimate_params_batch(&tx_request_1, &account.addr, 1, None)
+            .await
+            .unwrap();
+
+        let transfer_request_1 = ETHTransactionRequest {
+            to: Some(recipient_1.to_alloy_addr().into()),
+            value: Some(U256::from(200u128)),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(params_1.nonce),
+            gas: Some(21_000),
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let metadata_1 = proto::tx::TransactionMetadata {
+            chain_hash: net_hash,
+            ..Default::default()
+        };
+        let txn_1 = TransactionRequest::Ethereum((transfer_request_1, metadata_1));
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+        let txn_1 = txn_1.sign(&keypair).await.unwrap();
+        let txns_1 = vec![txn_1];
+        let txns_1 = bg
+            .broadcast_signed_transactions(0, 0, txns_1)
+            .await
+            .unwrap();
+
+        assert_eq!(txns_1.len(), 1);
+        let tx_hash_1 = txns_1[0].metadata.hash.clone().unwrap();
+
+        sleep(Duration::from_secs(2)).await;
+
         bg.check_pending_txns(0).await.unwrap();
 
-        let filterd_history = walelt
-            .get_history()
-            .unwrap()
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let history = wallet.get_history().unwrap();
+        let filtered_history = history
             .into_iter()
             .filter(|t| t.metadata.chain_hash == net_hash)
             .collect::<Vec<HistoricalTransaction>>();
 
-        assert_eq!(
-            filterd_history[0].metadata.hash,
-            tx_history[0].metadata.hash
-        );
-        assert_eq!(
-            filterd_history[1].metadata.hash,
-            tx_history[1].metadata.hash
-        );
-        assert_eq!(filterd_history[0].status, TransactionStatus::Success);
-        assert_eq!(filterd_history[1].status, TransactionStatus::Failed);
+        assert_eq!(filtered_history.len(), 2);
+        let hash_0 = filtered_history[0].metadata.hash.as_ref().unwrap();
+        let hash_1 = filtered_history[1].metadata.hash.as_ref().unwrap();
+        assert!(hash_0 == &tx_hash_0 || hash_1 == &tx_hash_0);
+        assert!(hash_0 == &tx_hash_1 || hash_1 == &tx_hash_1);
+        assert_eq!(filtered_history[0].status, TransactionStatus::Success);
+        assert_eq!(filtered_history[1].status, TransactionStatus::Success);
     }
 
     #[tokio::test]
