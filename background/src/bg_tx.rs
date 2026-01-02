@@ -326,16 +326,27 @@ mod tests_background_transactions {
         let provider = providers.first().unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
+        let account = data.accounts.first().unwrap();
 
-        let nonce = *provider
-            .fetch_nonce(&addresses)
+        let zil_tx = ZILTransactionRequest {
+            nonce: 0,
+            chain_id: provider.config.chain_id() as u16,
+            gas_price: 2000000100,
+            gas_limit: 1000,
+            to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
+                .unwrap(),
+            amount: 1, // in QA
+            code: Vec::with_capacity(0),
+            data: Vec::with_capacity(0),
+        };
+        let tx_request = TransactionRequest::Zilliqa((zil_tx.clone(), Default::default()));
+
+        let params = provider
+            .estimate_params_batch(&tx_request, &account.addr, 1, None)
             .await
-            .unwrap()
-            .first()
             .unwrap();
         let zil_tx = ZILTransactionRequest {
-            nonce: nonce + 1,
+            nonce: params.nonce,
             chain_id: provider.config.chain_id() as u16,
             gas_price: 2000000100,
             gas_limit: 1000,
@@ -475,13 +486,6 @@ mod tests_background_transactions {
             "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
         );
 
-        let addresses: Vec<&Address> = data.accounts.iter().map(|v| &v.addr).collect();
-        let nonce = *provider
-            .fetch_nonce(&addresses)
-            .await
-            .unwrap()
-            .first()
-            .unwrap();
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
         let transfer_request = ETHTransactionRequest {
@@ -489,7 +493,24 @@ mod tests_background_transactions {
             value: Some(U256::from(10u128)),
             max_fee_per_gas: Some(2_000_000_000),
             max_priority_fee_per_gas: Some(1_000_000_000),
-            nonce: Some(nonce),
+            nonce: None,
+            gas: Some(21_000),
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+        let tx_request = TransactionRequest::Ethereum((transfer_request.clone(), Default::default()));
+
+        let params = provider
+            .estimate_params_batch(&tx_request, &account.addr, 1, None)
+            .await
+            .unwrap();
+
+        let transfer_request = ETHTransactionRequest {
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::from(10u128)),
+            max_fee_per_gas: Some(2_000_000_000),
+            max_priority_fee_per_gas: Some(1_000_000_000),
+            nonce: Some(params.nonce),
             gas: Some(21_000),
             chain_id: Some(provider.config.chain_id()),
             ..Default::default()
