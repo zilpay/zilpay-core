@@ -9,6 +9,11 @@ use alloy::consensus::{SignableTransaction, TxEip4844Variant, TxEnvelope, TypedT
 use alloy::network::TransactionBuilder;
 use alloy::primitives::{TxKind, U256};
 use alloy::signers::Signature as EthersSignature;
+use bitcoin::ecdsa::Signature as BitcoinEcdsaSignature;
+use bitcoin::script::Instruction;
+use bitcoin::secp256k1::{Message, Secp256k1};
+use bitcoin::sighash::SighashCache;
+use bitcoin::{PublicKey as BitcoinPublicKey, ScriptBuf, Transaction as BitcoinTransaction};
 use config::address::ADDR_LEN;
 use config::key::PUB_KEY_SIZE;
 use config::sha::SHA512_SIZE;
@@ -20,6 +25,7 @@ use k256::SecretKey as K256SecretKey;
 use serde::{Deserialize, Serialize};
 
 pub type ETHTransactionRequest = alloy::rpc::types::eth::request::TransactionRequest;
+pub type BTCTransactionRequest = BitcoinTransaction;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TransactionMetadata {
@@ -37,6 +43,7 @@ pub struct TransactionMetadata {
 pub enum TransactionReceipt {
     Zilliqa((ZILTransactionReceipt, TransactionMetadata)), // ZILLIQA
     Ethereum((TxEnvelope, TransactionMetadata)),           // Ethereum
+    Bitcoin((BitcoinTransaction, TransactionMetadata)),    // Bitcoin
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -44,6 +51,7 @@ pub enum TransactionReceipt {
 pub enum TransactionRequest {
     Zilliqa((ZILTransactionRequest, TransactionMetadata)), // ZILLIQA
     Ethereum((ETHTransactionRequest, TransactionMetadata)), // Ethereum
+    Bitcoin((BTCTransactionRequest, TransactionMetadata)),  // Bitcoin
 }
 
 impl TransactionReceipt {
@@ -72,6 +80,57 @@ impl TransactionReceipt {
                     Ok(false)
                 }
             }
+
+            Self::Bitcoin((tx, _metadata)) => {
+                if tx.input.is_empty() || tx.output.is_empty() {
+                    return Ok(false);
+                }
+
+                let secp = Secp256k1::verification_only();
+
+                for (index, input) in tx.input.iter().enumerate() {
+                    if input.script_sig.is_empty() && input.witness.is_empty() {
+                        return Ok(false);
+                    }
+
+                    if !input.script_sig.is_empty() {
+                        let instructions: Vec<_> = input.script_sig.instructions().collect();
+                        if instructions.len() < 2 {
+                            return Ok(false);
+                        }
+
+                        if let (Ok(Instruction::PushBytes(sig_bytes)), Ok(Instruction::PushBytes(pk_bytes))) =
+                            (&instructions[0], &instructions[1]) {
+
+                            if sig_bytes.is_empty() || pk_bytes.is_empty() {
+                                return Ok(false);
+                            }
+
+                            let bitcoin_sig = BitcoinEcdsaSignature::from_slice(sig_bytes.as_bytes())
+                                .map_err(|_| TransactionErrors::InvalidSignature)?;
+
+                            let pubkey = BitcoinPublicKey::from_slice(pk_bytes.as_bytes())
+                                .map_err(|_| TransactionErrors::InvalidPublicKey)?;
+
+                            let prev_script = ScriptBuf::new_p2pkh(&pubkey.pubkey_hash());
+
+                            let sighash = SighashCache::new(tx)
+                                .legacy_signature_hash(index, &prev_script, bitcoin_sig.sighash_type.to_u32())
+                                .map_err(|_| TransactionErrors::SighashComputationFailed)?;
+
+                            let message = Message::from_digest(*sighash.as_ref());
+
+                            if secp.verify_ecdsa(&message, &bitcoin_sig.signature, &pubkey.inner).is_err() {
+                                return Ok(false);
+                            }
+                        } else {
+                            return Ok(false);
+                        }
+                    }
+                }
+
+                Ok(true)
+            }
         }
     }
 
@@ -80,6 +139,7 @@ impl TransactionReceipt {
         match self {
             Self::Zilliqa((_tx, metadata)) => metadata.hash.as_deref(),
             Self::Ethereum((_tx, meta)) => meta.hash.as_deref(),
+            Self::Bitcoin((_tx, metadata)) => metadata.hash.as_deref(),
         }
     }
 
@@ -88,6 +148,7 @@ impl TransactionReceipt {
         match self {
             Self::Zilliqa((_tx, ref mut metadata)) => metadata,
             Self::Ethereum((_tx, ref mut metadata)) => metadata,
+            Self::Bitcoin((_tx, ref mut metadata)) => metadata,
         }
     }
 
@@ -96,6 +157,7 @@ impl TransactionReceipt {
         match self {
             Self::Zilliqa((_tx, ref metadata)) => metadata,
             Self::Ethereum((_tx, ref metadata)) => metadata,
+            Self::Bitcoin((_tx, ref metadata)) => metadata,
         }
     }
 }
@@ -152,6 +214,14 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
             }
+            TransactionRequest::Bitcoin((tx, mut metadata)) => {
+                let txid = tx.compute_txid().to_string();
+                metadata.hash = Some(txid);
+
+                metadata.signer = Some(keypair.get_pubkey()?);
+
+                Ok(TransactionReceipt::Bitcoin((tx, metadata)))
+            }
         }
     }
 
@@ -197,13 +267,15 @@ impl TransactionRequest {
 
                 let mut rlp_bytes = Vec::with_capacity(capacity);
 
-                // TODO: alloy want clone, possible to remove it.
                 tx.clone()
                     .build_consensus_tx()
                     .map_err(|_| TransactionErrors::EncodeTxRlpError)?
                     .encode_for_signing(&mut rlp_bytes);
 
                 Ok(rlp_bytes)
+            }
+            TransactionRequest::Bitcoin((tx, _)) => {
+                Ok(bitcoin::consensus::encode::serialize(tx))
             }
         }
     }
@@ -269,6 +341,13 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Zilliqa((signed_tx, metadata)))
             }
+            TransactionRequest::Bitcoin((tx, mut metadata)) => {
+                let txid = tx.compute_txid().to_string();
+                metadata.hash = Some(txid);
+                metadata.signer = Some(pub_key.clone());
+
+                Ok(TransactionReceipt::Bitcoin((tx, metadata)))
+            }
         }
     }
 
@@ -285,6 +364,23 @@ impl TransactionRequest {
                     Address::Secp256k1Keccak256(Address::ZERO)
                 }
             }
+            TransactionRequest::Bitcoin((tx, metadata)) => {
+                if let Some(first_output) = tx.output.first() {
+                    let network = if let Some(PubKey::Secp256k1Bitcoin((_, net, _))) = &metadata.signer {
+                        *net
+                    } else {
+                        bitcoin::Network::Bitcoin
+                    };
+
+                    if let Ok(addr) = bitcoin::Address::from_script(&first_output.script_pubkey, network) {
+                        Address::Secp256k1Bitcoin(addr.to_string().as_bytes().to_vec())
+                    } else {
+                        Address::Secp256k1Bitcoin(Vec::new())
+                    }
+                } else {
+                    Address::Secp256k1Bitcoin(Vec::new())
+                }
+            }
         }
     }
 
@@ -294,6 +390,9 @@ impl TransactionRequest {
                 metadata.icon = Some(icon);
             }
             TransactionRequest::Ethereum((_, metadata)) => {
+                metadata.icon = Some(icon);
+            }
+            TransactionRequest::Bitcoin((_, metadata)) => {
                 metadata.icon = Some(icon);
             }
         }
@@ -465,6 +564,80 @@ mod tests_tx {
         };
         let tx_req = TransactionRequest::Ethereum((eip7702_request, Default::default()));
         let tx_res = tx_req.sign(&key_pair).await.unwrap();
+        let verify = tx_res.verify();
+
+        assert!(verify.is_ok());
+        assert!(verify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sign_verify_btc_tx() {
+        use bitcoin::sighash::EcdsaSighashType;
+        use bitcoin::script::PushBytesBuf;
+        use bitcoin::secp256k1::{self, Message, Secp256k1};
+        use bitcoin::{absolute::LockTime, transaction::Version, Amount, OutPoint, Sequence, Txid};
+        use std::str::FromStr;
+
+        let keypair = KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh).unwrap();
+
+        let txid = Txid::from_str("76464c2b9e2af4d63ef38a77964b3b77e629dddefc5cb9eb1a3645b1608b790f").unwrap();
+        let input = bitcoin::TxIn {
+            previous_output: OutPoint { txid, vout: 0 },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: bitcoin::Witness::new(),
+        };
+
+        let output_addr = keypair.get_addr().unwrap();
+        let output_addr_str = output_addr.auto_format();
+        let btc_addr = bitcoin::Address::from_str(&output_addr_str).unwrap().assume_checked();
+
+        let output = bitcoin::TxOut {
+            value: Amount::from_sat(30_000_000),
+            script_pubkey: btc_addr.script_pubkey(),
+        };
+
+        let mut tx = BitcoinTransaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![input],
+            output: vec![output],
+        };
+
+        let secp = Secp256k1::new();
+        let sk_bytes = keypair.get_sk_bytes();
+        let secret_key = secp256k1::SecretKey::from_slice(&sk_bytes[..]).unwrap();
+
+        let pubkey_bytes = keypair.get_pubkey_bytes();
+        let public_key = secp256k1::PublicKey::from_slice(pubkey_bytes).unwrap();
+        let prev_script = ScriptBuf::new_p2pkh(&bitcoin::PublicKey::new(public_key).pubkey_hash());
+
+        let sighash_type = EcdsaSighashType::All;
+        let sighash_cache = SighashCache::new(&tx);
+        let sighash = sighash_cache
+            .legacy_signature_hash(0, &prev_script, sighash_type.to_u32())
+            .unwrap();
+
+        let message = Message::from_digest(*sighash.as_ref());
+        let signature = secp.sign_ecdsa(&message, &secret_key);
+
+        let bitcoin_sig = BitcoinEcdsaSignature {
+            signature,
+            sighash_type,
+        };
+
+        let mut script_sig = ScriptBuf::new();
+        let sig_bytes = bitcoin_sig.serialize();
+        let sig_push = PushBytesBuf::try_from(sig_bytes.to_vec()).unwrap();
+        script_sig.push_slice(sig_push);
+
+        let pubkey_push = PushBytesBuf::try_from(public_key.serialize().to_vec()).unwrap();
+        script_sig.push_slice(pubkey_push);
+
+        tx.input[0].script_sig = script_sig;
+
+        let tx_req = TransactionRequest::Bitcoin((tx, Default::default()));
+        let tx_res = tx_req.sign(&keypair).await.unwrap();
         let verify = tx_res.verify();
 
         assert!(verify.is_ok());
