@@ -67,6 +67,7 @@ pub trait BtcOperations {
         tokens: Vec<&mut FToken>,
         accounts: &[&Address],
     ) -> Result<()>;
+    async fn btc_list_unspent(&self, address: &Address) -> Result<Vec<electrum_client::ListUnspentRes>>;
 }
 
 #[async_trait]
@@ -238,6 +239,20 @@ impl BtcOperations for NetworkProvider {
         }
 
         Ok(())
+    }
+
+    async fn btc_list_unspent(&self, address: &Address) -> Result<Vec<electrum_client::ListUnspentRes>> {
+        let btc_addr = address
+            .to_bitcoin_addr()
+            .map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
+        let script = btc_addr.script_pubkey();
+
+        self.with_electrum_client(|client| {
+            let unspents = client
+                .script_list_unspent(script.as_ref())
+                .map_err(|e| NetworkErrors::RPCError(format!("Failed to list unspent: {}", e)))?;
+            Ok(unspents)
+        })
     }
 }
 

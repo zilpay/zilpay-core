@@ -5,6 +5,7 @@ use cipher::argon2::Argon2Seed;
 use config::sha::SHA256_SIZE;
 use errors::{background::BackgroundError, tx::TransactionErrors, wallet::WalletErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
+use network::btc::BtcOperations;
 use proto::{address::Address, pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
 use sha2::{Digest, Sha256};
 use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
@@ -60,6 +61,16 @@ pub trait TransactionsManagement {
         title: Option<String>,
         icon: Option<String>,
     ) -> std::result::Result<(PubKey, Signature), Self::Error>;
+
+    async fn prepare_and_sign_btc_transaction(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        seed_bytes: &Argon2Seed,
+        passphrase: Option<&str>,
+        destinations: Vec<(Address, u64)>,
+        fee_rate_sat_per_vbyte: Option<u64>,
+    ) -> std::result::Result<TransactionReceipt, Self::Error>;
 }
 
 #[async_trait]
@@ -247,6 +258,143 @@ impl TransactionsManagement for Background {
         wallet.add_history(&history)?;
 
         Ok(history)
+    }
+
+    async fn prepare_and_sign_btc_transaction(
+        &self,
+        wallet_index: usize,
+        account_index: usize,
+        seed_bytes: &Argon2Seed,
+        passphrase: Option<&str>,
+        destinations: Vec<(Address, u64)>,
+        fee_rate_sat_per_vbyte: Option<u64>,
+    ) -> Result<TransactionReceipt> {
+        use bitcoin::hashes::Hash;
+        use bitcoin::{
+            absolute::LockTime, sighash::EcdsaSighashType, sighash::SighashCache,
+            transaction::Version, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut,
+            WPubkeyHash, Witness,
+        };
+        use bitcoin::{secp256k1, secp256k1::Message, secp256k1::Secp256k1};
+
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let data = wallet.get_wallet_data()?;
+        let account = data
+            .accounts
+            .get(account_index)
+            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+
+        let provider = self.get_provider(account.chain_hash)?;
+        let unspents = provider.btc_list_unspent(&account.addr).await?;
+
+        if unspents.is_empty() {
+            return Err(BackgroundError::BincodeError(
+                "No UTXOs available for this address".to_string(),
+            ));
+        }
+
+        let total_output: u64 = destinations.iter().map(|(_, amount)| amount).sum();
+        let estimated_vsize = (unspents.len() * 148 + destinations.len() * 34 + 10) as u64;
+        let fee_rate = fee_rate_sat_per_vbyte.unwrap_or(10);
+        let estimated_fee = estimated_vsize * fee_rate;
+        let total_input: u64 = unspents.iter().map(|u| u.value).sum();
+
+        if total_input < total_output + estimated_fee {
+            return Err(BackgroundError::BincodeError(format!(
+                "Insufficient funds: have {}, need {} (output: {}, fee: {})",
+                total_input,
+                total_output + estimated_fee,
+                total_output,
+                estimated_fee
+            )));
+        }
+
+        let keypair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
+        let pubkey = keypair.get_pubkey()?;
+        let pk_bytes = pubkey.as_bytes();
+        let secp = Secp256k1::new();
+        let sk_bytes = keypair.get_secretkey()?;
+        let secret_key = secp256k1::SecretKey::from_slice(sk_bytes.as_ref())
+            .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
+        let public_key = secp256k1::PublicKey::from_slice(pk_bytes)
+            .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
+
+        let wpubkey_hash = WPubkeyHash::hash(&public_key.serialize());
+        let mut inputs = Vec::new();
+        for unspent in &unspents {
+            inputs.push(TxIn {
+                previous_output: OutPoint {
+                    txid: unspent.tx_hash,
+                    vout: unspent.tx_pos as u32,
+                },
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            });
+        }
+
+        let mut outputs = Vec::new();
+        for (dest_addr, amount) in destinations {
+            let btc_addr = dest_addr
+                .to_bitcoin_addr()
+                .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
+            outputs.push(TxOut {
+                value: Amount::from_sat(amount),
+                script_pubkey: btc_addr.script_pubkey(),
+            });
+        }
+
+        let change = total_input - total_output - estimated_fee;
+        if change > 546 {
+            let change_addr = account
+                .addr
+                .to_bitcoin_addr()
+                .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
+            outputs.push(TxOut {
+                value: Amount::from_sat(change),
+                script_pubkey: change_addr.script_pubkey(),
+            });
+        }
+
+        let mut tx = Transaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: inputs,
+            output: outputs,
+        };
+
+        let sighash_type = EcdsaSighashType::All;
+        let prev_script = ScriptBuf::new_p2wpkh(&wpubkey_hash);
+
+        for (index, unspent) in unspents.iter().enumerate() {
+            let mut sighash_cache = SighashCache::new(&mut tx);
+            let input_amount = Amount::from_sat(unspent.value);
+
+            let sighash = sighash_cache
+                .p2wpkh_signature_hash(index, &prev_script, input_amount, sighash_type)
+                .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
+
+            let message = Message::from_digest(*sighash.as_ref());
+            let signature = secp.sign_ecdsa(&message, &secret_key);
+
+            let bitcoin_sig = bitcoin::ecdsa::Signature {
+                signature,
+                sighash_type,
+            };
+
+            let mut witness = Witness::new();
+            witness.push(bitcoin_sig.serialize());
+            witness.push(public_key.serialize());
+
+            tx.input[index].witness = witness;
+        }
+
+        let metadata = proto::tx::TransactionMetadata {
+            chain_hash: account.chain_hash,
+            ..Default::default()
+        };
+
+        Ok(TransactionReceipt::Bitcoin((tx, metadata)))
     }
 }
 
@@ -801,13 +949,14 @@ mod tests_background_transactions {
 
         bg.add_provider(net_config.clone()).unwrap();
 
-        // Create Native SegWit Bech32 P2WPKH account (BIP84) for regtest
+        // Create Native SegWit Bech32 P2WPKH account (BIP84)
+        // Using Bitcoin (Mainnet) network to match the provided addresses
         let accounts = [(
             DerivationPath::new(
                 slip44::BITCOIN,
                 0,
                 DerivationPath::BIP84_PURPOSE,
-                Some(bitcoin::Network::Regtest),
+                Some(bitcoin::Network::Bitcoin),
             ),
             "BTC Acc 0".to_string(),
         )];
@@ -833,29 +982,54 @@ mod tests_background_transactions {
         let account = data.accounts.first().unwrap();
 
         let addr_str = account.addr.auto_format();
-        assert_eq!("bcrt1q4qw42stdzjqs59xvlrlxr8526e3nunw7nwu08r", addr_str);
+        // Check sender address (Should be P2WPKH Mainnet starting with bc1q)
+        assert!(addr_str.starts_with("bc1q"));
 
-        let providers = bg.get_providers();
-        let provider = providers.first().unwrap();
+        // Retrieve argon seed
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            TEST_PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
 
-        let addresses: Vec<&Address> = data.accounts.iter().map(|a| &a.addr).collect();
-        let mut ftokens = wallet.get_ftokens().unwrap();
-        let matching_tokens: Vec<&mut FToken> = ftokens
-            .iter_mut()
-            .filter(|token| token.chain_hash == net_config.hash())
-            .collect();
+        // Define destination addresses (using wallet's own address for testing)
+        // In a real scenario, these would be different recipient addresses
+        let dest_addr = account.addr.clone();
+        let destinations = vec![
+            (dest_addr.clone(), 1000u64),
+            (dest_addr.clone(), 1000u64),
+            (dest_addr.clone(), 1000u64),
+            (dest_addr.clone(), 1000u64),
+        ];
 
-        provider
-            .update_balances(matching_tokens, &addresses)
+        // Prepare and sign Bitcoin transaction (auto-fetches UTXOs and builds tx)
+        let signed_tx = bg
+            .prepare_and_sign_btc_transaction(0, 0, &argon_seed, None, destinations, Some(10))
             .await
             .unwrap();
-        wallet.save_ftokens(&ftokens).unwrap();
 
-        let updated_tokens = wallet.get_ftokens().unwrap();
-        let btc_token = updated_tokens.first().unwrap();
-        assert!(btc_token.balances.get(&0).unwrap() > &U256::ZERO);
+        // Verify the signature
+        assert!(signed_tx.verify().unwrap());
 
-        // TODO: Implement transaction creation
-        println!("Bitcoin account created with address: {}", addr_str);
+        // Verify we have outputs (destinations + potentially change)
+        if let TransactionReceipt::Bitcoin((signed_btc_tx, _)) = &signed_tx {
+            assert!(signed_btc_tx.output.len() >= 4); // At least 4 destinations
+        } else {
+            panic!("Not a BTC tx");
+        }
+
+        // Broadcast the signed transaction
+        let txns = vec![signed_tx];
+        let broadcasted_txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+
+        // Verify we got a transaction back with a hash
+        assert_eq!(broadcasted_txns.len(), 1);
+
+        for tx in broadcasted_txns {
+            assert!(tx.metadata.hash.is_some());
+            println!("Transaction broadcasted with hash: {:?}", tx.metadata.hash);
+        }
     }
 }

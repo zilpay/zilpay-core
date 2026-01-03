@@ -183,7 +183,7 @@ pub fn gen_btc_testnet_conf() -> ChainConfig {
         chain: "BTC".to_string(),
         short_name: "btc".to_string(),
         rpc: vec!["ssl://btc-testnet.zilpay.io:60402".to_string()],
-        features: vec![],
+        features: vec![1],
         slip_44: slip44::BITCOIN,
         ens: None,
         explorers: vec![],

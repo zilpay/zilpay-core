@@ -1318,6 +1318,7 @@ dependencies = [
  "cipher 0.1.0",
  "config",
  "crypto",
+ "electrum-client",
  "errors",
  "hex",
  "history",
