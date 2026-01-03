@@ -1027,36 +1027,70 @@ mod tests_background_transactions {
 
         // Get and verify btc field
         let btc_data = btc_tx.get_btc().expect("BTC field should be present");
-        println!("BTC transaction data: {}", serde_json::to_string_pretty(&btc_data).unwrap());
 
         // Verify btc data structure
         assert!(btc_data.get("txid").is_some(), "txid should be present");
-        assert!(btc_data.get("version").is_some(), "version should be present");
-        assert!(btc_data.get("lockTime").is_some(), "lockTime should be present");
+        assert!(
+            btc_data.get("version").is_some(),
+            "version should be present"
+        );
+        assert!(
+            btc_data.get("lockTime").is_some(),
+            "lockTime should be present"
+        );
         assert!(btc_data.get("inputs").is_some(), "inputs should be present");
-        assert!(btc_data.get("outputs").is_some(), "outputs should be present");
-        assert!(btc_data.get("confirmations").is_some(), "confirmations should be present");
+        assert!(
+            btc_data.get("outputs").is_some(),
+            "outputs should be present"
+        );
+        assert!(
+            btc_data.get("confirmations").is_some(),
+            "confirmations should be present"
+        );
 
         // Verify inputs and outputs are arrays
-        let inputs = btc_data.get("inputs").unwrap().as_array().expect("inputs should be array");
-        let outputs = btc_data.get("outputs").unwrap().as_array().expect("outputs should be array");
-        println!("Transaction has {} inputs and {} outputs", inputs.len(), outputs.len());
+        let inputs = btc_data
+            .get("inputs")
+            .unwrap()
+            .as_array()
+            .expect("inputs should be array");
+        let outputs = btc_data
+            .get("outputs")
+            .unwrap()
+            .as_array()
+            .expect("outputs should be array");
+        println!(
+            "Transaction has {} inputs and {} outputs",
+            inputs.len(),
+            outputs.len()
+        );
 
         assert!(inputs.len() > 0, "Should have at least one input");
-        assert!(outputs.len() >= 4, "Should have at least 4 outputs (destinations)");
+        assert!(
+            outputs.len() >= 4,
+            "Should have at least 4 outputs (destinations)"
+        );
 
         // Verify transaction status
         println!("Transaction status: {:?}", btc_tx.status);
         assert!(
-            btc_tx.status == TransactionStatus::Success || btc_tx.status == TransactionStatus::Pending,
+            btc_tx.status == TransactionStatus::Success
+                || btc_tx.status == TransactionStatus::Pending,
             "Transaction should be either Success or Pending"
         );
 
         // If transaction has confirmations, status should be Success
-        let confirmations = btc_data.get("confirmations").and_then(|c| c.as_u64()).unwrap_or(0);
+        let confirmations = btc_data
+            .get("confirmations")
+            .and_then(|c| c.as_u64())
+            .unwrap_or(0);
         println!("Transaction confirmations: {}", confirmations);
         if confirmations > 0 {
-            assert_eq!(btc_tx.status, TransactionStatus::Success, "Transaction with confirmations should be Success");
+            assert_eq!(
+                btc_tx.status,
+                TransactionStatus::Success,
+                "Transaction with confirmations should be Success"
+            );
         }
     }
 }
