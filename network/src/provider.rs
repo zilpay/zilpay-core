@@ -6,7 +6,6 @@ use crate::evm::{EvmOperations, RequiredTxParams};
 use crate::Result;
 use alloy::primitives::U256;
 use config::storage::NETWORK_DB_KEY_V1;
-use crypto::bip49::DerivationPath;
 use crypto::slip44;
 use errors::network::NetworkErrors;
 use errors::rpc::RpcError;
@@ -25,11 +24,6 @@ pub struct NetworkProvider {
     pub config: ChainConfig,
 }
 
-impl NetworkProvider {
-    pub fn get_bip49(&self, index: usize) -> DerivationPath {
-        DerivationPath::new(self.config.slip_44, index, DerivationPath::BIP44_PURPOSE, None)
-    }
-}
 
 impl Provider for NetworkProvider {
     fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {

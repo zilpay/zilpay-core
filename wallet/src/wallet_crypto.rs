@@ -74,8 +74,33 @@ impl WalletCrypto for Wallet {
                 let m = self.reveal_mnemonic(seed_bytes)?;
                 let seed = m.to_seed(passphrase.unwrap_or(""))?;
                 let hd_index = account.account_type.value();
-                let bip49 = provider.get_bip49(hd_index);
-                let mut keypair = KeyPair::from_bip39_seed(&seed, &bip49)?;
+
+                // Determine BIP purpose and network based on account type
+                let (bip_purpose, network) = match &account.pub_key {
+                    proto::pubkey::PubKey::Secp256k1Bitcoin((_, net, addr_type)) => {
+                        // Map Bitcoin address type to BIP standard
+                        let purpose = match addr_type {
+                            bitcoin::AddressType::P2pkh => crypto::bip49::DerivationPath::BIP44_PURPOSE,
+                            bitcoin::AddressType::P2sh => crypto::bip49::DerivationPath::BIP49_PURPOSE,
+                            bitcoin::AddressType::P2wpkh => crypto::bip49::DerivationPath::BIP84_PURPOSE,
+                            bitcoin::AddressType::P2tr => crypto::bip49::DerivationPath::BIP86_PURPOSE,
+                            _ => crypto::bip49::DerivationPath::BIP84_PURPOSE, // Default to BIP84 for unknown types
+                        };
+                        (purpose, Some(*net))
+                    }
+                    _ => {
+                        // For non-Bitcoin (Zilliqa, Ethereum, etc.), use BIP44
+                        (crypto::bip49::DerivationPath::BIP44_PURPOSE, None)
+                    }
+                };
+
+                let bip_path = crypto::bip49::DerivationPath::new(
+                    provider.config.slip_44,
+                    hd_index,
+                    bip_purpose,
+                    network,
+                );
+                let mut keypair = KeyPair::from_bip39_seed(&seed, &bip_path)?;
 
                 match account.addr {
                     Address::Secp256k1Sha256(_) => {
@@ -148,5 +173,481 @@ impl WalletCrypto for Wallet {
         }
 
         Ok(sig)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        wallet_data::AuthMethod,
+        wallet_init::WalletInit,
+        Bip39Params, SecretKeyParams, Wallet, WalletConfig,
+    };
+    use cipher::argon2::{derive_key, ARGON2_DEFAULT_CONFIG};
+    use config::{argon::KEY_SIZE, cipher::PROOF_SIZE};
+    use crypto::{bip49::DerivationPath, slip44};
+    use rand::Rng;
+    use rpc::network_config::ChainConfig;
+    use storage::LocalStorage;
+    use test_data::{ANVIL_MNEMONIC, TEST_PASSWORD};
+
+    const PASSPHRASE: &str = "";
+
+    fn setup_test_storage() -> (Arc<LocalStorage>, String) {
+        let mut rng = rand::thread_rng();
+        let dir = format!("/tmp/{}", rng.gen::<usize>());
+        let storage = LocalStorage::from(&dir).unwrap();
+        let storage = Arc::new(storage);
+
+        (storage, dir)
+    }
+
+    fn create_test_wallet_from_secret_key(
+        storage: Arc<LocalStorage>,
+        argon_seed: &Argon2Seed,
+    ) -> Wallet {
+        let keychain = KeyChain::from_seed(argon_seed).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&storage),
+            settings: Default::default(),
+        };
+        let chain_config = ChainConfig::default();
+
+        let sk: SecretKey =
+            "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+                .parse()
+                .unwrap();
+
+        Wallet::from_sk(
+            SecretKeyParams {
+                sk,
+                proof,
+                wallet_name: "Wallet from SK".to_string(),
+                biometric_type: AuthMethod::Biometric,
+                chain_config: &chain_config,
+            },
+            wallet_config,
+            vec![],
+        )
+        .unwrap()
+    }
+
+    fn create_test_wallet_from_mnemonic(
+        storage: Arc<LocalStorage>,
+        argon_seed: &Argon2Seed,
+        indexes: &[(DerivationPath, String)],
+        chain_config: &ChainConfig,
+    ) -> Wallet {
+        let keychain = KeyChain::from_seed(argon_seed).unwrap();
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let wallet_config = WalletConfig {
+            keychain,
+            storage: Arc::clone(&storage),
+            settings: Default::default(),
+        };
+
+        // Save network config before creating wallet
+        let provider = NetworkProvider::new(chain_config.clone());
+        NetworkProvider::save_network_configs(&[provider], Arc::clone(&storage)).unwrap();
+
+        Wallet::from_bip39_words(
+            Bip39Params {
+                chain_config,
+                proof,
+                mnemonic: &mnemonic,
+                passphrase: PASSPHRASE,
+                indexes,
+                wallet_name: "Test Wallet".to_string(),
+                biometric_type: AuthMethod::Biometric,
+            },
+            wallet_config,
+            vec![],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn test_reveal_keypair_from_secret_key() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let wallet = create_test_wallet_from_secret_key(Arc::clone(&storage), &argon_seed);
+
+        // Reveal the keypair for account 0
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        // Verify the keypair can sign and verify messages
+        let msg = b"test message";
+        let sig = keypair.sign_message(msg).unwrap();
+        let verified = keypair.verify_sig(msg, &sig).unwrap();
+
+        assert!(verified);
+
+        // Verify the address matches the account address
+        let data = wallet.get_wallet_data().unwrap();
+        let account_addr = &data.accounts[0].addr;
+        let keypair_addr = keypair.get_addr().unwrap();
+
+        assert_eq!(account_addr, &keypair_addr);
+    }
+
+    #[test]
+    fn test_reveal_keypair_from_secret_key_invalid_index() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let wallet = create_test_wallet_from_secret_key(Arc::clone(&storage), &argon_seed);
+
+        // Try to reveal keypair for non-existent account
+        let result = wallet.reveal_keypair(999, &argon_seed, None);
+
+        assert!(result.is_err());
+        assert!(matches!(result, Err(WalletErrors::FailToGetAccount(999))));
+    }
+
+    #[test]
+    fn test_reveal_keypair_zilliqa_bip44() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0, 1, 2].map(|i| {
+            (
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
+                format!("Zilliqa Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::ZILLIQA;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        // Reveal keypair for each account
+        for i in 0..3 {
+            let keypair = wallet.reveal_keypair(i, &argon_seed, None).unwrap();
+
+            // Verify the address matches
+            let data = wallet.get_wallet_data().unwrap();
+            let account_addr = &data.accounts[i].addr;
+            let keypair_addr = keypair.get_addr().unwrap();
+
+            assert_eq!(account_addr, &keypair_addr);
+
+            // Verify it's a Zilliqa address (BIP39-derived Zilliqa accounts use Keccak256)
+            assert!(matches!(keypair_addr, Address::Secp256k1Keccak256(_)));
+        }
+    }
+
+    #[test]
+    fn test_reveal_keypair_ethereum_bip44() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0, 1].map(|i| {
+            (
+                DerivationPath::new(slip44::ETHEREUM, i, DerivationPath::BIP44_PURPOSE, None),
+                format!("Ethereum Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::ETHEREUM;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        // Reveal keypair for each account
+        for i in 0..2 {
+            let keypair = wallet.reveal_keypair(i, &argon_seed, None).unwrap();
+
+            // Verify the address matches
+            let data = wallet.get_wallet_data().unwrap();
+            let account_addr = &data.accounts[i].addr;
+            let keypair_addr = keypair.get_addr().unwrap();
+
+            assert_eq!(account_addr, &keypair_addr);
+
+            // Verify it's an Ethereum address (Secp256k1Keccak256)
+            assert!(matches!(keypair_addr, Address::Secp256k1Keccak256(_)));
+        }
+    }
+
+    #[test]
+    fn test_reveal_keypair_bitcoin_bip44_p2pkh() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0].map(|i| {
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    i,
+                    DerivationPath::BIP44_PURPOSE,
+                    Some(bitcoin::Network::Bitcoin),
+                ),
+                format!("Bitcoin BIP44 Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::BITCOIN;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        // Verify the address matches
+        let data = wallet.get_wallet_data().unwrap();
+        let account_addr = &data.accounts[0].addr;
+        let keypair_addr = keypair.get_addr().unwrap();
+
+        assert_eq!(account_addr, &keypair_addr);
+
+        // Verify it's a Bitcoin address
+        assert!(matches!(keypair_addr, Address::Secp256k1Bitcoin(_)));
+
+        // Verify it's using P2pkh (legacy address starting with 1)
+        let addr_str = keypair_addr.auto_format();
+        assert!(addr_str.starts_with('1'));
+    }
+
+    #[test]
+    fn test_reveal_keypair_bitcoin_bip49_p2sh() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0].map(|i| {
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    i,
+                    DerivationPath::BIP49_PURPOSE,
+                    Some(bitcoin::Network::Bitcoin),
+                ),
+                format!("Bitcoin BIP49 Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::BITCOIN;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        // Verify the address matches
+        let data = wallet.get_wallet_data().unwrap();
+        let account_addr = &data.accounts[0].addr;
+        let keypair_addr = keypair.get_addr().unwrap();
+
+        assert_eq!(account_addr, &keypair_addr);
+
+        // Verify it's a Bitcoin address
+        assert!(matches!(keypair_addr, Address::Secp256k1Bitcoin(_)));
+
+        // Verify it's using P2sh (nested SegWit address starting with 3)
+        let addr_str = keypair_addr.auto_format();
+        assert!(addr_str.starts_with('3'));
+    }
+
+    #[test]
+    fn test_reveal_keypair_bitcoin_bip84_p2wpkh() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0, 1].map(|i| {
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    i,
+                    DerivationPath::BIP84_PURPOSE,
+                    Some(bitcoin::Network::Bitcoin),
+                ),
+                format!("Bitcoin BIP84 Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::BITCOIN;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        for i in 0..2 {
+            let keypair = wallet.reveal_keypair(i, &argon_seed, None).unwrap();
+
+            // Verify the address matches
+            let data = wallet.get_wallet_data().unwrap();
+            let account_addr = &data.accounts[i].addr;
+            let keypair_addr = keypair.get_addr().unwrap();
+
+            assert_eq!(account_addr, &keypair_addr);
+
+            // Verify it's a Bitcoin address
+            assert!(matches!(keypair_addr, Address::Secp256k1Bitcoin(_)));
+
+            // Verify it's using P2wpkh (native SegWit address starting with bc1q)
+            let addr_str = keypair_addr.auto_format();
+            assert!(addr_str.starts_with("bc1q"));
+        }
+    }
+
+    #[test]
+    fn test_reveal_keypair_bitcoin_bip86_p2tr() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0].map(|i| {
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    i,
+                    DerivationPath::BIP86_PURPOSE,
+                    Some(bitcoin::Network::Bitcoin),
+                ),
+                format!("Bitcoin BIP86 Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::BITCOIN;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        // Verify the address matches
+        let data = wallet.get_wallet_data().unwrap();
+        let account_addr = &data.accounts[0].addr;
+        let keypair_addr = keypair.get_addr().unwrap();
+
+        assert_eq!(account_addr, &keypair_addr);
+
+        // Verify it's a Bitcoin address
+        assert!(matches!(keypair_addr, Address::Secp256k1Bitcoin(_)));
+
+        // Verify it's using P2tr (Taproot address starting with bc1p)
+        let addr_str = keypair_addr.auto_format();
+        assert!(addr_str.starts_with("bc1p"));
+    }
+
+    #[test]
+    fn test_reveal_mnemonic_success() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0].map(|i| {
+            (
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
+                format!("Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::ZILLIQA;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        // Reveal the mnemonic
+        let revealed_mnemonic = wallet.reveal_mnemonic(&argon_seed).unwrap();
+
+        // Verify it matches the original
+        assert_eq!(revealed_mnemonic.to_string(), ANVIL_MNEMONIC);
+    }
+
+    #[test]
+    fn test_reveal_mnemonic_wrong_seed() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0].map(|i| {
+            (
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
+                format!("Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::ZILLIQA;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        // Try to reveal with wrong seed
+        let wrong_seed = [0u8; KEY_SIZE];
+        let result = wallet.reveal_mnemonic(&wrong_seed);
+
+        // Should fail with decryption error
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_reveal_mnemonic_on_secret_key_wallet() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let wallet = create_test_wallet_from_secret_key(Arc::clone(&storage), &argon_seed);
+
+        // Try to reveal mnemonic on a SecretKey wallet
+        let result = wallet.reveal_mnemonic(&argon_seed);
+
+        // Should fail with InvalidAccountType error
+        assert!(result.is_err());
+        assert!(matches!(result, Err(WalletErrors::InvalidAccountType)));
+    }
+
+    #[test]
+    fn test_sign_message_with_revealed_keypair() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0].map(|i| {
+            (
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
+                format!("Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::ZILLIQA;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        // Sign a message using the wallet's sign_message method
+        let msg = b"Hello, Zilliqa!";
+        let signature = wallet.sign_message(msg, 0, &argon_seed, None).unwrap();
+
+        // Reveal the keypair and verify the signature
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+        let verified = keypair.verify_sig(msg, &signature).unwrap();
+
+        assert!(verified);
+    }
+
+    #[test]
+    fn test_reveal_keypair_bitcoin_testnet() {
+        let (storage, _dir) = setup_test_storage();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+
+        let indexes = [0].map(|i| {
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    i,
+                    DerivationPath::BIP84_PURPOSE,
+                    Some(bitcoin::Network::Testnet),
+                ),
+                format!("Bitcoin Testnet Account {i}"),
+            )
+        });
+
+        let mut chain_config = ChainConfig::default();
+        chain_config.slip_44 = slip44::BITCOIN;
+        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        // Verify the address matches
+        let data = wallet.get_wallet_data().unwrap();
+        let account_addr = &data.accounts[0].addr;
+        let keypair_addr = keypair.get_addr().unwrap();
+
+        assert_eq!(account_addr, &keypair_addr);
+
+        // Verify it's a Bitcoin testnet address (starts with tb1)
+        let addr_str = keypair_addr.auto_format();
+        assert!(addr_str.starts_with("tb1q"));
     }
 }
