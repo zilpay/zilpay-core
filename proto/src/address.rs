@@ -48,6 +48,10 @@ impl Address {
             return Self::from_eth_address(addr);
         }
 
+        if Self::is_bitcoin_address(addr) {
+            return Self::from_bitcoin_address(addr);
+        }
+
         let bytes = hex::decode(addr).map_err(|_| AddressError::InvalidHex)?;
         if bytes.len() != ADDR_LEN {
             return Err(AddressError::InvalidLength);
@@ -95,6 +99,41 @@ impl Address {
             }
             _ => Err(AddressError::InvalidAddressType),
         }
+    }
+
+    pub fn is_bitcoin_address(addr: &str) -> bool {
+        if addr.starts_with('1') || addr.starts_with('3') || addr.starts_with('m') || addr.starts_with('n') || addr.starts_with('2') {
+            return true;
+        }
+
+        if addr.starts_with("bc1") || addr.starts_with("tb1") || addr.starts_with("bcrt1") {
+            return true;
+        }
+
+        false
+    }
+
+    pub fn from_bitcoin_address(addr: &str) -> Result<Self> {
+        let btc_addr = bitcoin::Address::from_str(addr)
+            .map_err(|e| AddressError::BTCAddrError(e.to_string()))?
+            .assume_checked();
+
+        let addr_string = btc_addr.to_string();
+        Ok(Self::Secp256k1Bitcoin(addr_string.into_bytes()))
+    }
+
+    pub fn get_bitcoin_address_type(&self) -> Result<bitcoin::AddressType> {
+        let btc_addr = self.to_bitcoin_addr()?;
+        btc_addr.address_type().ok_or(AddressError::BTCAddrError("Unknown address type".to_string()))
+    }
+
+    pub fn get_bip_purpose(&self) -> Result<usize> {
+        use crypto::bip49::DerivationPath;
+
+        let addr_type = self.get_bitcoin_address_type()?;
+        let bip = DerivationPath::bip_from_address_type(addr_type);
+
+        Ok(bip as usize)
     }
 
     pub fn to_eth_checksummed(&self) -> Result<String> {
@@ -486,5 +525,151 @@ mod tests {
         let roundtrip_addr: Address = bytes.as_slice().try_into().unwrap();
 
         assert_eq!(addr, roundtrip_addr);
+    }
+
+    #[test]
+    fn test_p2pkh_address_bip44() {
+        let addr_str = "1QJVDzdqb1VpbDK7uDeyVXy9mR27CJiyhY";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2pkh);
+        assert_eq!(addr.get_bip_purpose().unwrap(), 44);
+    }
+
+    #[test]
+    fn test_p2sh_address_bip49() {
+        let addr_str = "3QBRmWNqqBGme9er7fMkGqtZtp4gjMFxhE";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2sh);
+        assert_eq!(addr.get_bip_purpose().unwrap(), 49);
+    }
+
+    #[test]
+    fn test_p2wpkh_address_bip84() {
+        let addr_str = "bc1qvzvkjn4q3nszqxrv3nraga2r822xjty3ykvkuw";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2wpkh);
+        assert_eq!(addr.get_bip_purpose().unwrap(), 84);
+    }
+
+    #[test]
+    fn test_p2tr_address_bip86() {
+        let addr_str = "bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2tr);
+        assert_eq!(addr.get_bip_purpose().unwrap(), 86);
+    }
+
+    #[test]
+    fn test_p2wsh_address() {
+        let addr_str = "bc1qwqdg6squsna38e46795at95yu9atm8azzmyvckulcc7kytlcckxswvvzej";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2wsh);
+    }
+
+    #[test]
+    fn test_testnet_p2pkh_address() {
+        let addr_str = "mqkhEMH6NCeYjFybv7pvFC22MFeaNT9AQC";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2pkh);
+        assert_eq!(addr.get_bip_purpose().unwrap(), 44);
+    }
+
+    #[test]
+    fn test_testnet_p2sh_address() {
+        let addr_str = "2N3zXjbwdTcPsJiy8sUK9FhWJhqQCxA8Jjr";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2sh);
+        assert_eq!(addr.get_bip_purpose().unwrap(), 49);
+    }
+
+    #[test]
+    fn test_testnet_p2wsh_address() {
+        let addr_str = "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2wsh);
+    }
+
+    #[test]
+    fn test_regtest_p2wpkh_address() {
+        let addr_str = "bcrt1q2nfxmhd4n3c8834pj72xagvyr9gl57n5r94fsl";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.get_bitcoin_address_type().unwrap(), bitcoin::AddressType::P2wpkh);
+        assert_eq!(addr.get_bip_purpose().unwrap(), 84);
+    }
+
+    #[test]
+    fn test_is_bitcoin_address() {
+        assert!(Address::is_bitcoin_address("1QJVDzdqb1VpbDK7uDeyVXy9mR27CJiyhY"));
+        assert!(Address::is_bitcoin_address("3QBRmWNqqBGme9er7fMkGqtZtp4gjMFxhE"));
+        assert!(Address::is_bitcoin_address("bc1qvzvkjn4q3nszqxrv3nraga2r822xjty3ykvkuw"));
+        assert!(Address::is_bitcoin_address("bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr"));
+        assert!(Address::is_bitcoin_address("mqkhEMH6NCeYjFybv7pvFC22MFeaNT9AQC"));
+        assert!(Address::is_bitcoin_address("2N3zXjbwdTcPsJiy8sUK9FhWJhqQCxA8Jjr"));
+        assert!(Address::is_bitcoin_address("tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7"));
+        assert!(Address::is_bitcoin_address("bcrt1q2nfxmhd4n3c8834pj72xagvyr9gl57n5r94fsl"));
+
+        assert!(!Address::is_bitcoin_address("0xf06686B5Eb5cAe38c09f12412B729045647E74e3"));
+        assert!(!Address::is_bitcoin_address("zil1a0vtxuxamd3kltmyzpqdyxqu25vsss8mp58jtu"));
+    }
+
+    #[test]
+    fn test_from_str_hex_bitcoin() {
+        let addr_str = "1QJVDzdqb1VpbDK7uDeyVXy9mR27CJiyhY";
+        let addr = Address::from_str_hex(addr_str).unwrap();
+
+        assert!(matches!(addr, Address::Secp256k1Bitcoin(_)));
+        assert_eq!(addr.auto_format(), addr_str);
+    }
+
+    #[test]
+    fn test_bitcoin_address_type_detection() {
+        let test_cases = vec![
+            ("1QJVDzdqb1VpbDK7uDeyVXy9mR27CJiyhY", bitcoin::AddressType::P2pkh, 44),
+            ("3QBRmWNqqBGme9er7fMkGqtZtp4gjMFxhE", bitcoin::AddressType::P2sh, 49),
+            ("bc1qvzvkjn4q3nszqxrv3nraga2r822xjty3ykvkuw", bitcoin::AddressType::P2wpkh, 84),
+            ("bc1p5cyxnuxmeuwuvkwfem96lqzszd02n6xdcjrs20cac6yqjjwudpxqkedrcr", bitcoin::AddressType::P2tr, 86),
+        ];
+
+        for (addr_str, expected_type, expected_bip) in test_cases {
+            let addr = Address::from_bitcoin_address(addr_str).unwrap();
+            assert_eq!(addr.get_bitcoin_address_type().unwrap(), expected_type);
+            assert_eq!(addr.get_bip_purpose().unwrap(), expected_bip);
+        }
+    }
+
+    #[test]
+    fn test_invalid_bitcoin_address() {
+        let invalid_addr = "1InvalidBitcoinAddress";
+        let result = Address::from_bitcoin_address(invalid_addr);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bitcoin_address_serialization() {
+        let addr_str = "bc1qvzvkjn4q3nszqxrv3nraga2r822xjty3ykvkuw";
+        let addr = Address::from_bitcoin_address(addr_str).unwrap();
+        let bytes = addr.to_bytes();
+        let roundtrip_addr: Address = bytes.as_slice().try_into().unwrap();
+
+        assert_eq!(addr, roundtrip_addr);
+        assert_eq!(roundtrip_addr.auto_format(), addr_str);
     }
 }
