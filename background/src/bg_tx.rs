@@ -994,10 +994,69 @@ mod tests_background_transactions {
 
         // Verify we got a transaction back with a hash
         assert_eq!(broadcasted_txns.len(), 1);
+        let tx_hash = broadcasted_txns[0].metadata.hash.clone().unwrap();
+        println!("Transaction broadcasted with hash: {}", tx_hash);
 
-        for tx in broadcasted_txns {
-            assert!(tx.metadata.hash.is_some());
-            println!("Transaction broadcasted with hash: {:?}", tx.metadata.hash);
+        // Check that transaction is in history
+        let wallet_check = bg.get_wallet_by_index(0).unwrap();
+        let history_check = wallet_check.get_history().unwrap();
+        assert_eq!(history_check.len(), 1);
+        println!("History length after broadcast: {}", history_check.len());
+
+        // Wait for transaction to be processed
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+        // Update transaction status
+        println!("Updating transaction status...");
+        bg.check_pending_txns(0).await.unwrap();
+
+        // Get updated history
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let history = wallet.get_history().unwrap();
+        let net_hash = net_config.hash();
+        let filtered_history = history
+            .into_iter()
+            .filter(|t| t.metadata.chain_hash == net_hash)
+            .collect::<Vec<HistoricalTransaction>>();
+
+        assert_eq!(filtered_history.len(), 1);
+        let btc_tx = &filtered_history[0];
+
+        // Verify transaction hash matches
+        assert_eq!(btc_tx.metadata.hash.as_ref().unwrap(), &tx_hash);
+
+        // Get and verify btc field
+        let btc_data = btc_tx.get_btc().expect("BTC field should be present");
+        println!("BTC transaction data: {}", serde_json::to_string_pretty(&btc_data).unwrap());
+
+        // Verify btc data structure
+        assert!(btc_data.get("txid").is_some(), "txid should be present");
+        assert!(btc_data.get("version").is_some(), "version should be present");
+        assert!(btc_data.get("lockTime").is_some(), "lockTime should be present");
+        assert!(btc_data.get("inputs").is_some(), "inputs should be present");
+        assert!(btc_data.get("outputs").is_some(), "outputs should be present");
+        assert!(btc_data.get("confirmations").is_some(), "confirmations should be present");
+
+        // Verify inputs and outputs are arrays
+        let inputs = btc_data.get("inputs").unwrap().as_array().expect("inputs should be array");
+        let outputs = btc_data.get("outputs").unwrap().as_array().expect("outputs should be array");
+        println!("Transaction has {} inputs and {} outputs", inputs.len(), outputs.len());
+
+        assert!(inputs.len() > 0, "Should have at least one input");
+        assert!(outputs.len() >= 4, "Should have at least 4 outputs (destinations)");
+
+        // Verify transaction status
+        println!("Transaction status: {:?}", btc_tx.status);
+        assert!(
+            btc_tx.status == TransactionStatus::Success || btc_tx.status == TransactionStatus::Pending,
+            "Transaction should be either Success or Pending"
+        );
+
+        // If transaction has confirmations, status should be Success
+        let confirmations = btc_data.get("confirmations").and_then(|c| c.as_u64()).unwrap_or(0);
+        println!("Transaction confirmations: {}", confirmations);
+        if confirmations > 0 {
+            assert_eq!(btc_tx.status, TransactionStatus::Success, "Transaction with confirmations should be Success");
         }
     }
 }

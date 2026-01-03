@@ -20,6 +20,7 @@ pub struct HistoricalTransaction {
     pub metadata: TransactionMetadata,
     pub evm: Option<String>,
     pub scilla: Option<String>,
+    pub btc: Option<String>,
     pub signed_message: Option<String>,
     pub timestamp: u64,
 }
@@ -41,6 +42,14 @@ impl HistoricalTransaction {
 
     pub fn set_scilla(&mut self, value: Value) {
         self.scilla = serde_json::to_string(&value).ok();
+    }
+
+    pub fn get_btc(&self) -> Option<Value> {
+        self.btc.as_ref().and_then(|s| serde_json::from_str(s).ok())
+    }
+
+    pub fn set_btc(&mut self, value: Value) {
+        self.btc = serde_json::to_string(&value).ok();
     }
 
     pub fn get_signed_message(&self) -> Option<Value> {
@@ -85,6 +94,7 @@ impl HistoricalTransaction {
             },
             evm: None,
             scilla: None,
+            btc: None,
             signed_message: serde_json::to_string(&signed_msg).ok(),
             timestamp,
         }
@@ -124,6 +134,7 @@ impl HistoricalTransaction {
             },
             evm: None,
             scilla: None,
+            btc: None,
             signed_message: serde_json::to_string(&signed_msg).ok(),
             timestamp,
         }
@@ -170,6 +181,7 @@ impl HistoricalTransaction {
                     metadata,
                     evm: None,
                     scilla: serde_json::to_string(&scilla).ok(),
+                    btc: None,
                     signed_message: None,
                     timestamp,
                 })
@@ -221,6 +233,7 @@ impl HistoricalTransaction {
                     metadata,
                     evm: serde_json::to_string(&evm).ok(),
                     scilla: None,
+                    btc: None,
                     signed_message: None,
                     timestamp,
                 })
@@ -240,8 +253,9 @@ impl HistoricalTransaction {
                 Ok(Self {
                     status: TransactionStatus::Pending,
                     metadata,
-                    evm: serde_json::to_string(&btc).ok(),
+                    evm: None,
                     scilla: None,
+                    btc: serde_json::to_string(&btc).ok(),
                     signed_message: None,
                     timestamp,
                 })

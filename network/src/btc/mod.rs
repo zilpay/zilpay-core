@@ -7,6 +7,7 @@ use electrum_client::{Client as ElectrumClient, ConfigBuilder, ElectrumApi};
 use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
 use errors::tx::TransactionErrors;
+use history::status::TransactionStatus;
 use history::transaction::HistoricalTransaction;
 use proto::address::Address;
 use proto::tx::TransactionReceipt;
@@ -157,11 +158,159 @@ impl BtcOperations for NetworkProvider {
 
     async fn btc_update_transactions_receipt(
         &self,
-        _txns: &mut [&mut HistoricalTransaction],
+        txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
-        Err(NetworkErrors::RPCError(
-            "Bitcoin support not yet implemented".to_string(),
-        ))
+        use bitcoin::consensus::Decodable;
+        use bitcoin::Txid;
+        use serde_json::json;
+        use std::str::FromStr;
+
+        let mut last_error = None;
+
+        // Try each RPC URL until one works
+        for url in &self.config.rpc {
+            let config = ConfigBuilder::new().timeout(Some(5)).build();
+
+            let client = match ElectrumClient::from_config(url, config) {
+                Ok(c) => c,
+                Err(e) => {
+                    last_error = Some(NetworkErrors::RPCError(e.to_string()));
+                    continue;
+                }
+            };
+
+            // Process all transactions with this client
+            let mut all_success = true;
+            for tx in txns.iter_mut() {
+                // Get txid from btc field
+                let txid_str = match tx
+                    .get_btc()
+                    .and_then(|b| b.get("txid").and_then(|t| t.as_str()).map(|s| s.to_string()))
+                    .or_else(|| tx.metadata.hash.clone())
+                {
+                    Some(s) => s,
+                    None => {
+                        all_success = false;
+                        continue;
+                    }
+                };
+
+                let txid = match Txid::from_str(&txid_str) {
+                    Ok(t) => t,
+                    Err(_) => {
+                        all_success = false;
+                        continue;
+                    }
+                };
+
+                // Get raw transaction from electrum
+                let raw_tx = match client.transaction_get_raw(&txid) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        last_error = Some(NetworkErrors::RPCError(format!(
+                            "Failed to get transaction: {}",
+                            e
+                        )));
+                        all_success = false;
+                        break;
+                    }
+                };
+
+                // Decode the raw transaction
+                let btc_tx = match bitcoin::Transaction::consensus_decode(&mut raw_tx.as_slice()) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        last_error = Some(NetworkErrors::RPCError(format!(
+                            "Failed to decode transaction: {}",
+                            e
+                        )));
+                        all_success = false;
+                        continue;
+                    }
+                };
+
+                // Get transaction confirmations
+                let confirmations = client
+                    .transaction_get_merkle(&txid, 0)
+                    .ok()
+                    .and_then(|merkle| {
+                        client
+                            .block_headers_subscribe()
+                            .ok()
+                            .map(|header| header.height.saturating_sub(merkle.block_height as usize))
+                    })
+                    .unwrap_or(0);
+
+                // Build updated btc JSON
+                let mut btc_json = json!({
+                    "txid": txid.to_string(),
+                    "version": btc_tx.version.0,
+                    "lockTime": btc_tx.lock_time.to_consensus_u32(),
+                    "confirmations": confirmations,
+                    "rawHex": alloy::hex::encode(&raw_tx),
+                });
+
+                // Add inputs
+                let inputs: Vec<serde_json::Value> = btc_tx
+                    .input
+                    .iter()
+                    .map(|input| {
+                        json!({
+                            "previousOutput": {
+                                "txid": input.previous_output.txid.to_string(),
+                                "vout": input.previous_output.vout,
+                            },
+                            "scriptSig": alloy::hex::encode(&input.script_sig.as_bytes()),
+                            "sequence": input.sequence.0,
+                            "witness": input.witness.iter().map(|w| alloy::hex::encode(w)).collect::<Vec<_>>(),
+                        })
+                    })
+                    .collect();
+                btc_json["inputs"] = json!(inputs);
+
+                // Add outputs
+                let outputs: Vec<serde_json::Value> = btc_tx
+                    .output
+                    .iter()
+                    .map(|output| {
+                        json!({
+                            "value": output.value.to_sat(),
+                            "scriptPubKey": alloy::hex::encode(&output.script_pubkey.as_bytes()),
+                        })
+                    })
+                    .collect();
+                btc_json["outputs"] = json!(outputs);
+
+                // Merge with existing btc data if present
+                if let Some(existing_btc) = tx.get_btc() {
+                    if let Some(obj) = btc_json.as_object_mut() {
+                        if let Some(existing_obj) = existing_btc.as_object() {
+                            for (key, value) in existing_obj {
+                                if !obj.contains_key(key) {
+                                    obj.insert(key.clone(), value.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Update the transaction
+                tx.set_btc(btc_json);
+
+                // Update status based on confirmations
+                if confirmations > 0 {
+                    tx.status = TransactionStatus::Success;
+                } else {
+                    tx.status = TransactionStatus::Pending;
+                }
+            }
+
+            if all_success {
+                return Ok(());
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| NetworkErrors::RPCError("No RPC URLs configured".to_string())))
     }
 
     async fn btc_broadcast_signed_transactions(
