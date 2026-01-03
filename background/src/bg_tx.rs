@@ -12,6 +12,89 @@ use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
 use crate::Background;
 
+/// Helper function to build an unsigned Bitcoin transaction
+pub(crate) async fn build_unsigned_btc_transaction(
+    provider: &network::provider::NetworkProvider,
+    from_addr: &Address,
+    destinations: Vec<(Address, u64)>,
+    fee_rate_sat_per_vbyte: Option<u64>,
+) -> std::result::Result<(bitcoin::Transaction, Vec<u64>), BackgroundError> {
+    use bitcoin::{
+        absolute::LockTime, transaction::Version, Amount, OutPoint, ScriptBuf, Sequence,
+        Transaction, TxIn, TxOut, Witness,
+    };
+
+    let unspents = provider.btc_list_unspent(from_addr).await?;
+
+    if unspents.is_empty() {
+        return Err(BackgroundError::BincodeError(
+            "No UTXOs available for this address".to_string(),
+        ));
+    }
+
+    let total_output: u64 = destinations.iter().map(|(_, amount)| amount).sum();
+    let estimated_vsize = (unspents.len() * 148 + destinations.len() * 34 + 10) as u64;
+    let fee_rate = fee_rate_sat_per_vbyte.unwrap_or(10);
+    let estimated_fee = estimated_vsize * fee_rate;
+    let total_input: u64 = unspents.iter().map(|u| u.value).sum();
+
+    if total_input < total_output + estimated_fee {
+        return Err(BackgroundError::BincodeError(format!(
+            "Insufficient funds: have {}, need {} (output: {}, fee: {})",
+            total_input,
+            total_output + estimated_fee,
+            total_output,
+            estimated_fee
+        )));
+    }
+
+    let mut inputs = Vec::new();
+    for unspent in &unspents {
+        inputs.push(TxIn {
+            previous_output: OutPoint {
+                txid: unspent.tx_hash,
+                vout: unspent.tx_pos as u32,
+            },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: Witness::new(),
+        });
+    }
+
+    let mut outputs = Vec::new();
+    for (dest_addr, amount) in destinations {
+        let btc_addr = dest_addr
+            .to_bitcoin_addr()
+            .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
+        outputs.push(TxOut {
+            value: Amount::from_sat(amount),
+            script_pubkey: btc_addr.script_pubkey(),
+        });
+    }
+
+    let change = total_input - total_output - estimated_fee;
+    if change > 546 {
+        let change_addr = from_addr
+            .to_bitcoin_addr()
+            .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
+        outputs.push(TxOut {
+            value: Amount::from_sat(change),
+            script_pubkey: change_addr.script_pubkey(),
+        });
+    }
+
+    let tx = Transaction {
+        version: Version::TWO,
+        lock_time: LockTime::ZERO,
+        input: inputs,
+        output: outputs,
+    };
+
+    let utxo_amounts: Vec<u64> = unspents.iter().map(|u| u.value).collect();
+
+    Ok((tx, utxo_amounts))
+}
+
 #[async_trait]
 pub trait TransactionsManagement {
     type Error;
@@ -269,11 +352,6 @@ impl TransactionsManagement for Background {
         destinations: Vec<(Address, u64)>,
         fee_rate_sat_per_vbyte: Option<u64>,
     ) -> Result<TransactionReceipt> {
-        use bitcoin::{
-            absolute::LockTime, transaction::Version, Amount, OutPoint, ScriptBuf, Sequence,
-            Transaction, TxIn, TxOut, Witness,
-        };
-
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let account = data
@@ -282,76 +360,16 @@ impl TransactionsManagement for Background {
             .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
 
         let provider = self.get_provider(account.chain_hash)?;
-        let unspents = provider.btc_list_unspent(&account.addr).await?;
-
-        if unspents.is_empty() {
-            return Err(BackgroundError::BincodeError(
-                "No UTXOs available for this address".to_string(),
-            ));
-        }
-
-        let total_output: u64 = destinations.iter().map(|(_, amount)| amount).sum();
-        let estimated_vsize = (unspents.len() * 148 + destinations.len() * 34 + 10) as u64;
-        let fee_rate = fee_rate_sat_per_vbyte.unwrap_or(10);
-        let estimated_fee = estimated_vsize * fee_rate;
-        let total_input: u64 = unspents.iter().map(|u| u.value).sum();
-
-        if total_input < total_output + estimated_fee {
-            return Err(BackgroundError::BincodeError(format!(
-                "Insufficient funds: have {}, need {} (output: {}, fee: {})",
-                total_input,
-                total_output + estimated_fee,
-                total_output,
-                estimated_fee
-            )));
-        }
-
         let keypair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
-        let mut inputs = Vec::new();
-        for unspent in &unspents {
-            inputs.push(TxIn {
-                previous_output: OutPoint {
-                    txid: unspent.tx_hash,
-                    vout: unspent.tx_pos as u32,
-                },
-                script_sig: ScriptBuf::new(),
-                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-                witness: Witness::new(),
-            });
-        }
-
-        let mut outputs = Vec::new();
-        for (dest_addr, amount) in destinations {
-            let btc_addr = dest_addr
-                .to_bitcoin_addr()
-                .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
-            outputs.push(TxOut {
-                value: Amount::from_sat(amount),
-                script_pubkey: btc_addr.script_pubkey(),
-            });
-        }
-
-        let change = total_input - total_output - estimated_fee;
-        if change > 546 {
-            let change_addr = account
-                .addr
-                .to_bitcoin_addr()
-                .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
-            outputs.push(TxOut {
-                value: Amount::from_sat(change),
-                script_pubkey: change_addr.script_pubkey(),
-            });
-        }
-
-        let tx = Transaction {
-            version: Version::TWO,
-            lock_time: LockTime::ZERO,
-            input: inputs,
-            output: outputs,
-        };
-
-        let utxo_amounts: Vec<u64> = unspents.iter().map(|u| u.value).collect();
+        // Use helper to build unsigned transaction
+        let (tx, utxo_amounts) = build_unsigned_btc_transaction(
+            &provider,
+            &account.addr,
+            destinations,
+            fee_rate_sat_per_vbyte,
+        )
+        .await?;
 
         let metadata = proto::tx::TransactionMetadata {
             chain_hash: account.chain_hash,
@@ -369,7 +387,7 @@ impl TransactionsManagement for Background {
 #[cfg(test)]
 mod tests_background_transactions {
     use super::*;
-    use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
+    use crate::{bg_storage::StorageManagement, bg_token::TokensManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
     use cipher::argon2;
     use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
@@ -946,6 +964,7 @@ mod tests_background_transactions {
         .unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
+        bg.sync_ftokens_balances(0).await.unwrap();
         let data = wallet.get_wallet_data().unwrap();
         let account = data.accounts.first().unwrap();
 
