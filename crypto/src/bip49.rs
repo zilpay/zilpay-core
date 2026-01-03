@@ -88,6 +88,16 @@ impl DerivationPath {
             _ => bitcoin::AddressType::P2wpkh,
         }
     }
+
+    pub fn bip_from_address_type(address_type: bitcoin::AddressType) -> u32 {
+        match address_type {
+            bitcoin::AddressType::P2pkh => Self::BIP44_PURPOSE,
+            bitcoin::AddressType::P2sh => Self::BIP49_PURPOSE,
+            bitcoin::AddressType::P2wpkh => Self::BIP84_PURPOSE,
+            bitcoin::AddressType::P2tr => Self::BIP86_PURPOSE,
+            _ => Self::BIP84_PURPOSE,
+        }
+    }
 }
 
 impl fmt::Display for DerivationPath {
