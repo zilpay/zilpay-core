@@ -36,6 +36,7 @@ pub struct TransactionMetadata {
     pub title: Option<String>,
     pub signer: Option<PubKey>,
     pub token_info: Option<(U256, u8, String)>,
+    pub btc_utxo_amounts: Option<Vec<u64>>,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -224,9 +225,53 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
             }
-            TransactionRequest::Bitcoin((tx, mut metadata)) => {
-                let txid = tx.compute_txid().to_string();
-                metadata.hash = Some(txid);
+            TransactionRequest::Bitcoin((mut tx, mut metadata)) => {
+                use bitcoin::hashes::Hash;
+                use bitcoin::sighash::{EcdsaSighashType, SighashCache};
+                use bitcoin::{secp256k1, secp256k1::Message, secp256k1::Secp256k1};
+                use bitcoin::{Amount, ScriptBuf, WPubkeyHash, Witness};
+
+                let utxo_amounts = metadata
+                    .btc_utxo_amounts
+                    .as_ref()
+                    .ok_or(TransactionErrors::MissingUtxoAmounts)?;
+
+                let pubkey = keypair.get_pubkey()?;
+                let pk_bytes = pubkey.as_bytes();
+                let sk_bytes = keypair.get_secretkey()?;
+
+                let secp = Secp256k1::new();
+                let secret_key = secp256k1::SecretKey::from_slice(sk_bytes.as_ref())
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+                let public_key = secp256k1::PublicKey::from_slice(pk_bytes)
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+
+                let wpubkey_hash = WPubkeyHash::hash(&public_key.serialize());
+                let prev_script = ScriptBuf::new_p2wpkh(&wpubkey_hash);
+                let sighash_type = EcdsaSighashType::All;
+
+                for (index, input_amount) in utxo_amounts.iter().enumerate() {
+                    let mut sighash_cache = SighashCache::new(&mut tx);
+                    let amount = Amount::from_sat(*input_amount);
+
+                    let sighash = sighash_cache
+                        .p2wpkh_signature_hash(index, &prev_script, amount, sighash_type)
+                        .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+
+                    let message = Message::from_digest(*sighash.as_ref());
+                    let signature = secp.sign_ecdsa(&message, &secret_key);
+
+                    let bitcoin_sig = bitcoin::ecdsa::Signature {
+                        signature,
+                        sighash_type,
+                    };
+
+                    let mut witness = Witness::new();
+                    witness.push(bitcoin_sig.serialize());
+                    witness.push(public_key.serialize());
+
+                    tx.input[index].witness = witness;
+                }
 
                 metadata.signer = Some(keypair.get_pubkey()?);
 
@@ -583,14 +628,11 @@ mod tests_tx {
 
     #[tokio::test]
     async fn test_sign_verify_btc_tx() {
-        use bitcoin::script::PushBytesBuf;
-        use bitcoin::secp256k1::{self, Message, Secp256k1};
-        use bitcoin::sighash::EcdsaSighashType;
         use bitcoin::{absolute::LockTime, transaction::Version, Amount, OutPoint, Sequence, Txid};
         use std::str::FromStr;
 
         let keypair =
-            KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh).unwrap();
+            KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2wpkh).unwrap();
 
         let txid =
             Txid::from_str("76464c2b9e2af4d63ef38a77964b3b77e629dddefc5cb9eb1a3645b1608b790f")
@@ -613,46 +655,20 @@ mod tests_tx {
             script_pubkey: btc_addr.script_pubkey(),
         };
 
-        let mut tx = BitcoinTransaction {
+        let tx = BitcoinTransaction {
             version: Version::TWO,
             lock_time: LockTime::ZERO,
             input: vec![input],
             output: vec![output],
         };
 
-        let secp = Secp256k1::new();
-        let sk_bytes = keypair.get_sk_bytes();
-        let secret_key = secp256k1::SecretKey::from_slice(&sk_bytes[..]).unwrap();
-
-        let pubkey_bytes = keypair.get_pubkey_bytes();
-        let public_key = secp256k1::PublicKey::from_slice(pubkey_bytes).unwrap();
-        let prev_script = ScriptBuf::new_p2pkh(&bitcoin::PublicKey::new(public_key).pubkey_hash());
-
-        let sighash_type = EcdsaSighashType::All;
-        let sighash_cache = SighashCache::new(&tx);
-        let sighash = sighash_cache
-            .legacy_signature_hash(0, &prev_script, sighash_type.to_u32())
-            .unwrap();
-
-        let message = Message::from_digest(*sighash.as_ref());
-        let signature = secp.sign_ecdsa(&message, &secret_key);
-
-        let bitcoin_sig = BitcoinEcdsaSignature {
-            signature,
-            sighash_type,
+        let input_amount = 50_000_000u64;
+        let metadata = TransactionMetadata {
+            btc_utxo_amounts: Some(vec![input_amount]),
+            ..Default::default()
         };
 
-        let mut script_sig = ScriptBuf::new();
-        let sig_bytes = bitcoin_sig.serialize();
-        let sig_push = PushBytesBuf::try_from(sig_bytes.to_vec()).unwrap();
-        script_sig.push_slice(sig_push);
-
-        let pubkey_push = PushBytesBuf::try_from(public_key.serialize().to_vec()).unwrap();
-        script_sig.push_slice(pubkey_push);
-
-        tx.input[0].script_sig = script_sig;
-
-        let tx_req = TransactionRequest::Bitcoin((tx, Default::default()));
+        let tx_req = TransactionRequest::Bitcoin((tx, metadata));
         let tx_res = tx_req.sign(&keypair).await.unwrap();
         let verify = tx_res.verify();
 

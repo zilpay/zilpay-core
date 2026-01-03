@@ -64,6 +64,9 @@ pub enum TransactionErrors {
 
     #[error("Invalid signature")]
     InvalidSignature,
+
+    #[error("Missing UTXO amounts for Bitcoin transaction signing")]
+    MissingUtxoAmounts,
 }
 
 impl From<PubKeyError> for TransactionErrors {

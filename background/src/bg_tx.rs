@@ -269,13 +269,10 @@ impl TransactionsManagement for Background {
         destinations: Vec<(Address, u64)>,
         fee_rate_sat_per_vbyte: Option<u64>,
     ) -> Result<TransactionReceipt> {
-        use bitcoin::hashes::Hash;
         use bitcoin::{
-            absolute::LockTime, sighash::EcdsaSighashType, sighash::SighashCache,
-            transaction::Version, Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut,
-            WPubkeyHash, Witness,
+            absolute::LockTime, transaction::Version, Amount, OutPoint, ScriptBuf, Sequence,
+            Transaction, TxIn, TxOut, Witness,
         };
-        use bitcoin::{secp256k1, secp256k1::Message, secp256k1::Secp256k1};
 
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
@@ -310,16 +307,7 @@ impl TransactionsManagement for Background {
         }
 
         let keypair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
-        let pubkey = keypair.get_pubkey()?;
-        let pk_bytes = pubkey.as_bytes();
-        let secp = Secp256k1::new();
-        let sk_bytes = keypair.get_secretkey()?;
-        let secret_key = secp256k1::SecretKey::from_slice(sk_bytes.as_ref())
-            .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
-        let public_key = secp256k1::PublicKey::from_slice(pk_bytes)
-            .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
 
-        let wpubkey_hash = WPubkeyHash::hash(&public_key.serialize());
         let mut inputs = Vec::new();
         for unspent in &unspents {
             inputs.push(TxIn {
@@ -356,45 +344,25 @@ impl TransactionsManagement for Background {
             });
         }
 
-        let mut tx = Transaction {
+        let tx = Transaction {
             version: Version::TWO,
             lock_time: LockTime::ZERO,
             input: inputs,
             output: outputs,
         };
 
-        let sighash_type = EcdsaSighashType::All;
-        let prev_script = ScriptBuf::new_p2wpkh(&wpubkey_hash);
-
-        for (index, unspent) in unspents.iter().enumerate() {
-            let mut sighash_cache = SighashCache::new(&mut tx);
-            let input_amount = Amount::from_sat(unspent.value);
-
-            let sighash = sighash_cache
-                .p2wpkh_signature_hash(index, &prev_script, input_amount, sighash_type)
-                .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
-
-            let message = Message::from_digest(*sighash.as_ref());
-            let signature = secp.sign_ecdsa(&message, &secret_key);
-
-            let bitcoin_sig = bitcoin::ecdsa::Signature {
-                signature,
-                sighash_type,
-            };
-
-            let mut witness = Witness::new();
-            witness.push(bitcoin_sig.serialize());
-            witness.push(public_key.serialize());
-
-            tx.input[index].witness = witness;
-        }
+        let utxo_amounts: Vec<u64> = unspents.iter().map(|u| u.value).collect();
 
         let metadata = proto::tx::TransactionMetadata {
             chain_hash: account.chain_hash,
+            btc_utxo_amounts: Some(utxo_amounts),
             ..Default::default()
         };
 
-        Ok(TransactionReceipt::Bitcoin((tx, metadata)))
+        let tx_request = proto::tx::TransactionRequest::Bitcoin((tx, metadata));
+        let signed_receipt = tx_request.sign(&keypair).await?;
+
+        Ok(signed_receipt)
     }
 }
 

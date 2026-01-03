@@ -79,6 +79,7 @@ impl TokensManagement for Background {
             title: None,
             signer: Some(sender.pub_key.clone()),
             token_info: Some((amount, token.decimals, token.symbol.clone())),
+            btc_utxo_amounts: None,
         };
         let addr = if token.native {
             &sender.addr
