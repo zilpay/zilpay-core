@@ -25,6 +25,10 @@ pub struct RequiredTxParams {
     pub tx_estimate_gas: U256,
     pub blob_base_fee: U256,
     pub nonce: u64,
+    pub slow: u64,
+    pub market: u64,
+    pub fast: u64,
+    pub current: u64,
 }
 
 pub const EIP1559: u16 = 1559;

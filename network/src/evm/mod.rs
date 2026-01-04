@@ -181,6 +181,10 @@ impl EvmOperations for NetworkProvider {
             gas_price: gas_price_response,
             fee_history: fee_history_response,
             tx_estimate_gas: tx_estimate_gas_response,
+            slow: 0,
+            market: 0,
+            fast: 0,
+            current: 0,
         })
     }
 

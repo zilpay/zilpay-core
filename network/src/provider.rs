@@ -122,7 +122,7 @@ impl NetworkProvider {
                 self.evm_estimate_params_batch(tx, sender, block_count, percentiles)
                     .await
             }
-            slip44::BITCOIN => self.btc_estimate_params_batch(block_count).await,
+            slip44::BITCOIN => self.btc_estimate_params_batch().await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.slip_44

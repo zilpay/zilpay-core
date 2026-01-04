@@ -17,7 +17,6 @@ const DEFAULT_FEE_RATE_BTC: f64 = 0.00001;
 const SATOSHIS_PER_BTC: f64 = 100_000_000.0;
 const BYTES_PER_KB: f64 = 1000.0;
 const DEFAULT_TX_SIZE_BYTES: u64 = 250;
-const DEFAULT_BLOCK_TARGET: u64 = 6;
 
 impl NetworkProvider {
     fn with_electrum_client<F, T>(&self, mut operation: F) -> Result<T>
@@ -53,7 +52,7 @@ impl NetworkProvider {
 #[async_trait]
 pub trait BtcOperations {
     async fn btc_get_current_block_number(&self) -> Result<u64>;
-    async fn btc_estimate_params_batch(&self, block_count: u64) -> Result<RequiredTxParams>;
+    async fn btc_estimate_params_batch(&self) -> Result<RequiredTxParams>;
     async fn btc_estimate_block_time(&self) -> Result<u64>;
     async fn btc_update_transactions_receipt(
         &self,
@@ -85,39 +84,65 @@ impl BtcOperations for NetworkProvider {
         })
     }
 
-    async fn btc_estimate_params_batch(&self, block_count: u64) -> Result<RequiredTxParams> {
+    async fn btc_estimate_params_batch(&self) -> Result<RequiredTxParams> {
         use crate::evm::GasFeeHistory;
 
-        let target_blocks = if block_count == 0 {
-            DEFAULT_BLOCK_TARGET
-        } else {
-            block_count
-        };
+        const SLOW_BLOCKS: usize = 6;
+        const MARKET_BLOCKS: usize = 3;
+        const FAST_BLOCKS: usize = 1;
 
         self.with_electrum_client(|client| {
-            let fee_estimate = client
-                .estimate_fee(target_blocks as usize)
-                .map_err(|e| NetworkErrors::RPCError(format!("Failed to estimate fee: {}", e)))?;
+            let mut batch = Batch::default();
+            batch.estimate_fee(SLOW_BLOCKS);
+            batch.estimate_fee(MARKET_BLOCKS);
+            batch.estimate_fee(FAST_BLOCKS);
 
-            let fee_rate_btc = if fee_estimate < 0.0 {
-                DEFAULT_FEE_RATE_BTC
+            let results = client.batch_call(&batch)
+                .map_err(|e| NetworkErrors::RPCError(format!("Failed to batch estimate fees: {}", e)))?;
+
+            let slow_fee_btc = results.get(0)
+                .and_then(|v| v.as_f64())
+                .unwrap_or(DEFAULT_FEE_RATE_BTC);
+            let market_fee_btc = results.get(1)
+                .and_then(|v| v.as_f64())
+                .unwrap_or(DEFAULT_FEE_RATE_BTC);
+            let fast_fee_btc = results.get(2)
+                .and_then(|v| v.as_f64())
+                .unwrap_or(DEFAULT_FEE_RATE_BTC);
+
+            let slow_fee_sat_per_vbyte = if slow_fee_btc < 0.0 {
+                (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             } else {
-                fee_estimate
+                (slow_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             };
 
-            let fee_rate_sat_per_byte = (fee_rate_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64;
+            let market_fee_sat_per_vbyte = if market_fee_btc < 0.0 {
+                (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
+            } else {
+                (market_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
+            };
+
+            let fast_fee_sat_per_vbyte = if fast_fee_btc < 0.0 {
+                (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
+            } else {
+                (fast_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
+            };
 
             Ok(RequiredTxParams {
-                gas_price: U256::from(fee_rate_sat_per_byte),
+                gas_price: U256::from(market_fee_sat_per_vbyte),
                 max_priority_fee: U256::ZERO,
                 fee_history: GasFeeHistory {
-                    max_fee: U256::from(fee_rate_sat_per_byte),
+                    max_fee: U256::from(fast_fee_sat_per_vbyte),
                     priority_fee: U256::ZERO,
-                    base_fee: U256::from(fee_rate_sat_per_byte),
+                    base_fee: U256::from(slow_fee_sat_per_vbyte),
                 },
                 tx_estimate_gas: U256::from(DEFAULT_TX_SIZE_BYTES),
                 blob_base_fee: U256::ZERO,
                 nonce: 0,
+                slow: slow_fee_sat_per_vbyte,
+                market: market_fee_sat_per_vbyte,
+                fast: fast_fee_sat_per_vbyte,
+                current: market_fee_sat_per_vbyte,
             })
         })
     }
@@ -375,12 +400,18 @@ mod tests {
         let net_conf = gen_btc_testnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
-        let params = provider.btc_estimate_params_batch(6).await.unwrap();
+        let params = provider.btc_estimate_params_batch().await.unwrap();
 
         assert!(params.gas_price > U256::ZERO);
         assert_eq!(params.max_priority_fee, U256::ZERO);
         assert_eq!(params.blob_base_fee, U256::ZERO);
         assert_eq!(params.tx_estimate_gas, U256::from(DEFAULT_TX_SIZE_BYTES));
+        assert!(params.slow > 0);
+        assert!(params.market > 0);
+        assert!(params.fast > 0);
+        assert_eq!(params.current, params.market);
+        assert!(params.slow <= params.market);
+        assert!(params.market <= params.fast);
     }
 
     #[tokio::test]

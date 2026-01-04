@@ -145,11 +145,40 @@ pub fn update_tx_from_params(
                 eth_tx.max_priority_fee_per_gas = None;
             }
         }
-        TransactionRequest::Bitcoin(_) => {
-            // Bitcoin transactions don't use nonce/gas in the same way
-            // The fee is already calculated when building the transaction
-            // via build_unsigned_btc_transaction with fee_rate_sat_per_vbyte
-            // No updates needed here
+        TransactionRequest::Bitcoin((ref mut btc_tx, ref metadata)) => {
+            if params.current == 0 {
+                return Ok(());
+            }
+
+            let fee_rate_sat_per_vbyte = params.current;
+            let estimated_vsize = (btc_tx.input.len() * 148 + btc_tx.output.len() * 34 + 10) as u64;
+            let new_fee = estimated_vsize * fee_rate_sat_per_vbyte;
+
+            let total_input: u64 = metadata.btc_utxo_amounts
+                .as_ref()
+                .ok_or(TransactionErrors::ConvertTxError("Missing UTXO amounts".to_string()))?
+                .iter()
+                .sum();
+
+            let output_count = btc_tx.output.len();
+            if output_count == 0 {
+                return Err(TransactionErrors::ConvertTxError("No outputs in transaction".to_string()))?;
+            }
+
+            let mut total_output: u64 = 0;
+            for i in 0..output_count.saturating_sub(1) {
+                total_output += btc_tx.output[i].value.to_sat();
+            }
+
+            let new_change = total_input.saturating_sub(total_output).saturating_sub(new_fee);
+
+            if new_change >= 546 {
+                btc_tx.output[output_count - 1].value = bitcoin::Amount::from_sat(new_change);
+            } else if output_count > 1 {
+                btc_tx.output.pop();
+            } else {
+                return Err(TransactionErrors::ConvertTxError("Insufficient funds for fee increase".to_string()))?;
+            }
         }
     }
 
