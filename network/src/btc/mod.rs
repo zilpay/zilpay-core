@@ -3,7 +3,7 @@ use crate::provider::NetworkProvider;
 use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
-use electrum_client::{Client as ElectrumClient, ConfigBuilder, ElectrumApi};
+use electrum_client::{Batch, Client as ElectrumClient, ConfigBuilder, ElectrumApi, Param};
 use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
 use errors::tx::TransactionErrors;
@@ -163,108 +163,66 @@ impl BtcOperations for NetworkProvider {
         &self,
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
-        use bitcoin::consensus::Decodable;
-        use bitcoin::Txid;
-        use serde_json::json;
-        use std::str::FromStr;
+        use std::collections::HashMap;
+
+        if txns.is_empty() {
+            return Ok(());
+        }
 
         self.with_electrum_client(|client| {
-            let current_height = client
-                .block_headers_subscribe()
-                .map_err(|e| {
-                    NetworkErrors::RPCError(format!("Failed to get current block height: {}", e))
-                })?
-                .height;
+            let mut txid_to_index: HashMap<String, usize> = HashMap::new();
+            let mut batch = Batch::default();
 
-            for tx in txns.iter_mut() {
+            for (idx, tx) in txns.iter().enumerate() {
                 let txid_str = match tx
                     .get_btc()
-                    .and_then(|b| b.get("txid").and_then(|t| t.as_str()).map(|s| s.to_string()))
+                    .and_then(|b| {
+                        b.get("txid")
+                            .and_then(|t| t.as_str())
+                            .map(|s| s.to_string())
+                    })
                     .or_else(|| tx.metadata.hash.clone())
                 {
                     Some(s) => s,
                     None => continue,
                 };
 
-                let txid = match Txid::from_str(&txid_str) {
-                    Ok(t) => t,
-                    Err(_) => continue,
-                };
+                batch.raw(
+                    "blockchain.transaction.get".to_string(),
+                    vec![Param::String(txid_str.clone()), Param::Bool(true)],
+                );
+                txid_to_index.insert(txid_str, idx);
+            }
 
-                let raw_tx = match client.transaction_get_raw(&txid) {
-                    Ok(r) => r,
-                    Err(_) => continue,
-                };
+            if txid_to_index.is_empty() {
+                return Ok(());
+            }
 
-                let btc_tx = match bitcoin::Transaction::consensus_decode(&mut raw_tx.as_slice())
-                {
-                    Ok(t) => t,
-                    Err(_) => continue,
-                };
+            let results = client.batch_call(&batch).map_err(|e| {
+                NetworkErrors::RPCError(format!("Failed to batch get transactions: {}", e))
+            })?;
 
-                let confirmations = client
-                    .transaction_get_merkle(&txid, 0)
-                    .ok()
-                    .map(|merkle| {
-                        current_height.saturating_sub(merkle.block_height as usize) + 1
-                    })
-                    .unwrap_or(0);
+            for (_txid_str, idx) in txid_to_index.iter() {
+                let tx = &mut txns[*idx];
 
-                let mut btc_json = json!({
-                    "txid": txid.to_string(),
-                    "version": btc_tx.version.0,
-                    "lockTime": btc_tx.lock_time.to_consensus_u32(),
-                    "confirmations": confirmations,
-                    "rawHex": alloy::hex::encode(&raw_tx),
-                });
+                if let Some(result) = results.get(*idx) {
+                    let confirmations = result
+                        .get("confirmations")
+                        .and_then(|c| c.as_u64())
+                        .unwrap_or(0);
 
-                let inputs: Vec<serde_json::Value> = btc_tx
-                    .input
-                    .iter()
-                    .map(|input| {
-                        json!({
-                            "previousOutput": {
-                                "txid": input.previous_output.txid.to_string(),
-                                "vout": input.previous_output.vout,
-                            },
-                            "scriptSig": alloy::hex::encode(&input.script_sig.as_bytes()),
-                            "sequence": input.sequence.0,
-                            "witness": input.witness.iter().map(|w| alloy::hex::encode(w)).collect::<Vec<_>>(),
-                        })
-                    })
-                    .collect();
-                btc_json["inputs"] = json!(inputs);
-
-                let outputs: Vec<serde_json::Value> = btc_tx
-                    .output
-                    .iter()
-                    .map(|output| {
-                        json!({
-                            "value": output.value.to_sat(),
-                            "scriptPubKey": alloy::hex::encode(&output.script_pubkey.as_bytes()),
-                        })
-                    })
-                    .collect();
-                btc_json["outputs"] = json!(outputs);
-
-                if let Some(existing_btc) = tx.get_btc() {
-                    if let Some(obj) = btc_json.as_object_mut() {
-                        if let Some(existing_obj) = existing_btc.as_object() {
-                            for (key, value) in existing_obj {
-                                if !obj.contains_key(key) {
-                                    obj.insert(key.clone(), value.clone());
-                                }
-                            }
-                        }
+                    let mut tx_data = result.clone();
+                    if let Some(obj) = tx_data.as_object_mut() {
+                        obj.remove("hex");
                     }
-                }
 
-                tx.set_btc(btc_json);
+                    tx.set_btc(tx_data);
 
-                if confirmations > 0 {
-                    tx.status = TransactionStatus::Success;
-                } else {
-                    tx.status = TransactionStatus::Pending;
+                    if confirmations >= 1 {
+                        tx.status = TransactionStatus::Success;
+                    } else {
+                        tx.status = TransactionStatus::Pending;
+                    }
                 }
             }
 
@@ -399,7 +357,6 @@ mod tests {
             .await
             .unwrap();
 
-        dbg!(&btc_token);
         assert!(btc_token.balances.contains_key(&0));
     }
 
@@ -408,8 +365,6 @@ mod tests {
         let net_conf = gen_btc_testnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let block_time = provider.btc_estimate_block_time().await.unwrap();
-
-        dbg!(&block_time);
 
         assert!(block_time > 0);
         assert!(block_time < 3600);
@@ -426,5 +381,41 @@ mod tests {
         assert_eq!(params.max_priority_fee, U256::ZERO);
         assert_eq!(params.blob_base_fee, U256::ZERO);
         assert_eq!(params.tx_estimate_gas, U256::from(DEFAULT_TX_SIZE_BYTES));
+    }
+
+    #[tokio::test]
+    async fn test_btc_update_transactions_receipt() {
+        use proto::tx::TransactionMetadata;
+        use serde_json::json;
+
+        let net_conf = gen_btc_testnet_conf();
+        let provider = NetworkProvider::new(net_conf);
+
+        let tx_hash = "2c7e682a78010b47c812e4785c52831002b28486dc16998c77133510de9076a1";
+
+        let mut test_tx = HistoricalTransaction {
+            status: TransactionStatus::Pending,
+            metadata: TransactionMetadata {
+                hash: Some(tx_hash.to_string()),
+                ..Default::default()
+            },
+            evm: None,
+            scilla: None,
+            btc: Some(json!({"txid": tx_hash}).to_string()),
+            signed_message: None,
+            timestamp: 0,
+        };
+
+        let mut txns = vec![&mut test_tx];
+
+        let result = provider.btc_update_transactions_receipt(&mut txns).await;
+
+        if let Ok(_) = result {
+            if let Some(btc_data) = test_tx.get_btc() {
+                println!("{}", serde_json::to_string_pretty(&btc_data).unwrap());
+            }
+        }
+
+        assert!(result.is_ok());
     }
 }
