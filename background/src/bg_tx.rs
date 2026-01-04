@@ -1,18 +1,23 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
+use alloy::primitives::U256;
 use alloy::{dyn_abi::TypedData, primitives::keccak256};
 use async_trait::async_trait;
 use cipher::argon2::Argon2Seed;
 use config::sha::SHA256_SIZE;
 use errors::{background::BackgroundError, tx::TransactionErrors, wallet::WalletErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
-use network::btc::BtcOperations;
-use proto::{address::Address, pubkey::PubKey, signature::Signature, tx::TransactionReceipt};
+use network::{btc::BtcOperations, evm::RequiredTxParams};
+use proto::{
+    address::Address,
+    pubkey::PubKey,
+    signature::Signature,
+    tx::{TransactionReceipt, TransactionRequest},
+};
 use sha2::{Digest, Sha256};
 use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
 use crate::Background;
 
-/// Helper function to build an unsigned Bitcoin transaction
 pub(crate) async fn build_unsigned_btc_transaction(
     provider: &network::provider::NetworkProvider,
     from_addr: &Address,
@@ -93,6 +98,62 @@ pub(crate) async fn build_unsigned_btc_transaction(
     let utxo_amounts: Vec<u64> = unspents.iter().map(|u| u.value).collect();
 
     Ok((tx, utxo_amounts))
+}
+
+pub fn update_tx_from_params(
+    tx: &mut TransactionRequest,
+    params: RequiredTxParams,
+) -> std::result::Result<(), TransactionErrors> {
+    match tx {
+        TransactionRequest::Zilliqa((ref mut zil_tx, _metadata)) => {
+            zil_tx.nonce = params.nonce + 1;
+            zil_tx.gas_price = params
+                .gas_price
+                .try_into()
+                .map_err(|_| TransactionErrors::ConvertTxError("Gas price overflow".to_string()))?;
+            zil_tx.gas_limit = params
+                .tx_estimate_gas
+                .try_into()
+                .map_err(|_| TransactionErrors::ConvertTxError("Gas limit overflow".to_string()))?;
+        }
+        TransactionRequest::Ethereum((ref mut eth_tx, _metadata)) => {
+            eth_tx.nonce = Some(params.nonce);
+            eth_tx.gas = Some(params.tx_estimate_gas.try_into().map_err(|_| {
+                TransactionErrors::ConvertTxError("Gas limit overflow".to_string())
+            })?);
+
+            let is_eip1559_supported = params.fee_history.base_fee > U256::ZERO;
+
+            if is_eip1559_supported {
+                eth_tx.max_priority_fee_per_gas =
+                    Some(params.fee_history.priority_fee.try_into().map_err(|_| {
+                        TransactionErrors::ConvertTxError("Priority fee overflow".to_string())
+                    })?);
+
+                eth_tx.max_fee_per_gas =
+                    Some(params.fee_history.max_fee.try_into().map_err(|_| {
+                        TransactionErrors::ConvertTxError("Max fee overflow".to_string())
+                    })?);
+
+                eth_tx.gas_price = None;
+            } else {
+                eth_tx.gas_price = Some(params.gas_price.try_into().map_err(|_| {
+                    TransactionErrors::ConvertTxError("Gas price overflow".to_string())
+                })?);
+
+                eth_tx.max_fee_per_gas = None;
+                eth_tx.max_priority_fee_per_gas = None;
+            }
+        }
+        TransactionRequest::Bitcoin(_) => {
+            // Bitcoin transactions don't use nonce/gas in the same way
+            // The fee is already calculated when building the transaction
+            // via build_unsigned_btc_transaction with fee_rate_sat_per_vbyte
+            // No updates needed here
+        }
+    }
+
+    Ok(())
 }
 
 #[async_trait]
@@ -362,7 +423,6 @@ impl TransactionsManagement for Background {
         let provider = self.get_provider(account.chain_hash)?;
         let keypair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
-        // Use helper to build unsigned transaction
         let (tx, utxo_amounts) = build_unsigned_btc_transaction(
             &provider,
             &account.addr,
@@ -447,7 +507,7 @@ mod tests_background_transactions {
             gas_limit: 1000,
             to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
                 .unwrap(),
-            amount: 1, // in QA
+            amount: 1,
             code: Vec::with_capacity(0),
             data: Vec::with_capacity(0),
         };
@@ -464,7 +524,7 @@ mod tests_background_transactions {
             gas_limit: 1000,
             to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
                 .unwrap(),
-            amount: 1, // in QA
+            amount: 1,
             code: Vec::with_capacity(0),
             data: Vec::with_capacity(0),
         };
@@ -548,7 +608,6 @@ mod tests_background_transactions {
         let data = wallet.get_wallet_data().unwrap();
         let selected_account = data.get_selected_account().unwrap();
 
-        // Verify we got a valid Ethereum address from the Anvil mnemonic
         assert!(selected_account.addr.to_string().starts_with("0x"));
 
         if let PubKey::Secp256k1Keccak256(_pub_key) = selected_account.pub_key {
@@ -594,7 +653,6 @@ mod tests_background_transactions {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        // Verify we got the expected Anvil account (account 0)
         let account = data.accounts.first().unwrap();
         assert_eq!(
             account.addr.to_string().to_lowercase(),
@@ -606,28 +664,8 @@ mod tests_background_transactions {
         let transfer_request = ETHTransactionRequest {
             to: Some(recipient.to_alloy_addr().into()),
             value: Some(U256::from(10u128)),
-            max_fee_per_gas: Some(2_000_000_000),
-            max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: None,
-            gas: Some(21_000),
-            chain_id: Some(provider.config.chain_id()),
-            ..Default::default()
-        };
-        let tx_request =
-            TransactionRequest::Ethereum((transfer_request.clone(), Default::default()));
-
-        let params = provider
-            .estimate_params_batch(&tx_request, &account.addr, 1, None)
-            .await
-            .unwrap();
-
-        let transfer_request = ETHTransactionRequest {
-            to: Some(recipient.to_alloy_addr().into()),
-            value: Some(U256::from(10u128)),
-            max_fee_per_gas: Some(2_000_000_000),
-            max_priority_fee_per_gas: Some(1_000_000_000),
-            nonce: Some(params.nonce),
-            gas: Some(21_000),
+            gas: None,
             chain_id: Some(provider.config.chain_id()),
             ..Default::default()
         };
@@ -635,7 +673,16 @@ mod tests_background_transactions {
             chain_hash: net_config.hash(),
             ..Default::default()
         };
-        let txn = TransactionRequest::Ethereum((transfer_request, metadata));
+        let mut tx_request = TransactionRequest::Ethereum((transfer_request.clone(), metadata));
+
+        let params = provider
+            .estimate_params_batch(&tx_request, &account.addr, 1, None)
+            .await
+            .unwrap();
+
+        // Use update_tx_from_params to set gas fields based on network capabilities
+        super::update_tx_from_params(&mut tx_request, params).unwrap();
+        let txn = tx_request;
 
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -696,28 +743,8 @@ mod tests_background_transactions {
         let transfer_request_0 = ETHTransactionRequest {
             to: Some(recipient_0.to_alloy_addr().into()),
             value: Some(U256::from(100u128)),
-            max_fee_per_gas: Some(2_000_000_000),
-            max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: None,
-            gas: Some(21_000),
-            chain_id: Some(provider.config.chain_id()),
-            ..Default::default()
-        };
-        let tx_request_0 =
-            TransactionRequest::Ethereum((transfer_request_0.clone(), Default::default()));
-
-        let params_0 = provider
-            .estimate_params_batch(&tx_request_0, &account.addr, 1, None)
-            .await
-            .unwrap();
-
-        let transfer_request_0 = ETHTransactionRequest {
-            to: Some(recipient_0.to_alloy_addr().into()),
-            value: Some(U256::from(100u128)),
-            max_fee_per_gas: Some(2_000_000_000),
-            max_priority_fee_per_gas: Some(1_000_000_000),
-            nonce: Some(params_0.nonce),
-            gas: Some(21_000),
+            gas: None,
             chain_id: Some(provider.config.chain_id()),
             ..Default::default()
         };
@@ -725,7 +752,16 @@ mod tests_background_transactions {
             chain_hash: net_hash,
             ..Default::default()
         };
-        let txn_0 = TransactionRequest::Ethereum((transfer_request_0, metadata_0));
+        let mut tx_request_0 = TransactionRequest::Ethereum((transfer_request_0, metadata_0));
+
+        let params_0 = provider
+            .estimate_params_batch(&tx_request_0, &account.addr, 1, None)
+            .await
+            .unwrap();
+
+        // Use update_tx_from_params to set gas fields based on network capabilities
+        super::update_tx_from_params(&mut tx_request_0, params_0).unwrap();
+        let txn_0 = tx_request_0;
 
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -754,28 +790,8 @@ mod tests_background_transactions {
         let transfer_request_1 = ETHTransactionRequest {
             to: Some(recipient_1.to_alloy_addr().into()),
             value: Some(U256::from(200u128)),
-            max_fee_per_gas: Some(2_000_000_000),
-            max_priority_fee_per_gas: Some(1_000_000_000),
             nonce: None,
-            gas: Some(21_000),
-            chain_id: Some(provider.config.chain_id()),
-            ..Default::default()
-        };
-        let tx_request_1 =
-            TransactionRequest::Ethereum((transfer_request_1.clone(), Default::default()));
-
-        let params_1 = provider
-            .estimate_params_batch(&tx_request_1, &account.addr, 1, None)
-            .await
-            .unwrap();
-
-        let transfer_request_1 = ETHTransactionRequest {
-            to: Some(recipient_1.to_alloy_addr().into()),
-            value: Some(U256::from(200u128)),
-            max_fee_per_gas: Some(2_000_000_000),
-            max_priority_fee_per_gas: Some(1_000_000_000),
-            nonce: Some(params_1.nonce),
-            gas: Some(21_000),
+            gas: None,
             chain_id: Some(provider.config.chain_id()),
             ..Default::default()
         };
@@ -783,7 +799,16 @@ mod tests_background_transactions {
             chain_hash: net_hash,
             ..Default::default()
         };
-        let txn_1 = TransactionRequest::Ethereum((transfer_request_1, metadata_1));
+        let mut tx_request_1 = TransactionRequest::Ethereum((transfer_request_1, metadata_1));
+
+        let params_1 = provider
+            .estimate_params_batch(&tx_request_1, &account.addr, 1, None)
+            .await
+            .unwrap();
+
+        // Use update_tx_from_params to set gas fields based on network capabilities
+        super::update_tx_from_params(&mut tx_request_1, params_1).unwrap();
+        let txn_1 = tx_request_1;
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn_1 = txn_1.sign(&keypair).await.unwrap();
@@ -926,6 +951,186 @@ mod tests_background_transactions {
     }
 
     #[tokio::test]
+    async fn test_update_tx_from_params_eip1559() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_anvil_net_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+        let accounts = [gen_eth_account(0, "Anvil Acc 0")];
+        let device_indicators = gen_device_indicators("testanvil");
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: TEST_PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Anvil wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_anvil_token()],
+        })
+        .unwrap();
+
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let account = data.accounts.first().unwrap();
+
+        // Create a basic transaction without gas params
+        let recipient =
+            Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
+        let transfer_request = ETHTransactionRequest {
+            to: Some(recipient.to_alloy_addr().into()),
+            value: Some(U256::from(10u128)),
+            nonce: None,
+            gas: None,
+            max_fee_per_gas: None,
+            max_priority_fee_per_gas: None,
+            gas_price: None,
+            chain_id: Some(provider.config.chain_id()),
+            ..Default::default()
+        };
+
+        // Verify initial state - all gas params should be None
+        assert!(transfer_request.nonce.is_none());
+        assert!(transfer_request.gas.is_none());
+        assert!(transfer_request.gas_price.is_none());
+        assert!(transfer_request.max_fee_per_gas.is_none());
+        assert!(transfer_request.max_priority_fee_per_gas.is_none());
+
+        let metadata = proto::tx::TransactionMetadata {
+            chain_hash: net_config.hash(),
+            ..Default::default()
+        };
+        let mut tx_request = TransactionRequest::Ethereum((transfer_request.clone(), metadata));
+
+        // Get estimated params from the network
+        let params = provider
+            .estimate_params_batch(&tx_request, &account.addr, 10, None)
+            .await
+            .unwrap();
+
+        // Store params for verification
+        let expected_nonce = params.nonce;
+        let expected_gas_limit = params.tx_estimate_gas;
+        let expected_gas_price = params.gas_price;
+        let expected_base_fee = params.fee_history.base_fee;
+        let expected_priority_fee = params.fee_history.priority_fee;
+        let expected_max_fee = params.fee_history.max_fee;
+
+        // Verify params are valid
+        assert!(
+            expected_gas_limit > U256::ZERO,
+            "Gas limit should be estimated"
+        );
+
+        // Determine if EIP-1559 is supported
+        let is_eip1559 = expected_base_fee > U256::ZERO;
+
+        // Update the transaction with the params
+        super::update_tx_from_params(&mut tx_request, params).unwrap();
+
+        // Extract and verify the updated transaction
+        if let TransactionRequest::Ethereum((updated_tx, _)) = &tx_request {
+            // Verify basic fields are set
+            assert_eq!(
+                updated_tx.nonce,
+                Some(expected_nonce),
+                "Nonce should be set from params"
+            );
+
+            assert!(updated_tx.gas.is_some(), "Gas limit should be set");
+            assert_eq!(
+                U256::from(updated_tx.gas.unwrap()),
+                expected_gas_limit,
+                "Gas limit should be set from params"
+            );
+
+            if is_eip1559 {
+                // Verify EIP-1559 fields
+                assert!(
+                    updated_tx.max_fee_per_gas.is_some(),
+                    "max_fee_per_gas should be set for EIP-1559"
+                );
+                assert!(
+                    updated_tx.max_priority_fee_per_gas.is_some(),
+                    "max_priority_fee_per_gas should be set for EIP-1559"
+                );
+
+                let max_fee = updated_tx.max_fee_per_gas.unwrap();
+                let priority_fee = updated_tx.max_priority_fee_per_gas.unwrap();
+
+                // Verify correct values from fee history
+                let expected_max_fee_u128: u128 = expected_max_fee.try_into().unwrap();
+                let expected_priority_fee_u128: u128 = expected_priority_fee.try_into().unwrap();
+
+                assert_eq!(
+                    max_fee, expected_max_fee_u128,
+                    "max_fee_per_gas should match fee_history.max_fee"
+                );
+                assert_eq!(
+                    priority_fee, expected_priority_fee_u128,
+                    "max_priority_fee_per_gas should match fee_history.priority_fee"
+                );
+
+                // Verify EIP-1559 constraint: max_fee_per_gas >= max_priority_fee_per_gas
+                assert!(
+                    max_fee >= priority_fee,
+                    "max_fee_per_gas ({}) must be >= max_priority_fee_per_gas ({})",
+                    max_fee,
+                    priority_fee
+                );
+
+                // Verify max_fee calculation: base_fee * 2 + priority_fee
+                let expected_max_fee_calc = expected_base_fee
+                    .saturating_mul(U256::from(2))
+                    .saturating_add(expected_priority_fee);
+                assert_eq!(
+                    U256::from(max_fee),
+                    expected_max_fee_calc,
+                    "max_fee should be base_fee * 2 + priority_fee"
+                );
+
+                // Verify gas_price is cleared for EIP-1559
+                assert!(
+                    updated_tx.gas_price.is_none(),
+                    "gas_price should be None for EIP-1559 transactions"
+                );
+            } else {
+                // Legacy mode - verify gas_price is set
+                assert!(
+                    updated_tx.gas_price.is_some(),
+                    "gas_price should be set for legacy transactions"
+                );
+
+                let gas_price = updated_tx.gas_price.unwrap();
+                let expected_gas_price_u128: u128 = expected_gas_price.try_into().unwrap();
+
+                assert_eq!(
+                    gas_price, expected_gas_price_u128,
+                    "gas_price should match params.gas_price"
+                );
+
+                // Verify EIP-1559 fields are cleared for legacy
+                assert!(
+                    updated_tx.max_fee_per_gas.is_none(),
+                    "max_fee_per_gas should be None for legacy transactions"
+                );
+                assert!(
+                    updated_tx.max_priority_fee_per_gas.is_none(),
+                    "max_priority_fee_per_gas should be None for legacy transactions"
+                );
+            }
+        } else {
+            panic!("Transaction should be Ethereum type");
+        }
+    }
+
+    #[tokio::test]
     async fn test_sign_and_send_btc_tx() {
         use crypto::{bip49::DerivationPath, slip44};
         use test_data::gen_btc_testnet_conf;
@@ -1054,10 +1259,7 @@ mod tests_background_transactions {
             "locktime should be present"
         );
         assert!(btc_data.get("vin").is_some(), "vin should be present");
-        assert!(
-            btc_data.get("vout").is_some(),
-            "vout should be present"
-        );
+        assert!(btc_data.get("vout").is_some(), "vout should be present");
 
         let inputs = btc_data
             .get("vin")
