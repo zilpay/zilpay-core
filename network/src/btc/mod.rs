@@ -20,9 +20,9 @@ const DEFAULT_TX_SIZE_BYTES: u64 = 250;
 const DEFAULT_BLOCK_TARGET: u64 = 6;
 
 impl NetworkProvider {
-    fn with_electrum_client<F, T>(&self, operation: F) -> Result<T>
+    fn with_electrum_client<F, T>(&self, mut operation: F) -> Result<T>
     where
-        F: Fn(&ElectrumClient) -> Result<T>,
+        F: FnMut(&ElectrumClient) -> Result<T>,
     {
         let mut last_error = None;
         let mut errors = String::with_capacity(200);
@@ -68,7 +68,10 @@ pub trait BtcOperations {
         tokens: Vec<&mut FToken>,
         accounts: &[&Address],
     ) -> Result<()>;
-    async fn btc_list_unspent(&self, address: &Address) -> Result<Vec<electrum_client::ListUnspentRes>>;
+    async fn btc_list_unspent(
+        &self,
+        address: &Address,
+    ) -> Result<Vec<electrum_client::ListUnspentRes>>;
 }
 
 #[async_trait]
@@ -165,83 +168,48 @@ impl BtcOperations for NetworkProvider {
         use serde_json::json;
         use std::str::FromStr;
 
-        let mut last_error = None;
+        self.with_electrum_client(|client| {
+            let current_height = client
+                .block_headers_subscribe()
+                .map_err(|e| {
+                    NetworkErrors::RPCError(format!("Failed to get current block height: {}", e))
+                })?
+                .height;
 
-        // Try each RPC URL until one works
-        for url in &self.config.rpc {
-            let config = ConfigBuilder::new().timeout(Some(5)).build();
-
-            let client = match ElectrumClient::from_config(url, config) {
-                Ok(c) => c,
-                Err(e) => {
-                    last_error = Some(NetworkErrors::RPCError(e.to_string()));
-                    continue;
-                }
-            };
-
-            // Process all transactions with this client
-            let mut all_success = true;
             for tx in txns.iter_mut() {
-                // Get txid from btc field
                 let txid_str = match tx
                     .get_btc()
                     .and_then(|b| b.get("txid").and_then(|t| t.as_str()).map(|s| s.to_string()))
                     .or_else(|| tx.metadata.hash.clone())
                 {
                     Some(s) => s,
-                    None => {
-                        all_success = false;
-                        continue;
-                    }
+                    None => continue,
                 };
 
                 let txid = match Txid::from_str(&txid_str) {
                     Ok(t) => t,
-                    Err(_) => {
-                        all_success = false;
-                        continue;
-                    }
+                    Err(_) => continue,
                 };
 
-                // Get raw transaction from electrum
                 let raw_tx = match client.transaction_get_raw(&txid) {
                     Ok(r) => r,
-                    Err(e) => {
-                        last_error = Some(NetworkErrors::RPCError(format!(
-                            "Failed to get transaction: {}",
-                            e
-                        )));
-                        all_success = false;
-                        break;
-                    }
+                    Err(_) => continue,
                 };
 
-                // Decode the raw transaction
-                let btc_tx = match bitcoin::Transaction::consensus_decode(&mut raw_tx.as_slice()) {
+                let btc_tx = match bitcoin::Transaction::consensus_decode(&mut raw_tx.as_slice())
+                {
                     Ok(t) => t,
-                    Err(e) => {
-                        last_error = Some(NetworkErrors::RPCError(format!(
-                            "Failed to decode transaction: {}",
-                            e
-                        )));
-                        all_success = false;
-                        continue;
-                    }
+                    Err(_) => continue,
                 };
 
-                // Get transaction confirmations
                 let confirmations = client
                     .transaction_get_merkle(&txid, 0)
                     .ok()
-                    .and_then(|merkle| {
-                        client
-                            .block_headers_subscribe()
-                            .ok()
-                            .map(|header| header.height.saturating_sub(merkle.block_height as usize))
+                    .map(|merkle| {
+                        current_height.saturating_sub(merkle.block_height as usize) + 1
                     })
                     .unwrap_or(0);
 
-                // Build updated btc JSON
                 let mut btc_json = json!({
                     "txid": txid.to_string(),
                     "version": btc_tx.version.0,
@@ -250,7 +218,6 @@ impl BtcOperations for NetworkProvider {
                     "rawHex": alloy::hex::encode(&raw_tx),
                 });
 
-                // Add inputs
                 let inputs: Vec<serde_json::Value> = btc_tx
                     .input
                     .iter()
@@ -268,7 +235,6 @@ impl BtcOperations for NetworkProvider {
                     .collect();
                 btc_json["inputs"] = json!(inputs);
 
-                // Add outputs
                 let outputs: Vec<serde_json::Value> = btc_tx
                     .output
                     .iter()
@@ -281,7 +247,6 @@ impl BtcOperations for NetworkProvider {
                     .collect();
                 btc_json["outputs"] = json!(outputs);
 
-                // Merge with existing btc data if present
                 if let Some(existing_btc) = tx.get_btc() {
                     if let Some(obj) = btc_json.as_object_mut() {
                         if let Some(existing_obj) = existing_btc.as_object() {
@@ -294,10 +259,8 @@ impl BtcOperations for NetworkProvider {
                     }
                 }
 
-                // Update the transaction
                 tx.set_btc(btc_json);
 
-                // Update status based on confirmations
                 if confirmations > 0 {
                     tx.status = TransactionStatus::Success;
                 } else {
@@ -305,12 +268,8 @@ impl BtcOperations for NetworkProvider {
                 }
             }
 
-            if all_success {
-                return Ok(());
-            }
-        }
-
-        Err(last_error.unwrap_or_else(|| NetworkErrors::RPCError("No RPC URLs configured".to_string())))
+            Ok(())
+        })
     }
 
     async fn btc_broadcast_signed_transactions(
@@ -390,7 +349,10 @@ impl BtcOperations for NetworkProvider {
         Ok(())
     }
 
-    async fn btc_list_unspent(&self, address: &Address) -> Result<Vec<electrum_client::ListUnspentRes>> {
+    async fn btc_list_unspent(
+        &self,
+        address: &Address,
+    ) -> Result<Vec<electrum_client::ListUnspentRes>> {
         let btc_addr = address
             .to_bitcoin_addr()
             .map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
