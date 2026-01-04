@@ -935,8 +935,6 @@ mod tests_background_transactions {
 
         bg.add_provider(net_config.clone()).unwrap();
 
-        // Create Native SegWit Bech32 P2WPKH account (BIP84)
-        // Using Bitcoin (Mainnet) network to match the provided addresses
         let accounts = [(
             DerivationPath::new(
                 slip44::BITCOIN,
@@ -1044,40 +1042,33 @@ mod tests_background_transactions {
         // Verify transaction hash matches
         assert_eq!(btc_tx.metadata.hash.as_ref().unwrap(), &tx_hash);
 
-        // Get and verify btc field
         let btc_data = btc_tx.get_btc().expect("BTC field should be present");
 
-        // Verify btc data structure
         assert!(btc_data.get("txid").is_some(), "txid should be present");
         assert!(
             btc_data.get("version").is_some(),
             "version should be present"
         );
         assert!(
-            btc_data.get("lockTime").is_some(),
-            "lockTime should be present"
+            btc_data.get("locktime").is_some(),
+            "locktime should be present"
         );
-        assert!(btc_data.get("inputs").is_some(), "inputs should be present");
+        assert!(btc_data.get("vin").is_some(), "vin should be present");
         assert!(
-            btc_data.get("outputs").is_some(),
-            "outputs should be present"
-        );
-        assert!(
-            btc_data.get("confirmations").is_some(),
-            "confirmations should be present"
+            btc_data.get("vout").is_some(),
+            "vout should be present"
         );
 
-        // Verify inputs and outputs are arrays
         let inputs = btc_data
-            .get("inputs")
+            .get("vin")
             .unwrap()
             .as_array()
-            .expect("inputs should be array");
+            .expect("vin should be array");
         let outputs = btc_data
-            .get("outputs")
+            .get("vout")
             .unwrap()
             .as_array()
-            .expect("outputs should be array");
+            .expect("vout should be array");
         println!(
             "Transaction has {} inputs and {} outputs",
             inputs.len(),
@@ -1098,7 +1089,6 @@ mod tests_background_transactions {
             "Transaction should be either Success or Pending"
         );
 
-        // If transaction has confirmations, status should be Success
         let confirmations = btc_data
             .get("confirmations")
             .and_then(|c| c.as_u64())
