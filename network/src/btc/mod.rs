@@ -18,6 +18,85 @@ const SATOSHIS_PER_BTC: f64 = 100_000_000.0;
 const BYTES_PER_KB: f64 = 1000.0;
 const DEFAULT_TX_SIZE_BYTES: u64 = 250;
 
+fn calculate_tx_vsize(tx: &TransactionRequest) -> u64 {
+    match tx {
+        TransactionRequest::Bitcoin((btc_tx, _)) => {
+            (btc_tx.input.len() * 148 + btc_tx.output.len() * 34 + 10) as u64
+        }
+        _ => DEFAULT_TX_SIZE_BYTES,
+    }
+}
+
+fn btc_fee_rate_to_sat_per_byte(fee_btc: f64) -> u64 {
+    if fee_btc < 0.0 {
+        (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
+    } else {
+        (fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
+    }
+}
+
+fn build_required_params(slow_rate: u64, market_rate: u64, fast_rate: u64, vsize: u64) -> RequiredTxParams {
+    use crate::evm::GasFeeHistory;
+
+    let slow_fee_sat = U256::from(vsize * slow_rate);
+    let market_fee_sat = U256::from(vsize * market_rate);
+    let fast_fee_sat = U256::from(vsize * fast_rate);
+
+    RequiredTxParams {
+        gas_price: U256::from(market_rate),
+        max_priority_fee: U256::ZERO,
+        fee_history: GasFeeHistory {
+            max_fee: U256::from(fast_rate),
+            priority_fee: U256::ZERO,
+            base_fee: U256::from(slow_rate),
+        },
+        tx_estimate_gas: U256::from(vsize),
+        blob_base_fee: U256::ZERO,
+        nonce: 0,
+        slow: slow_fee_sat,
+        market: market_fee_sat,
+        fast: fast_fee_sat,
+        current: market_fee_sat,
+    }
+}
+
+fn parse_fee_histogram(value: &serde_json::Value) -> Option<(u64, u64, u64)> {
+    let histogram = value.as_array()?;
+
+    if histogram.is_empty() {
+        return None;
+    }
+
+    let mut fee_rates: Vec<f64> = Vec::new();
+    let mut total_vsize: u64 = 0;
+
+    for entry in histogram {
+        let arr = entry.as_array()?;
+        if arr.len() != 2 {
+            continue;
+        }
+
+        let fee_rate = arr[0].as_f64()?;
+        let vsize = arr[1].as_u64()?;
+
+        fee_rates.push(fee_rate);
+        total_vsize += vsize;
+    }
+
+    if fee_rates.is_empty() || total_vsize == 0 {
+        return None;
+    }
+
+    let fast_rate = fee_rates.first().copied().unwrap_or(10.0).max(1.0) as u64;
+
+    let market_idx = fee_rates.len() / 2;
+    let market_rate = fee_rates.get(market_idx).copied().unwrap_or(5.0).max(1.0) as u64;
+
+    let slow_rate = fee_rates.last().copied().unwrap_or(2.0).max(1.0) as u64;
+
+    Some((slow_rate, market_rate, fast_rate))
+}
+
 impl NetworkProvider {
     fn with_electrum_client<F, T>(&self, mut operation: F) -> Result<T>
     where
@@ -85,82 +164,43 @@ impl BtcOperations for NetworkProvider {
     }
 
     async fn btc_estimate_params_batch(&self, tx: &TransactionRequest) -> Result<RequiredTxParams> {
-        use crate::evm::GasFeeHistory;
-
-        const SLOW_BLOCKS: usize = 6;
         const MARKET_BLOCKS: usize = 3;
-        const FAST_BLOCKS: usize = 1;
+
+        let vsize = calculate_tx_vsize(tx);
 
         self.with_electrum_client(|client| {
             let mut batch = Batch::default();
-            batch.estimate_fee(SLOW_BLOCKS);
+            batch.raw("mempool.get_fee_histogram".to_string(), vec![]);
+
+            let results = client.batch_call(&batch);
+
+            if let Ok(histogram_results) = results {
+                if let Some(histogram_value) = histogram_results.get(0) {
+                    if let Some((slow_rate, market_rate, fast_rate)) = parse_fee_histogram(histogram_value) {
+                        return Ok(build_required_params(slow_rate, market_rate, fast_rate, vsize));
+                    }
+                }
+            }
+
+            let mut batch = Batch::default();
             batch.estimate_fee(MARKET_BLOCKS);
-            batch.estimate_fee(FAST_BLOCKS);
 
             let results = client.batch_call(&batch).map_err(|e| {
-                NetworkErrors::RPCError(format!("Failed to batch estimate fees: {}", e))
+                NetworkErrors::RPCError(format!("Failed to estimate fee: {}", e))
             })?;
 
-            dbg!(&results);
-
-            let slow_fee_btc = results
+            let base_fee_btc = results
                 .get(0)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(DEFAULT_FEE_RATE_BTC);
-            let market_fee_btc = results
-                .get(1)
-                .and_then(|v| v.as_f64())
-                .unwrap_or(DEFAULT_FEE_RATE_BTC);
-            let fast_fee_btc = results
-                .get(2)
-                .and_then(|v| v.as_f64())
-                .unwrap_or(DEFAULT_FEE_RATE_BTC);
 
-            let slow_fee_rate = if slow_fee_btc < 0.0 {
-                (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
-            } else {
-                (slow_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
-            };
+            let base_rate = btc_fee_rate_to_sat_per_byte(base_fee_btc);
 
-            let market_fee_rate = if market_fee_btc < 0.0 {
-                (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
-            } else {
-                (market_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
-            };
+            let market_fee_rate = base_rate;
+            let slow_fee_rate = (base_rate / 2).max(1);
+            let fast_fee_rate = base_rate + (base_rate / 2);
 
-            let fast_fee_rate = if fast_fee_btc < 0.0 {
-                (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
-            } else {
-                (fast_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
-            };
-
-            let vsize = match tx {
-                TransactionRequest::Bitcoin((btc_tx, _)) => {
-                    (btc_tx.input.len() * 148 + btc_tx.output.len() * 34 + 10) as u64
-                }
-                _ => DEFAULT_TX_SIZE_BYTES,
-            };
-
-            let slow_fee_sat = U256::from(vsize * slow_fee_rate);
-            let market_fee_sat = U256::from(vsize * market_fee_rate);
-            let fast_fee_sat = U256::from(vsize * fast_fee_rate);
-
-            Ok(RequiredTxParams {
-                gas_price: U256::from(market_fee_rate),
-                max_priority_fee: U256::ZERO,
-                fee_history: GasFeeHistory {
-                    max_fee: U256::from(fast_fee_rate),
-                    priority_fee: U256::ZERO,
-                    base_fee: U256::from(slow_fee_rate),
-                },
-                tx_estimate_gas: U256::from(vsize),
-                blob_base_fee: U256::ZERO,
-                nonce: 0,
-                slow: slow_fee_sat,
-                market: market_fee_sat,
-                fast: fast_fee_sat,
-                current: market_fee_sat,
-            })
+            Ok(build_required_params(slow_fee_rate, market_fee_rate, fast_fee_rate, vsize))
         })
     }
 
