@@ -130,6 +130,25 @@ impl EvmOperations for NetworkProvider {
             .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
             .unwrap_or_default();
 
+        if matches!(tx, TransactionRequest::Zilliqa(_)) {
+            let slow = gas_price_response;
+            let market = gas_price_response.saturating_mul(U256::from(2));
+            let fast = gas_price_response.saturating_mul(U256::from(3));
+
+            return Ok(RequiredTxParams {
+                blob_base_fee: U256::ZERO,
+                nonce,
+                max_priority_fee: U256::ZERO,
+                gas_price: gas_price_response,
+                fee_history: Default::default(),
+                tx_estimate_gas: U256::ZERO,
+                slow,
+                market,
+                fast,
+                current: market,
+            });
+        }
+
         let tx_estimate_gas_response = response.get(2);
 
         if let Some(errors) = tx_estimate_gas_response.and_then(|res| res.error.as_ref()) {
@@ -174,6 +193,28 @@ impl EvmOperations for NetworkProvider {
             U256::ZERO
         };
 
+        let (slow, market, fast) = if fee_history_response.base_fee > U256::ZERO {
+            let priority_fee = fee_history_response.priority_fee;
+            let base_fee = fee_history_response.base_fee;
+
+            let slow_max_fee = base_fee.saturating_add(priority_fee);
+            let market_max_fee = base_fee
+                .saturating_mul(U256::from(2))
+                .saturating_add(priority_fee);
+            let fast_max_fee = base_fee
+                .saturating_mul(U256::from(3))
+                .saturating_add(priority_fee);
+
+            (slow_max_fee, market_max_fee, fast_max_fee)
+        } else {
+            let gas_price = gas_price_response;
+            let slow_gas_price = gas_price;
+            let market_gas_price = gas_price.saturating_mul(U256::from(2));
+            let fast_gas_price = gas_price.saturating_mul(U256::from(3));
+
+            (slow_gas_price, market_gas_price, fast_gas_price)
+        };
+
         Ok(RequiredTxParams {
             blob_base_fee,
             nonce,
@@ -181,10 +222,10 @@ impl EvmOperations for NetworkProvider {
             gas_price: gas_price_response,
             fee_history: fee_history_response,
             tx_estimate_gas: tx_estimate_gas_response,
-            slow: 1,
-            market: 2,
-            fast: 3,
-            current: 2,
+            slow,
+            market,
+            fast,
+            current: market,
         })
     }
 

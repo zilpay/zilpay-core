@@ -104,14 +104,11 @@ pub fn update_tx_from_params(
     tx: &mut TransactionRequest,
     params: RequiredTxParams,
 ) -> std::result::Result<(), TransactionErrors> {
-    let multiplier = if params.current == 0 { 1 } else { params.current };
-
     match tx {
         TransactionRequest::Zilliqa((ref mut zil_tx, _metadata)) => {
             zil_tx.nonce = params.nonce + 1;
             zil_tx.gas_price = params
-                .gas_price
-                .saturating_mul(U256::from(multiplier))
+                .current
                 .try_into()
                 .map_err(|_| TransactionErrors::ConvertTxError("Gas price overflow".to_string()))?;
             zil_tx.gas_limit = params
@@ -128,34 +125,23 @@ pub fn update_tx_from_params(
             let is_eip1559_supported = params.fee_history.base_fee > U256::ZERO;
 
             if is_eip1559_supported {
-                let adjusted_priority_fee = params
-                    .fee_history
-                    .priority_fee
-                    .saturating_mul(U256::from(multiplier));
+                eth_tx.max_priority_fee_per_gas = Some(
+                    params
+                        .fee_history
+                        .priority_fee
+                        .try_into()
+                        .map_err(|_| {
+                            TransactionErrors::ConvertTxError("Priority fee overflow".to_string())
+                        })?,
+                );
 
-                eth_tx.max_priority_fee_per_gas =
-                    Some(adjusted_priority_fee.try_into().map_err(|_| {
-                        TransactionErrors::ConvertTxError("Priority fee overflow".to_string())
-                    })?);
-
-                let adjusted_max_fee = params
-                    .fee_history
-                    .base_fee
-                    .saturating_mul(U256::from(2))
-                    .saturating_add(adjusted_priority_fee);
-
-                eth_tx.max_fee_per_gas =
-                    Some(adjusted_max_fee.try_into().map_err(|_| {
-                        TransactionErrors::ConvertTxError("Max fee overflow".to_string())
-                    })?);
+                eth_tx.max_fee_per_gas = Some(params.current.try_into().map_err(|_| {
+                    TransactionErrors::ConvertTxError("Max fee overflow".to_string())
+                })?);
 
                 eth_tx.gas_price = None;
             } else {
-                let adjusted_gas_price = params
-                    .gas_price
-                    .saturating_mul(U256::from(multiplier));
-
-                eth_tx.gas_price = Some(adjusted_gas_price.try_into().map_err(|_| {
+                eth_tx.gas_price = Some(params.current.try_into().map_err(|_| {
                     TransactionErrors::ConvertTxError("Gas price overflow".to_string())
                 })?);
 
@@ -164,13 +150,14 @@ pub fn update_tx_from_params(
             }
         }
         TransactionRequest::Bitcoin((ref mut btc_tx, ref metadata)) => {
-            if params.current == 0 {
+            if params.current == U256::ZERO {
                 return Ok(());
             }
 
-            let fee_rate_sat_per_vbyte = params.current;
-            let estimated_vsize = (btc_tx.input.len() * 148 + btc_tx.output.len() * 34 + 10) as u64;
-            let new_fee = estimated_vsize * fee_rate_sat_per_vbyte;
+            let new_fee: u64 = params
+                .current
+                .try_into()
+                .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
 
             let total_input: u64 = metadata.btc_utxo_amounts
                 .as_ref()
@@ -195,7 +182,7 @@ pub fn update_tx_from_params(
             } else if output_count > 1 {
                 btc_tx.output.pop();
             } else {
-                return Err(TransactionErrors::ConvertTxError("Insufficient funds for fee increase".to_string()))?;
+                return Err(TransactionErrors::ConvertTxError("Insufficient funds for fee".to_string()))?;
             }
         }
     }

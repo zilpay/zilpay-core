@@ -10,7 +10,7 @@ use errors::tx::TransactionErrors;
 use history::status::TransactionStatus;
 use history::transaction::HistoricalTransaction;
 use proto::address::Address;
-use proto::tx::TransactionReceipt;
+use proto::tx::{TransactionReceipt, TransactionRequest};
 use token::ft::FToken;
 
 const DEFAULT_FEE_RATE_BTC: f64 = 0.00001;
@@ -52,7 +52,7 @@ impl NetworkProvider {
 #[async_trait]
 pub trait BtcOperations {
     async fn btc_get_current_block_number(&self) -> Result<u64>;
-    async fn btc_estimate_params_batch(&self) -> Result<RequiredTxParams>;
+    async fn btc_estimate_params_batch(&self, tx: &TransactionRequest) -> Result<RequiredTxParams>;
     async fn btc_estimate_block_time(&self) -> Result<u64>;
     async fn btc_update_transactions_receipt(
         &self,
@@ -84,7 +84,7 @@ impl BtcOperations for NetworkProvider {
         })
     }
 
-    async fn btc_estimate_params_batch(&self) -> Result<RequiredTxParams> {
+    async fn btc_estimate_params_batch(&self, tx: &TransactionRequest) -> Result<RequiredTxParams> {
         use crate::evm::GasFeeHistory;
 
         const SLOW_BLOCKS: usize = 6;
@@ -110,39 +110,50 @@ impl BtcOperations for NetworkProvider {
                 .and_then(|v| v.as_f64())
                 .unwrap_or(DEFAULT_FEE_RATE_BTC);
 
-            let slow_fee_sat_per_vbyte = if slow_fee_btc < 0.0 {
+            let slow_fee_rate = if slow_fee_btc < 0.0 {
                 (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             } else {
                 (slow_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             };
 
-            let market_fee_sat_per_vbyte = if market_fee_btc < 0.0 {
+            let market_fee_rate = if market_fee_btc < 0.0 {
                 (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             } else {
                 (market_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             };
 
-            let fast_fee_sat_per_vbyte = if fast_fee_btc < 0.0 {
+            let fast_fee_rate = if fast_fee_btc < 0.0 {
                 (DEFAULT_FEE_RATE_BTC * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             } else {
                 (fast_fee_btc * SATOSHIS_PER_BTC / BYTES_PER_KB) as u64
             };
 
+            let vsize = match tx {
+                TransactionRequest::Bitcoin((btc_tx, _)) => {
+                    (btc_tx.input.len() * 148 + btc_tx.output.len() * 34 + 10) as u64
+                }
+                _ => DEFAULT_TX_SIZE_BYTES,
+            };
+
+            let slow_fee_sat = U256::from(vsize * slow_fee_rate);
+            let market_fee_sat = U256::from(vsize * market_fee_rate);
+            let fast_fee_sat = U256::from(vsize * fast_fee_rate);
+
             Ok(RequiredTxParams {
-                gas_price: U256::from(market_fee_sat_per_vbyte),
+                gas_price: U256::from(market_fee_rate),
                 max_priority_fee: U256::ZERO,
                 fee_history: GasFeeHistory {
-                    max_fee: U256::from(fast_fee_sat_per_vbyte),
+                    max_fee: U256::from(fast_fee_rate),
                     priority_fee: U256::ZERO,
-                    base_fee: U256::from(slow_fee_sat_per_vbyte),
+                    base_fee: U256::from(slow_fee_rate),
                 },
-                tx_estimate_gas: U256::from(DEFAULT_TX_SIZE_BYTES),
+                tx_estimate_gas: U256::from(vsize),
                 blob_base_fee: U256::ZERO,
                 nonce: 0,
-                slow: slow_fee_sat_per_vbyte,
-                market: market_fee_sat_per_vbyte,
-                fast: fast_fee_sat_per_vbyte,
-                current: market_fee_sat_per_vbyte,
+                slow: slow_fee_sat,
+                market: market_fee_sat,
+                fast: fast_fee_sat,
+                current: market_fee_sat,
             })
         })
     }
@@ -397,18 +408,32 @@ mod tests {
 
     #[tokio::test]
     async fn test_estimate_params_batch_btc() {
+        use bitcoin::{Amount, ScriptBuf, Transaction, TxIn, TxOut};
+        use proto::tx::TransactionMetadata;
+
         let net_conf = gen_btc_testnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
-        let params = provider.btc_estimate_params_batch().await.unwrap();
+        let dummy_tx = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: bitcoin::absolute::LockTime::ZERO,
+            input: vec![TxIn::default()],
+            output: vec![TxOut {
+                value: Amount::from_sat(1000),
+                script_pubkey: ScriptBuf::new(),
+            }],
+        };
+        let tx_request = TransactionRequest::Bitcoin((dummy_tx, TransactionMetadata::default()));
+
+        let params = provider.btc_estimate_params_batch(&tx_request).await.unwrap();
 
         assert!(params.gas_price > U256::ZERO);
         assert_eq!(params.max_priority_fee, U256::ZERO);
         assert_eq!(params.blob_base_fee, U256::ZERO);
-        assert_eq!(params.tx_estimate_gas, U256::from(DEFAULT_TX_SIZE_BYTES));
-        assert!(params.slow > 0);
-        assert!(params.market > 0);
-        assert!(params.fast > 0);
+        assert!(params.tx_estimate_gas > U256::ZERO);
+        assert!(params.slow > U256::ZERO);
+        assert!(params.market > U256::ZERO);
+        assert!(params.fast > U256::ZERO);
         assert_eq!(params.current, params.market);
         assert!(params.slow <= params.market);
         assert!(params.market <= params.fast);
