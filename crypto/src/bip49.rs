@@ -113,7 +113,8 @@ mod tests {
 
     #[test]
     fn test_ethereum_path() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path =
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");
         assert_eq!(eth_path.get_base_path(), "m/44'/60'/0'/0/");
     }
@@ -127,14 +128,16 @@ mod tests {
 
     #[test]
     fn test_different_indexes() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 5, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path =
+            DerivationPath::new(slip44::ETHEREUM, 5, DerivationPath::BIP44_PURPOSE, None);
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/5");
         assert_eq!(eth_path.get_index(), 5);
     }
 
     #[test]
     fn test_display() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path =
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
         assert_eq!(eth_path.to_string(), "m/44'/60'/0'/0/0");
     }
 

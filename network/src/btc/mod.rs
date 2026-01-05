@@ -1,6 +1,6 @@
+use crate::Result;
 use crate::evm::RequiredTxParams;
 use crate::provider::NetworkProvider;
-use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
 use electrum_client::{Batch, Client as ElectrumClient, ConfigBuilder, ElectrumApi, Param};
@@ -97,16 +97,22 @@ impl BtcOperations for NetworkProvider {
             batch.estimate_fee(MARKET_BLOCKS);
             batch.estimate_fee(FAST_BLOCKS);
 
-            let results = client.batch_call(&batch)
-                .map_err(|e| NetworkErrors::RPCError(format!("Failed to batch estimate fees: {}", e)))?;
+            let results = client.batch_call(&batch).map_err(|e| {
+                NetworkErrors::RPCError(format!("Failed to batch estimate fees: {}", e))
+            })?;
 
-            let slow_fee_btc = results.get(0)
+            dbg!(&results);
+
+            let slow_fee_btc = results
+                .get(0)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(DEFAULT_FEE_RATE_BTC);
-            let market_fee_btc = results.get(1)
+            let market_fee_btc = results
+                .get(1)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(DEFAULT_FEE_RATE_BTC);
-            let fast_fee_btc = results.get(2)
+            let fast_fee_btc = results
+                .get(2)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(DEFAULT_FEE_RATE_BTC);
 
@@ -425,7 +431,10 @@ mod tests {
         };
         let tx_request = TransactionRequest::Bitcoin((dummy_tx, TransactionMetadata::default()));
 
-        let params = provider.btc_estimate_params_batch(&tx_request).await.unwrap();
+        let params = provider
+            .btc_estimate_params_batch(&tx_request)
+            .await
+            .unwrap();
 
         assert!(params.gas_price > U256::ZERO);
         assert_eq!(params.max_priority_fee, U256::ZERO);

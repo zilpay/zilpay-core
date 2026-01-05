@@ -628,7 +628,8 @@ mod tests_background {
         }
 
         for i in 1..20 {
-            let bip49 = DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None);
+            let bip49 =
+                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None);
             wallet
                 .add_next_bip39_account(
                     format!("Zilliqa account {}", i),

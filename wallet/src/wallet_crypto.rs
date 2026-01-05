@@ -80,10 +80,18 @@ impl WalletCrypto for Wallet {
                     proto::pubkey::PubKey::Secp256k1Bitcoin((_, net, addr_type)) => {
                         // Map Bitcoin address type to BIP standard
                         let purpose = match addr_type {
-                            bitcoin::AddressType::P2pkh => crypto::bip49::DerivationPath::BIP44_PURPOSE,
-                            bitcoin::AddressType::P2sh => crypto::bip49::DerivationPath::BIP49_PURPOSE,
-                            bitcoin::AddressType::P2wpkh => crypto::bip49::DerivationPath::BIP84_PURPOSE,
-                            bitcoin::AddressType::P2tr => crypto::bip49::DerivationPath::BIP86_PURPOSE,
+                            bitcoin::AddressType::P2pkh => {
+                                crypto::bip49::DerivationPath::BIP44_PURPOSE
+                            }
+                            bitcoin::AddressType::P2sh => {
+                                crypto::bip49::DerivationPath::BIP49_PURPOSE
+                            }
+                            bitcoin::AddressType::P2wpkh => {
+                                crypto::bip49::DerivationPath::BIP84_PURPOSE
+                            }
+                            bitcoin::AddressType::P2tr => {
+                                crypto::bip49::DerivationPath::BIP86_PURPOSE
+                            }
                             _ => crypto::bip49::DerivationPath::BIP84_PURPOSE, // Default to BIP84 for unknown types
                         };
                         (purpose, Some(*net))
@@ -180,9 +188,8 @@ impl WalletCrypto for Wallet {
 mod tests {
     use super::*;
     use crate::{
-        wallet_data::AuthMethod,
-        wallet_init::WalletInit,
-        Bip39Params, SecretKeyParams, Wallet, WalletConfig,
+        wallet_data::AuthMethod, wallet_init::WalletInit, Bip39Params, SecretKeyParams, Wallet,
+        WalletConfig,
     };
     use cipher::argon2::{derive_key, ARGON2_DEFAULT_CONFIG};
     use config::{argon::KEY_SIZE, cipher::PROOF_SIZE};
@@ -216,10 +223,9 @@ mod tests {
         };
         let chain_config = ChainConfig::default();
 
-        let sk: SecretKey =
-            "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
-                .parse()
-                .unwrap();
+        let sk: SecretKey = "00e93c035175b08613c4b0251ca92cd007026ca032ba53bafa3c839838f8b52d04"
+            .parse()
+            .unwrap();
 
         Wallet::from_sk(
             SecretKeyParams {
@@ -323,7 +329,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         // Reveal keypair for each account
         for i in 0..3 {
@@ -355,7 +366,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ETHEREUM;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         // Reveal keypair for each account
         for i in 0..2 {
@@ -392,7 +408,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
 
@@ -430,7 +451,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
 
@@ -468,7 +494,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         for i in 0..2 {
             let keypair = wallet.reveal_keypair(i, &argon_seed, None).unwrap();
@@ -508,7 +539,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
 
@@ -541,7 +577,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         // Reveal the mnemonic
         let revealed_mnemonic = wallet.reveal_mnemonic(&argon_seed).unwrap();
@@ -564,7 +605,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         // Try to reveal with wrong seed
         let wrong_seed = [0u8; KEY_SIZE];
@@ -603,7 +649,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         // Sign a message using the wallet's sign_message method
         let msg = b"Hello, Zilliqa!";
@@ -635,7 +686,12 @@ mod tests {
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
-        let wallet = create_test_wallet_from_mnemonic(Arc::clone(&storage), &argon_seed, &indexes, &chain_config);
+        let wallet = create_test_wallet_from_mnemonic(
+            Arc::clone(&storage),
+            &argon_seed,
+            &indexes,
+            &chain_config,
+        );
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
 

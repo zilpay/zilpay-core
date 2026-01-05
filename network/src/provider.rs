@@ -24,7 +24,6 @@ pub struct NetworkProvider {
     pub config: ChainConfig,
 }
 
-
 impl Provider for NetworkProvider {
     fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
         let bytes = storage.get(NETWORK_DB_KEY_V1).unwrap_or_default();

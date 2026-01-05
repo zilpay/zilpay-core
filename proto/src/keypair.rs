@@ -160,13 +160,15 @@ impl KeyPair {
                 Ok(Self::Secp256k1Keccak256((pub_key, secret_key)))
             }
             slip44::BITCOIN => {
-                let network = bip49.network.ok_or(
-                    KeyPairError::ExtendedPrivKeyDeriveError(
-                        Bip329Errors::MissingBitcoinNetwork
-                    )
-                )?;
+                let network = bip49
+                    .network
+                    .ok_or(KeyPairError::ExtendedPrivKeyDeriveError(
+                        Bip329Errors::MissingBitcoinNetwork,
+                    ))?;
                 let addr_type = bip49.get_address_type();
-                Ok(Self::Secp256k1Bitcoin((pub_key, secret_key, network, addr_type)))
+                Ok(Self::Secp256k1Bitcoin((
+                    pub_key, secret_key, network, addr_type,
+                )))
             }
             _ => {
                 return Err(KeyPairError::ExtendedPrivKeyDeriveError(
@@ -536,7 +538,8 @@ mod tests_keypair {
         );
 
         let zil_path = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None);
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path =
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
 
         let zil_key_pair = KeyPair::from_bip39_seed(&seed, &zil_path).unwrap();
         let eth_key_pair = KeyPair::from_bip39_seed(&seed, &eth_path).unwrap();
@@ -582,7 +585,8 @@ mod tests_keypair {
 
     #[test]
     fn test_derivation_path_generation() {
-        let eth_path = DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path =
+            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
         let zil_path = DerivationPath::new(slip44::ZILLIQA, 1, DerivationPath::BIP44_PURPOSE, None);
 
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");

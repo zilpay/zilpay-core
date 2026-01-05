@@ -125,15 +125,10 @@ pub fn update_tx_from_params(
             let is_eip1559_supported = params.fee_history.base_fee > U256::ZERO;
 
             if is_eip1559_supported {
-                eth_tx.max_priority_fee_per_gas = Some(
-                    params
-                        .fee_history
-                        .priority_fee
-                        .try_into()
-                        .map_err(|_| {
-                            TransactionErrors::ConvertTxError("Priority fee overflow".to_string())
-                        })?,
-                );
+                eth_tx.max_priority_fee_per_gas =
+                    Some(params.fee_history.priority_fee.try_into().map_err(|_| {
+                        TransactionErrors::ConvertTxError("Priority fee overflow".to_string())
+                    })?);
 
                 eth_tx.max_fee_per_gas = Some(params.current.try_into().map_err(|_| {
                     TransactionErrors::ConvertTxError("Max fee overflow".to_string())
@@ -159,15 +154,20 @@ pub fn update_tx_from_params(
                 .try_into()
                 .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
 
-            let total_input: u64 = metadata.btc_utxo_amounts
+            let total_input: u64 = metadata
+                .btc_utxo_amounts
                 .as_ref()
-                .ok_or(TransactionErrors::ConvertTxError("Missing UTXO amounts".to_string()))?
+                .ok_or(TransactionErrors::ConvertTxError(
+                    "Missing UTXO amounts".to_string(),
+                ))?
                 .iter()
                 .sum();
 
             let output_count = btc_tx.output.len();
             if output_count == 0 {
-                return Err(TransactionErrors::ConvertTxError("No outputs in transaction".to_string()))?;
+                return Err(TransactionErrors::ConvertTxError(
+                    "No outputs in transaction".to_string(),
+                ))?;
             }
 
             let mut total_output: u64 = 0;
@@ -175,14 +175,18 @@ pub fn update_tx_from_params(
                 total_output += btc_tx.output[i].value.to_sat();
             }
 
-            let new_change = total_input.saturating_sub(total_output).saturating_sub(new_fee);
+            let new_change = total_input
+                .saturating_sub(total_output)
+                .saturating_sub(new_fee);
 
             if new_change >= 546 {
                 btc_tx.output[output_count - 1].value = bitcoin::Amount::from_sat(new_change);
             } else if output_count > 1 {
                 btc_tx.output.pop();
             } else {
-                return Err(TransactionErrors::ConvertTxError("Insufficient funds for fee".to_string()))?;
+                return Err(TransactionErrors::ConvertTxError(
+                    "Insufficient funds for fee".to_string(),
+                ))?;
             }
         }
     }
