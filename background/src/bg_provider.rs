@@ -1,6 +1,6 @@
 use crate::{bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
-use crypto::slip44::{ETHEREUM, ZILLIQA};
+use crypto::slip44::{BITCOIN, ETHEREUM, ZILLIQA};
 use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::{common::Provider, provider::NetworkProvider};
 use proto::{address::Address, pubkey::PubKey};
@@ -125,7 +125,7 @@ impl ProvidersManagement for Background {
         let default_provider = self.get_provider(data.default_chain_hash)?;
 
         if let WalletTypes::Ledger(_) = data.wallet_type {
-            if default_provider.config.slip_44 == 313 {
+            if default_provider.config.slip_44 == ZILLIQA {
                 // old ledger doesn't support evm.
                 return Err(WalletErrors::InvalidAccountType)?;
             }
@@ -172,6 +172,19 @@ impl ProvidersManagement for Background {
                     _ => {}
                 }
                 a.chain_id = provider.config.chain_id();
+            } else if provider.config.slip_44 == BITCOIN {
+                match a.pub_key {
+                    PubKey::Secp256k1Bitcoin((pk, _, addr_type)) => {
+                        if provider.config.testnet.unwrap_or(false) {
+                            a.pub_key = PubKey::Secp256k1Bitcoin((
+                                pk,
+                                bitcoin::Network::Testnet,
+                                addr_type,
+                            ));
+                        }
+                    }
+                    _ => {}
+                }
             } else {
                 a.chain_id = provider.config.chain_id();
             }
