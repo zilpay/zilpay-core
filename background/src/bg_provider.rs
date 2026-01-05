@@ -173,17 +173,17 @@ impl ProvidersManagement for Background {
                 }
                 a.chain_id = provider.config.chain_id();
             } else if provider.config.slip_44 == BITCOIN {
-                match a.pub_key {
-                    PubKey::Secp256k1Bitcoin((pk, _, addr_type)) => {
-                        if provider.config.testnet.unwrap_or(false) {
-                            a.pub_key = PubKey::Secp256k1Bitcoin((
-                                pk,
-                                bitcoin::Network::Testnet,
-                                addr_type,
-                            ));
+                if let Some(network) = provider.config.bitcoin_network() {
+                    match a.pub_key {
+                        PubKey::Secp256k1Bitcoin((pk, _, addr_type)) => {
+                            a.pub_key = PubKey::Secp256k1Bitcoin((pk, network, addr_type));
+
+                            if let Ok(addr) = a.pub_key.get_addr() {
+                                a.addr = addr;
+                            }
                         }
+                        _ => {}
                     }
-                    _ => {}
                 }
             } else {
                 a.chain_id = provider.config.chain_id();

@@ -135,7 +135,7 @@ pub fn gen_bsc_testnet_conf() -> ChainConfig {
         logo: String::new(),
         diff_block_time: 0,
         testnet: None,
-        chain_ids: [97, 0],
+        chain_ids: [0, 0],
         name: "Binance-smart-chain".to_string(),
         chain: "BSC".to_string(),
         short_name: String::new(),

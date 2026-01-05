@@ -75,10 +75,8 @@ impl WalletCrypto for Wallet {
                 let seed = m.to_seed(passphrase.unwrap_or(""))?;
                 let hd_index = account.account_type.value();
 
-                // Determine BIP purpose and network based on account type
                 let (bip_purpose, network) = match &account.pub_key {
                     proto::pubkey::PubKey::Secp256k1Bitcoin((_, net, addr_type)) => {
-                        // Map Bitcoin address type to BIP standard
                         let purpose = match addr_type {
                             bitcoin::AddressType::P2pkh => {
                                 crypto::bip49::DerivationPath::BIP44_PURPOSE
@@ -92,14 +90,11 @@ impl WalletCrypto for Wallet {
                             bitcoin::AddressType::P2tr => {
                                 crypto::bip49::DerivationPath::BIP86_PURPOSE
                             }
-                            _ => crypto::bip49::DerivationPath::BIP84_PURPOSE, // Default to BIP84 for unknown types
+                            _ => crypto::bip49::DerivationPath::BIP84_PURPOSE,
                         };
                         (purpose, Some(*net))
                     }
-                    _ => {
-                        // For non-Bitcoin (Zilliqa, Ethereum, etc.), use BIP44
-                        (crypto::bip49::DerivationPath::BIP44_PURPOSE, None)
-                    }
+                    _ => (crypto::bip49::DerivationPath::BIP44_PURPOSE, None),
                 };
 
                 let bip_path = crypto::bip49::DerivationPath::new(

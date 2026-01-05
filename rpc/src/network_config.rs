@@ -1,7 +1,7 @@
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use errors::rpc::RpcError;
-use proto::address::Address;
+use proto::{address::Address, btc_utils::ByteCodec};
 use serde::{Deserialize, Serialize};
 use token::ft::FToken;
 
@@ -50,6 +50,14 @@ impl ChainConfig {
 
     pub fn chain_id(&self) -> u64 {
         self.chain_ids[0]
+    }
+
+    pub fn bitcoin_network(&self) -> Option<bitcoin::Network> {
+        let network_id = self.chain_id();
+        if network_id > 4 {
+            return None;
+        }
+        bitcoin::Network::from_byte(network_id as u8).ok()
     }
 
     pub fn urls(&self) -> &[String] {
