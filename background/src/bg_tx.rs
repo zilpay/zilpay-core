@@ -1210,10 +1210,8 @@ mod tests_background_transactions {
         let account = data.accounts.first().unwrap();
 
         let addr_str = account.addr.auto_format();
-        // Check sender address (Should be P2WPKH Mainnet starting with bc1q)
         assert!(addr_str.starts_with("bc1q"));
 
-        // Retrieve argon seed
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             TEST_PASSWORD.as_bytes(),
@@ -1222,8 +1220,6 @@ mod tests_background_transactions {
         )
         .unwrap();
 
-        // Define destination addresses (using wallet's own address for testing)
-        // In a real scenario, these would be different recipient addresses
         let dest_addr = account.addr.clone();
         let destinations = vec![
             (dest_addr.clone(), 1000u64),
@@ -1232,45 +1228,36 @@ mod tests_background_transactions {
             (dest_addr.clone(), 1000u64),
         ];
 
-        // Prepare and sign Bitcoin transaction (auto-fetches UTXOs and builds tx)
         let signed_tx = bg
             .prepare_and_sign_btc_transaction(0, 0, &argon_seed, None, destinations, Some(10))
             .await
             .unwrap();
 
-        // Verify the signature
         assert!(signed_tx.verify().unwrap());
 
-        // Verify we have outputs (destinations + potentially change)
         if let TransactionReceipt::Bitcoin((signed_btc_tx, _)) = &signed_tx {
-            assert!(signed_btc_tx.output.len() >= 4); // At least 4 destinations
+            assert!(signed_btc_tx.output.len() >= 4);
         } else {
             panic!("Not a BTC tx");
         }
 
-        // Broadcast the signed transaction
         let txns = vec![signed_tx];
         let broadcasted_txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
 
-        // Verify we got a transaction back with a hash
         assert_eq!(broadcasted_txns.len(), 1);
         let tx_hash = broadcasted_txns[0].metadata.hash.clone().unwrap();
         println!("Transaction broadcasted with hash: {}", tx_hash);
 
-        // Check that transaction is in history
         let wallet_check = bg.get_wallet_by_index(0).unwrap();
         let history_check = wallet_check.get_history().unwrap();
         assert_eq!(history_check.len(), 1);
         println!("History length after broadcast: {}", history_check.len());
 
-        // Wait for transaction to be processed
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
-        // Update transaction status
         println!("Updating transaction status...");
         bg.check_pending_txns(0).await.unwrap();
 
-        // Get updated history
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let history = wallet.get_history().unwrap();
         let net_hash = net_config.hash();
@@ -1282,7 +1269,6 @@ mod tests_background_transactions {
         assert_eq!(filtered_history.len(), 1);
         let btc_tx = &filtered_history[0];
 
-        // Verify transaction hash matches
         assert_eq!(btc_tx.metadata.hash.as_ref().unwrap(), &tx_hash);
 
         let btc_data = btc_tx.get_btc().expect("BTC field should be present");
@@ -1321,7 +1307,6 @@ mod tests_background_transactions {
             "Should have at least 4 outputs (destinations)"
         );
 
-        // Verify transaction status
         println!("Transaction status: {:?}", btc_tx.status);
         assert!(
             btc_tx.status == TransactionStatus::Success
@@ -1341,5 +1326,79 @@ mod tests_background_transactions {
                 "Transaction with confirmations should be Success"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_sign_and_send_btc_taproot_tx() {
+        use crypto::{bip49::DerivationPath, slip44};
+        use test_data::gen_btc_testnet_conf;
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_btc_testnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [(
+            DerivationPath::new(
+                slip44::BITCOIN,
+                0,
+                DerivationPath::BIP86_PURPOSE,
+                Some(bitcoin::Network::Bitcoin),
+            ),
+            "BTC Taproot Acc 0".to_string(),
+        )];
+        let device_indicators = gen_device_indicators("btc_taproot_test");
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: TEST_PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "BTC Taproot wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![test_data::gen_btc_token()],
+        })
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        bg.sync_ftokens_balances(0).await.unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let account = data.accounts.first().unwrap();
+
+        let addr_str = account.addr.auto_format();
+        assert!(addr_str.starts_with("bc1p"));
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            TEST_PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let dest_addr =
+            Address::from_bitcoin_address("bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v")
+                .unwrap();
+        let destinations = vec![(dest_addr, 1000u64)];
+
+        let signed_tx = bg
+            .prepare_and_sign_btc_transaction(0, 0, &argon_seed, None, destinations, Some(10))
+            .await
+            .unwrap();
+
+        assert!(signed_tx.verify().unwrap());
+
+        if let TransactionReceipt::Bitcoin((signed_btc_tx, _)) = &signed_tx {
+            assert!(signed_btc_tx.output.len() >= 1);
+        } else {
+            panic!("Not a BTC tx");
+        }
+
+        let txns = vec![signed_tx];
+        bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
     }
 }

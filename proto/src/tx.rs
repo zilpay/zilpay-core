@@ -227,7 +227,8 @@ impl TransactionRequest {
             }
             TransactionRequest::Bitcoin((mut tx, mut metadata)) => {
                 use bitcoin::hashes::Hash;
-                use bitcoin::sighash::{EcdsaSighashType, SighashCache};
+                use bitcoin::key::TapTweak;
+                use bitcoin::sighash::{EcdsaSighashType, Prevouts, SighashCache, TapSighashType};
                 use bitcoin::{secp256k1, secp256k1::Message, secp256k1::Secp256k1};
                 use bitcoin::{Amount, ScriptBuf, WPubkeyHash, Witness};
 
@@ -246,31 +247,71 @@ impl TransactionRequest {
                 let public_key = secp256k1::PublicKey::from_slice(pk_bytes)
                     .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
 
-                let wpubkey_hash = WPubkeyHash::hash(&public_key.serialize());
-                let prev_script = ScriptBuf::new_p2wpkh(&wpubkey_hash);
-                let sighash_type = EcdsaSighashType::All;
+                let addr_type = if let KeyPair::Secp256k1Bitcoin((_, _, _, addr_type)) = keypair {
+                    *addr_type
+                } else {
+                    bitcoin::AddressType::P2wpkh
+                };
 
-                for (index, input_amount) in utxo_amounts.iter().enumerate() {
-                    let mut sighash_cache = SighashCache::new(&mut tx);
-                    let amount = Amount::from_sat(*input_amount);
+                match addr_type {
+                    bitcoin::AddressType::P2tr => {
+                        let keypair_for_taproot = secp256k1::Keypair::from_secret_key(&secp, &secret_key);
+                        let (internal_key, _parity) = keypair_for_taproot.x_only_public_key();
+                        let sighash_type = TapSighashType::Default;
 
-                    let sighash = sighash_cache
-                        .p2wpkh_signature_hash(index, &prev_script, amount, sighash_type)
-                        .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+                        let prevouts: Vec<bitcoin::TxOut> = utxo_amounts
+                            .iter()
+                            .map(|&amount| bitcoin::TxOut {
+                                value: Amount::from_sat(amount),
+                                script_pubkey: ScriptBuf::new_p2tr(&secp, internal_key, None),
+                            })
+                            .collect();
 
-                    let message = Message::from_digest(*sighash.as_ref());
-                    let signature = secp.sign_ecdsa(&message, &secret_key);
+                        for (index, _input_amount) in utxo_amounts.iter().enumerate() {
+                            let prevouts_all = Prevouts::All(&prevouts);
+                            let mut sighash_cache = SighashCache::new(&mut tx);
 
-                    let bitcoin_sig = bitcoin::ecdsa::Signature {
-                        signature,
-                        sighash_type,
-                    };
+                            let sighash = sighash_cache
+                                .taproot_key_spend_signature_hash(index, &prevouts_all, sighash_type)
+                                .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
 
-                    let mut witness = Witness::new();
-                    witness.push(bitcoin_sig.serialize());
-                    witness.push(public_key.serialize());
+                            let tweaked = keypair_for_taproot.tap_tweak(&secp, None);
+                            let msg = Message::from(sighash);
+                            let sig = secp.sign_schnorr_no_aux_rand(&msg, tweaked.as_keypair());
 
-                    tx.input[index].witness = witness;
+                            let signature = bitcoin::taproot::Signature { signature: sig, sighash_type };
+
+                            tx.input[index].witness = Witness::p2tr_key_spend(&signature);
+                        }
+                    }
+                    _ => {
+                        let wpubkey_hash = WPubkeyHash::hash(&public_key.serialize());
+                        let prev_script = ScriptBuf::new_p2wpkh(&wpubkey_hash);
+                        let sighash_type = EcdsaSighashType::All;
+
+                        for (index, input_amount) in utxo_amounts.iter().enumerate() {
+                            let mut sighash_cache = SighashCache::new(&mut tx);
+                            let amount = Amount::from_sat(*input_amount);
+
+                            let sighash = sighash_cache
+                                .p2wpkh_signature_hash(index, &prev_script, amount, sighash_type)
+                                .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+
+                            let message = Message::from_digest(*sighash.as_ref());
+                            let signature = secp.sign_ecdsa(&message, &secret_key);
+
+                            let bitcoin_sig = bitcoin::ecdsa::Signature {
+                                signature,
+                                sighash_type,
+                            };
+
+                            let mut witness = Witness::new();
+                            witness.push(bitcoin_sig.serialize());
+                            witness.push(public_key.serialize());
+
+                            tx.input[index].witness = witness;
+                        }
+                    }
                 }
 
                 metadata.signer = Some(keypair.get_pubkey()?);
