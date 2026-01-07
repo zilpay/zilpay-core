@@ -46,7 +46,7 @@ network = { path = "./network" }
 intl = { path = "./intl" }
 cache = { path = "./cache" }
 qrcodes = { path = "./qrcodes" }
-rustls = { version = "0.23", features = ["ring"], default-features = false }
+rustls = { version = "0.23", features = ["aws-lc-rs"], default-features = false }
 
 [workspace.dependencies]
 image = "0.25.5"

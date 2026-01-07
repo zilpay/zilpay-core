@@ -6838,6 +6838,7 @@ dependencies = [
  "proto",
  "qrcodes",
  "rpc",
+ "rustls",
  "settings",
  "token",
  "wallet",

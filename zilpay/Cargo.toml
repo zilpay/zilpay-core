@@ -19,3 +19,4 @@ history = { path = "../history" }
 network = { path = "../network" }
 cache = { path = "../cache" }
 qrcodes = { path = "../qrcodes" }
+rustls = { version = "0.23", features = ["aws-lc-rs"], default-features = false }
