@@ -604,4 +604,188 @@ mod tests_background_tokens {
         assert_eq!(history_check.len(), 1);
         println!("History length after broadcast: {}", history_check.len());
     }
+
+    #[tokio::test]
+    async fn test_build_token_transfer_btc_max_amount() {
+        use crate::{bg_tx::TransactionsManagement, bg_wallet::WalletManagement};
+        use cipher::argon2;
+        use crypto::bip49::DerivationPath;
+        use crypto::slip44;
+        use network::btc::BtcOperations;
+        use test_data::{gen_btc_testnet_conf, ANVIL_MNEMONIC};
+        use wallet::wallet_transaction::WalletTransaction;
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_btc_testnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    0,
+                    DerivationPath::BIP84_PURPOSE,
+                    Some(bitcoin::Network::Bitcoin),
+                ),
+                "BTC SegWit Acc 0".to_string(),
+            ),
+            (
+                DerivationPath::new(
+                    slip44::BITCOIN,
+                    1,
+                    DerivationPath::BIP84_PURPOSE,
+                    Some(bitcoin::Network::Bitcoin),
+                ),
+                "BTC SegWit Acc 1".to_string(),
+            ),
+        ];
+        let device_indicators = gen_device_indicators("btc_max_test");
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: TEST_PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "BTC Max wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![test_data::gen_btc_token()],
+        })
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+
+        assert_eq!(data.accounts.len(), 2, "Should have 2 accounts");
+
+        let account = &data.accounts[0];
+        let account_1 = &data.accounts[1];
+
+        let addr_str = account.addr.auto_format();
+        let addr_str_1 = account_1.addr.auto_format();
+
+        assert!(
+            addr_str.starts_with("bc1q"),
+            "Should be SegWit address starting with bc1q, got: {}",
+            addr_str
+        );
+        assert_eq!(
+            addr_str, "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te",
+            "First account should match expected SegWit address"
+        );
+        assert_eq!(
+            addr_str_1, "bc1qp533522veg9uyhpx3sva9vqrnfzmt262n4lsuq",
+            "Second account should match expected SegWit address"
+        );
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let btc_token = ftokens.first().unwrap();
+
+        assert!(btc_token.native, "BTC token should be native");
+        assert_eq!(btc_token.symbol, "BTC", "Token symbol should be BTC");
+
+        let synced_balance = btc_token
+            .balances
+            .get(&0)
+            .copied()
+            .unwrap_or(U256::ZERO);
+
+        if synced_balance == U256::ZERO {
+            println!("No balance available, skipping test");
+            return;
+        }
+
+        println!("Synced balance: {} satoshis", synced_balance);
+
+        let provider = bg.get_provider(net_config.hash()).unwrap();
+        let unspents = provider.btc_list_unspent(&account.addr).await.unwrap();
+
+        if unspents.is_empty() {
+            println!("No UTXOs available, skipping test");
+            return;
+        }
+
+        let actual_balance: u64 = unspents.iter().map(|u| u.value).sum();
+        let max_balance = U256::from(actual_balance);
+
+        println!("Actual UTXO balance: {} satoshis", actual_balance);
+
+        let dest_addr = account_1.addr.clone();
+
+        let txn_req = bg
+            .build_token_transfer(btc_token, account, dest_addr.clone(), max_balance)
+            .await
+            .unwrap();
+
+        match &txn_req {
+            TransactionRequest::Bitcoin((tx, meta)) => {
+                assert!(tx.input.len() > 0, "Should have at least one input");
+                assert!(tx.output.len() > 0, "Should have at least one output");
+                assert_eq!(meta.chain_hash, net_config.hash());
+                assert!(meta.btc_utxo_amounts.is_some());
+                assert_eq!(
+                    meta.token_info,
+                    Some((max_balance, btc_token.decimals, btc_token.symbol.clone()))
+                );
+
+                let total_output: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
+                let total_input: u64 = meta.btc_utxo_amounts.as_ref().unwrap().iter().sum();
+                let fee = total_input.saturating_sub(total_output);
+
+                println!("Total input: {} satoshis", total_input);
+                println!("Total output: {} satoshis", total_output);
+                println!("Fee: {} satoshis", fee);
+
+                assert!(
+                    total_output < total_input,
+                    "Output should be less than input to account for fees"
+                );
+                assert!(
+                    fee > 0,
+                    "Fee should be greater than zero"
+                );
+                assert!(
+                    total_output <= max_balance.to::<u64>(),
+                    "Output should not exceed requested max balance"
+                );
+            }
+            _ => panic!("Expected Bitcoin transaction request"),
+        }
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            TEST_PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let signed_tx = wallet
+            .sign_transaction(txn_req, 0, &argon_seed, None)
+            .await
+            .unwrap();
+
+        assert!(signed_tx.verify().unwrap(), "Signed transaction should be valid");
+
+        let txns = vec![signed_tx];
+        let broadcasted_txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+
+        assert_eq!(broadcasted_txns.len(), 1);
+        let tx_hash = broadcasted_txns[0].metadata.hash.clone().unwrap();
+        println!("Max amount transaction broadcasted with hash: {}", tx_hash);
+
+        let wallet_check = bg.get_wallet_by_index(0).unwrap();
+        let history_check = wallet_check.get_history().unwrap();
+        assert!(
+            history_check.len() > 0,
+            "Transaction should be in history"
+        );
+    }
 }
