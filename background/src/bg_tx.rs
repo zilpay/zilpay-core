@@ -174,7 +174,7 @@ pub fn update_tx_from_params(
                     }
                 }
             } else {
-                eth_tx.gas_price = Some(params.current.try_into().map_err(|_| {
+                eth_tx.gas_price = Some(params.gas_price.try_into().map_err(|_| {
                     TransactionErrors::ConvertTxError("Gas price overflow".to_string())
                 })?);
 
