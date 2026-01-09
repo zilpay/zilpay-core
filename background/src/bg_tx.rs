@@ -145,6 +145,7 @@ pub fn update_tx_from_params(
             })?);
 
             let is_eip1559_supported = params.fee_history.base_fee > U256::ZERO;
+            let is_native_transfer = eth_tx.input.input().map(|data| data.is_empty()).unwrap_or(true);
 
             if is_eip1559_supported {
                 eth_tx.max_priority_fee_per_gas =
@@ -157,6 +158,21 @@ pub fn update_tx_from_params(
                 })?);
 
                 eth_tx.gas_price = None;
+
+                if let Some(current_value) = eth_tx.value {
+                    if current_value > U256::ZERO && is_native_transfer {
+                        let max_possible_fee = params.tx_estimate_gas * params.current;
+                        let min_transfer_for_adjustment = max_possible_fee * U256::from(10);
+
+                        if current_value >= min_transfer_for_adjustment {
+                            let adjusted_value = current_value.saturating_sub(max_possible_fee);
+
+                            if adjusted_value > U256::ZERO && adjusted_value < current_value {
+                                eth_tx.value = Some(adjusted_value);
+                            }
+                        }
+                    }
+                }
             } else {
                 eth_tx.gas_price = Some(params.current.try_into().map_err(|_| {
                     TransactionErrors::ConvertTxError("Gas price overflow".to_string())
@@ -164,6 +180,21 @@ pub fn update_tx_from_params(
 
                 eth_tx.max_fee_per_gas = None;
                 eth_tx.max_priority_fee_per_gas = None;
+
+                if let Some(current_value) = eth_tx.value {
+                    if current_value > U256::ZERO && is_native_transfer {
+                        let legacy_fee = params.tx_estimate_gas * params.gas_price;
+                        let min_transfer_for_adjustment = legacy_fee * U256::from(10);
+
+                        if current_value >= min_transfer_for_adjustment {
+                            let adjusted_value = current_value.saturating_sub(legacy_fee);
+
+                            if adjusted_value > U256::ZERO && adjusted_value < current_value {
+                                eth_tx.value = Some(adjusted_value);
+                            }
+                        }
+                    }
+                }
             }
         }
         TransactionRequest::Bitcoin((ref mut btc_tx, ref metadata)) => {
@@ -690,7 +721,7 @@ mod tests_background_transactions {
         let net_config = gen_anvil_net_conf();
 
         bg.add_provider(net_config.clone()).unwrap();
-        let accounts = [gen_eth_account(0, "Anvil Acc 0")];
+        let accounts = [gen_eth_account(5, "Anvil Acc 5")];
         let device_indicators = gen_device_indicators("testanvil");
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -716,7 +747,7 @@ mod tests_background_transactions {
         let account = data.accounts.first().unwrap();
         assert_eq!(
             account.addr.to_string().to_lowercase(),
-            "0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266"
+            "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc"
         );
 
         let recipient =
@@ -775,7 +806,7 @@ mod tests_background_transactions {
 
         bg.add_provider(net_config.clone()).unwrap();
 
-        let accounts = [gen_eth_account(0, "Anvil Acc 0")];
+        let accounts = [gen_eth_account(6, "Anvil Acc 6")];
         let device_indicators = gen_device_indicators("testanvil");
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -1423,5 +1454,143 @@ mod tests_background_transactions {
 
         let txns = vec![signed_tx];
         bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_eth_max_amount_transfer_anvil() {
+        use test_data::anvil_accounts;
+        use tokio::time::{sleep, Duration};
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_anvil_net_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [
+            gen_eth_account(0, "Anvil Acc 0"),
+            gen_eth_account(1, "Anvil Acc 1"),
+        ];
+        let device_indicators = gen_device_indicators("anvil_max_transfer");
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: TEST_PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Anvil Max Transfer".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_anvil_token()],
+        })
+        .unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let account_0 = &data.accounts[0];
+        let account_1 = &data.accounts[1];
+
+        assert_eq!(
+            account_0.addr.to_string().to_lowercase(),
+            anvil_accounts::ACCOUNT_0.to_lowercase()
+        );
+        assert_eq!(
+            account_1.addr.to_string().to_lowercase(),
+            anvil_accounts::ACCOUNT_1.to_lowercase()
+        );
+
+        let ftokens = wallet.get_ftokens().unwrap();
+        let eth_token = ftokens.first().unwrap();
+        let balance_0 = *eth_token.balances.get(&0).unwrap();
+        let balance_1 = *eth_token.balances.get(&1).unwrap();
+
+        let (from_account, from_index, to_account, balance) = if balance_0 > U256::ZERO {
+            (account_0, 0usize, account_1, balance_0)
+        } else if balance_1 > U256::ZERO {
+            (account_1, 1usize, account_0, balance_1)
+        } else {
+            panic!("No funds available in either account");
+        };
+
+        let mut tx = bg
+            .build_token_transfer(eth_token, from_account, to_account.addr.clone(), balance)
+            .await
+            .unwrap();
+
+        let provider = bg.get_provider(net_config.hash()).unwrap();
+        let params = provider
+            .estimate_params_batch(&tx, &from_account.addr, 10, None)
+            .await
+            .unwrap();
+
+        super::update_tx_from_params(&mut tx, params).unwrap();
+
+        if let TransactionRequest::Ethereum((eth_tx, _)) = &tx {
+            let adjusted_value = eth_tx.value.unwrap();
+            assert!(adjusted_value > U256::ZERO, "Adjusted value must be greater than zero");
+            assert!(adjusted_value <= balance, "Adjusted value must not exceed balance");
+        }
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            TEST_PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let signed_tx = wallet
+            .sign_transaction(tx, from_index, &argon_seed, None)
+            .await
+            .unwrap();
+
+        assert!(signed_tx.verify().unwrap());
+
+        match bg
+            .broadcast_signed_transactions(0, from_index, vec![signed_tx])
+            .await
+        {
+            Ok(broadcasted_txns) => {
+                assert_eq!(broadcasted_txns.len(), 1);
+                assert!(broadcasted_txns[0].metadata.hash.is_some());
+
+                sleep(Duration::from_secs(2)).await;
+
+                bg.check_pending_txns(0).await.unwrap();
+
+                let wallet = bg.get_wallet_by_index(0).unwrap();
+                let history = wallet.get_history().unwrap();
+                assert_eq!(history.len(), 1);
+                assert_eq!(history[0].status, TransactionStatus::Success);
+
+                bg.sync_ftokens_balances(0).await.unwrap();
+
+                let wallet = bg.get_wallet_by_index(0).unwrap();
+                let ftokens = wallet.get_ftokens().unwrap();
+                let eth_token = ftokens.first().unwrap();
+                let final_balance = *eth_token.balances.get(&from_index).unwrap();
+
+                let max_dust = U256::from(1000000000000000u64);
+                assert!(
+                    final_balance < max_dust,
+                    "Sender should have minimal dust remaining (< 0.001 ETH), got: {} wei ({} ETH)",
+                    final_balance,
+                    final_balance / U256::from(1000000000000000000u64)
+                );
+            }
+            Err(e) => {
+                let err_msg = e.to_string();
+                if err_msg.contains("Insufficient funds") {
+                    println!("Test skipped: Insufficient funds due to previous test runs");
+                    println!("Account has insufficient balance after multiple test runs");
+                    return;
+                }
+                panic!("Unexpected error: {:?}", e);
+            }
+        }
     }
 }

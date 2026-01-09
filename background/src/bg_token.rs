@@ -624,20 +624,20 @@ mod tests_background_tokens {
             (
                 DerivationPath::new(
                     slip44::BITCOIN,
-                    0,
+                    2,
                     DerivationPath::BIP84_PURPOSE,
                     Some(bitcoin::Network::Bitcoin),
                 ),
-                "BTC SegWit Acc 0".to_string(),
+                "BTC SegWit Acc 2".to_string(),
             ),
             (
                 DerivationPath::new(
                     slip44::BITCOIN,
-                    1,
+                    3,
                     DerivationPath::BIP84_PURPOSE,
                     Some(bitcoin::Network::Bitcoin),
                 ),
-                "BTC SegWit Acc 1".to_string(),
+                "BTC SegWit Acc 3".to_string(),
             ),
         ];
         let device_indicators = gen_device_indicators("btc_max_test");
@@ -674,12 +674,12 @@ mod tests_background_tokens {
             addr_str
         );
         assert_eq!(
-            addr_str, "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te",
-            "First account should match expected SegWit address"
+            addr_str, "bc1qt3az9lwpqfvr466mezsewuzdc4d379ldv83d4c",
+            "Account 2 should match expected SegWit address"
         );
         assert_eq!(
-            addr_str_1, "bc1qp533522veg9uyhpx3sva9vqrnfzmt262n4lsuq",
-            "Second account should match expected SegWit address"
+            addr_str_1, "bc1qcqp7wgm6ke7zvwqnyy5a52ratfuhufw0zhpmxg",
+            "Account 3 should match expected SegWit address"
         );
 
         bg.sync_ftokens_balances(0).await.unwrap();
@@ -691,36 +691,50 @@ mod tests_background_tokens {
         assert!(btc_token.native, "BTC token should be native");
         assert_eq!(btc_token.symbol, "BTC", "Token symbol should be BTC");
 
-        let synced_balance = btc_token
-            .balances
-            .get(&0)
-            .copied()
-            .unwrap_or(U256::ZERO);
-
-        if synced_balance == U256::ZERO {
-            println!("No balance available, skipping test");
-            return;
-        }
-
-        println!("Synced balance: {} satoshis", synced_balance);
+        let balance_0 = btc_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
+        let balance_1 = btc_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
 
         let provider = bg.get_provider(net_config.hash()).unwrap();
-        let unspents = provider.btc_list_unspent(&account.addr).await.unwrap();
 
-        if unspents.is_empty() {
-            println!("No UTXOs available, skipping test");
+        let (from_account, from_index, to_account) = if balance_0 > U256::ZERO {
+            let unspents = provider.btc_list_unspent(&account.addr).await.unwrap();
+            if !unspents.is_empty() {
+                (account, 0usize, account_1)
+            } else if balance_1 > U256::ZERO {
+                let unspents_1 = provider.btc_list_unspent(&account_1.addr).await.unwrap();
+                if !unspents_1.is_empty() {
+                    (account_1, 1usize, account)
+                } else {
+                    println!("No UTXOs available for either account, skipping test");
+                    return;
+                }
+            } else {
+                println!("No balance available in either account, skipping test");
+                return;
+            }
+        } else if balance_1 > U256::ZERO {
+            let unspents_1 = provider.btc_list_unspent(&account_1.addr).await.unwrap();
+            if !unspents_1.is_empty() {
+                (account_1, 1usize, account)
+            } else {
+                println!("No UTXOs available, skipping test");
+                return;
+            }
+        } else {
+            println!("No balance available in either account, skipping test");
             return;
-        }
+        };
 
+        let unspents = provider.btc_list_unspent(&from_account.addr).await.unwrap();
         let actual_balance: u64 = unspents.iter().map(|u| u.value).sum();
         let max_balance = U256::from(actual_balance);
 
-        println!("Actual UTXO balance: {} satoshis", actual_balance);
+        println!("Sending from account {}, balance: {} satoshis", from_index, actual_balance);
 
-        let dest_addr = account_1.addr.clone();
+        let dest_addr = to_account.addr.clone();
 
         let txn_req = bg
-            .build_token_transfer(btc_token, account, dest_addr.clone(), max_balance)
+            .build_token_transfer(btc_token, from_account, dest_addr.clone(), max_balance)
             .await
             .unwrap();
 
@@ -768,14 +782,14 @@ mod tests_background_tokens {
         .unwrap();
 
         let signed_tx = wallet
-            .sign_transaction(txn_req, 0, &argon_seed, None)
+            .sign_transaction(txn_req, from_index, &argon_seed, None)
             .await
             .unwrap();
 
         assert!(signed_tx.verify().unwrap(), "Signed transaction should be valid");
 
         let txns = vec![signed_tx];
-        let broadcasted_txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+        let broadcasted_txns = bg.broadcast_signed_transactions(0, from_index, txns).await.unwrap();
 
         assert_eq!(broadcasted_txns.len(), 1);
         let tx_hash = broadcasted_txns[0].metadata.hash.clone().unwrap();
