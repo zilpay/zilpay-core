@@ -72,6 +72,9 @@ pub enum SecretKeyError {
 
     #[error("Invalid key type")]
     InvalidKeyType,
+
+    #[error("Invalid WIF format: {0}")]
+    InvalidWif(String),
 }
 
 #[derive(Debug, Error, PartialEq)]

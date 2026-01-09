@@ -20,6 +20,46 @@ pub enum SecretKey {
 }
 
 impl SecretKey {
+    pub fn from_wif(wif: &str, addr_type: bitcoin::AddressType) -> Result<Self> {
+        use bitcoin::NetworkKind;
+
+        let private_key = bitcoin::PrivateKey::from_wif(wif)
+            .map_err(|e| SecretKeyError::InvalidWif(e.to_string()))?;
+
+        let secret_bytes: [u8; SECRET_KEY_SIZE] = private_key
+            .inner
+            .secret_bytes()
+            .try_into()
+            .map_err(|_| SecretKeyError::InvalidLength)?;
+
+        let network = match private_key.network {
+            NetworkKind::Main => bitcoin::Network::Bitcoin,
+            NetworkKind::Test => bitcoin::Network::Testnet,
+        };
+
+        Ok(Self::Secp256k1Bitcoin((secret_bytes, network, addr_type)))
+    }
+
+    pub fn to_wif(&self, compressed: bool) -> Result<String> {
+        match self {
+            Self::Secp256k1Bitcoin((sk, network, _)) => {
+                let secret_key = bitcoin::secp256k1::SecretKey::from_slice(sk)
+                    .map_err(|e| SecretKeyError::InvalidWif(e.to_string()))?;
+
+                let private_key = if compressed {
+                    bitcoin::PrivateKey::new(secret_key, *network)
+                } else {
+                    bitcoin::PrivateKey::new_uncompressed(secret_key, *network)
+                };
+
+                Ok(private_key.to_wif())
+            }
+            _ => Err(SecretKeyError::InvalidWif(
+                "WIF format only supported for Bitcoin keys".to_string(),
+            )),
+        }
+    }
+
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         match self {
             SecretKey::Secp256k1Sha256Zilliqa(sk) => {
@@ -287,5 +327,87 @@ mod tests {
         assert_eq!(SecretKey::from_str(&zil_str).unwrap(), sk_zil);
         assert_eq!(SecretKey::from_str(&eth_str).unwrap(), sk_eth);
         assert_eq!(SecretKey::from_str(&btc_str).unwrap(), sk_btc);
+    }
+
+    #[test]
+    fn test_wif_mainnet_compressed() {
+        let wif = "L5oLkpV3aqBJ4BgssVAsax1iRa77G5CVYnv9adQ6Z87te7TyUdSC";
+        let sk = SecretKey::from_wif(wif, bitcoin::AddressType::P2wpkh).unwrap();
+
+        match sk {
+            SecretKey::Secp256k1Bitcoin((_, network, _)) => {
+                assert_eq!(network, bitcoin::Network::Bitcoin);
+            }
+            _ => panic!("Expected Bitcoin key"),
+        }
+
+        let wif_output = sk.to_wif(true).unwrap();
+        assert_eq!(wif, wif_output);
+    }
+
+    #[test]
+    fn test_wif_mainnet_uncompressed() {
+        let wif = "5KYZdUEo39z3FPrtuX2QbbwGnNP5zTd7yyr2SC1j299sBCnWjss";
+        let sk = SecretKey::from_wif(wif, bitcoin::AddressType::P2pkh).unwrap();
+
+        match sk {
+            SecretKey::Secp256k1Bitcoin((_, network, _)) => {
+                assert_eq!(network, bitcoin::Network::Bitcoin);
+            }
+            _ => panic!("Expected Bitcoin key"),
+        }
+
+        let wif_output = sk.to_wif(false).unwrap();
+        assert_eq!(wif, wif_output);
+    }
+
+    #[test]
+    fn test_wif_testnet_compressed() {
+        let wif = "cVt4o7BGAig1UXywgGSmARhxMdzP5qvQsxKkSsc1XEkw3tDTQFpy";
+        let sk = SecretKey::from_wif(wif, bitcoin::AddressType::P2wpkh).unwrap();
+
+        match sk {
+            SecretKey::Secp256k1Bitcoin((_, network, _)) => {
+                assert_eq!(network, bitcoin::Network::Testnet);
+            }
+            _ => panic!("Expected Bitcoin key"),
+        }
+
+        let wif_output = sk.to_wif(true).unwrap();
+        assert_eq!(wif, wif_output);
+    }
+
+    #[test]
+    fn test_wif_roundtrip() {
+        let sk_data = [123u8; SECRET_KEY_SIZE];
+        let sk = SecretKey::Secp256k1Bitcoin((
+            sk_data,
+            bitcoin::Network::Bitcoin,
+            bitcoin::AddressType::P2wpkh,
+        ));
+
+        let wif = sk.to_wif(true).unwrap();
+        let recovered = SecretKey::from_wif(&wif, bitcoin::AddressType::P2wpkh).unwrap();
+
+        assert_eq!(sk, recovered);
+    }
+
+    #[test]
+    fn test_wif_invalid_format() {
+        let invalid_wif = "invalid_wif_string";
+        let result = SecretKey::from_wif(invalid_wif, bitcoin::AddressType::P2wpkh);
+        assert!(matches!(result, Err(SecretKeyError::InvalidWif(_))));
+    }
+
+    #[test]
+    fn test_wif_non_bitcoin_key() {
+        let sk_data = [42u8; SECRET_KEY_SIZE];
+        let sk_eth = SecretKey::Secp256k1Keccak256Ethereum(sk_data);
+        let result = sk_eth.to_wif(true);
+        assert!(matches!(result, Err(SecretKeyError::InvalidWif(_))));
+
+        let sk_zil = SecretKey::Secp256k1Sha256Zilliqa(sk_data);
+        let result = sk_zil.to_wif(true);
+        assert!(matches!(result, Err(SecretKeyError::InvalidWif(_))));
     }
 }
