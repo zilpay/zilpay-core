@@ -37,21 +37,43 @@ pub(crate) async fn build_unsigned_btc_transaction(
         ));
     }
 
-    let total_output: u64 = destinations.iter().map(|(_, amount)| amount).sum();
+    let total_input: u64 = unspents.iter().map(|u| u.value).sum();
+    let original_total_output: u64 = destinations.iter().map(|(_, amount)| amount).sum();
     let estimated_vsize = (unspents.len() * 148 + destinations.len() * 34 + 10) as u64;
     let fee_rate = fee_rate_sat_per_vbyte.unwrap_or(10);
     let estimated_fee = estimated_vsize * fee_rate;
-    let total_input: u64 = unspents.iter().map(|u| u.value).sum();
 
-    if total_input < total_output + estimated_fee {
-        return Err(BackgroundError::BincodeError(format!(
-            "Insufficient funds: have {}, need {} (output: {}, fee: {})",
-            total_input,
-            total_output + estimated_fee,
-            total_output,
-            estimated_fee
-        )));
-    }
+    let (adjusted_destinations, total_output) = if total_input
+        < original_total_output + estimated_fee
+    {
+        let max_threshold = estimated_fee.saturating_mul(3).max(10000);
+        let is_max_transfer = destinations.len() == 1
+            && original_total_output <= total_input
+            && original_total_output + estimated_fee > total_input
+            && (original_total_output + estimated_fee).saturating_sub(total_input) < max_threshold;
+
+        if is_max_transfer {
+            let adjusted_amount = total_input.saturating_sub(estimated_fee);
+            if adjusted_amount < 546 {
+                return Err(BackgroundError::BincodeError(format!(
+                    "Insufficient funds: balance too low after fee (have: {}, fee: {})",
+                    total_input, estimated_fee
+                )));
+            }
+            let adjusted_dests = vec![(destinations[0].0.clone(), adjusted_amount)];
+            (adjusted_dests, adjusted_amount)
+        } else {
+            return Err(BackgroundError::BincodeError(format!(
+                "Insufficient funds: have {}, need {} (output: {}, fee: {})",
+                total_input,
+                original_total_output + estimated_fee,
+                original_total_output,
+                estimated_fee
+            )));
+        }
+    } else {
+        (destinations.clone(), original_total_output)
+    };
 
     let mut inputs = Vec::new();
     for unspent in &unspents {
@@ -67,7 +89,7 @@ pub(crate) async fn build_unsigned_btc_transaction(
     }
 
     let mut outputs = Vec::new();
-    for (dest_addr, amount) in destinations {
+    for (dest_addr, amount) in adjusted_destinations {
         let btc_addr = dest_addr
             .to_bitcoin_addr()
             .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
@@ -1380,9 +1402,10 @@ mod tests_background_transactions {
         )
         .unwrap();
 
-        let dest_addr =
-            Address::from_bitcoin_address("bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v")
-                .unwrap();
+        let dest_addr = Address::from_bitcoin_address(
+            "bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v",
+        )
+        .unwrap();
         let destinations = vec![(dest_addr, 1000u64)];
 
         let signed_tx = bg

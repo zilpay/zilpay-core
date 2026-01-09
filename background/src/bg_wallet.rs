@@ -665,4 +665,57 @@ mod tests_background {
             );
         }
     }
+
+    #[test]
+    fn test_add_bitcoin_sk_wallet() {
+        use test_data::{gen_btc_testnet_conf, gen_device_indicators, TEST_PASSWORD};
+
+        let (mut bg, _dir) = setup_test_background();
+        let btc_conf = gen_btc_testnet_conf();
+        let device_indicators = gen_device_indicators("test_device");
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2wpkh).unwrap();
+
+        bg.add_provider(btc_conf.clone()).unwrap();
+
+        let session = bg
+            .add_sk_wallet(BackgroundSKParams {
+                secret_key: keypair.get_secretkey().unwrap(),
+                password: TEST_PASSWORD,
+                chain_hash: btc_conf.hash(),
+                wallet_settings: Default::default(),
+                wallet_name: "Bitcoin Wallet".to_string(),
+                biometric_type: Default::default(),
+                device_indicators: &device_indicators,
+                ftokens: vec![],
+            })
+            .unwrap();
+
+        assert_eq!(bg.wallets.len(), 1);
+        assert_eq!(session.len(), 0);
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+
+        assert_eq!(data.wallet_name, "Bitcoin Wallet");
+        assert_eq!(data.accounts.len(), 1);
+        assert!(matches!(
+            data.get_selected_account().unwrap().addr,
+            Address::Secp256k1Bitcoin(_)
+        ));
+
+        drop(bg);
+
+        let bg = Background::from_storage_path(&_dir).unwrap();
+        assert_eq!(bg.wallets.len(), 1);
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let restored_data = wallet.get_wallet_data().unwrap();
+
+        assert_eq!(restored_data.wallet_name, "Bitcoin Wallet");
+        assert!(matches!(
+            restored_data.get_selected_account().unwrap().addr,
+            Address::Secp256k1Bitcoin(_)
+        ));
+    }
 }
