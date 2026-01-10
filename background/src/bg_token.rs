@@ -244,7 +244,9 @@ mod tests_background_tokens {
     use network::btc::BtcOperations;
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
+    use serde_json::Value;
     use std::collections::HashMap;
+    use std::str::FromStr;
     use std::thread::sleep;
     use std::time::Duration;
     use test_data::{
@@ -1027,7 +1029,7 @@ mod tests_background_tokens {
             .await
             .unwrap();
 
-        update_tx_from_params(&mut tx, params, amount).unwrap();
+        update_tx_from_params(&mut tx, params.clone(), amount).unwrap();
 
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -1058,11 +1060,26 @@ mod tests_background_tokens {
 
                 let wallet = bg.get_wallet_by_index(0).unwrap();
                 let history = wallet.get_history().unwrap();
-                dbg!(&history);
 
                 assert_eq!(history.len(), 1);
                 assert_eq!(history[0].status, TransactionStatus::Success);
 
+                let evm_json = history[0].evm.as_ref().unwrap();
+                let tx_data: Value = serde_json::from_str(evm_json).unwrap();
+
+                let gas_used = U256::from_str(tx_data["gasUsed"].as_str().unwrap()).unwrap();
+
+                let total_fee = if let Some(priority_fee_str) = tx_data["maxPriorityFeePerGas"].as_str() {
+                    let effective_gas_price = U256::from_str(tx_data["effectiveGasPrice"].as_str().unwrap()).unwrap();
+                    let max_priority_fee = U256::from_str(priority_fee_str).unwrap();
+                    let base_fee = effective_gas_price - max_priority_fee;
+                    gas_used * (base_fee + max_priority_fee)
+                } else {
+                    let gas_price = U256::from_str(tx_data["gasPrice"].as_str().unwrap()).unwrap();
+                    gas_used * gas_price
+                };
+
+                assert_eq!(total_fee, params.current);
                 bg.sync_ftokens_balances(0).await.unwrap();
 
                 let wallet = bg.get_wallet_by_index(0).unwrap();
