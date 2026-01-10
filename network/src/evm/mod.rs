@@ -198,25 +198,13 @@ impl EvmOperations for NetworkProvider {
         };
 
         let (slow, market, fast) = if fee_history_response.base_fee > U256::ZERO {
-            let priority_fee = fee_history_response.priority_fee;
-            let base_fee = fee_history_response.base_fee;
-
-            let slow_max_fee = base_fee.saturating_add(priority_fee);
-            let market_max_fee = base_fee
-                .saturating_mul(U256::from(2))
-                .saturating_add(priority_fee);
-            let fast_max_fee = base_fee
-                .saturating_mul(U256::from(3))
-                .saturating_add(priority_fee);
-
-            (slow_max_fee, market_max_fee, fast_max_fee)
+            Self::calculate_eip1559_fee_tiers(
+                fee_history_response.base_fee,
+                fee_history_response.priority_fee,
+                tx_estimate_gas_response,
+            )
         } else {
-            let gas_price = gas_price_response;
-            let slow_gas_price = gas_price;
-            let market_gas_price = gas_price.saturating_mul(U256::from(2));
-            let fast_gas_price = gas_price.saturating_mul(U256::from(3));
-
-            (slow_gas_price, market_gas_price, fast_gas_price)
+            Self::calculate_legacy_fee_tiers(gas_price_response, tx_estimate_gas_response)
         };
 
         Ok(RequiredTxParams {
@@ -471,5 +459,37 @@ impl EvmOperations for NetworkProvider {
                 })
             }
         }
+    }
+}
+
+impl NetworkProvider {
+    fn calculate_eip1559_fee_tiers(
+        base_fee: U256,
+        priority_fee: U256,
+        gas_limit: U256,
+    ) -> (U256, U256, U256) {
+        let slow_fee_per_gas = base_fee.saturating_add(priority_fee);
+        let market_fee_per_gas =
+            base_fee.saturating_add(priority_fee.saturating_mul(U256::from(2)));
+        let fast_fee_per_gas =
+            base_fee.saturating_add(priority_fee.saturating_mul(U256::from(3)));
+
+        (
+            Self::calculate_total_fee(slow_fee_per_gas, gas_limit),
+            Self::calculate_total_fee(market_fee_per_gas, gas_limit),
+            Self::calculate_total_fee(fast_fee_per_gas, gas_limit),
+        )
+    }
+
+    fn calculate_legacy_fee_tiers(gas_price: U256, gas_limit: U256) -> (U256, U256, U256) {
+        (
+            Self::calculate_total_fee(gas_price, gas_limit),
+            Self::calculate_total_fee(gas_price.saturating_mul(U256::from(2)), gas_limit),
+            Self::calculate_total_fee(gas_price.saturating_mul(U256::from(3)), gas_limit),
+        )
+    }
+
+    fn calculate_total_fee(fee_per_gas: U256, gas_limit: U256) -> U256 {
+        fee_per_gas.saturating_mul(gas_limit)
     }
 }

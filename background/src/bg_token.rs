@@ -239,11 +239,17 @@ mod tests_background_tokens {
     use config::address::ADDR_LEN;
     use crypto::bip49::DerivationPath;
     use crypto::slip44;
+
+    use history::status::TransactionStatus;
     use network::btc::BtcOperations;
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
     use std::collections::HashMap;
-    use test_data::{gen_btc_testnet_conf, ANVIL_MNEMONIC};
+    use std::thread::sleep;
+    use std::time::Duration;
+    use test_data::{
+        anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_testnet_conf, ANVIL_MNEMONIC,
+    };
     use test_data::{
         gen_device_indicators, gen_eth_account, gen_zil_account, gen_zil_testnet_conf,
         TEST_PASSWORD,
@@ -951,5 +957,129 @@ mod tests_background_tokens {
         // let sender_blk = scilla_token.balances.get(&from_index).unwrap();
 
         // assert_eq!(*sender_blk, U256::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_eth_max_amount_transfer_anvil() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_anvil_net_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [
+            gen_eth_account(0, "Anvil Acc 0"),
+            gen_eth_account(1, "Anvil Acc 1"),
+        ];
+        let device_indicators = gen_device_indicators("anvil_max_transfer");
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: TEST_PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Anvil Max Transfer".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![gen_anvil_token()],
+        })
+        .unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let account_0 = &data.accounts[0];
+        let account_1 = &data.accounts[1];
+
+        assert_eq!(
+            account_0.addr.to_string().to_lowercase(),
+            anvil_accounts::ACCOUNT_0.to_lowercase()
+        );
+        assert_eq!(
+            account_1.addr.to_string().to_lowercase(),
+            anvil_accounts::ACCOUNT_1.to_lowercase()
+        );
+
+        let ftokens = wallet.get_ftokens().unwrap();
+        let eth_token = ftokens.first().unwrap();
+        let balance_0 = eth_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
+        let balance_1 = eth_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
+
+        let (from_index, from_account, to_account, amount) = if balance_0 > balance_1 {
+            (0, account_0, account_1, balance_0)
+        } else if balance_1 > balance_0 {
+            (1, account_1, account_0, balance_1)
+        } else {
+            panic!("acocunt 1 and 2 not enough funds");
+        };
+
+        let mut tx = bg
+            .build_token_transfer(eth_token, from_account, to_account.addr.clone(), amount)
+            .await
+            .unwrap();
+
+        let provider = bg.get_provider(net_config.hash()).unwrap();
+        let params = provider
+            .estimate_params_batch(&tx, &from_account.addr, 10, None)
+            .await
+            .unwrap();
+
+        update_tx_from_params(&mut tx, params, amount).unwrap();
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            TEST_PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let signed_tx = wallet
+            .sign_transaction(tx, from_index, &argon_seed, None)
+            .await
+            .unwrap();
+
+        assert!(signed_tx.verify().unwrap());
+
+        match bg
+            .broadcast_signed_transactions(0, from_index, vec![signed_tx])
+            .await
+        {
+            Ok(broadcasted_txns) => {
+                assert_eq!(broadcasted_txns.len(), 1);
+                assert!(broadcasted_txns[0].metadata.hash.is_some());
+
+                sleep(Duration::from_secs(2));
+
+                bg.check_pending_txns(0).await.unwrap();
+
+                let wallet = bg.get_wallet_by_index(0).unwrap();
+                let history = wallet.get_history().unwrap();
+                assert_eq!(history.len(), 1);
+                assert_eq!(history[0].status, TransactionStatus::Success);
+
+                bg.sync_ftokens_balances(0).await.unwrap();
+
+                let wallet = bg.get_wallet_by_index(0).unwrap();
+                let ftokens = wallet.get_ftokens().unwrap();
+                let eth_token = ftokens.first().unwrap();
+                dbg!(&eth_token);
+                let final_balance = *eth_token.balances.get(&from_index).unwrap();
+
+                let max_dust = U256::from(1000000000000000u64);
+                assert!(
+                    final_balance < max_dust,
+                    "Sender should have minimal dust remaining (< 0.001 ETH), got: {} wei ({} ETH)",
+                    final_balance,
+                    final_balance / U256::from(1000000000000000000u64)
+                );
+            }
+            Err(e) => {
+                dbg!(e);
+            }
+        }
     }
 }
