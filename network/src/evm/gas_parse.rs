@@ -6,7 +6,7 @@ use rpc::{
     network_config::ChainConfig,
     provider::RpcProvider,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::nonce_parser::build_nonce_request;
 

@@ -11,7 +11,7 @@ use rpc::{
     provider::RpcProvider,
     zil_interfaces::ResultRes,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
     match tx {

@@ -154,17 +154,11 @@ impl EvmOperations for NetworkProvider {
         }
 
         let tx_estimate_gas_response = response.get(2);
-
-        if let Some(errors) = tx_estimate_gas_response.and_then(|res| res.error.as_ref()) {
-            let error = errors.to_string();
-            return Err(NetworkErrors::RPCError(error));
-        }
-
         let tx_estimate_gas_response = tx_estimate_gas_response
             .and_then(|res| res.result.as_ref())
             .and_then(|result| result.as_str())
             .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
-            .unwrap_or_default();
+            .unwrap_or(U256::from(21000));
 
         let (max_priority_fee_per_gas_response, fee_history_response) =
             if self.config.features.contains(&EIP1559) {
@@ -200,7 +194,7 @@ impl EvmOperations for NetworkProvider {
         let (slow, market, fast) = if fee_history_response.base_fee > U256::ZERO {
             Self::calculate_eip1559_fee_tiers(
                 fee_history_response.base_fee,
-                fee_history_response.priority_fee,
+                max_priority_fee_per_gas_response,
                 tx_estimate_gas_response,
             )
         } else {
@@ -468,11 +462,13 @@ impl NetworkProvider {
         priority_fee: U256,
         gas_limit: U256,
     ) -> (U256, U256, U256) {
-        let slow_fee_per_gas = base_fee.saturating_add(priority_fee);
+        let effective_gas_price = base_fee.saturating_add(priority_fee);
+        let slow_fee_per_gas =
+            effective_gas_price.saturating_mul(U256::from(150)) / U256::from(100);
         let market_fee_per_gas =
-            base_fee.saturating_add(priority_fee.saturating_mul(U256::from(2)));
+            effective_gas_price.saturating_mul(U256::from(200)) / U256::from(100);
         let fast_fee_per_gas =
-            base_fee.saturating_add(priority_fee.saturating_mul(U256::from(3)));
+            effective_gas_price.saturating_mul(U256::from(250)) / U256::from(100);
 
         (
             Self::calculate_total_fee(slow_fee_per_gas, gas_limit),
@@ -491,5 +487,25 @@ impl NetworkProvider {
 
     fn calculate_total_fee(fee_per_gas: U256, gas_limit: U256) -> U256 {
         fee_per_gas.saturating_mul(gas_limit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use alloy::primitives::U256;
+
+    #[test]
+    fn test_calculate_eip1559_fee_tiers() {
+        let base_fee = U256::from(50353);
+        let priority_fee = U256::from(1755128);
+        let gas_limit = U256::from(21000);
+
+        let (slow, market, fast) =
+            NetworkProvider::calculate_eip1559_fee_tiers(base_fee, priority_fee, gas_limit);
+
+        assert_eq!(U256::from(39810855000u128), slow);
+        assert_eq!(U256::from(41706609000u128), market);
+        assert_eq!(U256::from(43602363000u128), fast);
     }
 }

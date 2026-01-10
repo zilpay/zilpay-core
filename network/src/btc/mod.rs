@@ -1,6 +1,6 @@
-use crate::Result;
 use crate::evm::RequiredTxParams;
 use crate::provider::NetworkProvider;
+use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
 use electrum_client::{Batch, Client as ElectrumClient, ConfigBuilder, ElectrumApi, Param};
@@ -35,7 +35,12 @@ fn btc_fee_rate_to_sat_per_byte(fee_btc: f64) -> u64 {
     }
 }
 
-fn build_required_params(slow_rate: u64, market_rate: u64, fast_rate: u64, vsize: u64) -> RequiredTxParams {
+fn build_required_params(
+    slow_rate: u64,
+    market_rate: u64,
+    fast_rate: u64,
+    vsize: u64,
+) -> RequiredTxParams {
     use crate::evm::GasFeeHistory;
 
     let slow_fee_sat = U256::from(vsize * slow_rate);
@@ -176,8 +181,15 @@ impl BtcOperations for NetworkProvider {
 
             if let Ok(histogram_results) = results {
                 if let Some(histogram_value) = histogram_results.get(0) {
-                    if let Some((slow_rate, market_rate, fast_rate)) = parse_fee_histogram(histogram_value) {
-                        return Ok(build_required_params(slow_rate, market_rate, fast_rate, vsize));
+                    if let Some((slow_rate, market_rate, fast_rate)) =
+                        parse_fee_histogram(histogram_value)
+                    {
+                        return Ok(build_required_params(
+                            slow_rate,
+                            market_rate,
+                            fast_rate,
+                            vsize,
+                        ));
                     }
                 }
             }
@@ -185,9 +197,9 @@ impl BtcOperations for NetworkProvider {
             let mut batch = Batch::default();
             batch.estimate_fee(MARKET_BLOCKS);
 
-            let results = client.batch_call(&batch).map_err(|e| {
-                NetworkErrors::RPCError(format!("Failed to estimate fee: {}", e))
-            })?;
+            let results = client
+                .batch_call(&batch)
+                .map_err(|e| NetworkErrors::RPCError(format!("Failed to estimate fee: {}", e)))?;
 
             let base_fee_btc = results
                 .get(0)
@@ -200,7 +212,12 @@ impl BtcOperations for NetworkProvider {
             let slow_fee_rate = (base_rate / 2).max(1);
             let fast_fee_rate = base_rate + (base_rate / 2);
 
-            Ok(build_required_params(slow_fee_rate, market_fee_rate, fast_fee_rate, vsize))
+            Ok(build_required_params(
+                slow_fee_rate,
+                market_fee_rate,
+                fast_fee_rate,
+                vsize,
+            ))
         })
     }
 

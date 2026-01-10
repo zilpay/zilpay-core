@@ -255,7 +255,8 @@ impl TransactionRequest {
 
                 match addr_type {
                     bitcoin::AddressType::P2tr => {
-                        let keypair_for_taproot = secp256k1::Keypair::from_secret_key(&secp, &secret_key);
+                        let keypair_for_taproot =
+                            secp256k1::Keypair::from_secret_key(&secp, &secret_key);
                         let (internal_key, _parity) = keypair_for_taproot.x_only_public_key();
                         let sighash_type = TapSighashType::Default;
 
@@ -272,14 +273,21 @@ impl TransactionRequest {
                             let mut sighash_cache = SighashCache::new(&mut tx);
 
                             let sighash = sighash_cache
-                                .taproot_key_spend_signature_hash(index, &prevouts_all, sighash_type)
+                                .taproot_key_spend_signature_hash(
+                                    index,
+                                    &prevouts_all,
+                                    sighash_type,
+                                )
                                 .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
 
                             let tweaked = keypair_for_taproot.tap_tweak(&secp, None);
                             let msg = Message::from(sighash);
                             let sig = secp.sign_schnorr_no_aux_rand(&msg, tweaked.as_keypair());
 
-                            let signature = bitcoin::taproot::Signature { signature: sig, sighash_type };
+                            let signature = bitcoin::taproot::Signature {
+                                signature: sig,
+                                sighash_type,
+                            };
 
                             tx.input[index].witness = Witness::p2tr_key_spend(&signature);
                         }

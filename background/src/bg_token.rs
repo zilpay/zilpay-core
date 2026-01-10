@@ -1069,8 +1069,11 @@ mod tests_background_tokens {
 
                 let gas_used = U256::from_str(tx_data["gasUsed"].as_str().unwrap()).unwrap();
 
-                let total_fee = if let Some(priority_fee_str) = tx_data["maxPriorityFeePerGas"].as_str() {
-                    let effective_gas_price = U256::from_str(tx_data["effectiveGasPrice"].as_str().unwrap()).unwrap();
+                let total_fee = if let Some(priority_fee_str) =
+                    tx_data["maxPriorityFeePerGas"].as_str()
+                {
+                    let effective_gas_price =
+                        U256::from_str(tx_data["effectiveGasPrice"].as_str().unwrap()).unwrap();
                     let max_priority_fee = U256::from_str(priority_fee_str).unwrap();
                     let base_fee = effective_gas_price - max_priority_fee;
                     gas_used * (base_fee + max_priority_fee)

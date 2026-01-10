@@ -6,7 +6,7 @@ use rpc::{
     provider::RpcProvider,
     zil_interfaces::ResultRes,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub fn build_nonce_request(address: &Address) -> Value {
     match address {

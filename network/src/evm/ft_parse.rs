@@ -13,7 +13,7 @@ use rpc::{
     provider::RpcProvider,
     zil_interfaces::{GetTokenInitItem, ResultRes},
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use token::Result;
 
 type RequestResult<'a, T = Value> = std::result::Result<Vec<(T, RequestType<'a>)>, TokenError>;
@@ -160,7 +160,7 @@ fn build_zil_requests<'a>(
             _ => {
                 return Err(TokenError::InvalidContractAddress(
                     errors::address::AddressError::InvalidKeyType,
-                ))
+                ));
             }
         };
 
@@ -635,6 +635,9 @@ mod ftoken_tests {
         assert!(result.is_ok());
         let input_data = result.unwrap();
 
-        assert_eq!(alloy::hex::encode_prefixed(input_data), "0xa9059cbb00000000000000000000000001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000de0b6b3a7640000");
+        assert_eq!(
+            alloy::hex::encode_prefixed(input_data),
+            "0xa9059cbb00000000000000000000000001010101010101010101010101010101010101010000000000000000000000000000000000000000000000000de0b6b3a7640000"
+        );
     }
 }
