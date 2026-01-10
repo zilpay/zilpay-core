@@ -49,7 +49,7 @@ pub fn gen_zil_testnet_conf() -> ChainConfig {
         logo: String::new(),
         diff_block_time: 0,
         testnet: None,
-        chain_ids: [0, 333],
+        chain_ids: [33101, 333],
         name: "Zilliqa(testnet)".to_string(),
         chain: "ZIL".to_string(),
         short_name: "zil".to_string(),

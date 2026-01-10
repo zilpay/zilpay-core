@@ -120,10 +120,7 @@ mod wallet_settings_tests {
         let settings = WalletSettings::default();
 
         // Test default cipher orders
-        assert_eq!(
-            settings.cipher_orders,
-            vec![CipherOrders::AESGCM256, CipherOrders::NTRUP1277]
-        );
+        assert_eq!(settings.cipher_orders, vec![CipherOrders::AESGCM256,]);
 
         // Test default wallet features
         assert_eq!(

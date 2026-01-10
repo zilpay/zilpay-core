@@ -368,7 +368,9 @@ mod tests_network {
         assert!(loaded_providers
             .iter()
             .any(|p| p.config.name == "Zilliqa(testnet)"));
-        assert!(loaded_providers.iter().any(|p| p.config.chain_id() == 333));
+        assert!(loaded_providers
+            .iter()
+            .any(|p| p.config.chain_id() == 33101));
     }
 
     #[test]

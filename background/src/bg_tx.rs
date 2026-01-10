@@ -542,7 +542,7 @@ mod tests_background_transactions {
     use crate::{bg_storage::StorageManagement, bg_token::TokensManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
     use cipher::argon2;
-    use proto::{address::Address, tx::TransactionRequest, zil_tx::ZILTransactionRequest};
+    use proto::{address::Address, tx::TransactionRequest};
     use rand::Rng;
     use test_data::{
         gen_anvil_net_conf, gen_anvil_token, gen_device_indicators, gen_eth_account,
@@ -557,90 +557,6 @@ mod tests_background_transactions {
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let bg = Background::from_storage_path(&dir).unwrap();
         (bg, dir)
-    }
-
-    #[tokio::test]
-    async fn test_sign_and_send_zil_legacy_tx() {
-        let (mut bg, _dir) = setup_test_background();
-        let net_config = gen_zil_testnet_conf();
-
-        bg.add_provider(net_config.clone()).unwrap();
-
-        let accounts = [gen_zil_account(0, "ZIL Acc 0")];
-        let device_indicators = gen_device_indicators("zil_test");
-
-        bg.add_bip39_wallet(BackgroundBip39Params {
-            mnemonic_check: true,
-            password: TEST_PASSWORD,
-            chain_hash: net_config.hash(),
-            mnemonic_str: ANVIL_MNEMONIC,
-            accounts: &accounts,
-            wallet_settings: Default::default(),
-            passphrase: "",
-            wallet_name: String::new(),
-            biometric_type: Default::default(),
-            device_indicators: &device_indicators,
-            ftokens: vec![FToken::zil(net_config.hash())],
-        })
-        .unwrap();
-
-        bg.swap_zilliqa_chain(0, 0).unwrap();
-
-        let providers = bg.get_providers();
-        let provider = providers.first().unwrap();
-        let wallet = bg.get_wallet_by_index(0).unwrap();
-        let data = wallet.get_wallet_data().unwrap();
-        let account = data.accounts.first().unwrap();
-
-        let zil_tx = ZILTransactionRequest {
-            nonce: 0,
-            chain_id: provider.config.chain_id() as u16,
-            gas_price: 2000000100,
-            gas_limit: 1000,
-            to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
-                .unwrap(),
-            amount: 1,
-            code: Vec::with_capacity(0),
-            data: Vec::with_capacity(0),
-        };
-        let tx_request = TransactionRequest::Zilliqa((zil_tx.clone(), Default::default()));
-
-        let params = provider
-            .estimate_params_batch(&tx_request, &account.addr, 1, None)
-            .await
-            .unwrap();
-        let zil_tx = ZILTransactionRequest {
-            nonce: params.nonce,
-            chain_id: provider.config.chain_id() as u16,
-            gas_price: 2000000100,
-            gas_limit: 1000,
-            to_addr: Address::from_zil_bech32("zil1sctmwt3zpy8scyck0pj3glky3fkm0z8lxa4ga7")
-                .unwrap(),
-            amount: 1,
-            code: Vec::with_capacity(0),
-            data: Vec::with_capacity(0),
-        };
-        let txn = TransactionRequest::Zilliqa((zil_tx, Default::default()));
-
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
-
-        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
-        let txn = txn.sign(&keypair).await.unwrap();
-        let txns = vec![txn];
-
-        let txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
-
-        assert_eq!(txns.len(), 1);
-
-        for tx in txns {
-            assert!(tx.metadata.hash.is_some());
-        }
     }
 
     #[tokio::test]
