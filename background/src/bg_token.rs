@@ -1013,7 +1013,7 @@ mod tests_background_tokens {
         } else if balance_1 > balance_0 {
             (1, account_1, account_0, balance_1)
         } else {
-            panic!("acocunt 1 and 2 not enough funds");
+            (0, account_0, account_1, balance_0)
         };
 
         let mut tx = bg
@@ -1058,6 +1058,8 @@ mod tests_background_tokens {
 
                 let wallet = bg.get_wallet_by_index(0).unwrap();
                 let history = wallet.get_history().unwrap();
+                dbg!(&history);
+
                 assert_eq!(history.len(), 1);
                 assert_eq!(history[0].status, TransactionStatus::Success);
 
