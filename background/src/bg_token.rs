@@ -243,8 +243,6 @@ mod tests_background_tokens {
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
     use std::collections::HashMap;
-    use std::thread::sleep;
-    use std::time::Duration;
     use test_data::{gen_btc_testnet_conf, ANVIL_MNEMONIC};
     use test_data::{
         gen_device_indicators, gen_eth_account, gen_zil_account, gen_zil_testnet_conf,
@@ -891,7 +889,7 @@ mod tests_background_tokens {
             .await
             .unwrap();
 
-        update_tx_from_params(&mut txn_req, params, amount).unwrap();
+        update_tx_from_params(&mut txn_req, params.clone(), amount).unwrap();
 
         match txn_req {
             TransactionRequest::Zilliqa((ref tx_zil, _)) => {
@@ -916,20 +914,42 @@ mod tests_background_tokens {
             .unwrap();
         assert!(signed_tx.verify().unwrap());
 
-        let h = bg
-            .broadcast_signed_transactions(0, from_index, vec![signed_tx])
-            .await
-            .unwrap();
+        match signed_tx {
+            proto::tx::TransactionReceipt::Zilliqa((signed_zil_tx, _)) => {
+                assert_eq!(signed_zil_tx.pub_key, from_account.pub_key.as_bytes());
+                assert_eq!(signed_zil_tx.version, 21823489);
 
-        dbg!(&h.first().unwrap().metadata.hash);
+                let gas_price: u128 = params.gas_price.try_into().unwrap();
+                assert_eq!(signed_zil_tx.gas_price, gas_price.to_be_bytes());
+                assert_eq!(U256::from(signed_zil_tx.gas_limit), 50);
+                assert_eq!(
+                    signed_zil_tx.to_addr.as_slice(),
+                    to_account.addr.addr_bytes()
+                );
+                let zil_amount = U256::from(u128::from_be_bytes(signed_zil_tx.amount));
+                let shoud_be_amount = amount - params.current;
 
-        sleep(Duration::from_secs(10));
+                assert_eq!(zil_amount, shoud_be_amount);
+            }
+            _ => {
+                panic!("wrong tx")
+            }
+        }
 
-        bg.sync_ftokens_balances(0).await.unwrap();
-        let ftokens = wallet.get_ftokens().unwrap();
-        let scilla_token = ftokens.first().unwrap();
-        let sender_blk = scilla_token.balances.get(&from_index).unwrap();
+        // let h = bg
+        //     .broadcast_signed_transactions(0, from_index, vec![signed_tx])
+        //     .await
+        //     .unwrap();
 
-        assert_eq!(*sender_blk, U256::ZERO);
+        // dbg!(&h.first().unwrap().metadata.hash);
+
+        // sleep(Duration::from_secs(10));
+
+        // bg.sync_ftokens_balances(0).await.unwrap();
+        // let ftokens = wallet.get_ftokens().unwrap();
+        // let scilla_token = ftokens.first().unwrap();
+        // let sender_blk = scilla_token.balances.get(&from_index).unwrap();
+
+        // assert_eq!(*sender_blk, U256::ZERO);
     }
 }

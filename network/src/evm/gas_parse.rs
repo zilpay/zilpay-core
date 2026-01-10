@@ -10,14 +10,14 @@ use serde_json::{json, Value};
 
 use super::nonce_parser::build_nonce_request;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct GasFeeHistory {
     pub max_fee: U256,
     pub priority_fee: U256,
     pub base_fee: U256,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RequiredTxParams {
     pub gas_price: U256,
     pub max_priority_fee: U256,

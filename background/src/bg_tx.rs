@@ -132,7 +132,7 @@ pub fn update_tx_from_params(
             zil_tx.nonce = params.nonce + 1;
 
             if balance == U256::from(zil_tx.amount) {
-                let current_fee: u128 = params.slow.try_into().unwrap_or_default();
+                let current_fee: u128 = params.current.try_into().unwrap_or_default();
                 zil_tx.amount = zil_tx.amount - current_fee;
             }
 
