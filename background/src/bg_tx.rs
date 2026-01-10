@@ -125,6 +125,7 @@ pub(crate) async fn build_unsigned_btc_transaction(
 pub fn update_tx_from_params(
     tx: &mut TransactionRequest,
     params: RequiredTxParams,
+    balance: U256,
 ) -> std::result::Result<(), TransactionErrors> {
     match tx {
         TransactionRequest::Zilliqa((ref mut zil_tx, _metadata)) => {
@@ -160,16 +161,12 @@ pub fn update_tx_from_params(
                 eth_tx.gas_price = None;
 
                 if let Some(current_value) = eth_tx.value {
-                    if current_value > U256::ZERO && is_native_transfer {
+                    if current_value > U256::ZERO && is_native_transfer && current_value == balance {
                         let max_possible_fee = params.tx_estimate_gas * params.current;
-                        let min_transfer_for_adjustment = max_possible_fee * U256::from(10);
+                        let adjusted_value = current_value.saturating_sub(max_possible_fee);
 
-                        if current_value >= min_transfer_for_adjustment {
-                            let adjusted_value = current_value.saturating_sub(max_possible_fee);
-
-                            if adjusted_value > U256::ZERO && adjusted_value < current_value {
-                                eth_tx.value = Some(adjusted_value);
-                            }
+                        if adjusted_value > U256::ZERO && adjusted_value < current_value {
+                            eth_tx.value = Some(adjusted_value);
                         }
                     }
                 }
@@ -182,16 +179,12 @@ pub fn update_tx_from_params(
                 eth_tx.max_priority_fee_per_gas = None;
 
                 if let Some(current_value) = eth_tx.value {
-                    if current_value > U256::ZERO && is_native_transfer {
+                    if current_value > U256::ZERO && is_native_transfer && current_value == balance {
                         let legacy_fee = params.tx_estimate_gas * params.gas_price;
-                        let min_transfer_for_adjustment = legacy_fee * U256::from(10);
+                        let adjusted_value = current_value.saturating_sub(legacy_fee);
 
-                        if current_value >= min_transfer_for_adjustment {
-                            let adjusted_value = current_value.saturating_sub(legacy_fee);
-
-                            if adjusted_value > U256::ZERO && adjusted_value < current_value {
-                                eth_tx.value = Some(adjusted_value);
-                            }
+                        if adjusted_value > U256::ZERO && adjusted_value < current_value {
+                            eth_tx.value = Some(adjusted_value);
                         }
                     }
                 }
@@ -741,8 +734,13 @@ mod tests_background_transactions {
 
         let providers = bg.get_providers();
         let provider = providers.first().unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
 
         let account = data.accounts.first().unwrap();
         assert_eq!(
@@ -772,7 +770,7 @@ mod tests_background_transactions {
             .unwrap();
 
         // Use update_tx_from_params to set gas fields based on network capabilities
-        super::update_tx_from_params(&mut tx_request, params).unwrap();
+        super::update_tx_from_params(&mut tx_request, params, balance).unwrap();
         let txn = tx_request;
 
         let device_indicator = device_indicators.join(":");
@@ -826,8 +824,13 @@ mod tests_background_transactions {
 
         let providers = bg.get_providers();
         let provider = providers.first().unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
         let account = data.accounts.first().unwrap();
 
         let recipient_0 = Address::from_eth_address(anvil_accounts::ACCOUNT_1).unwrap();
@@ -851,7 +854,7 @@ mod tests_background_transactions {
             .unwrap();
 
         // Use update_tx_from_params to set gas fields based on network capabilities
-        super::update_tx_from_params(&mut tx_request_0, params_0).unwrap();
+        super::update_tx_from_params(&mut tx_request_0, params_0, balance).unwrap();
         let txn_0 = tx_request_0;
 
         let device_indicator = device_indicators.join(":");
@@ -898,7 +901,7 @@ mod tests_background_transactions {
             .unwrap();
 
         // Use update_tx_from_params to set gas fields based on network capabilities
-        super::update_tx_from_params(&mut tx_request_1, params_1).unwrap();
+        super::update_tx_from_params(&mut tx_request_1, params_1, balance).unwrap();
         let txn_1 = tx_request_1;
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
@@ -1067,8 +1070,13 @@ mod tests_background_transactions {
 
         let providers = bg.get_providers();
         let provider = providers.first().unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
         let account = data.accounts.first().unwrap();
 
         // Create a basic transaction without gas params
@@ -1123,7 +1131,7 @@ mod tests_background_transactions {
         let is_eip1559 = expected_base_fee > U256::ZERO;
 
         // Update the transaction with the params
-        super::update_tx_from_params(&mut tx_request, params).unwrap();
+        super::update_tx_from_params(&mut tx_request, params, balance).unwrap();
 
         // Extract and verify the updated transaction
         if let TransactionRequest::Ethereum((updated_tx, _)) = &tx_request {
@@ -1527,7 +1535,7 @@ mod tests_background_transactions {
             .await
             .unwrap();
 
-        super::update_tx_from_params(&mut tx, params).unwrap();
+        super::update_tx_from_params(&mut tx, params, balance).unwrap();
 
         if let TransactionRequest::Ethereum((eth_tx, _)) = &tx {
             let adjusted_value = eth_tx.value.unwrap();
