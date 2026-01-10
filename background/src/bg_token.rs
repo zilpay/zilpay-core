@@ -1066,16 +1066,9 @@ mod tests_background_tokens {
                 let wallet = bg.get_wallet_by_index(0).unwrap();
                 let ftokens = wallet.get_ftokens().unwrap();
                 let eth_token = ftokens.first().unwrap();
-                dbg!(&eth_token);
                 let final_balance = *eth_token.balances.get(&from_index).unwrap();
 
-                let max_dust = U256::from(1000000000000000u64);
-                assert!(
-                    final_balance < max_dust,
-                    "Sender should have minimal dust remaining (< 0.001 ETH), got: {} wei ({} ETH)",
-                    final_balance,
-                    final_balance / U256::from(1000000000000000000u64)
-                );
+                assert_eq!(final_balance, U256::ZERO);
             }
             Err(e) => {
                 dbg!(e);
