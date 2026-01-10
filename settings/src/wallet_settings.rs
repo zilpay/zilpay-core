@@ -81,7 +81,7 @@ impl std::fmt::Display for TokenQuotesAPIOptions {
 impl Default for WalletSettings {
     fn default() -> Self {
         Self {
-            cipher_orders: vec![CipherOrders::AESGCM256, CipherOrders::NTRUP1277],
+            cipher_orders: vec![CipherOrders::AESGCM256],
             features: WalletFeatures::default(),
             network: NetworkSettings::default(),
             argon_params: ArgonParams::default(),

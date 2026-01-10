@@ -229,22 +229,30 @@ impl TokensManagement for Background {
 
 #[cfg(test)]
 mod tests_background_tokens {
-    use std::collections::HashMap;
-
     use super::*;
+    use crate::bg_tx::update_tx_from_params;
     use crate::{
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
     };
+    use crate::{bg_tx::TransactionsManagement, bg_wallet::WalletManagement};
+    use cipher::argon2;
     use config::address::ADDR_LEN;
+    use crypto::bip49::DerivationPath;
     use crypto::slip44;
+    use network::btc::BtcOperations;
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
+    use std::collections::HashMap;
+    use std::thread::sleep;
+    use std::time::Duration;
+    use test_data::{gen_btc_testnet_conf, ANVIL_MNEMONIC};
     use test_data::{
         gen_device_indicators, gen_eth_account, gen_zil_account, gen_zil_testnet_conf,
         TEST_PASSWORD,
     };
     use tokio;
     use wallet::wallet_token::TokenManagement;
+    use wallet::wallet_transaction::WalletTransaction;
 
     const USDT_TOKEN: &str = "0x55d398326f99059fF775485246999027B3197955";
 
@@ -607,14 +615,6 @@ mod tests_background_tokens {
 
     #[tokio::test]
     async fn test_build_token_transfer_btc_max_amount() {
-        use crate::{bg_tx::TransactionsManagement, bg_wallet::WalletManagement};
-        use cipher::argon2;
-        use crypto::bip49::DerivationPath;
-        use crypto::slip44;
-        use network::btc::BtcOperations;
-        use test_data::{gen_btc_testnet_conf, ANVIL_MNEMONIC};
-        use wallet::wallet_transaction::WalletTransaction;
-
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_btc_testnet_conf();
 
@@ -729,7 +729,10 @@ mod tests_background_tokens {
         let actual_balance: u64 = unspents.iter().map(|u| u.value).sum();
         let max_balance = U256::from(actual_balance);
 
-        println!("Sending from account {}, balance: {} satoshis", from_index, actual_balance);
+        println!(
+            "Sending from account {}, balance: {} satoshis",
+            from_index, actual_balance
+        );
 
         let dest_addr = to_account.addr.clone();
 
@@ -761,10 +764,7 @@ mod tests_background_tokens {
                     total_output < total_input,
                     "Output should be less than input to account for fees"
                 );
-                assert!(
-                    fee > 0,
-                    "Fee should be greater than zero"
-                );
+                assert!(fee > 0, "Fee should be greater than zero");
                 assert!(
                     total_output <= max_balance.to::<u64>(),
                     "Output should not exceed requested max balance"
@@ -786,10 +786,16 @@ mod tests_background_tokens {
             .await
             .unwrap();
 
-        assert!(signed_tx.verify().unwrap(), "Signed transaction should be valid");
+        assert!(
+            signed_tx.verify().unwrap(),
+            "Signed transaction should be valid"
+        );
 
         let txns = vec![signed_tx];
-        let broadcasted_txns = bg.broadcast_signed_transactions(0, from_index, txns).await.unwrap();
+        let broadcasted_txns = bg
+            .broadcast_signed_transactions(0, from_index, txns)
+            .await
+            .unwrap();
 
         assert_eq!(broadcasted_txns.len(), 1);
         let tx_hash = broadcasted_txns[0].metadata.hash.clone().unwrap();
@@ -797,9 +803,133 @@ mod tests_background_tokens {
 
         let wallet_check = bg.get_wallet_by_index(0).unwrap();
         let history_check = wallet_check.get_history().unwrap();
-        assert!(
-            history_check.len() > 0,
-            "Transaction should be in history"
+        assert!(history_check.len() > 0, "Transaction should be in history");
+    }
+
+    #[tokio::test]
+    async fn test_build_token_transfer_scilla_max_amount() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_zil_testnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [
+            (
+                DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None),
+                "scilla Acc 2".to_string(),
+            ),
+            (
+                DerivationPath::new(slip44::ZILLIQA, 1, DerivationPath::BIP44_PURPOSE, None),
+                "scilla Acc 3".to_string(),
+            ),
+        ];
+        let device_indicators = gen_device_indicators("btc_max_test");
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: TEST_PASSWORD,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Scilla".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![test_data::gen_zil_token()],
+        })
+        .unwrap();
+
+        bg.swap_zilliqa_chain(0, 0).unwrap();
+        bg.swap_zilliqa_chain(0, 1).unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+
+        let account = data.accounts.first().unwrap();
+        let account_1 = data.accounts.last().unwrap();
+
+        let addr_str = account.addr.auto_format();
+        let addr_str_1 = account_1.addr.auto_format();
+
+        assert_eq!(
+            addr_str, "zil1d4c4vntch9jpn3fj9d4ugpuap8cmdj7alnrxvv",
+            "Account 0 should match expected SegWit address"
         );
+        assert_eq!(
+            addr_str_1, "zil1yzzzyac7hc3n93ca85xm4kytrk44j23yddppmy",
+            "Account 1 should match expected SegWit address"
+        );
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let scilla_token = ftokens.first().unwrap();
+
+        assert!(scilla_token.native, "ZIL token should be native");
+        assert_eq!(scilla_token.symbol, "ZIL", "Token symbol should be BTC");
+
+        let balance_0 = scilla_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
+        let balance_1 = scilla_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
+
+        let (from_index, from_account, to_account, amount) = if balance_0 > U256::ZERO {
+            (0, account, account_1, balance_0)
+        } else if balance_1 > U256::ZERO {
+            (1, account_1, account, balance_1)
+        } else {
+            panic!("acocunt 1 and 2 not enough funds");
+        };
+
+        let provider = bg.get_provider(net_config.hash()).unwrap();
+        let mut txn_req = bg
+            .build_token_transfer(scilla_token, from_account, to_account.addr.clone(), amount)
+            .await
+            .unwrap();
+        let params = provider
+            .estimate_params_batch(&txn_req, &from_account.addr, 10, None)
+            .await
+            .unwrap();
+
+        update_tx_from_params(&mut txn_req, params, amount).unwrap();
+
+        match txn_req {
+            TransactionRequest::Zilliqa((ref tx_zil, _)) => {
+                assert_ne!(U256::from(tx_zil.amount), amount);
+            }
+            _ => {
+                panic!("wrong tx");
+            }
+        }
+
+        let device_indicator = device_indicators.join(":");
+        let argon_seed = argon2::derive_key(
+            TEST_PASSWORD.as_bytes(),
+            &device_indicator,
+            &data.settings.argon_params.into_config(),
+        )
+        .unwrap();
+
+        let signed_tx = wallet
+            .sign_transaction(txn_req, from_index, &argon_seed, None)
+            .await
+            .unwrap();
+        assert!(signed_tx.verify().unwrap());
+
+        let h = bg
+            .broadcast_signed_transactions(0, from_index, vec![signed_tx])
+            .await
+            .unwrap();
+
+        dbg!(&h.first().unwrap().metadata.hash);
+
+        sleep(Duration::from_secs(10));
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let scilla_token = ftokens.first().unwrap();
+        let sender_blk = scilla_token.balances.get(&from_index).unwrap();
+
+        assert_eq!(*sender_blk, U256::ZERO);
     }
 }

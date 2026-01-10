@@ -130,14 +130,16 @@ pub fn update_tx_from_params(
     match tx {
         TransactionRequest::Zilliqa((ref mut zil_tx, _metadata)) => {
             zil_tx.nonce = params.nonce + 1;
+
+            if balance == U256::from(zil_tx.amount) {
+                let current_fee: u128 = params.slow.try_into().unwrap_or_default();
+                zil_tx.amount = zil_tx.amount - current_fee;
+            }
+
             zil_tx.gas_price = params
-                .current
+                .gas_price
                 .try_into()
                 .map_err(|_| TransactionErrors::ConvertTxError("Gas price overflow".to_string()))?;
-            zil_tx.gas_limit = params
-                .tx_estimate_gas
-                .try_into()
-                .map_err(|_| TransactionErrors::ConvertTxError("Gas limit overflow".to_string()))?;
         }
         TransactionRequest::Ethereum((ref mut eth_tx, _metadata)) => {
             eth_tx.nonce = Some(params.nonce);
@@ -146,7 +148,11 @@ pub fn update_tx_from_params(
             })?);
 
             let is_eip1559_supported = params.fee_history.base_fee > U256::ZERO;
-            let is_native_transfer = eth_tx.input.input().map(|data| data.is_empty()).unwrap_or(true);
+            let is_native_transfer = eth_tx
+                .input
+                .input()
+                .map(|data| data.is_empty())
+                .unwrap_or(true);
 
             if is_eip1559_supported {
                 eth_tx.max_priority_fee_per_gas =
@@ -161,7 +167,8 @@ pub fn update_tx_from_params(
                 eth_tx.gas_price = None;
 
                 if let Some(current_value) = eth_tx.value {
-                    if current_value > U256::ZERO && is_native_transfer && current_value == balance {
+                    if current_value > U256::ZERO && is_native_transfer && current_value == balance
+                    {
                         let max_possible_fee = params.tx_estimate_gas * params.current;
                         let adjusted_value = current_value.saturating_sub(max_possible_fee);
 
@@ -179,7 +186,8 @@ pub fn update_tx_from_params(
                 eth_tx.max_priority_fee_per_gas = None;
 
                 if let Some(current_value) = eth_tx.value {
-                    if current_value > U256::ZERO && is_native_transfer && current_value == balance {
+                    if current_value > U256::ZERO && is_native_transfer && current_value == balance
+                    {
                         let legacy_fee = params.tx_estimate_gas * params.gas_price;
                         let adjusted_value = current_value.saturating_sub(legacy_fee);
 
@@ -1539,8 +1547,14 @@ mod tests_background_transactions {
 
         if let TransactionRequest::Ethereum((eth_tx, _)) = &tx {
             let adjusted_value = eth_tx.value.unwrap();
-            assert!(adjusted_value > U256::ZERO, "Adjusted value must be greater than zero");
-            assert!(adjusted_value <= balance, "Adjusted value must not exceed balance");
+            assert!(
+                adjusted_value > U256::ZERO,
+                "Adjusted value must be greater than zero"
+            );
+            assert!(
+                adjusted_value <= balance,
+                "Adjusted value must not exceed balance"
+            );
         }
 
         let device_indicator = device_indicators.join(":");

@@ -130,23 +130,27 @@ impl EvmOperations for NetworkProvider {
             .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
             .unwrap_or_default();
 
-        if matches!(tx, TransactionRequest::Zilliqa(_)) {
-            let slow = gas_price_response;
-            let market = gas_price_response.saturating_mul(U256::from(2));
-            let fast = gas_price_response.saturating_mul(U256::from(3));
+        match tx {
+            TransactionRequest::Zilliqa((zil_tx, _)) => {
+                let gas_limit = U256::from(zil_tx.gas_limit);
+                let slow = gas_price_response * gas_limit;
+                let market = gas_price_response.saturating_mul(U256::from(2)) * gas_limit;
+                let fast = gas_price_response.saturating_mul(U256::from(3)) * gas_limit;
 
-            return Ok(RequiredTxParams {
-                blob_base_fee: U256::ZERO,
-                nonce,
-                max_priority_fee: U256::ZERO,
-                gas_price: gas_price_response,
-                fee_history: Default::default(),
-                tx_estimate_gas: U256::ZERO,
-                slow,
-                market,
-                fast,
-                current: market,
-            });
+                return Ok(RequiredTxParams {
+                    blob_base_fee: U256::ZERO,
+                    nonce,
+                    max_priority_fee: U256::ZERO,
+                    gas_price: gas_price_response,
+                    fee_history: Default::default(),
+                    tx_estimate_gas: U256::ZERO,
+                    slow,
+                    market,
+                    fast,
+                    current: market,
+                });
+            }
+            _ => {}
         }
 
         let tx_estimate_gas_response = response.get(2);
