@@ -30,6 +30,7 @@ members = [
 ]
 
 [dependencies]
+rustls.workspace = true
 zilpay = { path = "./zilpay" }
 errors = { path = "./errors" }
 background = { path = "./background" }
@@ -46,7 +47,6 @@ network = { path = "./network" }
 intl = { path = "./intl" }
 cache = { path = "./cache" }
 qrcodes = { path = "./qrcodes" }
-rustls = { version = "0.23", features = ["ring", "std", "tls12"], default-features = false }
 
 [workspace.dependencies]
 image = "0.25.5"
@@ -74,6 +74,7 @@ hmac = "0.12.1"
 rust-argon2 = "2.1.0"
 bitcoin = { version = "0.32.5", features = ["serde", "base64"] }
 electrum-client = "0.24.1"
+rustls = { version = "0.23", features = ["ring", "std"], default-features = false }
 
 [dev-dependencies]
 mockito = "1.5.0"

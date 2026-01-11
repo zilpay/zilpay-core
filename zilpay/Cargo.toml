@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+rustls.workspace = true
 errors = { path = "../errors" }
 intl = { path = "../intl" }
 background = { path = "../background" }
@@ -19,4 +20,3 @@ history = { path = "../history" }
 network = { path = "../network" }
 cache = { path = "../cache" }
 qrcodes = { path = "../qrcodes" }
-rustls = { version = "0.23", features = ["aws-lc-rs"], default-features = false }
