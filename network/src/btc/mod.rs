@@ -20,8 +20,22 @@ const DEFAULT_TX_SIZE_BYTES: u64 = 250;
 
 fn calculate_tx_vsize(tx: &TransactionRequest) -> u64 {
     match tx {
-        TransactionRequest::Bitcoin((btc_tx, _)) => {
-            (btc_tx.input.len() * 148 + btc_tx.output.len() * 34 + 10) as u64
+        TransactionRequest::Bitcoin((btc_tx, metadata)) => {
+            let (input_vsize, output_vsize) = if let Some(ref signer) = metadata.signer {
+                if let Ok(addr) = Address::from_pubkey(signer) {
+                    match addr.get_bitcoin_address_type() {
+                        Ok(bitcoin::AddressType::P2wpkh) => (68, 31),
+                        Ok(bitcoin::AddressType::P2tr) => (58, 43),
+                        _ => (148, 34),
+                    }
+                } else {
+                    (148, 34)
+                }
+            } else {
+                (148, 34)
+            };
+
+            (btc_tx.input.len() * input_vsize + btc_tx.output.len() * output_vsize + 10) as u64
         }
         _ => DEFAULT_TX_SIZE_BYTES,
     }

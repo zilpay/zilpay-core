@@ -18,6 +18,14 @@ use wallet::{wallet_crypto::WalletCrypto, wallet_storage::StorageOperations};
 
 use crate::Background;
 
+pub(crate) fn get_dust_limit(addr: &Address) -> u64 {
+    match addr.get_bitcoin_address_type() {
+        Ok(bitcoin::AddressType::P2wpkh) => 294,
+        Ok(bitcoin::AddressType::P2tr) => 330,
+        _ => 546,
+    }
+}
+
 pub(crate) async fn build_unsigned_btc_transaction(
     provider: &network::provider::NetworkProvider,
     from_addr: &Address,
@@ -37,11 +45,27 @@ pub(crate) async fn build_unsigned_btc_transaction(
         ));
     }
 
+    const TX_OVERHEAD_VSIZE: usize = 10;
+    const DEFAULT_FEE_RATE: u64 = 10;
+
+    let input_vsize = match from_addr.get_bitcoin_address_type() {
+        Ok(bitcoin::AddressType::P2wpkh) => 68,
+        Ok(bitcoin::AddressType::P2tr) => 58,
+        _ => 148,
+    };
+
+    let output_vsize = match from_addr.get_bitcoin_address_type() {
+        Ok(bitcoin::AddressType::P2wpkh) => 31,
+        Ok(bitcoin::AddressType::P2tr) => 43,
+        _ => 34,
+    };
+
     let total_input: u64 = unspents.iter().map(|u| u.value).sum();
     let original_total_output: u64 = destinations.iter().map(|(_, amount)| amount).sum();
-    let estimated_vsize = (unspents.len() * 148 + destinations.len() * 34 + 10) as u64;
-    let fee_rate = fee_rate_sat_per_vbyte.unwrap_or(10);
+    let estimated_vsize = (unspents.len() * input_vsize + destinations.len() * output_vsize + TX_OVERHEAD_VSIZE) as u64;
+    let fee_rate = fee_rate_sat_per_vbyte.unwrap_or(DEFAULT_FEE_RATE);
     let estimated_fee = estimated_vsize * fee_rate;
+
 
     let (adjusted_destinations, total_output) = if total_input
         < original_total_output + estimated_fee
@@ -54,7 +78,9 @@ pub(crate) async fn build_unsigned_btc_transaction(
 
         if is_max_transfer {
             let adjusted_amount = total_input.saturating_sub(estimated_fee);
-            if adjusted_amount < 546 {
+            let dust_limit = get_dust_limit(from_addr);
+
+            if adjusted_amount < dust_limit {
                 return Err(BackgroundError::BincodeError(format!(
                     "Insufficient funds: balance too low after fee (have: {}, fee: {})",
                     total_input, estimated_fee
@@ -100,7 +126,9 @@ pub(crate) async fn build_unsigned_btc_transaction(
     }
 
     let change = total_input - total_output - estimated_fee;
-    if change > 546 {
+    let dust_limit = get_dust_limit(from_addr);
+
+    if change > dust_limit {
         let change_addr = from_addr
             .to_bitcoin_addr()
             .map_err(|e| BackgroundError::BincodeError(e.to_string()))?;
@@ -230,23 +258,69 @@ pub fn update_tx_from_params(
                 ))?;
             }
 
-            let mut total_output: u64 = 0;
-            for i in 0..output_count.saturating_sub(1) {
-                total_output += btc_tx.output[i].value.to_sat();
-            }
+            let balance_sat: u64 = balance.try_into().unwrap_or(0);
+            let is_max_transfer = balance_sat == total_input;
 
-            let new_change = total_input
-                .saturating_sub(total_output)
-                .saturating_sub(new_fee);
+            if is_max_transfer {
+                let dust_limit = metadata
+                    .signer
+                    .as_ref()
+                    .and_then(|pk| Address::from_pubkey(pk).ok())
+                    .map(|addr| get_dust_limit(&addr))
+                    .unwrap_or(546);
 
-            if new_change >= 546 {
-                btc_tx.output[output_count - 1].value = bitcoin::Amount::from_sat(new_change);
-            } else if output_count > 1 {
-                btc_tx.output.pop();
+                let max_fee_affordable = total_input.saturating_sub(dust_limit);
+
+                if new_fee > max_fee_affordable {
+                    let new_amount = dust_limit;
+                    btc_tx.output[0].value = bitcoin::Amount::from_sat(new_amount);
+
+                    if output_count > 1 {
+                        btc_tx.output.pop();
+                    }
+                } else {
+                    let new_amount = total_input.saturating_sub(new_fee);
+
+                    if new_amount < dust_limit {
+                        let min_required = new_fee + dust_limit;
+                        return Err(TransactionErrors::ConvertTxError(format!(
+                            "Insufficient funds: need {} sats (fee) + {} sats (min output) = {} sats, but only have {} sats",
+                            new_fee, dust_limit, min_required, total_input
+                        )))?;
+                    }
+
+                    btc_tx.output[0].value = bitcoin::Amount::from_sat(new_amount);
+
+                    if output_count > 1 {
+                        btc_tx.output.pop();
+                    }
+                }
             } else {
-                return Err(TransactionErrors::ConvertTxError(
-                    "Insufficient funds for fee".to_string(),
-                ))?;
+                let mut total_output: u64 = 0;
+                for i in 0..output_count.saturating_sub(1) {
+                    total_output += btc_tx.output[i].value.to_sat();
+                }
+
+                let new_change = total_input
+                    .saturating_sub(total_output)
+                    .saturating_sub(new_fee);
+
+                let dust_limit = metadata
+                    .signer
+                    .as_ref()
+                    .and_then(|pk| Address::from_pubkey(pk).ok())
+                    .map(|addr| get_dust_limit(&addr))
+                    .unwrap_or(546);
+
+                if new_change >= dust_limit {
+                    btc_tx.output[output_count - 1].value = bitcoin::Amount::from_sat(new_change);
+                } else if output_count > 1 {
+                    btc_tx.output.pop();
+                } else {
+                    return Err(TransactionErrors::ConvertTxError(
+                        "Insufficient funds for fee".to_string(),
+                    ))?;
+                }
             }
         }
     }
