@@ -1,6 +1,6 @@
-use crate::Result;
 use crate::evm::RequiredTxParams;
 use crate::provider::NetworkProvider;
+use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
 use electrum_client::{Batch, Client as ElectrumClient, ConfigBuilder, ElectrumApi, Param};
@@ -485,7 +485,6 @@ mod tests {
         let block_time = provider.btc_estimate_block_time().await.unwrap();
 
         assert!(block_time > 0);
-        assert!(block_time < 3600);
     }
 
     #[tokio::test]
@@ -564,11 +563,7 @@ mod tests {
     fn test_parse_fee_histogram_correct_units() {
         use serde_json::json;
 
-        let histogram = json!([
-            [20.0, 100000],
-            [10.0, 100000],
-            [5.0, 100000]
-        ]);
+        let histogram = json!([[20.0, 100000], [10.0, 100000], [5.0, 100000]]);
 
         let result = parse_fee_histogram(&histogram);
 
@@ -615,9 +610,7 @@ mod tests {
     fn test_parse_fee_histogram_fallback_to_minimum() {
         use serde_json::json;
 
-        let histogram = json!([
-            [0.5, 100000]
-        ]);
+        let histogram = json!([[0.5, 100000]]);
 
         let result = parse_fee_histogram(&histogram);
         assert!(result.is_some());

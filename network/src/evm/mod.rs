@@ -464,11 +464,11 @@ impl NetworkProvider {
     ) -> (U256, U256, U256) {
         let effective_gas_price = base_fee.saturating_add(priority_fee);
         let slow_fee_per_gas =
-            effective_gas_price.saturating_mul(U256::from(150)) / U256::from(100);
+            effective_gas_price.saturating_mul(U256::from(110)) / U256::from(100);
         let market_fee_per_gas =
-            effective_gas_price.saturating_mul(U256::from(200)) / U256::from(100);
+            effective_gas_price.saturating_mul(U256::from(120)) / U256::from(100);
         let fast_fee_per_gas =
-            effective_gas_price.saturating_mul(U256::from(250)) / U256::from(100);
+            effective_gas_price.saturating_mul(U256::from(230)) / U256::from(100);
 
         (
             Self::calculate_total_fee(slow_fee_per_gas, gas_limit),
@@ -504,8 +504,8 @@ mod tests {
         let (slow, market, fast) =
             NetworkProvider::calculate_eip1559_fee_tiers(base_fee, priority_fee, gas_limit);
 
-        assert_eq!(U256::from(39810855000u128), slow);
-        assert_eq!(U256::from(41706609000u128), market);
-        assert_eq!(U256::from(43602363000u128), fast);
+        assert_eq!(U256::from(41706609000u128), slow);
+        assert_eq!(U256::from(45498117000u128), market);
+        assert_eq!(U256::from(87204726000u128), fast);
     }
 }
