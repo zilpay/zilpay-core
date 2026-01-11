@@ -73,7 +73,7 @@ directories = "6.0.0"
 hmac = "0.12.1"
 rust-argon2 = "2.1.0"
 bitcoin = { version = "0.32.5", features = ["serde", "base64"] }
-electrum-client = "0.24.1"
+electrum-client = { version = "0.24.1", default-features = false, features = ["proxy", "use-rustls-ring"] }
 rustls = { version = "0.23", features = ["ring", "std"], default-features = false }
 
 [dev-dependencies]
