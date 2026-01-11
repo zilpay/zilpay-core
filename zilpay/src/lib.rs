@@ -15,5 +15,5 @@ pub use token;
 pub use wallet;
 
 pub fn init() {
-    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    let _ = rustls::crypto::ring::default_provider().install_default();
 }
