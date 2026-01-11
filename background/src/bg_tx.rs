@@ -62,10 +62,11 @@ pub(crate) async fn build_unsigned_btc_transaction(
 
     let total_input: u64 = unspents.iter().map(|u| u.value).sum();
     let original_total_output: u64 = destinations.iter().map(|(_, amount)| amount).sum();
-    let estimated_vsize = (unspents.len() * input_vsize + destinations.len() * output_vsize + TX_OVERHEAD_VSIZE) as u64;
+    let estimated_vsize = (unspents.len() * input_vsize
+        + destinations.len() * output_vsize
+        + TX_OVERHEAD_VSIZE) as u64;
     let fee_rate = fee_rate_sat_per_vbyte.unwrap_or(DEFAULT_FEE_RATE);
     let estimated_fee = estimated_vsize * fee_rate;
-
 
     let (adjusted_destinations, total_output) = if total_input
         < original_total_output + estimated_fee

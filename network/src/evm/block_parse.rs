@@ -5,7 +5,7 @@ use rpc::{
     provider::RpcProvider,
     zil_interfaces::ResultRes,
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 pub fn build_last_block_header_request(address: &Address, block_number: Option<u128>) -> Value {
     match address {

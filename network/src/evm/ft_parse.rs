@@ -13,7 +13,7 @@ use rpc::{
     provider::RpcProvider,
     zil_interfaces::{GetTokenInitItem, ResultRes},
 };
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use token::Result;
 
 type RequestResult<'a, T = Value> = std::result::Result<Vec<(T, RequestType<'a>)>, TokenError>;

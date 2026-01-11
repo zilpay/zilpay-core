@@ -1,6 +1,6 @@
+use crate::Result;
 use crate::evm::RequiredTxParams;
 use crate::provider::NetworkProvider;
-use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
 use electrum_client::{Batch, Client as ElectrumClient, ConfigBuilder, ElectrumApi, Param};
@@ -98,7 +98,8 @@ fn parse_fee_histogram(value: &serde_json::Value) -> Option<(u64, u64, u64)> {
         let fee_rate = arr[0].as_f64()?;
         let vsize = arr[1].as_u64()?;
 
-        fee_rates.push(fee_rate);
+        // Convert from sat/kB to sat/vB by dividing by 1000
+        fee_rates.push(fee_rate / BYTES_PER_KB);
         total_vsize += vsize;
     }
 
@@ -553,5 +554,29 @@ mod tests {
         }
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_fee_histogram_correct_units() {
+        use serde_json::json;
+
+        // Simulate histogram response from Electrum (sat/vB, vsize)
+        // If the fee rate is 10 sat/vB, we expect the parser to return 10.
+        // If the code divides by 1000 (treating it as sat/kB), it would return 0.01 -> 1.
+        let histogram = json!([
+            [20.0, 100000], // Fast
+            [10.0, 100000], // Market
+            [5.0, 100000]   // Slow
+        ]);
+
+        let result = parse_fee_histogram(&histogram);
+
+        assert!(result.is_some());
+        let (slow, market, fast) = result.unwrap();
+
+        // We expect the values to be preserved (sat/vB)
+        assert_eq!(fast, 20);
+        assert_eq!(market, 10);
+        assert_eq!(slow, 5);
     }
 }
