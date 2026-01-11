@@ -86,8 +86,7 @@ fn parse_fee_histogram(value: &serde_json::Value) -> Option<(u64, u64, u64)> {
         return None;
     }
 
-    let mut fee_rates: Vec<f64> = Vec::new();
-    let mut total_vsize: u64 = 0;
+    let mut min_fee_rate = f64::MAX;
 
     for entry in histogram {
         let arr = entry.as_array()?;
@@ -96,23 +95,18 @@ fn parse_fee_histogram(value: &serde_json::Value) -> Option<(u64, u64, u64)> {
         }
 
         let fee_rate = arr[0].as_f64()?;
-        let vsize = arr[1].as_u64()?;
-
-        // Convert from sat/kB to sat/vB by dividing by 1000
-        fee_rates.push(fee_rate / BYTES_PER_KB);
-        total_vsize += vsize;
+        if fee_rate > 0.0 && fee_rate < min_fee_rate {
+            min_fee_rate = fee_rate;
+        }
     }
 
-    if fee_rates.is_empty() || total_vsize == 0 {
-        return None;
+    if min_fee_rate == f64::MAX || min_fee_rate <= 0.0 {
+        min_fee_rate = 1.0;
     }
 
-    let fast_rate = fee_rates.first().copied().unwrap_or(10.0).max(1.0) as u64;
-
-    let market_idx = fee_rates.len() / 2;
-    let market_rate = fee_rates.get(market_idx).copied().unwrap_or(5.0).max(1.0) as u64;
-
-    let slow_rate = fee_rates.last().copied().unwrap_or(2.0).max(1.0) as u64;
+    let slow_rate = min_fee_rate.max(1.0).ceil() as u64;
+    let market_rate = (min_fee_rate * 1.10).ceil() as u64;
+    let fast_rate = (min_fee_rate * 1.15).ceil() as u64;
 
     Some((slow_rate, market_rate, fast_rate))
 }
@@ -184,7 +178,9 @@ impl BtcOperations for NetworkProvider {
     }
 
     async fn btc_estimate_params_batch(&self, tx: &TransactionRequest) -> Result<RequiredTxParams> {
+        const FAST_BLOCKS: usize = 1;
         const MARKET_BLOCKS: usize = 3;
+        const SLOW_BLOCKS: usize = 6;
 
         let vsize = calculate_tx_vsize(tx);
 
@@ -210,27 +206,35 @@ impl BtcOperations for NetworkProvider {
             }
 
             let mut batch = Batch::default();
+            batch.estimate_fee(FAST_BLOCKS);
             batch.estimate_fee(MARKET_BLOCKS);
+            batch.estimate_fee(SLOW_BLOCKS);
 
             let results = client
                 .batch_call(&batch)
                 .map_err(|e| NetworkErrors::RPCError(format!("Failed to estimate fee: {}", e)))?;
 
-            let base_fee_btc = results
+            let fast_fee_btc = results
                 .get(0)
                 .and_then(|v| v.as_f64())
                 .unwrap_or(DEFAULT_FEE_RATE_BTC);
+            let market_fee_btc = results
+                .get(1)
+                .and_then(|v| v.as_f64())
+                .unwrap_or(DEFAULT_FEE_RATE_BTC);
+            let slow_fee_btc = results
+                .get(2)
+                .and_then(|v| v.as_f64())
+                .unwrap_or(DEFAULT_FEE_RATE_BTC);
 
-            let base_rate = btc_fee_rate_to_sat_per_byte(base_fee_btc);
-
-            let market_fee_rate = base_rate;
-            let slow_fee_rate = (base_rate / 2).max(1);
-            let fast_fee_rate = base_rate + (base_rate / 2);
+            let fast_rate = btc_fee_rate_to_sat_per_byte(fast_fee_btc).max(1);
+            let market_rate = btc_fee_rate_to_sat_per_byte(market_fee_btc).max(1);
+            let slow_rate = btc_fee_rate_to_sat_per_byte(slow_fee_btc).max(1);
 
             Ok(build_required_params(
-                slow_fee_rate,
-                market_fee_rate,
-                fast_fee_rate,
+                slow_rate,
+                market_rate,
+                fast_rate,
                 vsize,
             ))
         })
@@ -560,13 +564,10 @@ mod tests {
     fn test_parse_fee_histogram_correct_units() {
         use serde_json::json;
 
-        // Simulate histogram response from Electrum (sat/vB, vsize)
-        // If the fee rate is 10 sat/vB, we expect the parser to return 10.
-        // If the code divides by 1000 (treating it as sat/kB), it would return 0.01 -> 1.
         let histogram = json!([
-            [20.0, 100000], // Fast
-            [10.0, 100000], // Market
-            [5.0, 100000]   // Slow
+            [20.0, 100000],
+            [10.0, 100000],
+            [5.0, 100000]
         ]);
 
         let result = parse_fee_histogram(&histogram);
@@ -574,9 +575,56 @@ mod tests {
         assert!(result.is_some());
         let (slow, market, fast) = result.unwrap();
 
-        // We expect the values to be preserved (sat/vB)
-        assert_eq!(fast, 20);
-        assert_eq!(market, 10);
         assert_eq!(slow, 5);
+        assert_eq!(market, 6);
+        assert_eq!(fast, 6);
+        assert!(slow <= market);
+        assert!(market <= fast);
+    }
+
+    #[test]
+    fn test_parse_fee_histogram_min_fee_extraction() {
+        use serde_json::json;
+
+        let histogram = json!([
+            [100.0, 50000],
+            [50.0, 100000],
+            [10.0, 200000],
+            [3.0, 300000]
+        ]);
+
+        let result = parse_fee_histogram(&histogram);
+        assert!(result.is_some());
+        let (slow, market, fast) = result.unwrap();
+
+        assert_eq!(slow, 3);
+        assert_eq!(market, 4);
+        assert_eq!(fast, 4);
+    }
+
+    #[test]
+    fn test_parse_fee_histogram_empty() {
+        use serde_json::json;
+
+        let histogram = json!([]);
+        let result = parse_fee_histogram(&histogram);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_fee_histogram_fallback_to_minimum() {
+        use serde_json::json;
+
+        let histogram = json!([
+            [0.5, 100000]
+        ]);
+
+        let result = parse_fee_histogram(&histogram);
+        assert!(result.is_some());
+        let (slow, market, fast) = result.unwrap();
+
+        assert_eq!(slow, 1);
+        assert_eq!(market, 1);
+        assert_eq!(fast, 1);
     }
 }

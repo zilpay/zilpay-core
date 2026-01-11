@@ -742,7 +742,7 @@ mod tests_background_tokens {
 
         let dest_addr = to_account.addr.clone();
 
-        let txn_req = bg
+        let mut txn_req = bg
             .build_token_transfer(btc_token, from_account, dest_addr.clone(), max_balance)
             .await
             .unwrap();
@@ -774,6 +774,54 @@ mod tests_background_tokens {
                 assert!(
                     total_output <= max_balance.to::<u64>(),
                     "Output should not exceed requested max balance"
+                );
+            }
+            _ => panic!("Expected Bitcoin transaction request"),
+        }
+
+        let params = provider
+            .btc_estimate_params_batch(&txn_req)
+            .await
+            .unwrap();
+
+        println!("Fee estimates - slow: {}, market: {}, fast: {}",
+            params.slow, params.market, params.fast);
+
+        use crate::bg_tx::update_tx_from_params;
+        update_tx_from_params(&mut txn_req, params.clone(), max_balance).unwrap();
+
+        match &txn_req {
+            TransactionRequest::Bitcoin((tx, meta)) => {
+                let total_output_after: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
+                let total_input: u64 = meta.btc_utxo_amounts.as_ref().unwrap().iter().sum();
+                let actual_fee = total_input.saturating_sub(total_output_after);
+
+                println!("After update_tx_from_params:");
+                println!("  Total output: {} satoshis", total_output_after);
+                println!("  Actual fee: {} satoshis", actual_fee);
+                println!("  Output count: {}", tx.output.len());
+
+                assert_eq!(
+                    total_input,
+                    total_output_after + actual_fee,
+                    "Total input should equal output + fee"
+                );
+
+                assert_eq!(
+                    tx.output.len(),
+                    1,
+                    "Max balance transfer should have exactly 1 output (no change)"
+                );
+
+                assert!(
+                    actual_fee > 0,
+                    "Fee should be greater than zero"
+                );
+
+                assert_eq!(
+                    total_output_after + actual_fee,
+                    actual_balance,
+                    "Output + fee should equal the full balance (sender balance becomes 0)"
                 );
             }
             _ => panic!("Expected Bitcoin transaction request"),
