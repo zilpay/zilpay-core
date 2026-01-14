@@ -1,4 +1,4 @@
-use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
+use crate::{Result, bg_provider::ProvidersManagement, bg_wallet::WalletManagement};
 use alloy::primitives::U256;
 use alloy::{dyn_abi::TypedData, primitives::keccak256};
 use async_trait::async_trait;
@@ -33,8 +33,8 @@ pub(crate) async fn build_unsigned_btc_transaction(
     fee_rate_sat_per_vbyte: Option<u64>,
 ) -> std::result::Result<(bitcoin::Transaction, Vec<u64>), BackgroundError> {
     use bitcoin::{
-        absolute::LockTime, transaction::Version, Amount, OutPoint, ScriptBuf, Sequence,
-        Transaction, TxIn, TxOut, Witness,
+        Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+        absolute::LockTime, transaction::Version,
     };
 
     let unspents = provider.btc_list_unspent(from_addr).await?;
@@ -182,15 +182,18 @@ pub fn update_tx_from_params(
                 .input()
                 .map(|data| data.is_empty())
                 .unwrap_or(true);
+            let is_fast_fee = params.fast > U256::ZERO && params.current >= params.fast;
 
+            let precision = U256::from(1_000_000);
             let multiplier = if params.slow > U256::ZERO {
-                params.current / params.slow
+                params.current.saturating_mul(precision) / params.slow
             } else {
-                U256::from(1)
+                precision
             };
 
             if is_eip1559_supported {
-                let priority_fee = params.fee_history.priority_fee.saturating_mul(multiplier);
+                let priority_fee =
+                    params.fee_history.priority_fee.saturating_mul(multiplier) / precision;
                 let max_fee_per_gas = params.fee_history.base_fee.saturating_add(priority_fee);
 
                 eth_tx.max_priority_fee_per_gas = Some(priority_fee.try_into().map_err(|_| {
@@ -205,7 +208,14 @@ pub fn update_tx_from_params(
 
                 if let Some(current_value) = eth_tx.value {
                     if is_native_transfer && current_value == balance {
-                        let adjusted_value = current_value.saturating_sub(params.current);
+                        let buffer_multiplier = if is_fast_fee {
+                            precision.saturating_mul(U256::from(105)) / U256::from(100)
+                        } else {
+                            precision
+                        };
+                        let fee_to_subtract =
+                            params.current.saturating_mul(buffer_multiplier) / precision;
+                        let adjusted_value = current_value.saturating_sub(fee_to_subtract);
 
                         if adjusted_value > U256::ZERO && adjusted_value < current_value {
                             eth_tx.value = Some(adjusted_value);
@@ -213,7 +223,7 @@ pub fn update_tx_from_params(
                     }
                 }
             } else {
-                let gas_price = params.gas_price.saturating_mul(multiplier);
+                let gas_price = params.gas_price.saturating_mul(multiplier) / precision;
 
                 eth_tx.gas_price = Some(gas_price.try_into().map_err(|_| {
                     TransactionErrors::ConvertTxError("Gas price overflow".to_string())
@@ -224,7 +234,14 @@ pub fn update_tx_from_params(
 
                 if let Some(current_value) = eth_tx.value {
                     if is_native_transfer && current_value == balance {
-                        let adjusted_value = current_value.saturating_sub(params.current);
+                        let buffer_multiplier = if is_fast_fee {
+                            precision.saturating_mul(U256::from(105)) / U256::from(100)
+                        } else {
+                            precision
+                        };
+                        let fee_to_subtract =
+                            params.current.saturating_mul(buffer_multiplier) / precision;
+                        let adjusted_value = current_value.saturating_sub(fee_to_subtract);
 
                         if adjusted_value > U256::ZERO && adjusted_value < current_value {
                             eth_tx.value = Some(adjusted_value);
@@ -620,14 +637,14 @@ impl TransactionsManagement for Background {
 #[cfg(test)]
 mod tests_background_transactions {
     use super::*;
-    use crate::{bg_storage::StorageManagement, bg_token::TokensManagement, BackgroundBip39Params};
+    use crate::{BackgroundBip39Params, bg_storage::StorageManagement, bg_token::TokensManagement};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
     use cipher::argon2;
     use proto::{address::Address, tx::TransactionRequest};
     use rand::Rng;
     use test_data::{
-        gen_anvil_net_conf, gen_anvil_token, gen_device_indicators, gen_eth_account,
-        gen_zil_account, gen_zil_testnet_conf, gen_zil_token, ANVIL_MNEMONIC, TEST_PASSWORD,
+        ANVIL_MNEMONIC, TEST_PASSWORD, gen_anvil_net_conf, gen_anvil_token, gen_device_indicators,
+        gen_eth_account, gen_zil_account, gen_zil_testnet_conf, gen_zil_token,
     };
     use token::ft::FToken;
     use tokio;
@@ -801,7 +818,7 @@ mod tests_background_transactions {
     #[tokio::test]
     async fn test_update_history_evm() {
         use test_data::anvil_accounts;
-        use tokio::time::{sleep, Duration};
+        use tokio::time::{Duration, sleep};
 
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_anvil_net_conf();
