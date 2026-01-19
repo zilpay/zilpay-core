@@ -192,9 +192,15 @@ impl EvmOperations for NetworkProvider {
         };
 
         let (slow, market, fast) = if fee_history_response.base_fee > U256::ZERO {
+            let priority_fee = if fee_history_response.priority_fee > U256::ZERO {
+                fee_history_response.priority_fee
+            } else {
+                max_priority_fee_per_gas_response
+            };
+
             Self::calculate_eip1559_fee_tiers(
                 fee_history_response.base_fee,
-                max_priority_fee_per_gas_response,
+                priority_fee,
                 tx_estimate_gas_response,
             )
         } else {

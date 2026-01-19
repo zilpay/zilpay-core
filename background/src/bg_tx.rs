@@ -192,8 +192,13 @@ pub fn update_tx_from_params(
             };
 
             if is_eip1559_supported {
+                let base_priority_fee = if params.fee_history.priority_fee.is_zero() {
+                    params.max_priority_fee
+                } else {
+                    params.fee_history.priority_fee
+                };
                 let priority_fee =
-                    params.fee_history.priority_fee.saturating_mul(multiplier) / precision;
+                    base_priority_fee.saturating_mul(multiplier) / precision;
                 let max_fee_per_gas = if eth_tx.gas.unwrap_or_default() > 0 {
                     params.current / U256::from(eth_tx.gas.unwrap_or_default())
                 } else {
