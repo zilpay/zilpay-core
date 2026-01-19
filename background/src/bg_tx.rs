@@ -194,7 +194,11 @@ pub fn update_tx_from_params(
             if is_eip1559_supported {
                 let priority_fee =
                     params.fee_history.priority_fee.saturating_mul(multiplier) / precision;
-                let max_fee_per_gas = params.fee_history.base_fee.saturating_add(priority_fee);
+                let max_fee_per_gas = if eth_tx.gas.unwrap_or_default() > 0 {
+                    params.current / U256::from(eth_tx.gas.unwrap_or_default())
+                } else {
+                     params.fee_history.base_fee.saturating_add(priority_fee)
+                };
 
                 eth_tx.max_priority_fee_per_gas = Some(priority_fee.try_into().map_err(|_| {
                     TransactionErrors::ConvertTxError("Priority fee overflow".to_string())

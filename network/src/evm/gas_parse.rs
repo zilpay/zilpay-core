@@ -75,8 +75,16 @@ pub fn build_batch_gas_request(
         TransactionRequest::Zilliqa(_) => {
             return Err(TransactionErrors::InvalidTransaction)?;
         }
-        TransactionRequest::Ethereum((tx, _)) => serde_json::to_value(&tx)
-            .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?,
+        TransactionRequest::Ethereum((tx, _)) => {
+            let mut val = serde_json::to_value(&tx)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+
+            if let Some(obj) = val.as_object_mut() {
+                obj.remove("gas");
+            }
+
+            val
+        }
         TransactionRequest::Bitcoin(_) => {
             return Err(TransactionErrors::InvalidTransaction)?;
         }
