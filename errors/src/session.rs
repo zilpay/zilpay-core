@@ -11,4 +11,10 @@ pub enum SessionErrors {
 
     #[error("Invalid seed decryption")]
     InvalidDecryptSession,
+
+    #[error("Session has expired")]
+    SessionExpired,
+
+    #[error("Session not found")]
+    SessionNotFound,
 }

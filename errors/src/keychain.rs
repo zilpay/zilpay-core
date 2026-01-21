@@ -34,6 +34,15 @@ pub enum KeyChainErrors {
 
     #[error("Cyber errors: {0}")]
     CyberErrors(CyberErrors),
+
+    #[error("Apple Keychain Error: {0}")]
+    AppleKeychainError(String),
+
+    #[error("Keyring Error: {0}")]
+    KeyringError(String),
+
+    #[error("Platform Not Supported")]
+    PlatformNotSupported,
 }
 
 impl From<AesGCMErrors> for KeyChainErrors {

@@ -3,28 +3,6 @@ use cipher::{argon2, keychain::KeyChain, options::CipherOrders};
 use config::argon::{KEY_SIZE, SESSION_SALT};
 use errors::session::SessionErrors;
 
-/// Encrypts a seed using device-specific fingerprint and layered encryption
-///
-/// # Overview
-/// Implements a multi-layer encryption scheme using a device fingerprint to encrypt
-/// a seed value (typically a password). The encryption process:
-/// 1. Derives a key from the device fingerprint using Argon2
-/// 2. Generates a keychain from the derived key
-/// 3. Applies multiple encryption layers based on provided cipher options
-///
-/// # Arguments
-/// * `fingerprint` - Device-specific identifier used for key derivation
-/// * `seed_bytes` - Fixed-size array of bytes to encrypt (must be KEY_SIZE bytes)
-/// * `options` - Ordered sequence of encryption algorithms to apply
-/// * `argon2_config` - Argon2 password hashing configuration parameters
-///
-/// # Returns
-/// * `Ok(Vec<u8>)` - Encrypted seed as a byte vector
-/// * `Err(SessionErrors)` - Error indicating failed:
-///   - Key derivation (`ArgonError`)
-///   - Keychain initialization (`KeychainError`)
-///   - Encryption process (`KeychainError`)
-///
 pub fn encrypt_session(
     fingerprint: &[u8],
     seed_bytes: &[u8; KEY_SIZE],
@@ -41,32 +19,6 @@ pub fn encrypt_session(
     Ok(seed_cipher)
 }
 
-/// Decrypts a previously encrypted seed using device fingerprint
-///
-/// # Overview
-/// Reverses the encryption performed by `encrypt_session()`. The decryption process:
-/// 1. Derives the same key from the device fingerprint using Argon2
-/// 2. Reconstructs the keychain from the derived key
-/// 3. Applies decryption layers in reverse order
-///
-/// # Arguments
-/// * `fingerprint` - Device-specific identifier (must match encryption fingerprint)
-/// * `seed_cipher` - Encrypted bytes from previous `encrypt_session()` call
-/// * `options` - Ordered sequence of encryption algorithms (must match encryption sequence)
-/// * `argon2_config` - Argon2 password hashing configuration parameters
-///
-/// # Returns
-/// * `Ok([u8; KEY_SIZE])` - Decrypted seed as fixed-size byte array
-/// * `Err(SessionErrors)` - Error indicating failed:
-///   - Key derivation (`ArgonError`)
-///   - Keychain initialization (`KeychainError`)
-///   - Decryption process (`KeychainError`)
-///   - Invalid decrypted seed size (`InvalidDecryptSession`)
-///
-/// # Security Considerations
-/// * Fingerprint must exactly match the one used for encryption
-/// * Cipher options must match the encryption sequence
-/// * Failed decryption may indicate tampering or incorrect device fingerprint
 pub fn decrypt_session(
     fingerprint: &[u8],
     seed_cipher: Vec<u8>,
@@ -84,6 +36,21 @@ pub fn decrypt_session(
 
     Ok(seed_bytes)
 }
+
+pub mod keychain_store;
+pub mod management;
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod keychain_store_apple;
+
+#[cfg(target_os = "android")]
+mod keychain_store_android;
+
+#[cfg(target_os = "linux")]
+mod keychain_store_linux;
+
+#[cfg(target_os = "windows")]
+mod keychain_store_windows;
 
 #[cfg(test)]
 mod tests {

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::{bg_storage::StorageManagement, Result};
 
+use crate::Background;
 use errors::background::BackgroundError;
 use settings::{
     browser::BrowserSettings,
@@ -9,8 +10,6 @@ use settings::{
     notifications::{NotificationState, Notifications},
     theme::Theme,
 };
-
-use crate::Background;
 
 pub trait SettingsManagement {
     type Error;

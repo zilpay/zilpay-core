@@ -7,6 +7,17 @@ edition = "2021"
 rand_chacha.workspace = true
 rand.workspace = true
 rust-argon2.workspace = true
+zeroize.workspace = true
+secrecy.workspace = true
+keyring.workspace = true
 errors = { path = "../errors" }
 cipher = { path = "../cipher" }
 config = { path = "../config" }
+storage = { path = "../storage" }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+security-framework = { workspace = true }
+security-framework-sys = { workspace = true }
+core-foundation = { workspace = true }
+
+
