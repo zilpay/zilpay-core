@@ -404,17 +404,19 @@ pub async fn store_key_in_secure_enclave(
     let encrypted_data = call_biometric_operation(move |env, manager, activity, callback, _ptr| {
         let key_array = env.byte_array_from_slice(&key_vec).map_err(map_jni_error)?;
 
-        let result = env.call_method(
-            manager,
-            "encryptKeyAsync",
-            "(Landroidx/fragment/app/FragmentActivity;[BLbiometric/BiometricCallback;)V",
-            &[
-                JValue::Object(activity),
-                JValue::Object(&key_array.into()),
-                JValue::Object(callback),
-            ],
-        )
-        .map_err(map_jni_error);
+        let result = env
+            .call_method(
+                manager,
+                "encryptKeyAsync",
+                "(Landroidx/fragment/app/FragmentActivity;[BLbiometric/BiometricCallback;)V",
+                &[
+                    JValue::Object(activity),
+                    JValue::Object(&key_array.into()),
+                    JValue::Object(callback),
+                ],
+            )
+            .map_err(map_jni_error)
+            .map(|_| ());
 
         key_vec.zeroize();
         result
@@ -457,17 +459,19 @@ pub async fn retrieve_key_from_secure_enclave(
             .byte_array_from_slice(&encrypted_data)
             .map_err(map_jni_error)?;
 
-        let result = env.call_method(
-            manager,
-            "decryptKeyAsync",
-            "(Landroidx/fragment/app/FragmentActivity;[BLbiometric/BiometricCallback;)V",
-            &[
-                JValue::Object(activity),
-                JValue::Object(&data_array.into()),
-                JValue::Object(callback),
-            ],
-        )
-        .map_err(map_jni_error);
+        let result = env
+            .call_method(
+                manager,
+                "decryptKeyAsync",
+                "(Landroidx/fragment/app/FragmentActivity;[BLbiometric/BiometricCallback;)V",
+                &[
+                    JValue::Object(activity),
+                    JValue::Object(&data_array.into()),
+                    JValue::Object(callback),
+                ],
+            )
+            .map_err(map_jni_error)
+            .map(|_| ());
 
         encrypted_data.zeroize();
         result
