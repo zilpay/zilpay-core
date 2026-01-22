@@ -4,7 +4,10 @@ use std::{
 };
 
 use cipher::{keychain::KeyChain, options::CipherOrders};
-use config::sha::{SHA256_SIZE, SHA512_SIZE};
+use config::{
+    argon::KEY_SIZE,
+    sha::{SHA256_SIZE, SHA512_SIZE},
+};
 use errors::session::SessionErrors;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -142,17 +145,17 @@ impl<'a> SessionManagement for SessionManager<'a> {
             return false;
         }
 
-        let retrieved_key_vec = match retrieve_key_from_secure_enclave(&wallet_key) {
+        let retrieved_key_vec: SecretSlice<u8> = match retrieve_key_from_secure_enclave(&wallet_key)
+        {
+            Ok(key) => key,
+            Err(_) => return false,
+        };
+        let retrieved_key: [u8; KEY_SIZE] = match retrieved_key_vec.expose_secret().try_into() {
             Ok(key) => key,
             Err(_) => return false,
         };
 
-        let retrieved_key: [u8; SHA512_SIZE] = match retrieved_key_vec.try_into() {
-            Ok(key) => key,
-            Err(_) => return false,
-        };
-
-        let keychain = match KeyChain::from_seed(&retrieved_key) {
+        let keychain = match KeyChain::from_seed(&retrieved_key.into()) {
             Ok(kc) => kc,
             Err(_) => return false,
         };

@@ -1,6 +1,7 @@
 use config::session::KEYCHAIN_SERVICE;
 use core_foundation::base::TCFType;
 use errors::{keychain::KeyChainErrors, session::SessionErrors};
+use secrecy::SecretSlice;
 use security_framework::{
     access_control::SecAccessControl,
     passwords::{
@@ -43,14 +44,16 @@ pub fn store_key_in_secure_enclave(key: &[u8], wallet_key: &str) -> Result<(), S
     Ok(())
 }
 
-pub fn retrieve_key_from_secure_enclave(wallet_key: &str) -> Result<Vec<u8>, SessionErrors> {
+pub fn retrieve_key_from_secure_enclave(
+    wallet_key: &str,
+) -> Result<SecretSlice<u8>, SessionErrors> {
     let read_options = PasswordOptions::new_generic_password(KEYCHAIN_SERVICE, wallet_key);
 
     let results = generic_password(read_options).map_err(|e| {
         SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(e.to_string()))
     })?;
 
-    Ok(results)
+    Ok(SecretSlice::new(results.into()))
 }
 
 pub fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
