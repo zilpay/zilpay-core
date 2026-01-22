@@ -14,62 +14,96 @@ mod default_keyring {
         key: &[u8],
         wallet_key: &str,
     ) -> Result<(), SessionErrors> {
-        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
-            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
-                e.to_string(),
-            ))
-        })?;
+        let key_vec = key.to_vec();
+        let wallet_key_owned = wallet_key.to_string();
 
-        let secret = SecretSlice::new(key.into());
-        let encoded = hex::encode(secret.expose_secret());
+        tokio::task::spawn_blocking(move || {
+            let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &wallet_key_owned).map_err(|e| {
+                SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                    e.to_string(),
+                ))
+            })?;
 
-        entry.set_password(&encoded).map_err(|e| {
-            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
-                e.to_string(),
-            ))
-        })?;
+            let secret = SecretSlice::new(key_vec.into());
+            let encoded = hex::encode(secret.expose_secret());
 
-        Ok(())
+            entry.set_password(&encoded).map_err(|e| {
+                SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                    e.to_string(),
+                ))
+            })?;
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(format!(
+                "Task join error: {}",
+                e
+            )))
+        })?
     }
 
     pub async fn retrieve_key_from_secure_enclave(
         wallet_key: &str,
     ) -> Result<SecretSlice<u8>, SessionErrors> {
-        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
-            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
-                e.to_string(),
-            ))
-        })?;
+        let wallet_key_owned = wallet_key.to_string();
 
-        let encoded = entry.get_password().map_err(|e| {
-            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
-                e.to_string(),
-            ))
-        })?;
+        tokio::task::spawn_blocking(move || {
+            let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &wallet_key_owned).map_err(|e| {
+                SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                    e.to_string(),
+                ))
+            })?;
 
-        let secret = SecretSlice::new(
-            hex::decode(encoded)
-                .map_err(|_| SessionErrors::InvalidDecryptSession)?
-                .into(),
-        );
+            let encoded = entry.get_password().map_err(|e| {
+                SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                    e.to_string(),
+                ))
+            })?;
 
-        Ok(secret)
+            let secret = SecretSlice::new(
+                hex::decode(encoded)
+                    .map_err(|_| SessionErrors::InvalidDecryptSession)?
+                    .into(),
+            );
+
+            Ok(secret)
+        })
+        .await
+        .map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(format!(
+                "Task join error: {}",
+                e
+            )))
+        })?
     }
 
     pub async fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
-        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
-            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
-                e.to_string(),
-            ))
-        })?;
+        let wallet_key_owned = wallet_key.to_string();
 
-        entry.delete_credential().map_err(|e| {
-            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
-                e.to_string(),
-            ))
-        })?;
+        tokio::task::spawn_blocking(move || {
+            let entry = keyring::Entry::new(KEYCHAIN_SERVICE, &wallet_key_owned).map_err(|e| {
+                SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                    e.to_string(),
+                ))
+            })?;
 
-        Ok(())
+            entry.delete_credential().map_err(|e| {
+                SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                    e.to_string(),
+                ))
+            })?;
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(format!(
+                "Task join error: {}",
+                e
+            )))
+        })?
     }
 }
 

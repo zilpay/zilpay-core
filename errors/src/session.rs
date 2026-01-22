@@ -20,4 +20,19 @@ pub enum SessionErrors {
 
     #[error("Storage error: {0}")]
     StorageError(LocalStorageError),
+
+    #[error("KeyChain error: {0}")]
+    KeyChainErrors(KeyChainErrors),
+}
+
+impl From<LocalStorageError> for SessionErrors {
+    fn from(error: LocalStorageError) -> Self {
+        SessionErrors::StorageError(error)
+    }
+}
+
+impl From<KeyChainErrors> for SessionErrors {
+    fn from(error: KeyChainErrors) -> Self {
+        SessionErrors::KeyChainErrors(error)
+    }
 }
