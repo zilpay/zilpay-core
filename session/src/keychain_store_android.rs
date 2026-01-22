@@ -338,8 +338,8 @@ pub extern "system" fn Java_biometric_RustBiometricCallback_nativeOnSuccess(
     };
 
     let sender =
-        unsafe { Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<Vec<u8>, String>>) };
-    let _ = sender.send(Ok(data_vec));
+        unsafe { Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<SecretSlice<u8>, String>>) };
+    let _ = sender.send(Ok(SecretSlice::new(data_vec.into())));
 }
 
 #[no_mangle]
@@ -356,7 +356,7 @@ pub extern "system" fn Java_biometric_RustBiometricCallback_nativeOnError(
     };
 
     let sender =
-        unsafe { Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<Vec<u8>, String>>) };
+        unsafe { Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<SecretSlice<u8>, String>>) };
     let _ = sender.send(Err(error_msg));
 }
 
@@ -398,13 +398,13 @@ pub async fn store_key_in_secure_enclave(
     mut key: SecretSlice<u8>,
     wallet_key: &str,
 ) -> Result<(), SessionErrors> {
-    let key_vec = key.expose_secret().to_vec();
+    let mut key_vec = key.expose_secret().to_vec();
     let wallet_key_owned = wallet_key.to_string();
 
     let encrypted_data = call_biometric_operation(move |env, manager, activity, callback, _ptr| {
         let key_array = env.byte_array_from_slice(&key_vec).map_err(map_jni_error)?;
 
-        env.call_method(
+        let result = env.call_method(
             manager,
             "encryptKeyAsync",
             "(Landroidx/fragment/app/FragmentActivity;[BLbiometric/BiometricCallback;)V",
@@ -414,9 +414,10 @@ pub async fn store_key_in_secure_enclave(
                 JValue::Object(callback),
             ],
         )
-        .map_err(map_jni_error)?;
+        .map_err(map_jni_error);
 
-        Ok(())
+        key_vec.zeroize();
+        result
     })
     .await?;
 
@@ -445,19 +446,18 @@ pub async fn retrieve_key_from_secure_enclave(
         ));
     }
 
-    let encrypted_data = hex::decode(encrypted_hex).map_err(|_| {
+    let mut encrypted_data = hex::decode(encrypted_hex).map_err(|_| {
         SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(
             "Failed to decode encrypted data".into(),
         ))
     })?;
 
-    let encrypted_data_owned = encrypted_data.clone();
     call_biometric_operation(move |env, manager, activity, callback, _ptr| {
         let data_array = env
-            .byte_array_from_slice(&encrypted_data_owned)
+            .byte_array_from_slice(&encrypted_data)
             .map_err(map_jni_error)?;
 
-        env.call_method(
+        let result = env.call_method(
             manager,
             "decryptKeyAsync",
             "(Landroidx/fragment/app/FragmentActivity;[BLbiometric/BiometricCallback;)V",
@@ -467,9 +467,10 @@ pub async fn retrieve_key_from_secure_enclave(
                 JValue::Object(callback),
             ],
         )
-        .map_err(map_jni_error)?;
+        .map_err(map_jni_error);
 
-        Ok(())
+        encrypted_data.zeroize();
+        result
     })
     .await
 }
