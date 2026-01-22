@@ -4,6 +4,7 @@ use errors::session::SessionErrors;
 use jni::objects::{JByteArray, JObject, JString, JValue};
 use jni::JNIEnv;
 use jni::JavaVM;
+use secrecy::{ExposeSecret, SecretSlice};
 use std::sync::OnceLock;
 use tokio::sync::oneshot;
 
@@ -325,7 +326,7 @@ fn get_activity<'local>(env: &mut JNIEnv<'local>) -> Result<JObject<'local>, Ses
 #[no_mangle]
 #[allow(non_snake_case)]
 pub extern "system" fn Java_biometric_RustBiometricCallback_nativeOnSuccess(
-    mut env: JNIEnv,
+    env: JNIEnv,
     _class: JObject,
     callback_ptr: jni::sys::jlong,
     data: JByteArray,
@@ -358,7 +359,7 @@ pub extern "system" fn Java_biometric_RustBiometricCallback_nativeOnError(
     let _ = sender.send(Err(error_msg));
 }
 
-async fn call_biometric_operation<F>(op: F) -> Result<Vec<u8>, SessionErrors>
+async fn call_biometric_operation<F>(op: F) -> Result<SecretSlice<u8>, SessionErrors>
 where
     F: FnOnce(
         &mut JNIEnv,
@@ -368,13 +369,14 @@ where
         jni::sys::jlong,
     ) -> Result<(), SessionErrors>,
 {
-    let (tx, rx) = oneshot::channel::<Result<Vec<u8>, String>>();
+    let (tx, rx) = oneshot::channel::<Result<SecretSlice<u8>, String>>();
     let callback_ptr = Box::into_raw(Box::new(tx)) as jni::sys::jlong;
 
     with_android_context(|env, context| {
         let biometric_manager = get_biometric_manager(env, context)?;
         let activity = get_activity(env)?;
-        let callback_class = find_class_from_context(env, context, "biometric.RustBiometricCallback")?;
+        let callback_class =
+            find_class_from_context(env, context, "biometric.RustBiometricCallback")?;
         let callback = env
             .new_object(callback_class, "(J)V", &[JValue::Long(callback_ptr)])
             .map_err(map_jni_error)?;
@@ -422,12 +424,14 @@ pub async fn store_key_in_secure_enclave(
             env,
             context,
             &wallet_key_owned,
-            &hex::encode(encrypted_data),
+            &hex::encode(encrypted_data.expose_secret()),
         )
     })
 }
 
-pub async fn retrieve_key_from_secure_enclave(wallet_key: &str) -> Result<Vec<u8>, SessionErrors> {
+pub async fn retrieve_key_from_secure_enclave(
+    wallet_key: &str,
+) -> Result<SecretSlice<u8>, SessionErrors> {
     let encrypted_hex = with_android_context(|env, context| fetch_data(env, context, wallet_key))?;
 
     if encrypted_hex.is_empty() {

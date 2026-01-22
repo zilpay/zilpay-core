@@ -5363,6 +5363,7 @@ dependencies = [
 name = "session"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "cipher 0.1.0",
  "config",
  "core-foundation 0.10.1",

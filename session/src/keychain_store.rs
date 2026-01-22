@@ -10,7 +10,10 @@ mod default_keyring {
     use errors::session::SessionErrors;
     use secrecy::{ExposeSecret, SecretSlice};
 
-    pub fn store_key_in_secure_enclave(key: &[u8], wallet_key: &str) -> Result<(), SessionErrors> {
+    pub async fn store_key_in_secure_enclave(
+        key: &[u8],
+        wallet_key: &str,
+    ) -> Result<(), SessionErrors> {
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
             SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
                 e.to_string(),
@@ -29,7 +32,7 @@ mod default_keyring {
         Ok(())
     }
 
-    pub fn retrieve_key_from_secure_enclave(
+    pub async fn retrieve_key_from_secure_enclave(
         wallet_key: &str,
     ) -> Result<SecretSlice<u8>, SessionErrors> {
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
@@ -53,7 +56,7 @@ mod default_keyring {
         Ok(secret)
     }
 
-    pub fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
+    pub async fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
             SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
                 e.to_string(),

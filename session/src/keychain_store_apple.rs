@@ -14,7 +14,10 @@ use security_framework_sys::access_control::{
 };
 use std::ptr;
 
-pub fn store_key_in_secure_enclave(key: &[u8], wallet_key: &str) -> Result<(), SessionErrors> {
+pub async fn store_key_in_secure_enclave(
+    key: &[u8],
+    wallet_key: &str,
+) -> Result<(), SessionErrors> {
     let access_control_ref = unsafe {
         SecAccessControlCreateWithFlags(
             ptr::null_mut(),
@@ -44,7 +47,7 @@ pub fn store_key_in_secure_enclave(key: &[u8], wallet_key: &str) -> Result<(), S
     Ok(())
 }
 
-pub fn retrieve_key_from_secure_enclave(
+pub async fn retrieve_key_from_secure_enclave(
     wallet_key: &str,
 ) -> Result<SecretSlice<u8>, SessionErrors> {
     let read_options = PasswordOptions::new_generic_password(KEYCHAIN_SERVICE, wallet_key);
@@ -56,7 +59,7 @@ pub fn retrieve_key_from_secure_enclave(
     Ok(SecretSlice::new(results.into()))
 }
 
-pub fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
+pub async fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
     delete_generic_password(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
         SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(e.to_string()))
     })

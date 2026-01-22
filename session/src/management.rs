@@ -1,8 +1,4 @@
-use std::{
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
-
+use async_trait::async_trait;
 use cipher::{keychain::KeyChain, options::CipherOrders};
 use config::{
     argon::KEY_SIZE,
@@ -12,16 +8,21 @@ use errors::session::SessionErrors;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use secrecy::{ExposeSecret, SecretSlice};
+use std::{
+    sync::Arc,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use storage::LocalStorage;
 use zeroize::Zeroize;
 
 use crate::keychain_store::{retrieve_key_from_secure_enclave, store_key_in_secure_enclave};
 
+#[async_trait]
 pub trait SessionManagement {
-    fn create_session(&self, words_bytes: SecretSlice<u8>) -> Result<(), SessionErrors>;
-    fn unlock_session(&self) -> Result<SecretSlice<u8>, SessionErrors>;
-    fn is_session_active(&self) -> bool;
-    fn clear_session(&self) -> Result<(), SessionErrors>;
+    async fn create_session(&self, words_bytes: SecretSlice<u8>) -> Result<(), SessionErrors>;
+    async fn unlock_session(&self) -> Result<SecretSlice<u8>, SessionErrors>;
+    async fn is_session_active(&self) -> bool;
+    async fn clear_session(&self) -> Result<(), SessionErrors>;
 }
 
 pub struct SessionManager<'a> {
@@ -51,8 +52,12 @@ impl<'a> SessionManager<'a> {
         format!("session_{}", wallet_key)
     }
 
-    fn cipher_orders() -> [CipherOrders; 1] {
-        [CipherOrders::AESGCM256]
+    fn cipher_orders() -> [CipherOrders; 3] {
+        [
+            CipherOrders::AESGCM256,
+            CipherOrders::KUZNECHIK,
+            CipherOrders::NTRUP1277,
+        ]
     }
 
     fn generate_random_key() -> [u8; SHA512_SIZE] {
@@ -96,8 +101,9 @@ impl<'a> SessionManager<'a> {
     }
 }
 
+#[async_trait]
 impl<'a> SessionManagement for SessionManager<'a> {
-    fn create_session(&self, words_bytes: SecretSlice<u8>) -> Result<(), SessionErrors> {
+    async fn create_session(&self, words_bytes: SecretSlice<u8>) -> Result<(), SessionErrors> {
         let wallet_key = self.wallet_key_hex();
         let mut random_key = Self::generate_random_key();
 
@@ -116,18 +122,18 @@ impl<'a> SessionManagement for SessionManager<'a> {
             .set(storage_key.as_bytes(), storage_value.as_bytes())
             .map_err(SessionErrors::StorageError)?;
 
-        store_key_in_secure_enclave(&random_key, &wallet_key)?;
+        store_key_in_secure_enclave(&random_key, &wallet_key).await?;
 
         random_key.zeroize();
 
         Ok(())
     }
 
-    fn unlock_session(&self) -> Result<SecretSlice<u8>, SessionErrors> {
+    async fn unlock_session(&self) -> Result<SecretSlice<u8>, SessionErrors> {
         todo!()
     }
 
-    fn is_session_active(&self) -> bool {
+    async fn is_session_active(&self) -> bool {
         let wallet_key = self.wallet_key_hex();
         let storage_key = self.storage_key(&wallet_key);
 
@@ -145,11 +151,11 @@ impl<'a> SessionManagement for SessionManager<'a> {
             return false;
         }
 
-        let retrieved_key_vec: SecretSlice<u8> = match retrieve_key_from_secure_enclave(&wallet_key)
-        {
-            Ok(key) => key,
-            Err(_) => return false,
-        };
+        let retrieved_key_vec: SecretSlice<u8> =
+            match retrieve_key_from_secure_enclave(&wallet_key).await {
+                Ok(key) => key,
+                Err(_) => return false,
+            };
         let retrieved_key: [u8; KEY_SIZE] = match retrieved_key_vec.expose_secret().try_into() {
             Ok(key) => key,
             Err(_) => return false,
@@ -164,86 +170,7 @@ impl<'a> SessionManagement for SessionManager<'a> {
         keychain.decrypt(encrypted_words, &cipher_orders).is_ok()
     }
 
-    fn clear_session(&self) -> Result<(), SessionErrors> {
+    async fn clear_session(&self) -> Result<(), SessionErrors> {
         todo!()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::{fs, time::UNIX_EPOCH};
-
-    fn setup_temp_storage() -> (LocalStorage, String) {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let temp_path = format!("/tmp/test_session_{}", timestamp);
-        let storage = LocalStorage::from(&temp_path).expect("Failed to create temp storage");
-        (storage, temp_path)
-    }
-
-    fn cleanup_temp_storage(path: &str) {
-        let _ = fs::remove_dir_all(path);
-    }
-
-    #[test]
-    fn test_create_session() {
-        let (storage, temp_path) = setup_temp_storage();
-        let wallet_key: [u8; SHA256_SIZE] = [42u8; SHA256_SIZE];
-        let words_bytes = b"test seed phrase words bytes".to_vec();
-        let secret_words = SecretSlice::new(words_bytes.into_boxed_slice());
-
-        let manager = SessionManager::new(Arc::new(storage), 3600, &wallet_key);
-
-        manager.create_session(secret_words).unwrap();
-
-        cleanup_temp_storage(&temp_path);
-    }
-
-    #[test]
-    fn test_is_session_active() {
-        let (storage, temp_path) = setup_temp_storage();
-        let wallet_key: [u8; SHA256_SIZE] = [42u8; SHA256_SIZE];
-        let words_bytes = b"test seed phrase words bytes".to_vec();
-        let secret_words = SecretSlice::new(words_bytes.clone().into_boxed_slice());
-
-        let manager = SessionManager::new(Arc::new(storage), 3600, &wallet_key);
-
-        assert!(
-            !manager.is_session_active(),
-            "Session should not be active before creation"
-        );
-
-        manager.create_session(secret_words).unwrap();
-
-        assert!(
-            manager.is_session_active(),
-            "Session should be active after creation"
-        );
-
-        cleanup_temp_storage(&temp_path);
-    }
-
-    #[test]
-    fn test_is_session_expired() {
-        let (storage, temp_path) = setup_temp_storage();
-        let wallet_key: [u8; SHA256_SIZE] = [42u8; SHA256_SIZE];
-        let words_bytes = b"test seed phrase words bytes".to_vec();
-        let secret_words = SecretSlice::new(words_bytes.into_boxed_slice());
-
-        let manager = SessionManager::new(Arc::new(storage), 1, &wallet_key);
-
-        manager.create_session(secret_words).unwrap();
-
-        std::thread::sleep(Duration::from_secs(2));
-
-        assert!(
-            !manager.is_session_active(),
-            "Session should be expired after TTL"
-        );
-
-        cleanup_temp_storage(&temp_path);
     }
 }

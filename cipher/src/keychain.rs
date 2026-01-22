@@ -73,6 +73,7 @@ impl KeyChain {
         })
     }
 
+    // TODO: repalce with secrecy
     pub fn from_seed(seed_bytes: &Argon2Seed) -> Result<Self, KeyChainErrors> {
         let (pk, sk) = ntru_keys_from_seed(seed_bytes)?;
 

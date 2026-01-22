@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 rand_chacha.workspace = true
 rand.workspace = true
+async-trait.workspace = true
 rust-argon2.workspace = true
 zeroize.workspace = true
 secrecy.workspace = true
