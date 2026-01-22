@@ -41,6 +41,7 @@ config = { path = "./config" }
 token = { path = "./token" }
 proto = { path = "./proto" }
 history = { path = "./history" }
+session = { path = "./session" }
 rpc = { path = "./rpc" }
 cipher = { path = "./cipher" }
 network = { path = "./network" }
@@ -59,7 +60,7 @@ alloy = { version = "1.0.3", features = ["rlp", "eips", "eip712", "consensus", "
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 sha2 = "0.10.8"
-tokio = { version = "1.47.1", features = ["macros"], default-features = false }
+tokio = { version = "1.47.1", features = ["macros", "rt", "sync"], default-features = false }
 ntrulp = { version = "0.2.3", features = ["ntrup761", "std"] }
 reqwest = { version = "0.12.23", features = ["rustls-tls", "json", "socks", "gzip", "brotli"], default-features = false }
 ripemd = "0.1.3"
@@ -79,9 +80,6 @@ rustls = { version = "0.23", features = ["ring", "std"], default-features = fals
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 zeroize = "1.8.2"
 secrecy = "0.10.3"
-security-framework = "3.5.1"
-security-framework-sys = { version = "2.15.0", features = ["OSX_10_13"] }
-core-foundation = "0.10.1"
 
 [dev-dependencies]
 mockito = "1.5.0"

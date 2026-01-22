@@ -18,5 +18,6 @@ config = { path = "../config" }
 proto = { path = "../proto" }
 history = { path = "../history" }
 network = { path = "../network" }
+session = { path = "../session" }
 cache = { path = "../cache" }
 qrcodes = { path = "../qrcodes" }

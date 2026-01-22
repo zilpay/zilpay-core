@@ -17,7 +17,7 @@ pub use crate::keychain_store_windows::*;
     target_os = "linux",
     target_os = "windows"
 )))]
-pub fn store_key_in_secure_enclave(_key: &[u8], _service: &str) -> Result<(), SessionErrors> {
+pub fn store_key_in_secure_enclave(_key: &[u8], _wallet_key: &str) -> Result<(), SessionErrors> {
     Err(SessionErrors::KeychainError(
         errors::keychain::KeyChainErrors::PlatformNotSupported,
     ))
@@ -30,7 +30,7 @@ pub fn store_key_in_secure_enclave(_key: &[u8], _service: &str) -> Result<(), Se
     target_os = "linux",
     target_os = "windows"
 )))]
-pub fn retrieve_key_from_secure_enclave(_service: &str) -> Result<Vec<u8>, SessionErrors> {
+pub fn retrieve_key_from_secure_enclave(_wallet_key: &str) -> Result<Vec<u8>, SessionErrors> {
     Err(SessionErrors::KeychainError(
         errors::keychain::KeyChainErrors::PlatformNotSupported,
     ))
@@ -43,7 +43,7 @@ pub fn retrieve_key_from_secure_enclave(_service: &str) -> Result<Vec<u8>, Sessi
     target_os = "linux",
     target_os = "windows"
 )))]
-pub fn delete_key_from_secure_enclave(_service: &str) -> Result<(), SessionErrors> {
+pub fn delete_key_from_secure_enclave(_wallet_key: &str) -> Result<(), SessionErrors> {
     Err(SessionErrors::KeychainError(
         errors::keychain::KeyChainErrors::PlatformNotSupported,
     ))

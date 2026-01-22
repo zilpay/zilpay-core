@@ -1,5 +1,5 @@
 use config::session::KEYCHAIN_SERVICE;
-use core_foundation::{base::TCFType, dictionary::CFDictionary, string::CFString};
+use core_foundation::base::TCFType;
 use errors::{keychain::KeyChainErrors, session::SessionErrors};
 use security_framework::{
     access_control::SecAccessControl,
@@ -7,13 +7,9 @@ use security_framework::{
         delete_generic_password, generic_password, set_generic_password_options, PasswordOptions,
     },
 };
-use security_framework_sys::{
-    access_control::{
-        kSecAccessControlUserPresence, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-        SecAccessControlCreateWithFlags,
-    },
-    item::{kSecAttrAccount, kSecAttrService, kSecClassGenericPassword},
-    keychain_item::SecItemDelete,
+use security_framework_sys::access_control::{
+    kSecAccessControlUserPresence, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+    SecAccessControlCreateWithFlags,
 };
 use std::ptr;
 

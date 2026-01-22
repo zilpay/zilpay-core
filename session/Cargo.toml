@@ -10,14 +10,19 @@ rust-argon2.workspace = true
 zeroize.workspace = true
 secrecy.workspace = true
 keyring.workspace = true
+hex.workspace = true
+tokio.workspace = true
 errors = { path = "../errors" }
 cipher = { path = "../cipher" }
 config = { path = "../config" }
 storage = { path = "../storage" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-security-framework = { workspace = true }
-security-framework-sys = { workspace = true }
-core-foundation = { workspace = true }
+security-framework = "3.5.1"
+security-framework-sys = { version = "2.15.0", features = ["OSX_10_13"] }
+core-foundation = "0.10.1"
 
+[target.'cfg(any(target_os = "android"))'.dependencies]
+jni = "0.21.1"
+ndk-context = "0.1.1"
 
