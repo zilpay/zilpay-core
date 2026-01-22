@@ -123,7 +123,8 @@ impl<'a> SessionManagement for SessionManager<'a> {
             .set(storage_key.as_bytes(), storage_value.as_bytes())
             .map_err(SessionErrors::StorageError)?;
 
-        store_key_in_secure_enclave(&random_key, &wallet_key).await?;
+        let random_key_secret = SecretSlice::new(random_key.to_vec().into());
+        store_key_in_secure_enclave(random_key_secret, &wallet_key).await?;
 
         random_key.zeroize();
 

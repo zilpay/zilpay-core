@@ -9,12 +9,12 @@ mod default_keyring {
     use config::session::KEYCHAIN_SERVICE;
     use errors::session::SessionErrors;
     use secrecy::{ExposeSecret, SecretSlice};
+    use zeroize::Zeroize;
 
     pub async fn store_key_in_secure_enclave(
-        key: &[u8],
+        mut key: SecretSlice<u8>,
         wallet_key: &str,
     ) -> Result<(), SessionErrors> {
-        let key_vec = key.to_vec();
         let wallet_key_owned = wallet_key.to_string();
 
         tokio::task::spawn_blocking(move || {
@@ -24,16 +24,15 @@ mod default_keyring {
                 ))
             })?;
 
-            let secret = SecretSlice::new(key_vec.into());
-            let encoded = hex::encode(secret.expose_secret());
-
-            entry.set_password(&encoded).map_err(|e| {
+            let result = entry.set_secret(key.expose_secret()).map_err(|e| {
                 SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
                     e.to_string(),
                 ))
-            })?;
+            });
 
-            Ok(())
+            key.zeroize();
+
+            result
         })
         .await
         .map_err(|e| {

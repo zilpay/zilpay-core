@@ -7,6 +7,7 @@ use jni::JavaVM;
 use secrecy::{ExposeSecret, SecretSlice};
 use std::sync::OnceLock;
 use tokio::sync::oneshot;
+use zeroize::Zeroize;
 
 static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
 
@@ -394,10 +395,10 @@ where
 }
 
 pub async fn store_key_in_secure_enclave(
-    key: &[u8],
+    mut key: SecretSlice<u8>,
     wallet_key: &str,
 ) -> Result<(), SessionErrors> {
-    let key_vec = key.to_vec();
+    let key_vec = key.expose_secret().to_vec();
     let wallet_key_owned = wallet_key.to_string();
 
     let encrypted_data = call_biometric_operation(move |env, manager, activity, callback, _ptr| {
@@ -419,14 +420,18 @@ pub async fn store_key_in_secure_enclave(
     })
     .await?;
 
-    with_android_context(|env, context| {
+    let result = with_android_context(|env, context| {
         persist_data(
             env,
             context,
             &wallet_key_owned,
             &hex::encode(encrypted_data.expose_secret()),
         )
-    })
+    });
+
+    key.zeroize();
+
+    result
 }
 
 pub async fn retrieve_key_from_secure_enclave(

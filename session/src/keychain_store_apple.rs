@@ -1,7 +1,7 @@
 use config::session::KEYCHAIN_SERVICE;
 use core_foundation::base::TCFType;
 use errors::{keychain::KeyChainErrors, session::SessionErrors};
-use secrecy::SecretSlice;
+use secrecy::{ExposeSecret, SecretSlice};
 use security_framework::{
     access_control::SecAccessControl,
     passwords::{
@@ -13,15 +13,16 @@ use security_framework_sys::access_control::{
     SecAccessControlCreateWithFlags,
 };
 use std::ptr;
+use zeroize::Zeroize;
 
 pub async fn store_key_in_secure_enclave(
-    key: &[u8],
+    mut key: SecretSlice<u8>,
     wallet_key: &str,
 ) -> Result<(), SessionErrors> {
-    let key_vec = key.to_vec();
+    let mut key_vec = key.expose_secret().to_vec();
     let wallet_key_owned = wallet_key.to_string();
 
-    tokio::task::spawn_blocking(move || {
+    let _ = tokio::task::spawn_blocking(move || {
         let access_control_ref = unsafe {
             SecAccessControlCreateWithFlags(
                 ptr::null_mut(),
@@ -37,18 +38,22 @@ pub async fn store_key_in_secure_enclave(
             ));
         }
 
-        let access_control = unsafe { SecAccessControl::wrap_under_create_rule(access_control_ref) };
-        let mut options = PasswordOptions::new_generic_password(KEYCHAIN_SERVICE, &wallet_key_owned);
+        let access_control =
+            unsafe { SecAccessControl::wrap_under_create_rule(access_control_ref) };
+        let mut options =
+            PasswordOptions::new_generic_password(KEYCHAIN_SERVICE, &wallet_key_owned);
 
         options.set_access_control(access_control);
 
         delete_generic_password(KEYCHAIN_SERVICE, &wallet_key_owned).unwrap_or_default();
 
-        set_generic_password_options(&key_vec, options).map_err(|e| {
+        let result = set_generic_password_options(&key_vec, options).map_err(|e| {
             SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(e.to_string()))
-        })?;
+        });
 
-        Ok(())
+        key_vec.zeroize();
+
+        result
     })
     .await
     .map_err(|e| {
@@ -56,7 +61,11 @@ pub async fn store_key_in_secure_enclave(
             "Task join error: {}",
             e
         )))
-    })?
+    })?;
+
+    key.zeroize();
+
+    Ok(())
 }
 
 pub async fn retrieve_key_from_secure_enclave(
@@ -65,7 +74,8 @@ pub async fn retrieve_key_from_secure_enclave(
     let wallet_key_owned = wallet_key.to_string();
 
     tokio::task::spawn_blocking(move || {
-        let read_options = PasswordOptions::new_generic_password(KEYCHAIN_SERVICE, &wallet_key_owned);
+        let read_options =
+            PasswordOptions::new_generic_password(KEYCHAIN_SERVICE, &wallet_key_owned);
         let results = generic_password(read_options).map_err(|e| {
             SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(e.to_string()))
         })?;
