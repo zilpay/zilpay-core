@@ -8,7 +8,7 @@ pub use crate::keychain_store_android::*;
 mod default_keyring {
     use config::session::KEYCHAIN_SERVICE;
     use errors::session::SessionErrors;
-    use secrecy::{ExposeSecret, SecretVec};
+    use secrecy::{ExposeSecret, SecretSlice};
 
     pub fn store_key_in_secure_enclave(key: &[u8], wallet_key: &str) -> Result<(), SessionErrors> {
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
@@ -17,7 +17,7 @@ mod default_keyring {
             ))
         })?;
 
-        let secret = SecretVec::new(key.to_vec());
+        let secret = SecretSlice::new(key.into());
         let encoded = hex::encode(secret.expose_secret());
 
         entry.set_password(&encoded).map_err(|e| {
@@ -29,7 +29,9 @@ mod default_keyring {
         Ok(())
     }
 
-    pub fn retrieve_key_from_secure_enclave(wallet_key: &str) -> Result<Vec<u8>, SessionErrors> {
+    pub fn retrieve_key_from_secure_enclave(
+        wallet_key: &str,
+    ) -> Result<SecretSlice<u8>, SessionErrors> {
         let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
             SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
                 e.to_string(),
@@ -42,10 +44,13 @@ mod default_keyring {
             ))
         })?;
 
-        let secret =
-            SecretVec::new(hex::decode(encoded).map_err(|_| SessionErrors::InvalidDecryptSession)?);
+        let secret = SecretSlice::new(
+            hex::decode(encoded)
+                .map_err(|_| SessionErrors::InvalidDecryptSession)?
+                .into(),
+        );
 
-        Ok(secret.expose_secret().clone())
+        Ok(secret)
     }
 
     pub fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
@@ -55,7 +60,7 @@ mod default_keyring {
             ))
         })?;
 
-        entry.delete_password().map_err(|e| {
+        entry.delete_credential().map_err(|e| {
             SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
                 e.to_string(),
             ))
