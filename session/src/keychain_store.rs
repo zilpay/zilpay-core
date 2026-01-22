@@ -4,47 +4,66 @@ pub use crate::keychain_store_apple::*;
 #[cfg(target_os = "android")]
 pub use crate::keychain_store_android::*;
 
-#[cfg(target_os = "linux")]
-pub use crate::keychain_store_linux::*;
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+mod default_keyring {
+    use config::session::KEYCHAIN_SERVICE;
+    use errors::session::SessionErrors;
+    use secrecy::{ExposeSecret, SecretVec};
 
-#[cfg(target_os = "windows")]
-pub use crate::keychain_store_windows::*;
+    pub fn store_key_in_secure_enclave(key: &[u8], wallet_key: &str) -> Result<(), SessionErrors> {
+        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                e.to_string(),
+            ))
+        })?;
 
-#[cfg(not(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "android",
-    target_os = "linux",
-    target_os = "windows"
-)))]
-pub fn store_key_in_secure_enclave(_key: &[u8], _wallet_key: &str) -> Result<(), SessionErrors> {
-    Err(SessionErrors::KeychainError(
-        errors::keychain::KeyChainErrors::PlatformNotSupported,
-    ))
+        let secret = SecretVec::new(key.to_vec());
+        let encoded = hex::encode(secret.expose_secret());
+
+        entry.set_password(&encoded).map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                e.to_string(),
+            ))
+        })?;
+
+        Ok(())
+    }
+
+    pub fn retrieve_key_from_secure_enclave(wallet_key: &str) -> Result<Vec<u8>, SessionErrors> {
+        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                e.to_string(),
+            ))
+        })?;
+
+        let encoded = entry.get_password().map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                e.to_string(),
+            ))
+        })?;
+
+        let secret =
+            SecretVec::new(hex::decode(encoded).map_err(|_| SessionErrors::InvalidDecryptSession)?);
+
+        Ok(secret.expose_secret().clone())
+    }
+
+    pub fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), SessionErrors> {
+        let entry = keyring::Entry::new(KEYCHAIN_SERVICE, wallet_key).map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                e.to_string(),
+            ))
+        })?;
+
+        entry.delete_password().map_err(|e| {
+            SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
+                e.to_string(),
+            ))
+        })?;
+
+        Ok(())
+    }
 }
 
-#[cfg(not(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "android",
-    target_os = "linux",
-    target_os = "windows"
-)))]
-pub fn retrieve_key_from_secure_enclave(_wallet_key: &str) -> Result<Vec<u8>, SessionErrors> {
-    Err(SessionErrors::KeychainError(
-        errors::keychain::KeyChainErrors::PlatformNotSupported,
-    ))
-}
-
-#[cfg(not(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "android",
-    target_os = "linux",
-    target_os = "windows"
-)))]
-pub fn delete_key_from_secure_enclave(_wallet_key: &str) -> Result<(), SessionErrors> {
-    Err(SessionErrors::KeychainError(
-        errors::keychain::KeyChainErrors::PlatformNotSupported,
-    ))
-}
+#[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+pub use default_keyring::*;

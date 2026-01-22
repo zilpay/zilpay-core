@@ -1,4 +1,4 @@
-use crate::{cipher::CipherErrors, keychain::KeyChainErrors};
+use crate::{cipher::CipherErrors, keychain::KeyChainErrors, storage::LocalStorageError};
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -17,4 +17,7 @@ pub enum SessionErrors {
 
     #[error("Session not found")]
     SessionNotFound,
+
+    #[error("Storage error: {0}")]
+    StorageError(LocalStorageError),
 }
