@@ -12,6 +12,8 @@ use secrecy::{ExposeSecret, SecretSlice};
 use storage::LocalStorage;
 use zeroize::Zeroize;
 
+use crate::keychain_store::{retrieve_key_from_secure_enclave, store_key_in_secure_enclave};
+
 pub trait SessionManagement {
     fn create_session(&self, words_bytes: SecretSlice<u8>) -> Result<(), SessionErrors>;
     fn unlock_session(&self) -> Result<SecretSlice<u8>, SessionErrors>;
