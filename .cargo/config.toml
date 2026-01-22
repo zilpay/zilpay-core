@@ -5,5 +5,8 @@
 # [env]
 # CC_aarch64_unknown_linux_gnu = "aarch64-unknown-linux-gnu-gcc"
 
-[build]
-target = "aarch64-linux-android"
+# [build]
+# target = "aarch64-unknown-linux-gnu"
+# 
+# [build]
+# target = "aarch64-linux-android"

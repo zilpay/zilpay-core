@@ -55,19 +55,13 @@ mod default_keyring {
                 ))
             })?;
 
-            let encoded = entry.get_password().map_err(|e| {
+            let secret_bytes = entry.get_secret().map_err(|e| {
                 SessionErrors::KeychainError(errors::keychain::KeyChainErrors::KeyringError(
                     e.to_string(),
                 ))
             })?;
 
-            let secret = SecretSlice::new(
-                hex::decode(encoded)
-                    .map_err(|_| SessionErrors::InvalidDecryptSession)?
-                    .into(),
-            );
-
-            Ok(secret)
+            Ok(SecretSlice::new(secret_bytes.into()))
         })
         .await
         .map_err(|e| {

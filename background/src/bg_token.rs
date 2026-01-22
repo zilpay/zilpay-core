@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
@@ -8,7 +10,9 @@ use proto::{
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
     zil_tx::ZILTransactionRequest,
 };
+use secrecy::{ExposeSecret, SecretSlice};
 use serde_json::json;
+use session::management::{SessionManagement, SessionManager};
 use token::ft::FToken;
 use wallet::{account::Account, wallet_storage::StorageOperations};
 
@@ -185,6 +189,17 @@ impl TokensManagement for Background {
         let selected = &data.accounts[data.selected_account];
         let provider = self.get_provider(selected.chain_hash)?;
         let mut token_meta = provider.ftoken_meta(contract, &accounts).await?;
+
+        let session = SessionManager::new(Arc::clone(&self.storage), 336000, &w.wallet_address);
+        let words_bytes = SecretSlice::new("test words bbytes".as_bytes().into());
+        session
+            .create_session(words_bytes)
+            .await
+            .map_err(|e| BackgroundError::ProviderDepends(e.to_string()))?;
+        let ll = session.unlock_session().await.unwrap();
+        let words = String::from_utf8_lossy(ll.expose_secret());
+
+        dbg!(words);
 
         if let Some(t) = w.get_ftokens()?.into_iter().next() {
             token_meta.logo = t.logo;

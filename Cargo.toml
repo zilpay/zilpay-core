@@ -76,8 +76,7 @@ rust-argon2 = "2.1.0"
 bitcoin = { version = "0.32.5", features = ["serde", "base64"] }
 electrum-client = { version = "0.24.1", default-features = false, features = ["proxy", "use-rustls-ring"] }
 rustls = { version = "0.23", features = ["ring", "std"], default-features = false }
-
-keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+keyring = { version = "3.6.3", features = ["windows-native", "sync-secret-service"] }
 zeroize = "1.8.2"
 secrecy = "0.10.3"
 

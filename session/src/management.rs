@@ -15,7 +15,9 @@ use std::{
 use storage::LocalStorage;
 use zeroize::Zeroize;
 
-use crate::keychain_store::{retrieve_key_from_secure_enclave, store_key_in_secure_enclave};
+use crate::keychain_store::{
+    delete_key_from_secure_enclave, retrieve_key_from_secure_enclave, store_key_in_secure_enclave,
+};
 
 #[async_trait]
 pub trait SessionManagement {
@@ -159,6 +161,8 @@ impl<'a> SessionManagement for SessionManager<'a> {
     }
 
     async fn clear_session(&self) -> Result<(), SessionErrors> {
-        todo!()
+        let wallet_key = self.wallet_key_hex();
+
+        delete_key_from_secure_enclave(&wallet_key).await
     }
 }

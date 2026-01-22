@@ -1306,6 +1306,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rpc",
+ "secrecy",
  "serde",
  "serde_json",
  "session",
@@ -1870,16 +1871,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
 dependencies = [
  "unicode-segmentation",
-]
-
-[[package]]
-name = "core-foundation"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
-dependencies = [
- "core-foundation-sys",
- "libc",
 ]
 
 [[package]]
@@ -3423,8 +3414,6 @@ dependencies = [
  "byteorder",
  "dbus-secret-service",
  "log",
- "security-framework 2.11.1",
- "security-framework 3.5.1",
  "windows-sys 0.60.2",
  "zeroize",
 ]
@@ -5013,7 +5002,7 @@ dependencies = [
  "openssl-probe",
  "rustls-pki-types",
  "schannel",
- "security-framework 3.5.1",
+ "security-framework",
 ]
 
 [[package]]
@@ -5205,25 +5194,12 @@ dependencies = [
 
 [[package]]
 name = "security-framework"
-version = "2.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "897b2245f0b511c87893af39b033e5ca9cce68824c4d7e7630b5a1d339658d02"
-dependencies = [
- "bitflags 2.10.0",
- "core-foundation 0.9.4",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
-]
-
-[[package]]
-name = "security-framework"
 version = "3.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3297343eaf830f66ede390ea39da1d462b6b0c1b000f420d0a83f898bbbe6ef"
 dependencies = [
  "bitflags 2.10.0",
- "core-foundation 0.10.1",
+ "core-foundation",
  "core-foundation-sys",
  "libc",
  "security-framework-sys",
@@ -5366,7 +5342,7 @@ dependencies = [
  "async-trait",
  "cipher 0.1.0",
  "config",
- "core-foundation 0.10.1",
+ "core-foundation",
  "errors",
  "hex",
  "jni",
@@ -5376,7 +5352,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rust-argon2",
  "secrecy",
- "security-framework 3.5.1",
+ "security-framework",
  "security-framework-sys",
  "storage",
  "tokio",
