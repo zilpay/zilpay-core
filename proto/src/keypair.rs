@@ -7,6 +7,7 @@ use alloy::{
 use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use crypto::{bip49::DerivationPath, schnorr, slip44};
 use k256::SecretKey as K256SecretKey;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{
     address::Address,
@@ -40,6 +41,27 @@ pub enum KeyPair {
         ),
     ),
 }
+
+impl Zeroize for KeyPair {
+    fn zeroize(&mut self) {
+        match self {
+            KeyPair::Secp256k1Sha256((pk, sk)) => {
+                pk.zeroize();
+                sk.zeroize();
+            }
+            KeyPair::Secp256k1Keccak256((pk, sk)) => {
+                pk.zeroize();
+                sk.zeroize();
+            }
+            KeyPair::Secp256k1Bitcoin((pk, sk, _, _)) => {
+                pk.zeroize();
+                sk.zeroize();
+            }
+        }
+    }
+}
+
+impl ZeroizeOnDrop for KeyPair {}
 
 impl KeyPair {
     pub fn gen_sha256() -> Result<Self> {

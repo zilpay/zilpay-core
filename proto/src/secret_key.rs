@@ -1,6 +1,7 @@
 use config::key::SECRET_KEY_SIZE;
 use errors::keypair::SecretKeyError;
 use std::str::FromStr;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::btc_utils::ByteCodec;
 
@@ -18,6 +19,18 @@ pub enum SecretKey {
         ),
     ),
 }
+
+impl Zeroize for SecretKey {
+    fn zeroize(&mut self) {
+        match self {
+            SecretKey::Secp256k1Sha256Zilliqa(key) => key.zeroize(),
+            SecretKey::Secp256k1Keccak256Ethereum(key) => key.zeroize(),
+            SecretKey::Secp256k1Bitcoin((key, _, _)) => key.zeroize(),
+        }
+    }
+}
+
+impl ZeroizeOnDrop for SecretKey {}
 
 impl SecretKey {
     pub fn from_wif(wif: &str, addr_type: bitcoin::AddressType) -> Result<Self> {

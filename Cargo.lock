@@ -1741,6 +1741,7 @@ dependencies = [
  "serde",
  "sha2",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -4454,6 +4455,7 @@ dependencies = [
  "sha2",
  "test_data",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

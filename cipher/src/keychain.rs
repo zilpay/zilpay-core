@@ -19,6 +19,7 @@ use ntrulp::{
 };
 use safe_pqc_kyber::Keypair as CyberKeypair;
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const KEYCHAIN_BYTES_SIZE: usize = PUBLICKEYS_BYTES + SECRETKEYS_BYTES + AES_GCM_KEY_SIZE;
 
@@ -28,6 +29,20 @@ pub struct KeyChain {
     pub kuznechik: KuznechikKey,
     pub cyber: CyberKeypair,
 }
+
+impl Zeroize for KeyChain {
+    fn zeroize(&mut self) {
+        self.aes_key.zeroize();
+        self.kuznechik.zeroize();
+
+        let mut pk_bytes = self.ntrup_keys.0.to_bytes();
+        let mut sk_bytes = self.ntrup_keys.1.to_bytes();
+        pk_bytes.zeroize();
+        sk_bytes.zeroize();
+    }
+}
+
+impl ZeroizeOnDrop for KeyChain {}
 
 fn derive_key_from_seed(seed: &[u8], idx: u8) -> [u8; SHA256_SIZE] {
     let mut hasher = Sha256::new();

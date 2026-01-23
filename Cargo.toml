@@ -77,7 +77,7 @@ bitcoin = { version = "0.32.5", features = ["serde", "base64"] }
 electrum-client = { version = "0.24.1", default-features = false, features = ["proxy", "use-rustls-ring"] }
 rustls = { version = "0.23", features = ["ring", "std"], default-features = false }
 keyring = { version = "3.6.3", features = ["windows-native", "sync-secret-service"] }
-zeroize = "1.8.2"
+zeroize = { version = "1.8.2", features = ["derive"] }
 secrecy = "0.10.3"
 
 [dev-dependencies]
