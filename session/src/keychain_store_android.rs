@@ -337,8 +337,9 @@ pub extern "system" fn Java_biometric_RustBiometricCallback_nativeOnSuccess(
         Err(_) => return,
     };
 
-    let sender =
-        unsafe { Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<SecretSlice<u8>, String>>) };
+    let sender = unsafe {
+        Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<SecretSlice<u8>, String>>)
+    };
     let _ = sender.send(Ok(SecretSlice::new(data_vec.into())));
 }
 
@@ -355,8 +356,9 @@ pub extern "system" fn Java_biometric_RustBiometricCallback_nativeOnError(
         Err(_) => "Unknown error".to_string(),
     };
 
-    let sender =
-        unsafe { Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<SecretSlice<u8>, String>>) };
+    let sender = unsafe {
+        Box::from_raw(callback_ptr as *mut oneshot::Sender<Result<SecretSlice<u8>, String>>)
+    };
     let _ = sender.send(Err(error_msg));
 }
 

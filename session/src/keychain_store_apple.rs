@@ -1,6 +1,7 @@
 use config::session::KEYCHAIN_SERVICE;
 use core_foundation::base::TCFType;
 use errors::{keychain::KeyChainErrors, session::SessionErrors};
+use objc2_local_authentication::{LABiometryType, LAContext, LAPolicy};
 use secrecy::{ExposeSecret, SecretSlice};
 use security_framework::{
     access_control::SecAccessControl,
@@ -106,4 +107,39 @@ pub async fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), Sess
             e
         )))
     })?
+}
+
+pub fn device_biometric_type() -> Result<String, SessionErrors> {
+    unsafe {
+        let context = LAContext::new();
+        let mut methods = Vec::new();
+
+        let can_use_biometrics = context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthenticationWithBiometrics);
+        let can_use_device_auth = context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthentication);
+
+        if can_use_biometrics.is_ok() {
+            let biometry_type = context.biometryType();
+            let biometric_name = match biometry_type {
+                LABiometryType::TouchID => "TouchID",
+                LABiometryType::FaceID => "FaceID",
+                LABiometryType::OpticID => "OpticID",
+                _ => "",
+            };
+            if !biometric_name.is_empty() {
+                methods.push(biometric_name);
+            }
+        }
+
+        if can_use_device_auth.is_ok() || can_use_biometrics.is_err() {
+            if !methods.contains(&"Password") {
+                methods.push("Password");
+            }
+        }
+
+        if methods.is_empty() {
+            methods.push("None");
+        }
+
+        Ok(methods.join(","))
+    }
 }

@@ -98,6 +98,10 @@ mod default_keyring {
             )))
         })?
     }
+
+    pub fn device_biometric_type() -> Result<String, SessionErrors> {
+        Ok("None".to_string())
+    }
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
