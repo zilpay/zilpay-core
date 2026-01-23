@@ -1,5 +1,6 @@
 pub use pqbip39::mnemonic::Mnemonic;
 
+use config::session::AuthMethod;
 use crypto::bip49::DerivationPath;
 use errors::background::BackgroundError;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
@@ -7,7 +8,7 @@ use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
 use token::ft::FToken;
-use wallet::{wallet_data::AuthMethod, Wallet};
+use wallet::Wallet;
 
 pub type Result<T> = std::result::Result<T, BackgroundError>;
 

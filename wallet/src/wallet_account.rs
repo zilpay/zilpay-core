@@ -138,14 +138,14 @@ impl AccountManagement for Wallet {
 #[cfg(test)]
 mod tests {
     use crate::{
-        wallet_account::AccountManagement, wallet_data::AuthMethod, wallet_init::WalletInit,
+        wallet_account::AccountManagement, wallet_init::WalletInit,
         wallet_storage::StorageOperations, Bip39Params, Wallet, WalletConfig,
     };
     use cipher::{
         argon2::{derive_key, ARGON2_DEFAULT_CONFIG},
         keychain::KeyChain,
     };
-    use config::{bip39::EN_WORDS, cipher::PROOF_SIZE};
+    use config::{bip39::EN_WORDS, cipher::PROOF_SIZE, session::AuthMethod};
     use crypto::{bip49::DerivationPath, slip44};
     use errors::wallet::WalletErrors;
     use pqbip39::mnemonic::Mnemonic;

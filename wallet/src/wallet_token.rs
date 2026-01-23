@@ -63,6 +63,7 @@ mod tests_wallet_tokens {
     use config::{
         address::ADDR_LEN,
         cipher::{PROOF_SALT, PROOF_SIZE},
+        session::AuthMethod,
     };
     use errors::wallet::WalletErrors;
     use proto::{address::Address, keypair::KeyPair};
@@ -74,7 +75,7 @@ mod tests_wallet_tokens {
     use token::ft::FToken;
 
     use crate::{
-        wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
+        wallet_init::WalletInit, wallet_security::WalletSecurity,
         wallet_storage::StorageOperations, wallet_token::TokenManagement, SecretKeyParams, Wallet,
         WalletConfig,
     };

@@ -12,6 +12,7 @@ use cipher::{
 use config::{
     bip39::EN_WORDS,
     cipher::{PROOF_SALT, PROOF_SIZE},
+    session::AuthMethod,
     sha::SHA256_SIZE,
     storage::{GLOBAL_SETTINGS_DB_KEY_V1, INDICATORS_DB_KEY_V1},
 };
@@ -26,7 +27,7 @@ use token::ft::FToken;
 use wallet::{
     account_type::AccountType,
     wallet_crypto::WalletCrypto,
-    wallet_data::{AuthMethod, WalletData},
+    wallet_data::WalletData,
     wallet_init::WalletInit,
     wallet_storage::StorageOperations,
     wallet_types::WalletTypes,

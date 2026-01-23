@@ -181,11 +181,8 @@ impl StorageOperations for Wallet {
 #[cfg(test)]
 mod tests_wallet_storage {
     use super::*;
-    use crate::{
-        wallet_data::{AuthMethod, WalletData},
-        wallet_types::WalletTypes,
-    };
-    use config::sha::SHA256_SIZE;
+    use crate::{wallet_data::WalletData, wallet_types::WalletTypes};
+    use config::{session::AuthMethod, sha::SHA256_SIZE};
     use settings::wallet_settings::WalletSettings;
     use std::sync::Arc;
     use storage::LocalStorage;

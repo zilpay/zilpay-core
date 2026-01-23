@@ -30,6 +30,7 @@ pub struct SessionManager<'a> {
     storage: Arc<LocalStorage>,
     ttl: Duration,
     wallet_key: &'a [u8; SHA256_SIZE],
+    cipher_orders: &'a [CipherOrders],
 }
 
 impl<'a> SessionManager<'a> {
@@ -37,11 +38,13 @@ impl<'a> SessionManager<'a> {
         storage: Arc<LocalStorage>,
         ttl_secs: u64,
         wallet_key: &'a [u8; SHA256_SIZE],
+        cipher_orders: &'a [CipherOrders],
     ) -> Self {
         Self {
             storage,
             ttl: Duration::from_secs(ttl_secs),
             wallet_key: wallet_key,
+            cipher_orders,
         }
     }
 
@@ -51,14 +54,6 @@ impl<'a> SessionManager<'a> {
 
     fn storage_key(&self, wallet_key: &str) -> String {
         format!("session_{}", wallet_key)
-    }
-
-    fn cipher_orders() -> [CipherOrders; 3] {
-        [
-            CipherOrders::AESGCM256,
-            CipherOrders::KUZNECHIK,
-            CipherOrders::NTRUP1277,
-        ]
     }
 
     fn generate_random_key() -> [u8; SHA512_SIZE] {
@@ -110,10 +105,9 @@ impl<'a> SessionManagement for SessionManager<'a> {
         let wallet_key = self.wallet_key_hex();
         let mut random_key = Self::generate_random_key();
 
-        let keychain = KeyChain::from_seed(&random_key).map_err(SessionErrors::KeychainError)?;
-        let cipher_orders = Self::cipher_orders();
+        let keychain = KeyChain::from_seed(&random_key)?;
         let encrypted_words = keychain
-            .encrypt(words_bytes.expose_secret().to_vec(), &cipher_orders)
+            .encrypt(words_bytes.expose_secret().to_vec(), &self.cipher_orders)
             .map_err(SessionErrors::KeychainError)?;
 
         let timestamp = Self::current_timestamp()?;
@@ -122,8 +116,7 @@ impl<'a> SessionManagement for SessionManager<'a> {
 
         let storage_key = self.storage_key(&wallet_key);
         self.storage
-            .set(storage_key.as_bytes(), storage_value.as_bytes())
-            .map_err(SessionErrors::StorageError)?;
+            .set(storage_key.as_bytes(), storage_value.as_bytes())?;
 
         let random_key_secret = SecretSlice::new(random_key.to_vec().into());
         store_key_in_secure_enclave(random_key_secret, &wallet_key).await?;
@@ -153,9 +146,7 @@ impl<'a> SessionManagement for SessionManager<'a> {
         };
 
         let keychain = KeyChain::from_seed(&retrieved_key.into())?;
-
-        let cipher_orders = Self::cipher_orders();
-        let data = keychain.decrypt(encrypted_words, &cipher_orders)?;
+        let data = keychain.decrypt(encrypted_words, &self.cipher_orders)?;
 
         Ok(data.into())
     }

@@ -114,13 +114,15 @@ pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
         let context = LAContext::new();
         let mut methods = Vec::new();
 
-        let can_use_biometrics = context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthenticationWithBiometrics);
-        let can_use_device_auth = context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthentication);
+        let can_use_biometrics =
+            context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthenticationWithBiometrics);
+        let can_use_device_auth =
+            context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthentication);
 
         if can_use_biometrics.is_ok() {
             let method = match context.biometryType() {
                 LABiometryType::TouchID => Some(AuthMethod::TouchID),
-                LABiometryType::FaceID => Some(AuthMethod::FaceID),
+                LABiometryType::FaceID => Some(AuthMethod::FaceId),
                 LABiometryType::OpticID => Some(AuthMethod::OpticID),
                 _ => None,
             };
@@ -129,7 +131,10 @@ pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
             }
         }
 
-        if can_use_device_auth.is_ok() && can_use_biometrics.is_err() && !methods.contains(&AuthMethod::Password) {
+        if can_use_device_auth.is_ok()
+            && can_use_biometrics.is_err()
+            && !methods.contains(&AuthMethod::Password)
+        {
             methods.push(AuthMethod::Password);
         }
 

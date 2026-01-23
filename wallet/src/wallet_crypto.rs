@@ -182,12 +182,9 @@ impl WalletCrypto for Wallet {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        wallet_data::AuthMethod, wallet_init::WalletInit, Bip39Params, SecretKeyParams, Wallet,
-        WalletConfig,
-    };
+    use crate::{wallet_init::WalletInit, Bip39Params, SecretKeyParams, Wallet, WalletConfig};
     use cipher::argon2::{derive_key, ARGON2_DEFAULT_CONFIG};
-    use config::{argon::KEY_SIZE, cipher::PROOF_SIZE};
+    use config::{argon::KEY_SIZE, cipher::PROOF_SIZE, session::AuthMethod};
     use crypto::{bip49::DerivationPath, slip44};
     use rand::Rng;
     use rpc::network_config::ChainConfig;

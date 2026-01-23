@@ -42,9 +42,6 @@ pub enum WalletErrors {
     #[error("Try encrypt secret key error")]
     TryEncryptSecretKeyError,
 
-    #[error("Keychain failed to get proof")]
-    KeyChainFailToGetProof,
-
     #[error("Invalid signature verify")]
     InvalidVerifySig,
 

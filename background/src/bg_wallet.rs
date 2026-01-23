@@ -7,6 +7,7 @@ use cipher::{argon2, keychain::KeyChain};
 use config::{
     bip39::EN_WORDS,
     cipher::{PROOF_SALT, PROOF_SIZE},
+    session::AuthMethod,
     sha::SHA512_SIZE,
 };
 use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
@@ -16,9 +17,8 @@ use session::{decrypt_session, encrypt_session};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
-    wallet_data::AuthMethod, wallet_init::WalletInit, wallet_security::WalletSecurity,
-    wallet_storage::StorageOperations, Bip39Params, LedgerParams, SecretKeyParams, Wallet,
-    WalletConfig,
+    wallet_init::WalletInit, wallet_security::WalletSecurity, wallet_storage::StorageOperations,
+    Bip39Params, LedgerParams, SecretKeyParams, Wallet, WalletConfig,
 };
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
@@ -96,6 +96,7 @@ impl WalletManagement for Background {
 
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let mut data = wallet.get_wallet_data()?;
+
         let session = if new_biometric_type != AuthMethod::None {
             let wallet_device_indicators =
                 create_wallet_device_indicator(&wallet.wallet_address, device_indicators);

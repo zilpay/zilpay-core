@@ -3,6 +3,7 @@ use std::sync::Arc;
 use cipher::argon2::{derive_key, Argon2Seed};
 use config::argon::KEY_SIZE;
 use config::cipher::{PROOF_SALT, PROOF_SIZE};
+use config::session::AuthMethod;
 use proto::pubkey::PubKey;
 
 use cipher::keychain::KeyChain;
@@ -14,7 +15,6 @@ use proto::secret_key::SecretKey;
 use rpc::network_config::ChainConfig;
 use settings::wallet_settings::WalletSettings;
 use storage::LocalStorage;
-use wallet_data::AuthMethod;
 use wallet_storage::StorageOperations;
 
 pub type WalletAddrType = [u8; SHA256_SIZE];
@@ -86,11 +86,7 @@ impl Wallet {
             .storage
             .get(&proof_key)
             .map_err(WalletErrors::FailToGetProofFromStorage)?;
-
-        let origin_proof = keychain
-            .get_proof(&cipher_proof, &data.settings.cipher_orders)
-            .or(Err(WalletErrors::KeyChainFailToGetProof))?;
-
+        let origin_proof = keychain.get_proof(&cipher_proof, &data.settings.cipher_orders)?;
         let argon2_config = data.settings.argon_params.into_config();
         let proof = derive_key(&seed_bytes[..PROOF_SIZE], PROOF_SALT, &argon2_config)
             .map_err(WalletErrors::ArgonCipherErrors)?;
