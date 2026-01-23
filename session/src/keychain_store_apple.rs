@@ -1,4 +1,4 @@
-use config::session::KEYCHAIN_SERVICE;
+use config::session::{AuthMethod, KEYCHAIN_SERVICE};
 use core_foundation::base::TCFType;
 use errors::{keychain::KeyChainErrors, session::SessionErrors};
 use objc2_local_authentication::{LABiometryType, LAContext, LAPolicy};
@@ -109,7 +109,7 @@ pub async fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), Sess
     })?
 }
 
-pub fn device_biometric_type() -> Result<String, SessionErrors> {
+pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
     unsafe {
         let context = LAContext::new();
         let mut methods = Vec::new();
@@ -118,28 +118,21 @@ pub fn device_biometric_type() -> Result<String, SessionErrors> {
         let can_use_device_auth = context.canEvaluatePolicy_error(LAPolicy::DeviceOwnerAuthentication);
 
         if can_use_biometrics.is_ok() {
-            let biometry_type = context.biometryType();
-            let biometric_name = match biometry_type {
-                LABiometryType::TouchID => "TouchID",
-                LABiometryType::FaceID => "FaceID",
-                LABiometryType::OpticID => "OpticID",
-                _ => "",
+            let method = match context.biometryType() {
+                LABiometryType::TouchID => Some(AuthMethod::TouchID),
+                LABiometryType::FaceID => Some(AuthMethod::FaceID),
+                LABiometryType::OpticID => Some(AuthMethod::OpticID),
+                _ => None,
             };
-            if !biometric_name.is_empty() {
-                methods.push(biometric_name);
+            if let Some(m) = method {
+                methods.push(m);
             }
         }
 
-        if can_use_device_auth.is_ok() || can_use_biometrics.is_err() {
-            if !methods.contains(&"Password") {
-                methods.push("Password");
-            }
+        if can_use_device_auth.is_ok() && can_use_biometrics.is_err() && !methods.contains(&AuthMethod::Password) {
+            methods.push(AuthMethod::Password);
         }
 
-        if methods.is_empty() {
-            methods.push("None");
-        }
-
-        Ok(methods.join(","))
+        Ok(methods)
     }
 }

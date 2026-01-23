@@ -1,4 +1,4 @@
-use config::session::PREFS_NAME;
+use config::session::{AuthMethod, PREFS_NAME};
 use errors::keychain::KeyChainErrors;
 use errors::session::SessionErrors;
 use jni::objects::{JByteArray, JObject, JString, JValue};
@@ -503,7 +503,7 @@ pub async fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), Sess
     })
 }
 
-pub fn device_biometric_type() -> Result<String, SessionErrors> {
+pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
     with_android_context(|env, context| {
         let biometric_manager = get_biometric_manager(env, context)?;
 
@@ -519,8 +519,16 @@ pub fn device_biometric_type() -> Result<String, SessionErrors> {
             .map_err(map_jni_error)?;
 
         let jstring = jni::objects::JString::from(biometric_type);
-        let type_str = env.get_string(&jstring).map_err(map_jni_error)?;
+        let type_str: String = env.get_string(&jstring).map_err(map_jni_error)?.into();
 
-        Ok(type_str.into())
+        let methods = match type_str.as_str() {
+            "BIOMETRIC_STRONG" => vec![AuthMethod::Biometric, AuthMethod::Password],
+            "BIOMETRIC_WEAK" => vec![AuthMethod::Biometric],
+            "NONE_ENROLLED" => vec![AuthMethod::Password],
+            "NO_HARDWARE" | "HARDWARE_UNAVAILABLE" | "SECURITY_UPDATE_REQUIRED" | "UNSUPPORTED" | "UNKNOWN" => vec![],
+            _ => vec![],
+        };
+
+        Ok(methods)
     })
 }

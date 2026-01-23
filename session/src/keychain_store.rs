@@ -6,7 +6,7 @@ pub use crate::keychain_store_android::*;
 
 #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
 mod default_keyring {
-    use config::session::KEYCHAIN_SERVICE;
+    use config::session::{AuthMethod, KEYCHAIN_SERVICE};
     use errors::session::SessionErrors;
     use secrecy::{ExposeSecret, SecretSlice};
     use zeroize::Zeroize;
@@ -99,8 +99,8 @@ mod default_keyring {
         })?
     }
 
-    pub fn device_biometric_type() -> Result<String, SessionErrors> {
-        Ok("None".to_string())
+    pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
+        Ok(vec![])
     }
 }
 
