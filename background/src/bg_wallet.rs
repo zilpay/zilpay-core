@@ -51,12 +51,12 @@ pub trait WalletManagement {
         params: BackgroundBip39Params<'_>,
     ) -> std::result::Result<(), Self::Error>;
 
-    fn add_ledger_wallet(
+    async fn add_ledger_wallet(
         &mut self,
         params: BackgroundLedgerParams,
         wallet_settings: WalletSettings,
         device_indicators: &[String],
-    ) -> std::result::Result<Vec<u8>, Self::Error>;
+    ) -> std::result::Result<(), Self::Error>;
 
     async fn add_sk_wallet<'a>(
         &'a mut self,
@@ -267,12 +267,12 @@ impl WalletManagement for Background {
         Ok(())
     }
 
-    fn add_ledger_wallet(
+    async fn add_ledger_wallet(
         &mut self,
         params: BackgroundLedgerParams,
         wallet_settings: WalletSettings,
         device_indicators: &[String],
-    ) -> Result<Vec<u8>> {
+    ) -> Result<()> {
         let provider = self.get_provider(params.chain_hash)?;
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -295,7 +295,6 @@ impl WalletManagement for Background {
             storage: Arc::clone(&self.storage),
             settings: wallet_settings,
         };
-        let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_ledger(
             LedgerParams {
                 pub_keys: params.pub_keys,
@@ -311,21 +310,26 @@ impl WalletManagement for Background {
             ftokens,
         )?;
         let data = wallet.get_wallet_data()?;
-        let device_indicators =
-            create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
-        let session = encrypt_session(
-            &device_indicators,
-            &argon_seed,
-            options,
-            &data.settings.argon_params.into_config(),
-        )?;
+
+        if data.biometric_type != AuthMethod::None {
+            let session = SessionManager::new(
+                Arc::clone(&self.storage),
+                0,
+                &wallet.wallet_address,
+                &data.settings.cipher_orders,
+            );
+            let secert_bytes = SecretSlice::new(argon_seed.into());
+
+            session.create_session(secert_bytes).await?;
+        }
+
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
         indicators.push(wallet.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators(indicators)?;
 
-        Ok(session)
+        Ok(())
     }
 
     async fn add_sk_wallet<'a>(&'a mut self, params: BackgroundSKParams<'_>) -> Result<()> {
