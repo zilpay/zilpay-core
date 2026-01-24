@@ -135,7 +135,7 @@ impl<'a> SessionManagement for SessionManager<'a> {
         let storage_key = self.storage_key(&wallet_key);
 
         let stored_value = self.storage.get(storage_key.as_bytes())?;
-        let (timestamp, encrypted_words) = self.parse_storage_value(&stored_value)?;
+        let (timestamp, encrypted_secret) = self.parse_storage_value(&stored_value)?;
 
         if !self.is_timestamp_valid(timestamp) {
             return Err(SessionErrors::SessionExpired);
@@ -150,7 +150,7 @@ impl<'a> SessionManagement for SessionManager<'a> {
         };
 
         let keychain = KeyChain::from_seed(&retrieved_key.into())?;
-        let data = keychain.decrypt(encrypted_words, &self.cipher_orders)?;
+        let data = keychain.decrypt(encrypted_secret, &self.cipher_orders)?;
 
         Ok(data.into())
     }

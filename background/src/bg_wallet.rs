@@ -185,6 +185,17 @@ impl WalletManagement for Background {
             .map_err(BackgroundError::DecryptSessionError)?;
 
             wallet.unlock(&seed_bytes)?;
+
+            let session = SessionManager::new(
+                Arc::clone(&self.storage),
+                0,
+                &wallet.wallet_address,
+                &data.settings.cipher_orders,
+            );
+            let secert_bytes = SecretSlice::new(seed_bytes.into());
+
+            session.create_session(secert_bytes).await?;
+
             Ok(seed_bytes)
         }
     }
