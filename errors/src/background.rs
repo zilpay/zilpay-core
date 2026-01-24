@@ -36,8 +36,8 @@ pub enum BackgroundError {
     #[error("Failed to decrypt session: {0}")]
     DecryptSessionError(SessionErrors),
 
-    #[error("Failed to create session: {0}")]
-    CreateSessionError(SessionErrors),
+    #[error("session error: {0}")]
+    SessionErrors(SessionErrors),
 
     #[error("failt to serialize address book")]
     FailToSerializeAddressBook,
@@ -72,11 +72,8 @@ pub enum BackgroundError {
     #[error("Deserialize TypedData error: {0}")]
     FailDeserializeTypedData(String),
 
-    #[error("Argon2 password hashing error: {0}")]
-    ArgonPasswordHashError(CipherErrors),
-
-    #[error("Argon2 proof creation error: {0}")]
-    ArgonCreateProofError(CipherErrors),
+    #[error("Cipger error: {0}")]
+    CipherErrors(CipherErrors),
 
     #[error("Worker error: {0}")]
     WorkerError(String),
@@ -130,6 +127,12 @@ pub enum BackgroundError {
 impl From<AddressError> for BackgroundError {
     fn from(error: AddressError) -> Self {
         BackgroundError::AddressError(error)
+    }
+}
+
+impl From<CipherErrors> for BackgroundError {
+    fn from(error: CipherErrors) -> Self {
+        BackgroundError::CipherErrors(error)
     }
 }
 
@@ -202,5 +205,11 @@ impl From<Box<ErrorKind>> for BackgroundError {
 impl From<Bip39Error> for BackgroundError {
     fn from(error: Bip39Error) -> Self {
         BackgroundError::Bip39Error(error)
+    }
+}
+
+impl From<SessionErrors> for BackgroundError {
+    fn from(error: SessionErrors) -> Self {
+        BackgroundError::SessionErrors(error)
     }
 }

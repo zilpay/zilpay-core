@@ -101,13 +101,13 @@ impl<'a> SessionManager<'a> {
 
 #[async_trait]
 impl<'a> SessionManagement for SessionManager<'a> {
-    async fn create_session(&self, words_bytes: SecretSlice<u8>) -> Result<(), SessionErrors> {
+    async fn create_session(&self, secret_bytes: SecretSlice<u8>) -> Result<(), SessionErrors> {
         let wallet_key = self.wallet_key_hex();
         let mut random_key = Self::generate_random_key();
 
         let keychain = KeyChain::from_seed(&random_key)?;
         let encrypted_words = keychain
-            .encrypt(words_bytes.expose_secret().to_vec(), &self.cipher_orders)
+            .encrypt(secret_bytes.expose_secret().to_vec(), &self.cipher_orders)
             .map_err(SessionErrors::KeychainError)?;
 
         let timestamp = Self::current_timestamp()?;

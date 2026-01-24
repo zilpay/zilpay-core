@@ -106,8 +106,7 @@ impl WalletManagement for Background {
                 &argon_seed,
                 &data.settings.cipher_orders,
                 &data.settings.argon_params.into_config(),
-            )
-            .map_err(BackgroundError::CreateSessionError)?;
+            )?;
 
             Some(gen_session)
         } else {
@@ -133,8 +132,7 @@ impl WalletManagement for Background {
             password.as_bytes(),
             &device_indicator,
             &data.settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonPasswordHashError)?;
+        )?;
 
         wallet.unlock(&argon_seed)?;
 
@@ -205,8 +203,7 @@ impl WalletManagement for Background {
             params.password.as_bytes(),
             &device_indicator,
             &params.wallet_settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonPasswordHashError)?;
+        )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
         let mnemonic = if params.mnemonic_check {
             Mnemonic::parse_str(&EN_WORDS, params.mnemonic_str)?
@@ -217,8 +214,7 @@ impl WalletManagement for Background {
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
             &params.wallet_settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonCreateProofError)?;
+        )?;
         let mut ftokens = provider.config.ftokens.clone();
         ftokens.extend_from_slice(&params.ftokens);
 
@@ -252,8 +248,7 @@ impl WalletManagement for Background {
                 &argon_seed,
                 &data.settings.cipher_orders,
                 &data.settings.argon_params.into_config(),
-            )
-            .map_err(BackgroundError::CreateSessionError)?
+            )?
         };
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
@@ -277,15 +272,13 @@ impl WalletManagement for Background {
             device_indicator.as_bytes(),
             &device_indicator,
             &wallet_settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonPasswordHashError)?;
+        )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
             &wallet_settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonCreateProofError)?;
+        )?;
 
         let mut ftokens = provider.config.ftokens.clone();
         ftokens.extend_from_slice(&params.ftokens);
@@ -318,8 +311,7 @@ impl WalletManagement for Background {
             &argon_seed,
             options,
             &data.settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::CreateSessionError)?;
+        )?;
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
         indicators.push(wallet.wallet_address);
@@ -337,15 +329,13 @@ impl WalletManagement for Background {
             params.password.as_bytes(),
             &device_indicator,
             &params.wallet_settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonPasswordHashError)?;
+        )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
         let proof = argon2::derive_key(
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
             &params.wallet_settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonCreateProofError)?;
+        )?;
         let mut ftokens = provider.config.ftokens.clone();
         ftokens.extend_from_slice(&params.ftokens);
 
@@ -378,8 +368,7 @@ impl WalletManagement for Background {
                 &argon_seed,
                 options,
                 &data.settings.argon_params.into_config(),
-            )
-            .map_err(BackgroundError::CreateSessionError)?
+            )?
         };
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 

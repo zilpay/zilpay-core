@@ -25,13 +25,9 @@ use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use token::ft::FToken;
 use wallet::{
-    account_type::AccountType,
-    wallet_crypto::WalletCrypto,
-    wallet_data::WalletData,
-    wallet_init::WalletInit,
-    wallet_storage::StorageOperations,
-    wallet_types::WalletTypes,
-    Wallet, WalletAddrType,
+    account_type::AccountType, wallet_crypto::WalletCrypto, wallet_data::WalletData,
+    wallet_init::WalletInit, wallet_storage::StorageOperations, wallet_types::WalletTypes, Wallet,
+    WalletAddrType,
 };
 
 use crate::Background;
@@ -139,8 +135,7 @@ impl StorageManagement for Background {
         device_indicators: &[String],
         biometric_type: AuthMethod,
     ) -> Result<Vec<u8>> {
-        let argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)
-            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)?;
         let mut keystore = KeyStore::from_backup(backup_cipher, &argon_seed)?;
 
         {
@@ -159,8 +154,7 @@ impl StorageManagement for Background {
             password.as_bytes(),
             &device_indicator,
             &keystore.wallet_data.settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonPasswordHashError)?;
+        )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
         let argon_params = keystore.wallet_data.settings.argon_params.clone();
         let cipher_orders = keystore.wallet_data.settings.cipher_orders.clone();
@@ -169,8 +163,7 @@ impl StorageManagement for Background {
             &argon_seed[..PROOF_SIZE],
             PROOF_SALT,
             &argon_params.into_config(),
-        )
-        .map_err(BackgroundError::ArgonCreateProofError)?;
+        )?;
         let cipher_proof = keychain.make_proof(&proof, &cipher_orders)?;
 
         keystore.wallet_data.biometric_type = biometric_type.clone();
@@ -229,8 +222,7 @@ impl StorageManagement for Background {
                 &argon_seed,
                 &cipher_orders,
                 &argon_params.into_config(),
-            )
-            .map_err(BackgroundError::CreateSessionError)?
+            )?
         };
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
@@ -274,8 +266,7 @@ impl StorageManagement for Background {
             keys,
             wallet_address: wallet.wallet_address,
         };
-        let new_argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)
-            .map_err(BackgroundError::ArgonPasswordHashError)?;
+        let new_argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)?;
 
         let keystore_bytes = bincode::serialize(&keystore)?;
         let keystore_version: u8 = 0;
