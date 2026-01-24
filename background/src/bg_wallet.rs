@@ -4,19 +4,21 @@ use crate::{
     BackgroundLedgerParams, Result,
 };
 use async_trait::async_trait;
-use cipher::{argon2, keychain::KeyChain};
+use cipher::{
+    argon2::{self, Argon2Seed},
+    keychain::KeyChain,
+};
 use config::{
     bip39::EN_WORDS,
     cipher::{PROOF_SALT, PROOF_SIZE},
     session::AuthMethod,
-    sha::SHA512_SIZE,
 };
 use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
 use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
-use secrecy::SecretSlice;
+use secrecy::{ExposeSecret, SecretSlice};
 use session::{
-    decrypt_session, encrypt_session,
+    decrypt_session,
     management::{SessionManagement, SessionManager},
 };
 use settings::wallet_settings::WalletSettings;
@@ -37,14 +39,14 @@ pub trait WalletManagement {
         password: &str,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> std::result::Result<[u8; SHA512_SIZE], Self::Error>;
+    ) -> std::result::Result<Argon2Seed, Self::Error>;
 
-    fn unlock_wallet_with_session(
+    async fn unlock_wallet_with_session(
         &self,
         session_cipher: Vec<u8>,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> std::result::Result<[u8; SHA512_SIZE], Self::Error>;
+    ) -> std::result::Result<Argon2Seed, Self::Error>;
 
     async fn add_bip39_wallet<'a>(
         &'a mut self,
@@ -71,14 +73,14 @@ pub trait WalletManagement {
 
     fn get_wallet_by_index(&self, wallet_index: usize)
         -> std::result::Result<&Wallet, Self::Error>;
-    fn set_biometric(
+    async fn set_biometric(
         &self,
         password: &str,
         mb_session_cipher: Option<Vec<u8>>,
         device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
-    ) -> std::result::Result<Option<Vec<u8>>, Self::Error>;
+    ) -> std::result::Result<(), Self::Error>;
 
     fn delete_wallet(&mut self, wallet_index: usize) -> std::result::Result<(), Self::Error>;
 }
@@ -87,16 +89,17 @@ pub trait WalletManagement {
 impl WalletManagement for Background {
     type Error = BackgroundError;
 
-    fn set_biometric(
+    async fn set_biometric(
         &self,
         password: &str,
         mb_session_cipher: Option<Vec<u8>>,
         device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
-    ) -> Result<Option<Vec<u8>>> {
+    ) -> Result<()> {
         let argon_seed = if let Some(session_cipher) = mb_session_cipher {
-            self.unlock_wallet_with_session(session_cipher, &device_indicators, wallet_index)?
+            self.unlock_wallet_with_session(session_cipher, &device_indicators, wallet_index)
+                .await?
         } else {
             self.unlock_wallet_with_password(password, &device_indicators, wallet_index)?
         };
@@ -104,26 +107,22 @@ impl WalletManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let mut data = wallet.get_wallet_data()?;
 
-        let session = if new_biometric_type != AuthMethod::None {
-            let wallet_device_indicators =
-                create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
-
-            let gen_session = encrypt_session(
-                &wallet_device_indicators,
-                &argon_seed,
+        if new_biometric_type != AuthMethod::None {
+            let session = SessionManager::new(
+                Arc::clone(&self.storage),
+                0,
+                &wallet.wallet_address,
                 &data.settings.cipher_orders,
-                &data.settings.argon_params.into_config(),
-            )?;
+            );
+            let secert_bytes = SecretSlice::new(argon_seed.into());
 
-            Some(gen_session)
-        } else {
-            None
-        };
+            session.create_session(secert_bytes).await?;
+        }
 
         data.biometric_type = new_biometric_type;
         wallet.save_wallet_data(data)?;
 
-        Ok(session)
+        Ok(())
     }
 
     fn unlock_wallet_with_password(
@@ -131,7 +130,7 @@ impl WalletManagement for Background {
         password: &str,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> Result<[u8; SHA512_SIZE]> {
+    ) -> Result<Argon2Seed> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let device_indicator = device_indicators.join(":");
@@ -146,28 +145,50 @@ impl WalletManagement for Background {
         Ok(argon_seed)
     }
 
-    fn unlock_wallet_with_session(
+    async fn unlock_wallet_with_session(
         &self,
         session_cipher: Vec<u8>,
         device_indicators: &[String],
         wallet_index: usize,
-    ) -> Result<[u8; SHA512_SIZE]> {
+    ) -> Result<Argon2Seed> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
 
-        let seed_bytes = decrypt_session(
-            &wallet_device_indicators,
-            session_cipher,
-            &data.settings.cipher_orders,
-            &data.settings.argon_params.into_config(),
-        )
-        .map_err(BackgroundError::DecryptSessionError)?;
+        if session_cipher.is_empty() {
+            let session = SessionManager::new(
+                Arc::clone(&self.storage),
+                0,
+                &wallet.wallet_address,
+                &data.settings.cipher_orders,
+            );
+            let seed_bytes: Argon2Seed = session
+                .unlock_session()
+                .await?
+                .expose_secret()
+                .to_vec()
+                .try_into()
+                .map_err(|_| {
+                    BackgroundError::SessionErrors(
+                        errors::session::SessionErrors::InvalidDecryptSession,
+                    )
+                })?;
 
-        wallet.unlock(&seed_bytes)?;
+            Ok(seed_bytes)
+        } else {
+            let wallet_device_indicators =
+                create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
 
-        Ok(seed_bytes)
+            let seed_bytes = decrypt_session(
+                &wallet_device_indicators,
+                session_cipher,
+                &data.settings.cipher_orders,
+                &data.settings.argon_params.into_config(),
+            )
+            .map_err(BackgroundError::DecryptSessionError)?;
+
+            wallet.unlock(&seed_bytes)?;
+            Ok(seed_bytes)
+        }
     }
 
     fn swap_zilliqa_chain(&self, wallet_index: usize, account_index: usize) -> Result<()> {
