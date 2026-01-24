@@ -3,6 +3,7 @@ use crate::{
     bg_storage::StorageManagement, device_indicators::create_wallet_device_indicator, Background,
     BackgroundLedgerParams, Result,
 };
+use async_trait::async_trait;
 use cipher::{argon2, keychain::KeyChain};
 use config::{
     bip39::EN_WORDS,
@@ -13,7 +14,11 @@ use config::{
 use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
 use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
-use session::{decrypt_session, encrypt_session};
+use secrecy::SecretSlice;
+use session::{
+    decrypt_session, encrypt_session,
+    management::{SessionManagement, SessionManager},
+};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
@@ -23,6 +28,7 @@ use wallet::{
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
 
+#[async_trait]
 pub trait WalletManagement {
     type Error;
 
@@ -40,10 +46,10 @@ pub trait WalletManagement {
         wallet_index: usize,
     ) -> std::result::Result<[u8; SHA512_SIZE], Self::Error>;
 
-    fn add_bip39_wallet(
-        &mut self,
-        params: BackgroundBip39Params,
-    ) -> std::result::Result<Vec<u8>, Self::Error>;
+    async fn add_bip39_wallet<'a>(
+        &'a mut self,
+        params: BackgroundBip39Params<'_>,
+    ) -> std::result::Result<(), Self::Error>;
 
     fn add_ledger_wallet(
         &mut self,
@@ -52,10 +58,10 @@ pub trait WalletManagement {
         device_indicators: &[String],
     ) -> std::result::Result<Vec<u8>, Self::Error>;
 
-    fn add_sk_wallet(
-        &mut self,
-        params: BackgroundSKParams,
-    ) -> std::result::Result<Vec<u8>, Self::Error>;
+    async fn add_sk_wallet<'a>(
+        &'a mut self,
+        params: BackgroundSKParams<'_>,
+    ) -> std::result::Result<(), Self::Error>;
 
     fn swap_zilliqa_chain(
         &self,
@@ -77,6 +83,7 @@ pub trait WalletManagement {
     fn delete_wallet(&mut self, wallet_index: usize) -> std::result::Result<(), Self::Error>;
 }
 
+#[async_trait]
 impl WalletManagement for Background {
     type Error = BackgroundError;
 
@@ -196,7 +203,7 @@ impl WalletManagement for Background {
         Ok(())
     }
 
-    fn add_bip39_wallet(&mut self, params: BackgroundBip39Params) -> Result<Vec<u8>> {
+    async fn add_bip39_wallet<'a>(&'a mut self, params: BackgroundBip39Params<'_>) -> Result<()> {
         let provider = self.get_provider(params.chain_hash)?;
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
@@ -237,19 +244,19 @@ impl WalletManagement for Background {
             ftokens,
         )?;
         let data = wallet.get_wallet_data()?;
-        let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.wallet_address, params.device_indicators);
 
-        let session = if data.biometric_type == AuthMethod::None {
-            Vec::with_capacity(0)
-        } else {
-            encrypt_session(
-                &wallet_device_indicators,
-                &argon_seed,
+        if data.biometric_type != AuthMethod::None {
+            let session = SessionManager::new(
+                Arc::clone(&self.storage),
+                0,
+                &wallet.wallet_address,
                 &data.settings.cipher_orders,
-                &data.settings.argon_params.into_config(),
-            )?
-        };
+            );
+            let secert_bytes = SecretSlice::new(argon_seed.into());
+
+            session.create_session(secert_bytes).await?;
+        }
+
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
         indicators.push(wallet.wallet_address);
@@ -257,7 +264,7 @@ impl WalletManagement for Background {
         self.save_indicators(indicators)?;
         self.storage.flush()?;
 
-        Ok(session)
+        Ok(())
     }
 
     fn add_ledger_wallet(
@@ -321,9 +328,8 @@ impl WalletManagement for Background {
         Ok(session)
     }
 
-    fn add_sk_wallet(&mut self, params: BackgroundSKParams) -> Result<Vec<u8>> {
+    async fn add_sk_wallet<'a>(&'a mut self, params: BackgroundSKParams<'_>) -> Result<()> {
         let provider = self.get_provider(params.chain_hash)?;
-        // TODO: check this device_indicators is right or not.
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             params.password.as_bytes(),
@@ -344,7 +350,6 @@ impl WalletManagement for Background {
             storage: Arc::clone(&self.storage),
             settings: params.wallet_settings,
         };
-        let options = &wallet_config.settings.cipher_orders.clone();
         let wallet = Wallet::from_sk(
             SecretKeyParams {
                 sk: params.secret_key,
@@ -358,25 +363,25 @@ impl WalletManagement for Background {
         )?;
         let data = wallet.get_wallet_data()?;
 
-        let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.wallet_address, params.device_indicators);
-        let session = if data.biometric_type == AuthMethod::None {
-            Vec::new()
-        } else {
-            encrypt_session(
-                &wallet_device_indicators,
-                &argon_seed,
-                options,
-                &data.settings.argon_params.into_config(),
-            )?
-        };
+        if data.biometric_type != AuthMethod::None {
+            let session = SessionManager::new(
+                Arc::clone(&self.storage),
+                0,
+                &wallet.wallet_address,
+                &data.settings.cipher_orders,
+            );
+            let secert_bytes = SecretSlice::new(argon_seed.into());
+
+            session.create_session(secert_bytes).await?;
+        }
+
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
         indicators.push(wallet.wallet_address);
         self.wallets.push(wallet);
         self.save_indicators(indicators)?;
 
-        Ok(session)
+        Ok(())
     }
 
     fn get_wallet_by_index(&self, wallet_index: usize) -> Result<&Wallet> {
@@ -439,8 +444,8 @@ mod tests_background {
         }
     }
 
-    #[test]
-    fn test_add_more_wallets_bip39() {
+    #[tokio::test]
+    async fn test_add_more_wallets_bip39() {
         let (mut bg, dir) = setup_test_background();
 
         assert_eq!(bg.wallets.len(), 0);
@@ -467,6 +472,7 @@ mod tests_background {
             device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
@@ -500,6 +506,7 @@ mod tests_background {
             biometric_type: Default::default(),
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         drop(bg);
@@ -509,8 +516,8 @@ mod tests_background {
         assert_eq!(bg.wallets.len(), 2);
     }
 
-    #[test]
-    fn test_delete_wallet() {
+    #[tokio::test]
+    async fn test_delete_wallet() {
         let (mut bg, dir) = setup_test_background();
 
         let password = "test_password";
@@ -536,6 +543,7 @@ mod tests_background {
             device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         bg.add_sk_wallet(BackgroundSKParams {
@@ -548,6 +556,7 @@ mod tests_background {
             device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         assert_eq!(bg.wallets.len(), 2);
@@ -563,8 +572,8 @@ mod tests_background {
         assert_eq!(bg.wallets.len(), 1);
     }
 
-    #[test]
-    fn test_generate_zilliqa_legacy_accounts() {
+    #[tokio::test]
+    async fn test_generate_zilliqa_legacy_accounts() {
         let (mut bg, _dir) = setup_test_background();
         let net_conf = create_test_net_conf();
         let password = "test_password";
@@ -590,6 +599,7 @@ mod tests_background {
             device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
@@ -656,8 +666,8 @@ mod tests_background {
         }
     }
 
-    #[test]
-    fn test_add_bitcoin_sk_wallet() {
+    #[tokio::test]
+    async fn test_add_bitcoin_sk_wallet() {
         use test_data::{gen_btc_testnet_conf, gen_device_indicators, TEST_PASSWORD};
 
         let (mut bg, _dir) = setup_test_background();
@@ -668,21 +678,20 @@ mod tests_background {
 
         bg.add_provider(btc_conf.clone()).unwrap();
 
-        let session = bg
-            .add_sk_wallet(BackgroundSKParams {
-                secret_key: keypair.get_secretkey().unwrap(),
-                password: TEST_PASSWORD,
-                chain_hash: btc_conf.hash(),
-                wallet_settings: Default::default(),
-                wallet_name: "Bitcoin Wallet".to_string(),
-                biometric_type: Default::default(),
-                device_indicators: &device_indicators,
-                ftokens: vec![],
-            })
-            .unwrap();
+        bg.add_sk_wallet(BackgroundSKParams {
+            secret_key: keypair.get_secretkey().unwrap(),
+            password: TEST_PASSWORD,
+            chain_hash: btc_conf.hash(),
+            wallet_settings: Default::default(),
+            wallet_name: "Bitcoin Wallet".to_string(),
+            biometric_type: Default::default(),
+            device_indicators: &device_indicators,
+            ftokens: vec![],
+        })
+        .await
+        .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
-        assert_eq!(session.len(), 0);
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();

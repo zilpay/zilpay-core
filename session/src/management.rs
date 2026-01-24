@@ -21,7 +21,7 @@ use crate::keychain_store::{
 
 #[async_trait]
 pub trait SessionManagement {
-    async fn create_session(&self, words_bytes: SecretSlice<u8>) -> Result<(), SessionErrors>;
+    async fn create_session(&self, secret_bytes: SecretSlice<u8>) -> Result<(), SessionErrors>;
     async fn unlock_session(&self) -> Result<SecretSlice<u8>, SessionErrors>;
     async fn clear_session(&self) -> Result<(), SessionErrors>;
 }

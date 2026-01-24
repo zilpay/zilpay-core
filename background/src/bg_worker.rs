@@ -260,6 +260,7 @@ mod tests_background_worker {
             device_indicators: &device_indicators,
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
+        .await
         .unwrap();
 
         let (tx, mut rx) = mpsc::channel(10);
@@ -306,6 +307,7 @@ mod tests_background_worker {
             device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
+        .await
         .unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
@@ -441,6 +443,7 @@ mod tests_background_worker {
             device_indicators: &device_indicators,
             ftokens: vec![gen_zilliqa_mainnet_token(net_config.hash())],
         })
+        .await
         .unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();

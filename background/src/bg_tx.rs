@@ -690,6 +690,7 @@ mod tests_background_transactions {
             device_indicators: &device_indicators,
             ftokens: vec![FToken::zil(zil_config.hash())],
         })
+        .await
         .unwrap();
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
@@ -760,6 +761,7 @@ mod tests_background_transactions {
             device_indicators: &device_indicators,
             ftokens: vec![gen_anvil_token()],
         })
+        .await
         .unwrap();
 
         let providers = bg.get_providers();
@@ -850,6 +852,7 @@ mod tests_background_transactions {
             device_indicators: &device_indicators,
             ftokens: vec![gen_anvil_token()],
         })
+        .await
         .unwrap();
 
         let providers = bg.get_providers();
@@ -987,6 +990,7 @@ mod tests_background_transactions {
             device_indicators: &device_indicators,
             ftokens: vec![FToken::zil(net_config.hash())],
         })
+        .await
         .unwrap();
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
@@ -1047,6 +1051,7 @@ mod tests_background_transactions {
             device_indicators: &device_indicators,
             ftokens: vec![gen_zil_token()],
         })
+        .await
         .unwrap();
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
@@ -1108,6 +1113,7 @@ mod tests_background_transactions {
             device_indicators: &device_indicators,
             ftokens: vec![test_data::gen_btc_token()],
         })
+        .await
         .unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();

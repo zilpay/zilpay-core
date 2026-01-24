@@ -1,9 +1,7 @@
-use crate::{
-    bg_provider::ProvidersManagement, bg_wallet::WalletManagement,
-    device_indicators::create_wallet_device_indicator, Result,
-};
+use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Result};
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use cipher::{
     argon2::{self, Argon2Seed, ARGON2_DEFAULT_CONFIG},
     keychain::KeyChain,
@@ -19,8 +17,9 @@ use config::{
 use errors::background::BackgroundError;
 use pqbip39::mnemonic::Mnemonic;
 use rpc::network_config::ChainConfig;
+use secrecy::SecretSlice;
 use serde::{Deserialize, Serialize};
-use session::encrypt_session;
+use session::management::{SessionManagement, SessionManager};
 use settings::common_settings::CommonSettings;
 use storage::LocalStorage;
 use token::ft::FToken;
@@ -97,6 +96,7 @@ impl KeyStore {
     }
 }
 
+#[async_trait]
 pub trait StorageManagement {
     type Error;
 
@@ -116,25 +116,26 @@ pub trait StorageManagement {
         password: &str,
         device_indicators: &[String],
     ) -> std::result::Result<Vec<u8>, Self::Error>;
-    fn load_keystore(
+    async fn load_keystore(
         &mut self,
         backup_cipher: Vec<u8>,
         password: &str,
         device_indicators: &[String],
         biometric_type: AuthMethod,
-    ) -> std::result::Result<Vec<u8>, Self::Error>;
+    ) -> std::result::Result<(), Self::Error>;
 }
 
+#[async_trait]
 impl StorageManagement for Background {
     type Error = BackgroundError;
 
-    fn load_keystore(
+    async fn load_keystore(
         &mut self,
         backup_cipher: Vec<u8>,
         password: &str,
         device_indicators: &[String],
         biometric_type: AuthMethod,
-    ) -> Result<Vec<u8>> {
+    ) -> Result<()> {
         let argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)?;
         let mut keystore = KeyStore::from_backup(backup_cipher, &argon_seed)?;
 
@@ -208,22 +209,20 @@ impl StorageManagement for Background {
         let wallet_address: [u8; SHA256_SIZE] = Wallet::wallet_key_gen();
         let wallet = Wallet::from(Arc::clone(&self.storage), wallet_address);
 
+        if keystore.wallet_data.biometric_type != AuthMethod::None {
+            let session = SessionManager::new(
+                Arc::clone(&self.storage),
+                0,
+                &wallet.wallet_address,
+                &keystore.wallet_data.settings.cipher_orders,
+            );
+            let secert_bytes = SecretSlice::new(argon_seed.into());
+
+            session.create_session(secert_bytes).await?;
+        }
+
         wallet.save_wallet_data(keystore.wallet_data)?;
         wallet.save_ftokens(&keystore.ftokens)?;
-
-        let wallet_device_indicators =
-            create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
-
-        let session = if biometric_type == AuthMethod::None {
-            Vec::with_capacity(0)
-        } else {
-            encrypt_session(
-                &wallet_device_indicators,
-                &argon_seed,
-                &cipher_orders,
-                &argon_params.into_config(),
-            )?
-        };
         let mut indicators = Self::get_indicators(Arc::clone(&self.storage));
 
         indicators.push(wallet.wallet_address);
@@ -231,7 +230,7 @@ impl StorageManagement for Background {
         self.save_indicators(indicators)?;
         self.storage.flush()?;
 
-        Ok(session)
+        Ok(())
     }
 
     fn get_keystore(
@@ -389,8 +388,8 @@ mod tests_background {
         }
     }
 
-    #[test]
-    fn test_store_and_load_from_storage() {
+    #[tokio::test]
+    async fn test_store_and_load_from_storage() {
         let (mut bg, dir) = setup_test_background();
 
         assert_eq!(bg.wallets.len(), 0);
@@ -417,6 +416,7 @@ mod tests_background {
             device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         assert_eq!(bg.wallets.len(), 1);
@@ -430,8 +430,8 @@ mod tests_background {
         assert_eq!(bg.wallets.first().unwrap().wallet_address, wallet_address);
     }
 
-    #[test]
-    fn test_multiple_wallets() {
+    #[tokio::test]
+    async fn test_multiple_wallets() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
 
@@ -456,6 +456,7 @@ mod tests_background {
             device_indicators: &[String::from("apple"), String::from("0001")],
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         // Add second wallet
@@ -478,14 +479,15 @@ mod tests_background {
             device_indicators: &[String::from("apple"), String::from("0002")],
             ftokens: vec![],
         })
+        .await
         .unwrap();
 
         assert_eq!(bg.wallets.len(), 2);
         assert_ne!(bg.wallets[0].wallet_address, bg.wallets[1].wallet_address);
     }
 
-    #[test]
-    fn test_keystore_bip39() {
+    #[tokio::test]
+    async fn test_keystore_bip39() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
         const PASSWORD: &str = "shit password";
@@ -511,6 +513,7 @@ mod tests_background {
             device_indicators: &[],
             ftokens: vec![],
         })
+        .await
         .unwrap();
         let keystore_bytes = bg.get_keystore(0, PASSWORD, &[]).unwrap();
         let argon_seed =
@@ -525,8 +528,8 @@ mod tests_background {
         assert_eq!(keystore.wallet_data, wallet_data);
     }
 
-    #[test]
-    fn test_keystore_key() {
+    #[tokio::test]
+    async fn test_keystore_key() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
         const PASSWORD: &str = "shit password";
@@ -546,6 +549,7 @@ mod tests_background {
             chain_hash: net_conf.hash(),
             ftokens: net_conf.ftokens.clone(),
         })
+        .await
         .unwrap();
 
         let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
@@ -564,8 +568,8 @@ mod tests_background {
         assert_eq!(keystore.wallet_data, wallet_data);
     }
 
-    #[test]
-    fn test_load_from_keystore_bip39() {
+    #[tokio::test]
+    async fn test_load_from_keystore_bip39() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
         const PASSWORD: &str = "shit password";
@@ -585,33 +589,33 @@ mod tests_background {
         ];
         let device_indicators = vec!["test indicator".to_string()];
 
-        let session0 = bg
-            .add_bip39_wallet(BackgroundBip39Params {
-                password: PASSWORD,
-                chain_hash: net_conf.hash(),
-                mnemonic_str: &words1,
-                mnemonic_check: true,
-                accounts: &accounts1,
-                wallet_settings: Default::default(),
-                passphrase: "",
-                wallet_name: String::from("shit walelt"),
-                biometric_type: AuthMethod::FaceId,
-                device_indicators: &device_indicators,
-                ftokens: vec![],
-            })
-            .unwrap();
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: PASSWORD,
+            chain_hash: net_conf.hash(),
+            mnemonic_str: &words1,
+            mnemonic_check: true,
+            accounts: &accounts1,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::from("shit walelt"),
+            biometric_type: AuthMethod::None,
+            device_indicators: &device_indicators,
+            ftokens: vec![],
+        })
+        .await
+        .unwrap();
 
         let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
         let new_device_indicators = vec!["test new device indicator".to_string()];
 
-        let session1 = bg
-            .load_keystore(
-                keystore_bytes,
-                PASSWORD,
-                &new_device_indicators,
-                AuthMethod::Fingerprint,
-            )
-            .unwrap();
+        bg.load_keystore(
+            keystore_bytes,
+            PASSWORD,
+            &new_device_indicators,
+            AuthMethod::None,
+        )
+        .await
+        .unwrap();
 
         let wallet0 = bg.get_wallet_by_index(0).unwrap();
         let restored_wallet_data0 = wallet0.get_wallet_data().unwrap();
@@ -643,24 +647,17 @@ mod tests_background {
             restored_wallet_data0.selected_account,
             restored_wallet_data1.selected_account
         );
-        assert_eq!(restored_wallet_data0.biometric_type, AuthMethod::FaceId);
-        assert_eq!(
-            restored_wallet_data1.biometric_type,
-            AuthMethod::Fingerprint
-        );
+        assert_eq!(restored_wallet_data0.biometric_type, AuthMethod::None);
+        assert_eq!(restored_wallet_data1.biometric_type, AuthMethod::None);
         assert_eq!(
             restored_wallet_data0.default_chain_hash,
             restored_wallet_data1.default_chain_hash
         );
 
-        bg.unlock_wallet_with_session(session0, &device_indicators, 0)
-            .unwrap();
         let seed_bytes0 = bg
             .unlock_wallet_with_password(PASSWORD, &device_indicators, 0)
             .unwrap();
 
-        bg.unlock_wallet_with_session(session1, &new_device_indicators, 1)
-            .unwrap();
         let seed_bytes1 = bg
             .unlock_wallet_with_password(PASSWORD, &new_device_indicators, 1)
             .unwrap();
@@ -671,8 +668,8 @@ mod tests_background {
         assert_eq!(words1, words0);
     }
 
-    #[test]
-    fn test_load_from_keystore_keypair() {
+    #[tokio::test]
+    async fn test_load_from_keystore_keypair() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
         const PASSWORD: &str = "shit password";
@@ -692,21 +689,20 @@ mod tests_background {
             chain_hash: net_conf.hash(),
             ftokens: net_conf.ftokens.clone(),
         })
+        .await
         .unwrap();
 
         let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
         let new_device_indicators = vec!["test new device indicator".to_string()];
 
-        let session1 = bg
-            .load_keystore(
-                keystore_bytes,
-                PASSWORD,
-                &new_device_indicators,
-                AuthMethod::None,
-            )
-            .unwrap();
-
-        assert!(session1.is_empty());
+        bg.load_keystore(
+            keystore_bytes,
+            PASSWORD,
+            &new_device_indicators,
+            AuthMethod::None,
+        )
+        .await
+        .unwrap();
 
         let wallet0 = bg.get_wallet_by_index(0).unwrap();
         let restored_wallet_data0 = wallet0.get_wallet_data().unwrap();

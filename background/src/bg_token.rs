@@ -335,6 +335,7 @@ mod tests_background_tokens {
             device_indicators: &device_indicators,
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
+        .await
         .unwrap();
         let providers = bg.get_providers();
 
@@ -404,6 +405,7 @@ mod tests_background_tokens {
             device_indicators: &device_indicators,
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
+        .await
         .unwrap();
         let providers = bg.get_providers();
 
@@ -465,6 +467,7 @@ mod tests_background_tokens {
             device_indicators: &device_indicators,
             ftokens: vec![zlp_token.clone()],
         })
+        .await
         .unwrap();
 
         let recipient = "0xEC6bB19886c9D5f5125DfC739362Bf54AA23d51F";
@@ -546,6 +549,7 @@ mod tests_background_tokens {
             device_indicators: &device_indicators,
             ftokens: vec![test_data::gen_btc_token()],
         })
+        .await
         .unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
@@ -773,6 +777,7 @@ mod tests_background_tokens {
             device_indicators: &device_indicators,
             ftokens: vec![test_data::gen_zil_token()],
         })
+        .await
         .unwrap();
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
@@ -916,6 +921,7 @@ mod tests_background_tokens {
             device_indicators: &device_indicators,
             ftokens: vec![gen_anvil_token()],
         })
+        .await
         .unwrap();
 
         bg.sync_ftokens_balances(0).await.unwrap();

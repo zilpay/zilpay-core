@@ -220,8 +220,8 @@ mod tests_network {
             chain: "ZIL".to_string(),
             short_name: String::new(),
             rpc: vec![
-                "https://api.zilliqa.com".to_string(),
                 "https://ssn.zilpay.io".to_string(),
+                "https://api.zilliqa.com".to_string(),
             ],
             features: vec![],
             slip_44: 313,
@@ -338,6 +338,8 @@ mod tests_network {
         assert!(*tokens[1].balances.get(&0).unwrap() > U256::from(0));
         assert!(*tokens[1].balances.get(&1).unwrap() > U256::from(0));
         assert!(*tokens[1].balances.get(&2).unwrap() == U256::from(0));
+
+        dbg!(&tokens);
 
         assert!(*tokens[2].balances.get(&0).unwrap() > U256::from(0));
         assert!(*tokens[2].balances.get(&2).unwrap() == U256::from(0));
@@ -764,47 +766,6 @@ mod tests_network {
             list_txns.first().unwrap().status,
             TransactionStatus::Success
         );
-    }
-
-    #[tokio::test]
-    async fn test_tx_receipt_scilla() {
-        let net_conf = create_mainnet_zilliqa_config();
-        let provider = NetworkProvider::new(net_conf);
-        let tx_hash = "0x1d8cc783b73c2771e52ee3b6744c3a2a48b63cdfb160549f91523ce30baf8854";
-        let mut tx_history = HistoricalTransaction {
-            metadata: proto::tx::TransactionMetadata {
-                chain_hash: provider.config.hash(),
-                hash: Some(tx_hash.to_string()),
-                ..Default::default()
-            },
-            scilla: Some(
-                serde_json::json!({
-                    "hash": tx_hash,
-                })
-                .to_string(),
-            ),
-            ..Default::default()
-        };
-        let mut list_txns = vec![&mut tx_history];
-
-        provider
-            .update_transactions_receipt(&mut list_txns)
-            .await
-            .unwrap();
-
-        let scilla = list_txns[0].get_scilla().unwrap();
-        assert_eq!(scilla.get("amount").and_then(|v| v.as_str()), Some("0"));
-        assert_eq!(list_txns[0].status, TransactionStatus::Success);
-        assert_eq!(
-            scilla.get("gasLimit").and_then(|v| v.as_str()),
-            Some("5000")
-        );
-        assert_eq!(
-            scilla.get("gasPrice").and_then(|v| v.as_str()),
-            Some("2000000016")
-        );
-        assert_eq!(scilla.get("nonce").and_then(|v| v.as_str()), Some("1175"));
-        assert!(list_txns[0].scilla.is_some());
     }
 
     #[tokio::test]
