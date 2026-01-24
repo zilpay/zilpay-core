@@ -9,7 +9,6 @@ use proto::{
     zil_tx::ZILTransactionRequest,
 };
 use serde_json::json;
-use session::keychain_store::device_biometric_type;
 use token::ft::FToken;
 use wallet::{account::Account, wallet_storage::StorageOperations};
 
@@ -186,9 +185,6 @@ impl TokensManagement for Background {
         let selected = &data.accounts[data.selected_account];
         let provider = self.get_provider(selected.chain_hash)?;
         let mut token_meta = provider.ftoken_meta(contract, &accounts).await?;
-
-        let b = device_biometric_type().unwrap();
-        dbg!(b);
 
         if let Some(t) = w.get_ftokens()?.into_iter().next() {
             token_meta.logo = t.logo;

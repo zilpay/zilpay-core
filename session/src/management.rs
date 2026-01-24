@@ -91,6 +91,10 @@ impl<'a> SessionManager<'a> {
     }
 
     fn is_timestamp_valid(&self, timestamp: u64) -> bool {
+        if self.ttl.is_zero() {
+            return true;
+        }
+
         if let Ok(current) = Self::current_timestamp() {
             timestamp + self.ttl.as_secs() > current
         } else {

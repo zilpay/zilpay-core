@@ -76,7 +76,6 @@ pub trait WalletManagement {
     async fn set_biometric(
         &self,
         password: &str,
-        mb_session_cipher: Option<Vec<u8>>,
         device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
@@ -92,20 +91,19 @@ impl WalletManagement for Background {
     async fn set_biometric(
         &self,
         password: &str,
-        mb_session_cipher: Option<Vec<u8>>,
         device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
     ) -> Result<()> {
-        let argon_seed = if let Some(session_cipher) = mb_session_cipher {
-            self.unlock_wallet_with_session(session_cipher, &device_indicators, wallet_index)
+        let wallet = self.get_wallet_by_index(wallet_index)?;
+        let mut data = wallet.get_wallet_data()?;
+
+        let argon_seed = if data.biometric_type != AuthMethod::None {
+            self.unlock_wallet_with_session(Default::default(), &device_indicators, wallet_index)
                 .await?
         } else {
             self.unlock_wallet_with_password(password, &device_indicators, wallet_index)?
         };
-
-        let wallet = self.get_wallet_by_index(wallet_index)?;
-        let mut data = wallet.get_wallet_data()?;
 
         if new_biometric_type != AuthMethod::None {
             let session = SessionManager::new(
