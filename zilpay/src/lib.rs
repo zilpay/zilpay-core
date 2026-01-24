@@ -10,6 +10,7 @@ pub use network;
 pub use proto;
 pub use qrcodes;
 pub use rpc;
+pub use session;
 pub use settings;
 pub use token;
 pub use wallet;
