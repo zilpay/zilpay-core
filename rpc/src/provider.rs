@@ -50,7 +50,9 @@ where
             match res {
                 Ok(response) => match response.text().await {
                     Ok(text) => match serde_json::from_str::<SR>(&text) {
-                        Ok(json) => return Ok(json),
+                        Ok(json) => {
+                            return Ok(json);
+                        }
                         Err(e) => {
                             errors.push_str(&format!(
                                 "Failed to parse JSON: {}. Response: {}",
@@ -79,7 +81,6 @@ where
     where
         SR: DeserializeOwned + Debug,
     {
-        // TODO: Implement Bitcoin JSON-RPC request handling
         Err(RpcError::NetworkDown)
     }
 }

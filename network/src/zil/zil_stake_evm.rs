@@ -393,6 +393,10 @@ impl ZilliqaEVMStakeing for NetworkProvider {
             .collect();
 
         for (idx, res) in batch_res.iter().enumerate() {
+            if let Some(err) = &res.error {
+                return Err(NetworkErrors::RPCError(err.message.to_string()));
+            }
+
             let result = res
                 .result
                 .as_ref()
