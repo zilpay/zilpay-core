@@ -175,6 +175,7 @@ impl WorkerManager for Background {
 #[cfg(test)]
 mod tests_background_worker {
     use history::{status::TransactionStatus, transaction::HistoricalTransaction};
+    use secrecy::SecretString;
     use tokio::sync::mpsc;
 
     use alloy::primitives::map::HashMap;
@@ -245,10 +246,11 @@ mod tests_background_worker {
         let accounts = [gen_eth_account(0, "Bsc account 1")];
         let net_config = gen_bsc_mainnet_conf();
         let device_indicators = gen_device_indicators("apple");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: TEST_PASSWORD,
+            password: &password,
             mnemonic_check: true,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
@@ -292,11 +294,12 @@ mod tests_background_worker {
             "Bsc account 1".to_string(),
         )];
         let net_config = gen_bsc_mainnet_conf();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
@@ -427,12 +430,13 @@ mod tests_background_worker {
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [gen_zil_account(0, "Zilliqa account 1")];
         let net_config = gen_zilliqa_mainnet_conf();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
         let device_indicators = gen_device_indicators("apple");
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
             accounts: &accounts,

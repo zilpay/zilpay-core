@@ -4,6 +4,7 @@ use config::session::AuthMethod;
 use crypto::bip49::DerivationPath;
 use errors::background::BackgroundError;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
+use secrecy::SecretString;
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use storage::LocalStorage;
@@ -13,7 +14,7 @@ use wallet::Wallet;
 pub type Result<T> = std::result::Result<T, BackgroundError>;
 
 pub struct BackgroundBip39Params<'a> {
-    pub password: &'a str,
+    pub password: &'a SecretString,
     pub mnemonic_str: &'a str,
     pub mnemonic_check: bool,
     pub passphrase: &'a str,
@@ -27,7 +28,7 @@ pub struct BackgroundBip39Params<'a> {
 }
 
 pub struct BackgroundSKParams<'a> {
-    pub password: &'a str,
+    pub password: &'a SecretString,
     pub secret_key: SecretKey,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,

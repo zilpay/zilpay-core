@@ -650,6 +650,7 @@ mod tests_background_transactions {
     use cipher::argon2;
     use proto::{address::Address, tx::TransactionRequest};
     use rand::Rng;
+    use secrecy::SecretString;
     use test_data::{
         gen_anvil_net_conf, gen_anvil_token, gen_device_indicators, gen_eth_account,
         gen_zil_account, gen_zil_testnet_conf, gen_zil_token, ANVIL_MNEMONIC, TEST_PASSWORD,
@@ -670,6 +671,7 @@ mod tests_background_transactions {
         let (mut bg, _dir) = setup_test_background();
         let zil_config = gen_zil_testnet_conf();
         let anvil_config = gen_anvil_net_conf();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(zil_config.clone()).unwrap();
         bg.add_provider(anvil_config.clone()).unwrap();
@@ -679,7 +681,7 @@ mod tests_background_transactions {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: zil_config.hash(),
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
@@ -696,6 +698,7 @@ mod tests_background_transactions {
         bg.swap_zilliqa_chain(0, 0).unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
 
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
         let token_transfer_request = ETHTransactionRequest {
@@ -713,9 +716,8 @@ mod tests_background_transactions {
             ..Default::default()
         };
         let zilpay_trasnfer_req = TransactionRequest::Ethereum((token_transfer_request, metadata));
-
         let argon_seed = bg
-            .unlock_wallet_with_password(&TEST_PASSWORD, &device_indicators, 0)
+            .unlock_wallet_with_password(&password, &device_indicators, 0)
             .unwrap();
 
         bg.select_accounts_chain(0, anvil_config.hash()).unwrap();
@@ -747,10 +749,11 @@ mod tests_background_transactions {
         bg.add_provider(net_config.clone()).unwrap();
         let accounts = [gen_eth_account(5, "Anvil Acc 5")];
         let device_indicators = gen_device_indicators("testanvil");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
@@ -838,10 +841,11 @@ mod tests_background_transactions {
 
         let accounts = [gen_eth_account(6, "Anvil Acc 6")];
         let device_indicators = gen_device_indicators("testanvil");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_hash,
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
@@ -976,10 +980,11 @@ mod tests_background_transactions {
         bg.add_provider(net_config.clone()).unwrap();
         let accounts = [gen_zil_account(0, "ZIL Acc 0")];
         let device_indicators = gen_device_indicators("zil_test");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
@@ -1035,12 +1040,13 @@ mod tests_background_transactions {
         bg.add_provider(net_config.clone()).unwrap();
         let accounts = [gen_zil_account(0, "Zil 0")];
         let device_indicators = gen_device_indicators("test_zilliqa");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         const UNCHECKSUMED_WORD: &str =
             "sword sure throw slide garden science six destroy canvas ceiling negative black";
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: false,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: UNCHECKSUMED_WORD,
             accounts: &accounts,
@@ -1099,10 +1105,11 @@ mod tests_background_transactions {
             "BTC Taproot Acc 0".to_string(),
         )];
         let device_indicators = gen_device_indicators("btc_taproot_test");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,

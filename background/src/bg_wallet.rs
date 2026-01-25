@@ -16,7 +16,7 @@ use config::{
 use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
 use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
-use secrecy::{ExposeSecret, SecretSlice};
+use secrecy::{ExposeSecret, SecretSlice, SecretString};
 use session::{
     decrypt_session,
     management::{SessionManagement, SessionManager},
@@ -36,7 +36,7 @@ pub trait WalletManagement {
 
     fn unlock_wallet_with_password(
         &self,
-        password: &str,
+        password: &SecretString,
         device_indicators: &[String],
         wallet_index: usize,
     ) -> std::result::Result<Argon2Seed, Self::Error>;
@@ -75,7 +75,7 @@ pub trait WalletManagement {
         -> std::result::Result<&Wallet, Self::Error>;
     async fn set_biometric(
         &self,
-        password: &str,
+        password: Option<&SecretString>,
         device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
@@ -90,7 +90,7 @@ impl WalletManagement for Background {
 
     async fn set_biometric(
         &self,
-        password: &str,
+        password: Option<&SecretString>,
         device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
@@ -98,11 +98,15 @@ impl WalletManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let mut data = wallet.get_wallet_data()?;
 
-        let argon_seed = if data.biometric_type != AuthMethod::None {
+        let argon_seed = if data.biometric_type != AuthMethod::None && password.is_none() {
             self.unlock_wallet_with_session(Default::default(), &device_indicators, wallet_index)
                 .await?
+        } else if let Some(pass) = password {
+            self.unlock_wallet_with_password(pass, &device_indicators, wallet_index)?
         } else {
-            self.unlock_wallet_with_password(password, &device_indicators, wallet_index)?
+            return Err(BackgroundError::ProviderDepends(
+                "invalid params".to_string(),
+            ));
         };
 
         if new_biometric_type != AuthMethod::None {
@@ -125,7 +129,7 @@ impl WalletManagement for Background {
 
     fn unlock_wallet_with_password(
         &self,
-        password: &str,
+        password: &SecretString,
         device_indicators: &[String],
         wallet_index: usize,
     ) -> Result<Argon2Seed> {
@@ -133,7 +137,7 @@ impl WalletManagement for Background {
         let data = wallet.get_wallet_data()?;
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
-            password.as_bytes(),
+            password.expose_secret().as_bytes(),
             &device_indicator,
             &data.settings.argon_params.into_config(),
         )?;
@@ -237,7 +241,7 @@ impl WalletManagement for Background {
         let provider = self.get_provider(params.chain_hash)?;
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
-            params.password.as_bytes(),
+            params.password.expose_secret().as_bytes(),
             &device_indicator,
             &params.wallet_settings.argon_params.into_config(),
         )?;
@@ -366,7 +370,7 @@ impl WalletManagement for Background {
         let provider = self.get_provider(params.chain_hash)?;
         let device_indicator = params.device_indicators.join(":");
         let argon_seed = argon2::derive_key(
-            params.password.as_bytes(),
+            params.password.expose_secret().as_bytes(),
             &device_indicator,
             &params.wallet_settings.argon_params.into_config(),
         )?;
@@ -484,7 +488,7 @@ mod tests_background {
 
         assert_eq!(bg.wallets.len(), 0);
 
-        let password = "test_password";
+        let password: SecretString = SecretString::new("shit password".into());
         let words = Background::gen_bip39(24).unwrap();
         let net_conf = create_test_net_conf();
         let accounts = [(
@@ -494,7 +498,7 @@ mod tests_background {
 
         bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password,
+            password: &password,
             mnemonic_check: true,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words,
@@ -515,7 +519,7 @@ mod tests_background {
 
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let words = Background::gen_bip39(24).unwrap();
-        let password = "newPassowrd";
+
         let accounts = [
             (
                 DerivationPath::new(slip44::ETHEREUM, 1, DerivationPath::BIP44_PURPOSE, None),
@@ -528,7 +532,7 @@ mod tests_background {
         ];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password,
+            password: &password,
             mnemonic_check: true,
             chain_hash: net_conf.hash(),
             accounts: &accounts,
@@ -554,7 +558,7 @@ mod tests_background {
     async fn test_delete_wallet() {
         let (mut bg, dir) = setup_test_background();
 
-        let password = "test_password";
+        let password: SecretString = SecretString::new("shit password".into());
         let words = Background::gen_bip39(24).unwrap();
         let net_conf = create_test_net_conf();
         let accounts = [(
@@ -566,7 +570,7 @@ mod tests_background {
         bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password,
+            password: &password,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
@@ -582,7 +586,7 @@ mod tests_background {
 
         bg.add_sk_wallet(BackgroundSKParams {
             secret_key: keypair.get_secretkey().unwrap(),
-            password,
+            password: &password,
             chain_hash: net_conf.hash(),
             wallet_settings: Default::default(),
             wallet_name: String::new(),
@@ -610,7 +614,7 @@ mod tests_background {
     async fn test_generate_zilliqa_legacy_accounts() {
         let (mut bg, _dir) = setup_test_background();
         let net_conf = create_test_net_conf();
-        let password = "test_password";
+        let password: SecretString = SecretString::new("shit password".into());
         let words = Background::gen_bip39(24).unwrap();
 
         bg.add_provider(net_conf.clone()).unwrap();
@@ -621,7 +625,7 @@ mod tests_background {
         )];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password,
+            password: &password,
             mnemonic_check: true,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words,
@@ -643,7 +647,7 @@ mod tests_background {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let argon_seed = bg
             .unlock_wallet_with_password(
-                password,
+                &password,
                 &[String::from("apple"), String::from("0000")],
                 0,
             )
@@ -709,12 +713,13 @@ mod tests_background {
         let device_indicators = gen_device_indicators("test_device");
         let keypair =
             KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2wpkh).unwrap();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(btc_conf.clone()).unwrap();
 
         bg.add_sk_wallet(BackgroundSKParams {
             secret_key: keypair.get_secretkey().unwrap(),
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: btc_conf.hash(),
             wallet_settings: Default::default(),
             wallet_name: "Bitcoin Wallet".to_string(),

@@ -17,7 +17,7 @@ use config::{
 use errors::background::BackgroundError;
 use pqbip39::mnemonic::Mnemonic;
 use rpc::network_config::ChainConfig;
-use secrecy::SecretSlice;
+use secrecy::{ExposeSecret, SecretSlice, SecretString};
 use serde::{Deserialize, Serialize};
 use session::management::{SessionManagement, SessionManager};
 use settings::common_settings::CommonSettings;
@@ -113,13 +113,13 @@ pub trait StorageManagement {
     fn get_keystore(
         &self,
         wallet_index: usize,
-        password: &str,
+        password: &SecretString,
         device_indicators: &[String],
     ) -> std::result::Result<Vec<u8>, Self::Error>;
     async fn load_keystore(
         &mut self,
         backup_cipher: Vec<u8>,
-        password: &str,
+        password: &SecretString,
         device_indicators: &[String],
         biometric_type: AuthMethod,
     ) -> std::result::Result<(), Self::Error>;
@@ -132,11 +132,15 @@ impl StorageManagement for Background {
     async fn load_keystore(
         &mut self,
         backup_cipher: Vec<u8>,
-        password: &str,
+        password: &SecretString,
         device_indicators: &[String],
         biometric_type: AuthMethod,
     ) -> Result<()> {
-        let argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)?;
+        let argon_seed = argon2::derive_key(
+            password.expose_secret().as_bytes(),
+            "",
+            &ARGON2_DEFAULT_CONFIG,
+        )?;
         let mut keystore = KeyStore::from_backup(backup_cipher, &argon_seed)?;
 
         {
@@ -152,7 +156,7 @@ impl StorageManagement for Background {
 
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
-            password.as_bytes(),
+            password.expose_secret().as_bytes(),
             &device_indicator,
             &keystore.wallet_data.settings.argon_params.into_config(),
         )?;
@@ -236,7 +240,7 @@ impl StorageManagement for Background {
     fn get_keystore(
         &self,
         wallet_index: usize,
-        password: &str,
+        password: &SecretString,
         device_indicators: &[String],
     ) -> Result<Vec<u8>> {
         let argon_seed =
@@ -265,7 +269,11 @@ impl StorageManagement for Background {
             keys,
             wallet_address: wallet.wallet_address,
         };
-        let new_argon_seed = argon2::derive_key(password.as_bytes(), "", &ARGON2_DEFAULT_CONFIG)?;
+        let new_argon_seed = argon2::derive_key(
+            password.expose_secret().as_bytes(),
+            "",
+            &ARGON2_DEFAULT_CONFIG,
+        )?;
 
         let keystore_bytes = bincode::serialize(&keystore)?;
         let keystore_version: u8 = 0;
@@ -394,7 +402,7 @@ mod tests_background {
 
         assert_eq!(bg.wallets.len(), 0);
 
-        let password = "test_password";
+        let password: SecretString = SecretString::new("shit password".into());
         let words = Background::gen_bip39(12).unwrap();
         let accounts = [(
             DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
@@ -404,7 +412,7 @@ mod tests_background {
 
         bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password,
+            password: &password,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words,
             mnemonic_check: true,
@@ -434,6 +442,7 @@ mod tests_background {
     async fn test_multiple_wallets() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
+        let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
@@ -444,7 +453,7 @@ mod tests_background {
         )];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: "pass1",
+            password: &password,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words1,
             mnemonic_check: true,
@@ -465,9 +474,10 @@ mod tests_background {
             DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
             "Wallet2".to_string(),
         )];
+        let password2: SecretString = SecretString::new("2 shit password".into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: "pass2",
+            password: &password2,
             chain_hash: net_conf.hash(),
             mnemonic_check: true,
             mnemonic_str: &words2,
@@ -490,7 +500,7 @@ mod tests_background {
     async fn test_keystore_bip39() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
-        const PASSWORD: &str = "shit password";
+        let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
@@ -501,7 +511,7 @@ mod tests_background {
         )];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: PASSWORD,
+            password: &password,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words1,
             mnemonic_check: true,
@@ -515,9 +525,13 @@ mod tests_background {
         })
         .await
         .unwrap();
-        let keystore_bytes = bg.get_keystore(0, PASSWORD, &[]).unwrap();
-        let argon_seed =
-            argon2::derive_key(PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password, &[]).unwrap();
+        let argon_seed = argon2::derive_key(
+            password.expose_secret().as_bytes(),
+            "",
+            &ARGON2_DEFAULT_CONFIG,
+        )
+        .unwrap();
         let keystore = KeyStore::from_backup(keystore_bytes, &argon_seed).unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let wallet_data = wallet.get_wallet_data().unwrap();
@@ -532,7 +546,7 @@ mod tests_background {
     async fn test_keystore_key() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
-        const PASSWORD: &str = "shit password";
+        let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
@@ -540,7 +554,7 @@ mod tests_background {
         let device_indicators = vec!["test indicator".to_string()];
 
         bg.add_sk_wallet(BackgroundSKParams {
-            password: PASSWORD,
+            password: &password,
             secret_key: keypair.get_secretkey().unwrap(),
             wallet_name: "sk wallet".to_string(),
             biometric_type: AuthMethod::FaceId,
@@ -552,9 +566,13 @@ mod tests_background {
         .await
         .unwrap();
 
-        let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
-        let argon_seed =
-            argon2::derive_key(PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password, &device_indicators).unwrap();
+        let argon_seed = argon2::derive_key(
+            password.expose_secret().as_bytes(),
+            "",
+            &ARGON2_DEFAULT_CONFIG,
+        )
+        .unwrap();
         let keystore = KeyStore::from_backup(keystore_bytes, &argon_seed).unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let wallet_data = wallet.get_wallet_data().unwrap();
@@ -572,7 +590,7 @@ mod tests_background {
     async fn test_load_from_keystore_bip39() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
-        const PASSWORD: &str = "shit password";
+        let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
@@ -590,7 +608,7 @@ mod tests_background {
         let device_indicators = vec!["test indicator".to_string()];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: PASSWORD,
+            password: &password,
             chain_hash: net_conf.hash(),
             mnemonic_str: &words1,
             mnemonic_check: true,
@@ -605,12 +623,12 @@ mod tests_background {
         .await
         .unwrap();
 
-        let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password, &device_indicators).unwrap();
         let new_device_indicators = vec!["test new device indicator".to_string()];
 
         bg.load_keystore(
             keystore_bytes,
-            PASSWORD,
+            &password,
             &new_device_indicators,
             AuthMethod::None,
         )
@@ -655,11 +673,11 @@ mod tests_background {
         );
 
         let seed_bytes0 = bg
-            .unlock_wallet_with_password(PASSWORD, &device_indicators, 0)
+            .unlock_wallet_with_password(&password, &device_indicators, 0)
             .unwrap();
 
         let seed_bytes1 = bg
-            .unlock_wallet_with_password(PASSWORD, &new_device_indicators, 1)
+            .unlock_wallet_with_password(&password, &new_device_indicators, 1)
             .unwrap();
 
         let words0 = wallet0.reveal_mnemonic(&seed_bytes0).unwrap();
@@ -672,7 +690,7 @@ mod tests_background {
     async fn test_load_from_keystore_keypair() {
         let (mut bg, _) = setup_test_background();
         let net_conf = create_test_network_config();
-        const PASSWORD: &str = "shit password";
+        let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
@@ -680,7 +698,7 @@ mod tests_background {
         let device_indicators = vec!["test indicator".to_string()];
 
         bg.add_sk_wallet(BackgroundSKParams {
-            password: PASSWORD,
+            password: &password,
             secret_key: keypair.get_secretkey().unwrap(),
             wallet_name: "sk wallet".to_string(),
             biometric_type: AuthMethod::FaceId,
@@ -692,12 +710,12 @@ mod tests_background {
         .await
         .unwrap();
 
-        let keystore_bytes = bg.get_keystore(0, PASSWORD, &device_indicators).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password, &device_indicators).unwrap();
         let new_device_indicators = vec!["test new device indicator".to_string()];
 
         bg.load_keystore(
             keystore_bytes,
-            PASSWORD,
+            &password,
             &new_device_indicators,
             AuthMethod::None,
         )
@@ -766,10 +784,10 @@ mod tests_background {
         );
 
         let seed_bytes0 = bg
-            .unlock_wallet_with_password(PASSWORD, &device_indicators, 0)
+            .unlock_wallet_with_password(&password, &device_indicators, 0)
             .unwrap();
         let seed_bytes1 = bg
-            .unlock_wallet_with_password(PASSWORD, &new_device_indicators, 1)
+            .unlock_wallet_with_password(&password, &new_device_indicators, 1)
             .unwrap();
 
         let keypair0 = wallet0.reveal_keypair(0, &seed_bytes0, None).unwrap();

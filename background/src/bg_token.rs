@@ -244,6 +244,7 @@ mod tests_background_tokens {
     use network::btc::BtcOperations;
     use rand::Rng;
     use rpc::network_config::{ChainConfig, Explorer};
+    use secrecy::SecretString;
     use serde_json::Value;
     use std::collections::HashMap;
     use std::str::FromStr;
@@ -316,10 +317,11 @@ mod tests_background_tokens {
         let accounts = [gen_eth_account(0, "Bsc account 1")];
         let net_config = gen_bsc_mainnet_conf();
         let device_indicators = gen_device_indicators("apple");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: TEST_PASSWORD,
+            password: &password,
             mnemonic_check: true,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
@@ -386,11 +388,12 @@ mod tests_background_tokens {
         ];
         let net_config = gen_bsc_mainnet_conf();
         let device_indicators = gen_device_indicators("test");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
             accounts: &accounts,
@@ -445,13 +448,14 @@ mod tests_background_tokens {
         let accounts = [gen_zil_account(0, "Zil account 1")];
         let net_config = gen_zil_testnet_conf();
         let device_indicators = gen_device_indicators("apple");
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
 
         let zlp_token = FToken::zlp(net_config.hash());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
-            password: TEST_PASSWORD,
+            password: &password,
             mnemonic_check: true,
             chain_hash: net_config.hash(),
             mnemonic_str: &words,
@@ -507,6 +511,7 @@ mod tests_background_tokens {
     async fn test_build_token_transfer_btc_max_amount() {
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_btc_testnet_conf();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
 
@@ -534,7 +539,7 @@ mod tests_background_tokens {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
@@ -745,6 +750,7 @@ mod tests_background_tokens {
     async fn test_build_token_transfer_scilla_max_amount() {
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_zil_testnet_conf();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
 
@@ -762,7 +768,7 @@ mod tests_background_tokens {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
@@ -898,6 +904,7 @@ mod tests_background_tokens {
 
         bg.add_provider(net_config.clone()).unwrap();
 
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
         let accounts = [
             gen_eth_account(0, "Anvil Acc 0"),
             gen_eth_account(1, "Anvil Acc 1"),
@@ -906,7 +913,7 @@ mod tests_background_tokens {
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
-            password: TEST_PASSWORD,
+            password: &password,
             chain_hash: net_config.hash(),
             mnemonic_str: ANVIL_MNEMONIC,
             accounts: &accounts,
