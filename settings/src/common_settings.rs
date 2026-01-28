@@ -2,23 +2,38 @@ use crate::{browser::BrowserSettings, notifications::Notifications, theme::Theme
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-/// Common application settings for UI preferences and behavior
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+fn default_wallet_biometric_salt_type() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommonSettings {
-    /// Notification configuration and preferences
     #[serde(default)]
     pub notifications: Notifications,
 
-    /// User interface theme settings
     #[serde(default)]
     pub theme: Theme,
 
-    /// Language and regional settings
     #[serde(default)]
     pub locale: Option<String>,
 
     #[serde(default)]
     pub browser: BrowserSettings,
+
+    #[serde(default = "default_wallet_biometric_salt_type")]
+    pub wallet_biometric_salt_type: bool,
+}
+
+impl Default for CommonSettings {
+    fn default() -> Self {
+        Self {
+            notifications: Notifications::default(),
+            theme: Theme::default(),
+            locale: None,
+            browser: BrowserSettings::default(),
+            wallet_biometric_salt_type: default_wallet_biometric_salt_type(),
+        }
+    }
 }
 
 impl CommonSettings {
@@ -27,30 +42,34 @@ impl CommonSettings {
         theme: Theme,
         locale: Option<String>,
         browser: BrowserSettings,
+        wallet_biometric_salt_type: bool,
     ) -> Self {
         Self {
             browser,
             notifications,
             theme,
             locale,
+            wallet_biometric_salt_type,
         }
     }
 
-    /// Returns a new instance with the specified theme
     pub fn with_theme(mut self, theme: Theme) -> Self {
         self.theme = theme;
         self
     }
 
-    /// Returns a new instance with the specified locale
     pub fn with_locale(mut self, locale: Option<String>) -> Self {
         self.locale = locale;
         self
     }
 
-    /// Returns a new instance with the specified notifications settings
     pub fn with_notifications(mut self, notifications: Notifications) -> Self {
         self.notifications = notifications;
+        self
+    }
+
+    pub fn with_wallet_biometric_salt_type(mut self, wallet_biometric_salt_type: bool) -> Self {
+        self.wallet_biometric_salt_type = wallet_biometric_salt_type;
         self
     }
 }
@@ -79,10 +98,16 @@ mod tests {
         let theme = Theme::default();
         let locale = Some("en".to_string());
 
-        let settings =
-            CommonSettings::new(notifications, theme, locale.clone(), Default::default());
+        let settings = CommonSettings::new(
+            notifications,
+            theme,
+            locale.clone(),
+            Default::default(),
+            true,
+        );
 
         assert_eq!(settings.locale, locale);
+        assert_eq!(settings.wallet_biometric_salt_type, true);
     }
 
     #[test]
@@ -131,5 +156,46 @@ mod tests {
         let settings = setup_test_settings();
         let debug_string = format!("{:?}", settings);
         assert!(!debug_string.is_empty());
+    }
+
+    #[test]
+    fn test_with_wallet_biometric_salt_type() {
+        let settings = setup_test_settings();
+        let updated = settings.with_wallet_biometric_salt_type(false);
+        assert_eq!(updated.wallet_biometric_salt_type, false);
+
+        let settings_true = setup_test_settings().with_wallet_biometric_salt_type(true);
+        assert_eq!(settings_true.wallet_biometric_salt_type, true);
+    }
+
+    #[test]
+    fn test_default_wallet_biometric_salt_type() {
+        let settings = setup_test_settings();
+        assert_eq!(settings.wallet_biometric_salt_type, true);
+    }
+
+    #[test]
+    fn test_bincode_backward_compatibility() {
+        #[derive(Serialize)]
+        struct OldCommonSettings {
+            notifications: Notifications,
+            theme: Theme,
+            locale: Option<String>,
+            browser: BrowserSettings,
+        }
+
+        let old_settings = OldCommonSettings {
+            notifications: Notifications::default(),
+            theme: Theme::default(),
+            locale: Some("en".to_string()),
+            browser: BrowserSettings::default(),
+        };
+
+        let serialized = bincode::serialize(&old_settings).unwrap();
+
+        let new_settings: CommonSettings =
+            bincode::deserialize(&serialized).unwrap_or(CommonSettings::default());
+
+        assert_eq!(new_settings.wallet_biometric_salt_type, true);
     }
 }

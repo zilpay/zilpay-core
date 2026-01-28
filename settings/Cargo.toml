@@ -11,3 +11,6 @@ sha2.workspace = true
 errors = { path = "../errors" }
 config = { path = "../config" }
 cipher = { path = "../cipher" }
+
+[dev-dependencies]
+bincode.workspace = true

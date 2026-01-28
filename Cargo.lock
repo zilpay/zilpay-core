@@ -5452,6 +5452,7 @@ dependencies = [
 name = "settings"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "cipher 0.1.0",
  "config",
  "errors",
