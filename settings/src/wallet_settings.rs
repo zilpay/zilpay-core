@@ -57,7 +57,8 @@ impl TokenQuotesAPIOptions {
     pub fn from_code(value: u8) -> Self {
         match value {
             0 => Self::None,
-            1 => Self::Coingecko,
+            1 => Self::CryptoCompare,
+            2 => Self::Coingecko,
             _ => Self::None,
         }
     }
