@@ -7,6 +7,7 @@ use crate::argon2::ArgonParams;
 pub enum TokenQuotesAPIOptions {
     None,
     #[default]
+    CryptoCompare,
     Coingecko,
 }
 
