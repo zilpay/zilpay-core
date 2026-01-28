@@ -27,7 +27,8 @@ impl From<AuthMethod> for String {
             AuthMethod::OpticID => "opticId".to_string(),
             AuthMethod::Fingerprint => "fingerprint".to_string(),
             AuthMethod::Biometric => "biometric".to_string(),
-            AuthMethod::Password | AuthMethod::PinCode => "password".to_string(),
+            AuthMethod::Password => "password".to_string(),
+            AuthMethod::PinCode => "pinCode".to_string(),
             AuthMethod::None => "none".to_string(),
         }
     }
@@ -42,7 +43,8 @@ impl From<String> for AuthMethod {
             "opticId" => AuthMethod::OpticID,
             "fingerprint" => AuthMethod::Fingerprint,
             "biometric" => AuthMethod::Biometric,
-            "password" | "pinCode" => AuthMethod::Password,
+            "password" => AuthMethod::Password,
+            "pinCode" => AuthMethod::PinCode,
             _ => AuthMethod::None,
         }
     }
