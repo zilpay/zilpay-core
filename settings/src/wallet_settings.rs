@@ -65,6 +65,7 @@ impl TokenQuotesAPIOptions {
     pub fn code(&self) -> u8 {
         match self {
             Self::None => 0,
+            Self::CryptoCompare => 1,
             Self::Coingecko => 1,
         }
     }
@@ -75,6 +76,7 @@ impl std::fmt::Display for TokenQuotesAPIOptions {
         match self {
             TokenQuotesAPIOptions::None => write!(f, "None"),
             TokenQuotesAPIOptions::Coingecko => write!(f, "Coingecko"),
+            TokenQuotesAPIOptions::CryptoCompare => write!(f, "CryptoCompare"),
         }
     }
 }
