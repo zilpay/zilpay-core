@@ -522,7 +522,7 @@ pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
         let type_str: String = env.get_string(&jstring).map_err(map_jni_error)?.into();
 
         let methods = match type_str.as_str() {
-            "BIOMETRIC_STRONG" => vec![AuthMethod::Biometric],
+            "BIOMETRIC_STRONG" => vec![AuthMethod::Biometric, AuthMethod::PinCode],
             "BIOMETRIC_WEAK" => vec![AuthMethod::Biometric],
             "NONE_ENROLLED" => vec![AuthMethod::PinCode],
             "NO_HARDWARE"
