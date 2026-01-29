@@ -38,6 +38,9 @@ pub enum KeyChainErrors {
     #[error("Apple Keychain Error: {0}")]
     AppleKeychainError(String),
 
+    #[error("Android Keychain Error: {0}")]
+    AndroidKeychain(String),
+
     #[error("Keyring Error: {0}")]
     KeyringError(String),
 

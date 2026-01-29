@@ -12,7 +12,7 @@ use zeroize::Zeroize;
 static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
 
 fn map_jni_error(e: jni::errors::Error) -> SessionErrors {
-    SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(e.to_string()))
+    SessionErrors::KeychainError(KeyChainErrors::AndroidKeychain(e.to_string()))
 }
 
 #[no_mangle]
@@ -58,7 +58,7 @@ where
     F: FnOnce(&mut JNIEnv, &JObject) -> Result<T, SessionErrors>,
 {
     let vm = JAVA_VM.get().ok_or_else(|| {
-        SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(
+        SessionErrors::KeychainError(KeyChainErrors::AndroidKeychain(
             "JavaVM not initialized".into(),
         ))
     })?;
@@ -68,7 +68,7 @@ where
 
     if ctx_ptr.is_null() {
         return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AppleKeychainError("Context is null".into()),
+            KeyChainErrors::AndroidKeychain("Context is null".into()),
         ));
     }
 
@@ -96,7 +96,7 @@ fn try_get_context_via_activity_thread<'local>(
 
     if current_application.is_null() {
         return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AppleKeychainError("currentApplication returned null".into()),
+            KeyChainErrors::AndroidKeychain("currentApplication returned null".into()),
         ));
     }
 
@@ -266,7 +266,7 @@ fn get_activity<'local>(env: &mut JNIEnv<'local>) -> Result<JObject<'local>, Ses
 
     if current_activity_thread.is_null() {
         return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AppleKeychainError("currentActivityThread returned null".into()),
+            KeyChainErrors::AndroidKeychain("currentActivityThread returned null".into()),
         ));
     }
 
@@ -282,7 +282,7 @@ fn get_activity<'local>(env: &mut JNIEnv<'local>) -> Result<JObject<'local>, Ses
 
     if activities.is_null() {
         return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AppleKeychainError("mActivities is null".into()),
+            KeyChainErrors::AndroidKeychain("mActivities is null".into()),
         ));
     }
 
@@ -294,7 +294,7 @@ fn get_activity<'local>(env: &mut JNIEnv<'local>) -> Result<JObject<'local>, Ses
 
     if size == 0 {
         return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AppleKeychainError("No activities found".into()),
+            KeyChainErrors::AndroidKeychain("No activities found".into()),
         ));
     }
 
@@ -317,7 +317,7 @@ fn get_activity<'local>(env: &mut JNIEnv<'local>) -> Result<JObject<'local>, Ses
 
     if activity.is_null() {
         return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AppleKeychainError("Activity is null".into()),
+            KeyChainErrors::AndroidKeychain("Activity is null".into()),
         ));
     }
 
@@ -389,11 +389,11 @@ where
 
     rx.await
         .map_err(|_| {
-            SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(
+            SessionErrors::KeychainError(KeyChainErrors::AndroidKeychain(
                 "Callback channel closed".into(),
             ))
         })?
-        .map_err(|e| SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(e)))
+        .map_err(|e| SessionErrors::KeychainError(KeyChainErrors::AndroidKeychain(e)))
 }
 
 pub async fn store_key_in_secure_enclave(
@@ -446,12 +446,12 @@ pub async fn retrieve_key_from_secure_enclave(
 
     if encrypted_hex.is_empty() {
         return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AppleKeychainError("No data found".into()),
+            KeyChainErrors::AndroidKeychain("No data found".into()),
         ));
     }
 
     let mut encrypted_data = hex::decode(encrypted_hex).map_err(|_| {
-        SessionErrors::KeychainError(KeyChainErrors::AppleKeychainError(
+        SessionErrors::KeychainError(KeyChainErrors::AndroidKeychain(
             "Failed to decode encrypted data".into(),
         ))
     })?;
@@ -495,7 +495,7 @@ pub async fn delete_key_from_secure_enclave(wallet_key: &str) -> Result<(), Sess
 
         if !result {
             return Err(SessionErrors::KeychainError(
-                KeyChainErrors::AppleKeychainError("Failed to delete biometric key".into()),
+                KeyChainErrors::AndroidKeychain("Failed to delete biometric key".into()),
             ));
         }
 
