@@ -714,7 +714,10 @@ mod tests_background_transactions {
             ..Default::default()
         };
         let zilpay_trasnfer_req = TransactionRequest::Ethereum((token_transfer_request, metadata));
-        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
 
         bg.select_accounts_chain(0, anvil_config.hash()).unwrap();
 
@@ -798,12 +801,12 @@ mod tests_background_transactions {
             .await
             .unwrap();
 
-        // Use update_tx_from_params to set gas fields based on network capabilities
         super::update_tx_from_params(&mut tx_request, params, balance).unwrap();
         let txn = tx_request;
 
         let argon_seed = bg
             .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .await
             .unwrap();
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn = txn.sign(&keypair).await.unwrap();
@@ -881,7 +884,10 @@ mod tests_background_transactions {
         super::update_tx_from_params(&mut tx_request_0, params_0, balance).unwrap();
         let txn_0 = tx_request_0;
 
-        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn_0 = txn_0.sign(&keypair).await.unwrap();
         let txns_0 = vec![txn_0];
@@ -978,7 +984,10 @@ mod tests_background_transactions {
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
 
-        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
 
         let message = "Hello, Zilliqa!";
         let (pubkey, signature) = bg
@@ -1027,7 +1036,10 @@ mod tests_background_transactions {
         bg.swap_zilliqa_chain(0, 0).unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
-        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
         let revealed_mnemonic = wallet.reveal_mnemonic(&argon_seed).unwrap();
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
 
@@ -1086,7 +1098,10 @@ mod tests_background_transactions {
         let addr_str = account.addr.auto_format();
         assert!(addr_str.starts_with("bc1p"));
 
-        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
         let dest_addr = Address::from_bitcoin_address(
             "bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v",
         )

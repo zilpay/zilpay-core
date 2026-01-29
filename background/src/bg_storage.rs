@@ -110,7 +110,7 @@ pub trait StorageManagement {
         indicators: Vec<[u8; SHA256_SIZE]>,
     ) -> std::result::Result<(), Self::Error>;
     fn save_settings(&self, settings: CommonSettings) -> std::result::Result<(), Self::Error>;
-    fn get_keystore(
+    async fn get_keystore(
         &self,
         wallet_index: usize,
         password: &SecretString,
@@ -234,8 +234,10 @@ impl StorageManagement for Background {
         Ok(())
     }
 
-    fn get_keystore(&self, wallet_index: usize, password: &SecretString) -> Result<Vec<u8>> {
-        let argon_seed = self.unlock_wallet_with_password(password, None, wallet_index)?;
+    async fn get_keystore(&self, wallet_index: usize, password: &SecretString) -> Result<Vec<u8>> {
+        let argon_seed = self
+            .unlock_wallet_with_password(password, None, wallet_index)
+            .await?;
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let wallet_data = wallet.get_wallet_data()?;
         let ftokens = wallet.get_ftokens()?;
@@ -512,7 +514,7 @@ mod tests_background {
         })
         .await
         .unwrap();
-        let keystore_bytes = bg.get_keystore(0, &password).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password).await.unwrap();
         let argon_seed = argon2::derive_key(
             password.expose_secret().as_bytes(),
             b"",
@@ -551,7 +553,7 @@ mod tests_background {
         .await
         .unwrap();
 
-        let keystore_bytes = bg.get_keystore(0, &password).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password).await.unwrap();
         let argon_seed = argon2::derive_key(
             password.expose_secret().as_bytes(),
             b"",
@@ -606,7 +608,7 @@ mod tests_background {
         .await
         .unwrap();
 
-        let keystore_bytes = bg.get_keystore(0, &password).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password).await.unwrap();
 
         bg.load_keystore(keystore_bytes, &password, AuthMethod::None)
             .await
@@ -649,9 +651,14 @@ mod tests_background {
             restored_wallet_data1.default_chain_hash
         );
 
-        let seed_bytes0 = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
-
-        let seed_bytes1 = bg.unlock_wallet_with_password(&password, None, 1).unwrap();
+        let seed_bytes0 = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
+        let seed_bytes1 = bg
+            .unlock_wallet_with_password(&password, None, 1)
+            .await
+            .unwrap();
 
         let words0 = wallet0.reveal_mnemonic(&seed_bytes0).unwrap();
         let words1 = wallet1.reveal_mnemonic(&seed_bytes1).unwrap();
@@ -681,7 +688,7 @@ mod tests_background {
         .await
         .unwrap();
 
-        let keystore_bytes = bg.get_keystore(0, &password).unwrap();
+        let keystore_bytes = bg.get_keystore(0, &password).await.unwrap();
 
         bg.load_keystore(keystore_bytes, &password, AuthMethod::None)
             .await
@@ -748,8 +755,14 @@ mod tests_background {
             restored_wallet_data1.default_chain_hash
         );
 
-        let seed_bytes0 = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
-        let seed_bytes1 = bg.unlock_wallet_with_password(&password, None, 1).unwrap();
+        let seed_bytes0 = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
+        let seed_bytes1 = bg
+            .unlock_wallet_with_password(&password, None, 1)
+            .await
+            .unwrap();
 
         let keypair0 = wallet0.reveal_keypair(0, &seed_bytes0, None).unwrap();
         let keypair1 = wallet1.reveal_keypair(0, &seed_bytes1, None).unwrap();

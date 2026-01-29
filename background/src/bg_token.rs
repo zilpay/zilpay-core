@@ -703,6 +703,7 @@ mod tests_background_tokens {
 
         let argon_seed = bg
             .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .await
             .unwrap();
 
         let signed_tx = wallet
@@ -828,6 +829,7 @@ mod tests_background_tokens {
 
         let argon_seed = bg
             .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .await
             .unwrap();
 
         let signed_tx = wallet
@@ -947,6 +949,7 @@ mod tests_background_tokens {
 
         let argon_seed = bg
             .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .await
             .unwrap();
         let signed_tx = wallet
             .sign_transaction(tx, from_index, &argon_seed, None)

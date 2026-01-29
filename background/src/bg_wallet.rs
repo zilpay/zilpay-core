@@ -30,7 +30,7 @@ use crate::{BackgroundBip39Params, BackgroundSKParams};
 pub trait WalletManagement {
     type Error;
 
-    fn unlock_wallet_with_password(
+    async fn unlock_wallet_with_password(
         &self,
         password: &SecretString,
         device_indicators: Option<&[String]>,
@@ -92,7 +92,8 @@ impl WalletManagement for Background {
         let argon_seed = if data.biometric_type != AuthMethod::None && password.is_none() {
             self.unlock_wallet_with_session(wallet_index).await?
         } else if let Some(pass) = password {
-            self.unlock_wallet_with_password(pass, None, wallet_index)?
+            self.unlock_wallet_with_password(pass, None, wallet_index)
+                .await?
         } else {
             return Err(BackgroundError::ProviderDepends(
                 "invalid params".to_string(),
@@ -117,12 +118,13 @@ impl WalletManagement for Background {
         Ok(())
     }
 
-    fn unlock_wallet_with_password(
+    async fn unlock_wallet_with_password(
         &self,
         password: &SecretString,
         device_indicators: Option<&[String]>,
         wallet_index: usize,
     ) -> Result<Argon2Seed> {
+        dbg!("dsadsadsadsa");
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
 
@@ -144,6 +146,18 @@ impl WalletManagement for Background {
             )?;
 
             wallet.migrate_salt(&argon_seed, &new_argon_seed)?;
+
+            if data.biometric_type != AuthMethod::None {
+                let session = SessionManager::new(
+                    Arc::clone(&self.storage),
+                    0,
+                    &wallet.wallet_address,
+                    &data.settings.cipher_orders,
+                );
+                let secert_bytes = SecretSlice::new(new_argon_seed.into());
+
+                session.create_session(secert_bytes).await?;
+            }
 
             new_argon_seed
         } else {
@@ -622,7 +636,10 @@ mod tests_background {
         assert_eq!(bg.wallets.len(), 1);
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
-        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
 
         if let Address::Secp256k1Sha256(_) = wallet
             .get_wallet_data()
