@@ -206,7 +206,7 @@ mod tests {
         argon_seed: &Argon2Seed,
     ) -> Wallet {
         let keychain = KeyChain::from_seed(argon_seed).unwrap();
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&storage),
@@ -240,7 +240,7 @@ mod tests {
     ) -> Wallet {
         let keychain = KeyChain::from_seed(argon_seed).unwrap();
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&storage),
@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_from_secret_key() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let wallet = create_test_wallet_from_secret_key(Arc::clone(&storage), &argon_seed);
 
@@ -295,7 +295,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_from_secret_key_invalid_index() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let wallet = create_test_wallet_from_secret_key(Arc::clone(&storage), &argon_seed);
 
@@ -309,7 +309,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_zilliqa_bip44() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0, 1, 2].map(|i| {
             (
@@ -346,7 +346,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_ethereum_bip44() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0, 1].map(|i| {
             (
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_bitcoin_bip44_p2pkh() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0].map(|i| {
             (
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_bitcoin_bip49_p2sh() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0].map(|i| {
             (
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_bitcoin_bip84_p2wpkh() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0, 1].map(|i| {
             (
@@ -514,7 +514,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_bitcoin_bip86_p2tr() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0].map(|i| {
             (
@@ -557,7 +557,7 @@ mod tests {
     #[test]
     fn test_reveal_mnemonic_success() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0].map(|i| {
             (
@@ -585,7 +585,7 @@ mod tests {
     #[test]
     fn test_reveal_mnemonic_wrong_seed() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0].map(|i| {
             (
@@ -614,7 +614,7 @@ mod tests {
     #[test]
     fn test_reveal_mnemonic_on_secret_key_wallet() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let wallet = create_test_wallet_from_secret_key(Arc::clone(&storage), &argon_seed);
 
@@ -629,7 +629,7 @@ mod tests {
     #[test]
     fn test_sign_message_with_revealed_keypair() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0].map(|i| {
             (
@@ -661,7 +661,7 @@ mod tests {
     #[test]
     fn test_reveal_keypair_bitcoin_testnet() {
         let (storage, _dir) = setup_test_storage();
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
         let indexes = [0].map(|i| {
             (

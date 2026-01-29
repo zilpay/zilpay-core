@@ -184,7 +184,7 @@ mod tests_background_worker {
     use proto::address::Address;
     use rand::Rng;
     use rpc::network_config::ChainConfig;
-    use test_data::{gen_device_indicators, gen_eth_account, gen_zil_account, TEST_PASSWORD};
+    use test_data::{gen_eth_account, gen_zil_account, TEST_PASSWORD};
     use token::ft::FToken;
     use wallet::wallet_storage::StorageOperations;
 
@@ -245,7 +245,6 @@ mod tests_background_worker {
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [gen_eth_account(0, "Bsc account 1")];
         let net_config = gen_bsc_mainnet_conf();
-        let device_indicators = gen_device_indicators("apple");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
@@ -259,7 +258,6 @@ mod tests_background_worker {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
         .await
@@ -307,7 +305,6 @@ mod tests_background_worker {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
         .await
@@ -431,7 +428,6 @@ mod tests_background_worker {
         let accounts = [gen_zil_account(0, "Zilliqa account 1")];
         let net_config = gen_zilliqa_mainnet_conf();
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
-        let device_indicators = gen_device_indicators("apple");
 
         bg.add_provider(net_config.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -444,7 +440,6 @@ mod tests_background_worker {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_zilliqa_mainnet_token(net_config.hash())],
         })
         .await

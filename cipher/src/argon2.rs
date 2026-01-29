@@ -16,11 +16,11 @@ pub const ARGON2_DEFAULT_CONFIG: Config = Config {
     hash_length: 64,
 };
 
-pub fn derive_key(password: &[u8], salt: &str, config: &Config) -> Result<Argon2Seed> {
-    let salt_len = salt.as_bytes().len() + WALLET_SALT.len();
+pub fn derive_key(password: &[u8], salt: &[u8], config: &Config) -> Result<Argon2Seed> {
+    let salt_len = salt.len() + WALLET_SALT.len();
     let mut combined_salt = Vec::with_capacity(salt_len);
 
-    combined_salt.extend_from_slice(salt.as_bytes());
+    combined_salt.extend_from_slice(salt);
     combined_salt.extend_from_slice(WALLET_SALT);
 
     let output_key_material: Argon2Seed = argon2::hash_raw(password, &combined_salt, config)
@@ -51,7 +51,7 @@ mod tests {
             ad: APP_ID,
             hash_length: 64,
         };
-        let key = derive_key(password, "some_salt", &config).unwrap();
+        let key = derive_key(password, b"some_salt", &config).unwrap();
 
         assert_eq!(
             key,

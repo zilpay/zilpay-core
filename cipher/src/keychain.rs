@@ -107,7 +107,7 @@ impl KeyChain {
 
     pub fn from_pass(
         password: &[u8],
-        fingerprint: &str,
+        fingerprint: &[u8],
         argon_config: &Argon2Config,
     ) -> Result<Self, KeyChainErrors> {
         let seed_bytes = derive_key(password, fingerprint, argon_config)
@@ -220,7 +220,7 @@ mod keychain_tests {
 
         rng.fill_bytes(&mut password);
 
-        let keychain = KeyChain::from_pass(&password, "", &ARGON2_DEFAULT_CONFIG);
+        let keychain = KeyChain::from_pass(&password, b"", &ARGON2_DEFAULT_CONFIG);
 
         assert!(keychain.is_ok());
     }
@@ -234,7 +234,7 @@ mod keychain_tests {
         rng.fill_bytes(&mut password);
         rng.fill_bytes(&mut plaintext);
 
-        let keychain = KeyChain::from_pass(&password, "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let keychain = KeyChain::from_pass(&password, b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let bytes = keychain.to_bytes();
         let restore_keychain = KeyChain::from_bytes(&bytes).unwrap();
 
@@ -258,7 +258,7 @@ mod keychain_tests {
         rng.fill_bytes(&mut password);
         rng.fill_bytes(&mut plaintext);
 
-        let keychain = KeyChain::from_pass(&password, "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let keychain = KeyChain::from_pass(&password, b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let options = [CipherOrders::AESGCM256, CipherOrders::NTRUP1277];
         let ciphertext = keychain.encrypt(plaintext.to_vec(), &options).unwrap();
         let res_plaintext = keychain.decrypt(ciphertext.clone(), &options).unwrap();
@@ -286,10 +286,10 @@ mod keychain_tests {
         rng.fill_bytes(&mut password);
 
         let options = [CipherOrders::NTRUP1277, CipherOrders::AESGCM256];
-        let seed_bytes = derive_key(&password, "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let seed_bytes = derive_key(&password, b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let keychain = KeyChain::from_seed(&seed_bytes).unwrap();
         let origin_proof =
-            derive_key(&seed_bytes[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
+            derive_key(&seed_bytes[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let proof_cipher = keychain.make_proof(&origin_proof, &options).unwrap();
         let proof = keychain.get_proof(&proof_cipher, &options).unwrap();
 

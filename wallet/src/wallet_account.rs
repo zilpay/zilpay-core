@@ -168,8 +168,7 @@ mod tests {
 
     #[test]
     fn test_select_account() {
-        // Setup initial wallet with bip39 for multiple accounts
-        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let (storage, _dir) = setup_test_storage();
 
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
@@ -183,7 +182,7 @@ mod tests {
             )
         });
 
-        let proof = derive_key(&argon_seed[..PROOF_SIZE], "", &ARGON2_DEFAULT_CONFIG).unwrap();
+        let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,
             storage: Arc::clone(&storage),
@@ -198,7 +197,7 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "Select Account Test Wallet".to_string(),
-                biometric_type: AuthMethod::Biometric,
+                biometric_type: AuthMethod::None,
                 chain_config: &chain_config,
             },
             wallet_config,

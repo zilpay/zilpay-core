@@ -126,13 +126,13 @@ mod tests_security {
         let settings = gen_settings();
         let argon_seed = derive_key(
             TEST_PASSWORD.as_bytes(),
-            "",
+            b"",
             &settings.argon_params.into_config(),
         )
         .unwrap();
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
-            "",
+            b"",
             &settings.argon_params.into_config(),
         )
         .unwrap();
@@ -172,7 +172,7 @@ mod tests_security {
             Ok(keypair.clone())
         );
 
-        let new_salt = "test_new_salty";
+        let new_salt = b"test_new_salty";
         let new_argon_seed = derive_key(
             TEST_PASSWORD.as_bytes(),
             new_salt,
@@ -192,7 +192,7 @@ mod tests_security {
         let settings = gen_settings();
         let argon_seed = derive_key(
             TEST_PASSWORD.as_bytes(),
-            "",
+            b"",
             &settings.argon_params.into_config(),
         )
         .unwrap();
@@ -211,7 +211,7 @@ mod tests_security {
         });
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
-            "",
+            b"",
             &settings.argon_params.into_config(),
         )
         .unwrap();
@@ -240,7 +240,7 @@ mod tests_security {
 
         let data = wallet.get_wallet_data().unwrap();
 
-        let new_salt = "test_new_salty";
+        let new_salt = b"test_new_salty";
         let new_argon_seed = derive_key(
             TEST_PASSWORD.as_bytes(),
             new_salt,

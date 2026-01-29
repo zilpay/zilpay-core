@@ -1,7 +1,6 @@
 use crate::{
     bg_connections::ConnectionManagement, bg_provider::ProvidersManagement,
-    bg_storage::StorageManagement, device_indicators::create_wallet_device_indicator, Background,
-    BackgroundLedgerParams, Result,
+    bg_storage::StorageManagement, Background, BackgroundLedgerParams, Result,
 };
 use async_trait::async_trait;
 use cipher::{
@@ -17,10 +16,7 @@ use errors::{account::AccountErrors, background::BackgroundError, wallet::Wallet
 use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
 use secrecy::{ExposeSecret, SecretSlice, SecretString};
-use session::{
-    decrypt_session,
-    management::{SessionManagement, SessionManager},
-};
+use session::management::{SessionManagement, SessionManager};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
@@ -37,14 +33,12 @@ pub trait WalletManagement {
     fn unlock_wallet_with_password(
         &self,
         password: &SecretString,
-        device_indicators: &[String],
+        device_indicators: Option<&[String]>,
         wallet_index: usize,
     ) -> std::result::Result<Argon2Seed, Self::Error>;
 
     async fn unlock_wallet_with_session(
         &self,
-        session_cipher: Vec<u8>,
-        device_indicators: &[String],
         wallet_index: usize,
     ) -> std::result::Result<Argon2Seed, Self::Error>;
 
@@ -76,7 +70,6 @@ pub trait WalletManagement {
     async fn set_biometric(
         &self,
         password: Option<&SecretString>,
-        device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
     ) -> std::result::Result<(), Self::Error>;
@@ -91,7 +84,6 @@ impl WalletManagement for Background {
     async fn set_biometric(
         &self,
         password: Option<&SecretString>,
-        device_indicators: &[String],
         wallet_index: usize,
         new_biometric_type: AuthMethod,
     ) -> Result<()> {
@@ -99,10 +91,9 @@ impl WalletManagement for Background {
         let mut data = wallet.get_wallet_data()?;
 
         let argon_seed = if data.biometric_type != AuthMethod::None && password.is_none() {
-            self.unlock_wallet_with_session(Default::default(), &device_indicators, wallet_index)
-                .await?
+            self.unlock_wallet_with_session(wallet_index).await?
         } else if let Some(pass) = password {
-            self.unlock_wallet_with_password(pass, &device_indicators, wallet_index)?
+            self.unlock_wallet_with_password(pass, None, wallet_index)?
         } else {
             return Err(BackgroundError::ProviderDepends(
                 "invalid params".to_string(),
@@ -130,78 +121,71 @@ impl WalletManagement for Background {
     fn unlock_wallet_with_password(
         &self,
         password: &SecretString,
-        device_indicators: &[String],
+        device_indicators: Option<&[String]>,
         wallet_index: usize,
     ) -> Result<Argon2Seed> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            password.expose_secret().as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )?;
 
-        wallet.unlock(&argon_seed)?;
+        let argon_seed = if let Some(device_indicators) = device_indicators {
+            let device_indicator = device_indicators.join(":");
+            let argon_seed = argon2::derive_key(
+                password.expose_secret().as_bytes(),
+                &device_indicator.as_bytes(),
+                &data.settings.argon_params.into_config(),
+            )?;
+
+            wallet.unlock(&argon_seed)?;
+
+            let salt = session::device::get_device_signature();
+            let new_argon_seed = argon2::derive_key(
+                password.expose_secret().as_bytes(),
+                &salt,
+                &data.settings.argon_params.into_config(),
+            )?;
+
+            wallet.migrate_salt(&argon_seed, &new_argon_seed)?;
+
+            new_argon_seed
+        } else {
+            let salt = session::device::get_device_signature();
+            let argon_seed = argon2::derive_key(
+                password.expose_secret().as_bytes(),
+                &salt,
+                &data.settings.argon_params.into_config(),
+            )?;
+
+            wallet.unlock(&argon_seed)?;
+
+            argon_seed
+        };
 
         Ok(argon_seed)
     }
 
-    async fn unlock_wallet_with_session(
-        &self,
-        session_cipher: Vec<u8>,
-        device_indicators: &[String],
-        wallet_index: usize,
-    ) -> Result<Argon2Seed> {
+    async fn unlock_wallet_with_session(&self, wallet_index: usize) -> Result<Argon2Seed> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
 
-        if session_cipher.is_empty() {
-            let session = SessionManager::new(
-                Arc::clone(&self.storage),
-                0,
-                &wallet.wallet_address,
-                &data.settings.cipher_orders,
-            );
-            let seed_bytes: Argon2Seed = session
-                .unlock_session()
-                .await?
-                .expose_secret()
-                .to_vec()
-                .try_into()
-                .map_err(|_| {
-                    BackgroundError::SessionErrors(
-                        errors::session::SessionErrors::InvalidDecryptSession,
-                    )
-                })?;
+        let session = SessionManager::new(
+            Arc::clone(&self.storage),
+            0,
+            &wallet.wallet_address,
+            &data.settings.cipher_orders,
+        );
+        let seed_bytes: Argon2Seed = session
+            .unlock_session()
+            .await?
+            .expose_secret()
+            .to_vec()
+            .try_into()
+            .map_err(|_| {
+                BackgroundError::SessionErrors(
+                    errors::session::SessionErrors::InvalidDecryptSession,
+                )
+            })?;
 
-            Ok(seed_bytes)
-        } else {
-            let wallet_device_indicators =
-                create_wallet_device_indicator(&wallet.wallet_address, device_indicators);
-
-            let seed_bytes = decrypt_session(
-                &wallet_device_indicators,
-                session_cipher,
-                &data.settings.cipher_orders,
-                &data.settings.argon_params.into_config(),
-            )
-            .map_err(BackgroundError::DecryptSessionError)?;
-
-            wallet.unlock(&seed_bytes)?;
-
-            let session = SessionManager::new(
-                Arc::clone(&self.storage),
-                0,
-                &wallet.wallet_address,
-                &data.settings.cipher_orders,
-            );
-            let secert_bytes = SecretSlice::new(seed_bytes.into());
-
-            session.create_session(secert_bytes).await?;
-
-            Ok(seed_bytes)
-        }
+        Ok(seed_bytes)
     }
 
     fn swap_zilliqa_chain(&self, wallet_index: usize, account_index: usize) -> Result<()> {
@@ -239,10 +223,10 @@ impl WalletManagement for Background {
 
     async fn add_bip39_wallet<'a>(&'a mut self, params: BackgroundBip39Params<'_>) -> Result<()> {
         let provider = self.get_provider(params.chain_hash)?;
-        let device_indicator = params.device_indicators.join(":");
+        let device_salt = session::device::get_device_signature();
         let argon_seed = argon2::derive_key(
             params.password.expose_secret().as_bytes(),
-            &device_indicator,
+            &device_salt,
             &params.wallet_settings.argon_params.into_config(),
         )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
@@ -311,7 +295,7 @@ impl WalletManagement for Background {
         let device_indicator = device_indicators.join(":");
         let argon_seed = argon2::derive_key(
             device_indicator.as_bytes(),
-            &device_indicator,
+            &device_indicator.as_bytes(),
             &wallet_settings.argon_params.into_config(),
         )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
@@ -368,10 +352,10 @@ impl WalletManagement for Background {
 
     async fn add_sk_wallet<'a>(&'a mut self, params: BackgroundSKParams<'_>) -> Result<()> {
         let provider = self.get_provider(params.chain_hash)?;
-        let device_indicator = params.device_indicators.join(":");
+        let device_salt = session::device::get_device_signature();
         let argon_seed = argon2::derive_key(
             params.password.expose_secret().as_bytes(),
-            &device_indicator,
+            &device_salt,
             &params.wallet_settings.argon_params.into_config(),
         )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
@@ -507,7 +491,6 @@ mod tests_background {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
         .await
@@ -540,7 +523,6 @@ mod tests_background {
             wallet_settings: Default::default(),
             passphrase: "",
             wallet_name: String::new(),
-            device_indicators: &[String::from("apple"), String::from("43498")],
             biometric_type: Default::default(),
             ftokens: vec![],
         })
@@ -578,7 +560,6 @@ mod tests_background {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
         .await
@@ -591,7 +572,6 @@ mod tests_background {
             wallet_settings: Default::default(),
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
         .await
@@ -634,7 +614,6 @@ mod tests_background {
             passphrase: "",
             wallet_name: "Test Wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &[String::from("apple"), String::from("0000")],
             ftokens: vec![],
         })
         .await
@@ -645,13 +624,7 @@ mod tests_background {
         assert_eq!(bg.wallets.len(), 1);
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
-        let argon_seed = bg
-            .unlock_wallet_with_password(
-                &password,
-                &[String::from("apple"), String::from("0000")],
-                0,
-            )
-            .unwrap();
+        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
 
         if let Address::Secp256k1Sha256(_) = wallet
             .get_wallet_data()
@@ -706,17 +679,15 @@ mod tests_background {
 
     #[tokio::test]
     async fn test_add_bitcoin_sk_wallet() {
-        use test_data::{gen_btc_testnet_conf, gen_device_indicators, TEST_PASSWORD};
+        use test_data::{gen_btc_testnet_conf, TEST_PASSWORD};
 
         let (mut bg, _dir) = setup_test_background();
         let btc_conf = gen_btc_testnet_conf();
-        let device_indicators = gen_device_indicators("test_device");
         let keypair =
             KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2wpkh).unwrap();
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(btc_conf.clone()).unwrap();
-
         bg.add_sk_wallet(BackgroundSKParams {
             secret_key: keypair.get_secretkey().unwrap(),
             password: &password,
@@ -724,7 +695,6 @@ mod tests_background {
             wallet_settings: Default::default(),
             wallet_name: "Bitcoin Wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![],
         })
         .await

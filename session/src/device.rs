@@ -15,10 +15,11 @@ use crate::keychain_store_windows::get_device_identifier;
 
 pub fn get_device_signature() -> [u8; SHA512_SIZE] {
     let identifiers = get_device_identifier().unwrap_or_default();
-    let combined = identifiers.join("") + PROOF_SALT;
+    let combined = identifiers.join("");
 
     let mut hasher = Sha512::new();
     hasher.update(combined.as_bytes());
+    hasher.update(PROOF_SALT);
     let result = hasher.finalize();
 
     let mut signature = [0u8; 64];

@@ -235,7 +235,7 @@ mod tests_background_tokens {
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
     };
     use crate::{bg_tx::TransactionsManagement, bg_wallet::WalletManagement};
-    use cipher::argon2;
+
     use config::address::ADDR_LEN;
     use crypto::bip49::DerivationPath;
     use crypto::slip44;
@@ -253,10 +253,7 @@ mod tests_background_tokens {
     use test_data::{
         anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_testnet_conf, ANVIL_MNEMONIC,
     };
-    use test_data::{
-        gen_device_indicators, gen_eth_account, gen_zil_account, gen_zil_testnet_conf,
-        TEST_PASSWORD,
-    };
+    use test_data::{gen_eth_account, gen_zil_account, gen_zil_testnet_conf, TEST_PASSWORD};
     use tokio;
     use wallet::wallet_token::TokenManagement;
     use wallet::wallet_transaction::WalletTransaction;
@@ -316,7 +313,6 @@ mod tests_background_tokens {
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [gen_eth_account(0, "Bsc account 1")];
         let net_config = gen_bsc_mainnet_conf();
-        let device_indicators = gen_device_indicators("apple");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
@@ -330,7 +326,6 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
         .await
@@ -387,7 +382,6 @@ mod tests_background_tokens {
             gen_eth_account(6, "account 6"),
         ];
         let net_config = gen_bsc_mainnet_conf();
-        let device_indicators = gen_device_indicators("test");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
@@ -401,7 +395,6 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
         })
         .await
@@ -447,7 +440,6 @@ mod tests_background_tokens {
         let words = Background::gen_bip39(24).unwrap();
         let accounts = [gen_zil_account(0, "Zil account 1")];
         let net_config = gen_zil_testnet_conf();
-        let device_indicators = gen_device_indicators("apple");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
@@ -464,7 +456,6 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![zlp_token.clone()],
         })
         .await
@@ -535,8 +526,6 @@ mod tests_background_tokens {
                 "BTC SegWit Acc 3".to_string(),
             ),
         ];
-        let device_indicators = gen_device_indicators("btc_max_test");
-
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
             password: &password,
@@ -547,7 +536,6 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: "BTC Max wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![test_data::gen_btc_token()],
         })
         .await
@@ -713,13 +701,9 @@ mod tests_background_tokens {
             _ => panic!("Expected Bitcoin transaction request"),
         }
 
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .unwrap();
 
         let signed_tx = wallet
             .sign_transaction(txn_req, from_index, &argon_seed, None)
@@ -764,7 +748,6 @@ mod tests_background_tokens {
                 "scilla Acc 3".to_string(),
             ),
         ];
-        let device_indicators = gen_device_indicators("btc_max_test");
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
@@ -776,7 +759,6 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: "Scilla".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![test_data::gen_zil_token()],
         })
         .await
@@ -844,13 +826,9 @@ mod tests_background_tokens {
             }
         }
 
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
+        let argon_seed = bg
+            .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .unwrap();
 
         let signed_tx = wallet
             .sign_transaction(txn_req, from_index, &argon_seed, None)
@@ -909,7 +887,6 @@ mod tests_background_tokens {
             gen_eth_account(0, "Anvil Acc 0"),
             gen_eth_account(1, "Anvil Acc 1"),
         ];
-        let device_indicators = gen_device_indicators("anvil_max_transfer");
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
@@ -921,7 +898,6 @@ mod tests_background_tokens {
             passphrase: "",
             wallet_name: "Anvil Max Transfer".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_anvil_token()],
         })
         .await
@@ -969,14 +945,9 @@ mod tests_background_tokens {
 
         update_tx_from_params(&mut tx, params.clone(), amount).unwrap();
 
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
-
+        let argon_seed = bg
+            .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .unwrap();
         let signed_tx = wallet
             .sign_transaction(tx, from_index, &argon_seed, None)
             .await

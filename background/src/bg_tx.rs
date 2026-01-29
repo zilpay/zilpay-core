@@ -647,13 +647,13 @@ mod tests_background_transactions {
     use super::*;
     use crate::{bg_storage::StorageManagement, bg_token::TokensManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
-    use cipher::argon2;
+
     use proto::{address::Address, tx::TransactionRequest};
     use rand::Rng;
     use secrecy::SecretString;
     use test_data::{
-        gen_anvil_net_conf, gen_anvil_token, gen_device_indicators, gen_eth_account,
-        gen_zil_account, gen_zil_testnet_conf, gen_zil_token, ANVIL_MNEMONIC, TEST_PASSWORD,
+        gen_anvil_net_conf, gen_anvil_token, gen_eth_account, gen_zil_account,
+        gen_zil_testnet_conf, gen_zil_token, ANVIL_MNEMONIC, TEST_PASSWORD,
     };
     use token::ft::FToken;
     use tokio;
@@ -677,7 +677,6 @@ mod tests_background_transactions {
         bg.add_provider(anvil_config.clone()).unwrap();
 
         let accounts = [gen_zil_account(0, "ZIL Acc 0")];
-        let device_indicators = gen_device_indicators("zil_test");
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
@@ -689,7 +688,6 @@ mod tests_background_transactions {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![FToken::zil(zil_config.hash())],
         })
         .await
@@ -716,9 +714,7 @@ mod tests_background_transactions {
             ..Default::default()
         };
         let zilpay_trasnfer_req = TransactionRequest::Ethereum((token_transfer_request, metadata));
-        let argon_seed = bg
-            .unlock_wallet_with_password(&password, &device_indicators, 0)
-            .unwrap();
+        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
 
         bg.select_accounts_chain(0, anvil_config.hash()).unwrap();
 
@@ -748,7 +744,6 @@ mod tests_background_transactions {
 
         bg.add_provider(net_config.clone()).unwrap();
         let accounts = [gen_eth_account(5, "Anvil Acc 5")];
-        let device_indicators = gen_device_indicators("testanvil");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -761,7 +756,6 @@ mod tests_background_transactions {
             passphrase: "",
             wallet_name: "Anvil wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_anvil_token()],
         })
         .await
@@ -808,14 +802,9 @@ mod tests_background_transactions {
         super::update_tx_from_params(&mut tx_request, params, balance).unwrap();
         let txn = tx_request;
 
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
-
+        let argon_seed = bg
+            .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .unwrap();
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn = txn.sign(&keypair).await.unwrap();
         let txns = vec![txn];
@@ -840,7 +829,6 @@ mod tests_background_transactions {
         bg.add_provider(net_config.clone()).unwrap();
 
         let accounts = [gen_eth_account(6, "Anvil Acc 6")];
-        let device_indicators = gen_device_indicators("testanvil");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -853,7 +841,6 @@ mod tests_background_transactions {
             passphrase: "",
             wallet_name: "Anvil wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_anvil_token()],
         })
         .await
@@ -894,14 +881,7 @@ mod tests_background_transactions {
         super::update_tx_from_params(&mut tx_request_0, params_0, balance).unwrap();
         let txn_0 = tx_request_0;
 
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
-
+        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn_0 = txn_0.sign(&keypair).await.unwrap();
         let txns_0 = vec![txn_0];
@@ -979,7 +959,6 @@ mod tests_background_transactions {
 
         bg.add_provider(net_config.clone()).unwrap();
         let accounts = [gen_zil_account(0, "ZIL Acc 0")];
-        let device_indicators = gen_device_indicators("zil_test");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -992,7 +971,6 @@ mod tests_background_transactions {
             passphrase: "",
             wallet_name: "ZIL wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![FToken::zil(net_config.hash())],
         })
         .await
@@ -1000,19 +978,7 @@ mod tests_background_transactions {
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
 
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &bg.get_wallet_by_index(0)
-                .unwrap()
-                .get_wallet_data()
-                .unwrap()
-                .settings
-                .argon_params
-                .into_config(),
-        )
-        .unwrap();
+        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
 
         let message = "Hello, Zilliqa!";
         let (pubkey, signature) = bg
@@ -1039,7 +1005,6 @@ mod tests_background_transactions {
 
         bg.add_provider(net_config.clone()).unwrap();
         let accounts = [gen_zil_account(0, "Zil 0")];
-        let device_indicators = gen_device_indicators("test_zilliqa");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         const UNCHECKSUMED_WORD: &str =
@@ -1054,7 +1019,6 @@ mod tests_background_transactions {
             passphrase: "",
             wallet_name: "Zilliqa legacy wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![gen_zil_token()],
         })
         .await
@@ -1063,14 +1027,7 @@ mod tests_background_transactions {
         bg.swap_zilliqa_chain(0, 0).unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
-        let data = wallet.get_wallet_data().unwrap();
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
+        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
         let revealed_mnemonic = wallet.reveal_mnemonic(&argon_seed).unwrap();
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
 
@@ -1104,7 +1061,6 @@ mod tests_background_transactions {
             ),
             "BTC Taproot Acc 0".to_string(),
         )];
-        let device_indicators = gen_device_indicators("btc_taproot_test");
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -1117,7 +1073,6 @@ mod tests_background_transactions {
             passphrase: "",
             wallet_name: "BTC Taproot wallet".to_string(),
             biometric_type: Default::default(),
-            device_indicators: &device_indicators,
             ftokens: vec![test_data::gen_btc_token()],
         })
         .await
@@ -1131,14 +1086,7 @@ mod tests_background_transactions {
         let addr_str = account.addr.auto_format();
         assert!(addr_str.starts_with("bc1p"));
 
-        let device_indicator = device_indicators.join(":");
-        let argon_seed = argon2::derive_key(
-            TEST_PASSWORD.as_bytes(),
-            &device_indicator,
-            &data.settings.argon_params.into_config(),
-        )
-        .unwrap();
-
+        let argon_seed = bg.unlock_wallet_with_password(&password, None, 0).unwrap();
         let dest_addr = Address::from_bitcoin_address(
             "bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v",
         )
