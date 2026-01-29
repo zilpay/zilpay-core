@@ -124,7 +124,6 @@ impl WalletManagement for Background {
         device_indicators: Option<&[String]>,
         wallet_index: usize,
     ) -> Result<Argon2Seed> {
-        dbg!("dsadsadsadsa");
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
 
