@@ -46,6 +46,14 @@ mod keychain_store_apple;
 #[cfg(target_os = "android")]
 mod keychain_store_android;
 
+#[cfg(target_os = "linux")]
+mod keychain_store_linux;
+
+#[cfg(target_os = "windows")]
+mod keychain_store_windows;
+
+pub mod device;
+
 #[cfg(test)]
 mod tests {
     use super::*;

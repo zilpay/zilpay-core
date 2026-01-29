@@ -13,7 +13,10 @@ use security_framework_sys::access_control::{
     kSecAccessControlUserPresence, kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
     SecAccessControlCreateWithFlags,
 };
-use std::ptr;
+use std::{io, ptr};
+
+#[cfg(target_os = "macos")]
+use std::process::Command;
 use zeroize::Zeroize;
 
 pub async fn store_key_in_secure_enclave(
@@ -139,5 +142,78 @@ pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
         }
 
         Ok(methods)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn extract_quoted_value(text: &str, field: &str) -> Option<String> {
+    text.lines()
+        .find(|line| line.contains(field))?
+        .split('"')
+        .nth(3)
+        .map(String::from)
+}
+
+#[cfg(target_os = "macos")]
+pub fn get_device_identifier() -> Result<Vec<String>, io::Error> {
+    let output = Command::new("ioreg")
+        .args(&["-rd1", "-c", "IOPlatformExpertDevice"])
+        .output()?;
+
+    if !output.status.success() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            "ioreg command failed",
+        ));
+    }
+
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let fields = ["IOPlatformUUID", "IOPlatformSerialNumber"];
+
+    let identifier: Vec<String> = fields
+        .iter()
+        .filter_map(|field| extract_quoted_value(&output_str, field))
+        .collect();
+
+    if identifier.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "No device identifiers found",
+        ));
+    }
+
+    Ok(identifier)
+}
+
+#[cfg(target_os = "ios")]
+pub fn get_device_identifier() -> Result<Vec<String>, io::Error> {
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2::msg_send;
+    use objc2_foundation::{NSString, NSUUID};
+
+    unsafe {
+        let ui_device_class = objc2::class!(UIDevice);
+        let device: Retained<AnyObject> = msg_send![ui_device_class, currentDevice];
+
+        let mut identifiers = Vec::new();
+
+        let vendor_id: Option<Retained<NSUUID>> = msg_send![&device, identifierForVendor];
+        if let Some(uuid) = vendor_id {
+            let uuid_string: Retained<NSString> = msg_send![&uuid, UUIDString];
+            identifiers.push(uuid_string.to_string());
+        }
+
+        let model: Retained<NSString> = msg_send![&device, model];
+        identifiers.push(model.to_string());
+
+        if identifiers.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                "No device identifiers found",
+            ));
+        }
+
+        Ok(identifiers)
     }
 }

@@ -12,6 +12,7 @@ zeroize.workspace = true
 secrecy.workspace = true
 keyring.workspace = true
 hex.workspace = true
+sha2.workspace = true
 tokio.workspace = true
 errors = { path = "../errors" }
 cipher = { path = "../cipher" }
