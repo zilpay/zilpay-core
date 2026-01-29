@@ -537,51 +537,43 @@ pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
     })
 }
 
-fn query_android_id_sync(env: &mut JNIEnv, context: &JObject) -> Result<String, SessionErrors> {
-    let content_resolver = env
-        .call_method(context, "getContentResolver", "()Landroid/content/ContentResolver;", &[])
-        .map_err(map_jni_error)?
-        .l()
-        .map_err(map_jni_error)?;
-
-    let settings_secure = env
-        .find_class("android/provider/Settings$Secure")
-        .map_err(map_jni_error)?;
-
-    let android_id_field = env
-        .new_string("android_id")
-        .map_err(map_jni_error)?;
-
-    let android_id = env
-        .call_static_method(
-            settings_secure,
-            "getString",
-            "(Landroid/content/ContentResolver;Ljava/lang/String;)Ljava/lang/String;",
-            &[JValue::Object(&content_resolver), JValue::Object(&android_id_field)],
-        )
-        .map_err(map_jni_error)?
-        .l()
-        .map_err(map_jni_error)?;
-
-    let android_id_str = env
-        .get_string((&android_id).into())
-        .map_err(map_jni_error)?;
-
-    let id_string: String = android_id_str.into();
-
-    if id_string.is_empty() {
-        return Err(SessionErrors::KeychainError(
-            KeyChainErrors::AndroidKeychain("Android ID is empty".into()),
-        ));
-    }
-
-    Ok(id_string)
-}
-
 pub fn get_device_identifier() -> Result<Vec<String>, io::Error> {
     with_android_context(|env, context| {
-        let android_id = query_android_id_sync(env, context)?;
-        Ok(vec![android_id])
+        let biometric_manager = get_biometric_manager(env, context)?;
+
+        let identifiers_obj = env
+            .call_method(
+                &biometric_manager,
+                "getDeviceIdentifier",
+                "()[Ljava/lang/String;",
+                &[],
+            )
+            .map_err(map_jni_error)?
+            .l()
+            .map_err(map_jni_error)?;
+
+        let identifiers_array = jni::objects::JObjectArray::from(identifiers_obj);
+
+        let array_len = env
+            .get_array_length(&identifiers_array)
+            .map_err(map_jni_error)? as usize;
+
+        let mut identifiers = Vec::with_capacity(array_len);
+
+        for i in 0..array_len {
+            let element = env
+                .get_object_array_element(&identifiers_array, i as i32)
+                .map_err(map_jni_error)?;
+
+            let identifier_str: String = env
+                .get_string(&JString::from(element))
+                .map_err(map_jni_error)?
+                .into();
+
+            identifiers.push(identifier_str);
+        }
+
+        Ok(identifiers)
     })
     .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))
 }
