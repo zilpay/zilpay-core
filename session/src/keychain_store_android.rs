@@ -524,7 +524,7 @@ pub fn device_biometric_type() -> Result<Vec<AuthMethod>, SessionErrors> {
         let methods = match type_str.as_str() {
             "BIOMETRIC_STRONG" => vec![AuthMethod::Biometric, AuthMethod::PinCode],
             "BIOMETRIC_WEAK" => vec![AuthMethod::Biometric],
-            "NONE_ENROLLED" => vec![AuthMethod::PinCode],
+            "NONE_ENROLLED" => vec![],
             "NO_HARDWARE"
             | "HARDWARE_UNAVAILABLE"
             | "SECURITY_UPDATE_REQUIRED"
