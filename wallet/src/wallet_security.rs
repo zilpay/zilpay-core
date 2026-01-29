@@ -1,9 +1,11 @@
+use crate::wallet_data::WalletData;
 use crate::wallet_storage::StorageOperations;
 use crate::wallet_types::WalletTypes;
 use crate::Result;
 use crate::Wallet;
-use cipher::argon2::Argon2Seed;
+use cipher::argon2::{derive_key, Argon2Seed};
 use cipher::keychain::KeyChain;
+use config::cipher::{PROOF_SALT, PROOF_SIZE};
 use errors::wallet::WalletErrors;
 
 pub trait WalletSecurity {
@@ -45,35 +47,37 @@ impl WalletSecurity for Wallet {
                     new_keychain.encrypt(decrypted_entropy, &data.settings.cipher_orders)?;
                 self.storage
                     .set(&entropy_storage_key, &new_cipher_entropy)?;
-
-                let proof_storage_key = usize::to_le_bytes(data.proof_key);
-                let cipher_proof = self.storage.get(&proof_storage_key)?;
-                let origin_proof =
-                    keychain.get_proof(&cipher_proof, &data.settings.cipher_orders)?;
-                let new_cipher_proof =
-                    new_keychain.make_proof(&origin_proof, &data.settings.cipher_orders)?;
-                self.storage.set(&proof_storage_key, &new_cipher_proof)?;
             }
             WalletTypes::SecretKey => {
                 let account = data.get_selected_account()?;
-
                 let sk_storage_key = usize::to_le_bytes(account.account_type.value());
                 let cipher_sk = self.storage.get(&sk_storage_key)?;
                 let sk_bytes = keychain.decrypt(cipher_sk, &data.settings.cipher_orders)?;
                 let new_cipher_sk = new_keychain.encrypt(sk_bytes, &data.settings.cipher_orders)?;
                 self.storage.set(&sk_storage_key, &new_cipher_sk)?;
-
-                let proof_storage_key = usize::to_le_bytes(data.proof_key);
-                let cipher_proof = self.storage.get(&proof_storage_key)?;
-                let origin_proof =
-                    keychain.get_proof(&cipher_proof, &data.settings.cipher_orders)?;
-                let new_cipher_proof =
-                    new_keychain.make_proof(&origin_proof, &data.settings.cipher_orders)?;
-                self.storage.set(&proof_storage_key, &new_cipher_proof)?;
             }
             _ => return Err(WalletErrors::InvalidHexToWalletType),
         }
 
+        self.update_proof_with_new_seed(new_seed_bytes, &new_keychain, &data)?;
+
+        Ok(())
+    }
+}
+
+impl Wallet {
+    fn update_proof_with_new_seed(
+        &self,
+        new_seed_bytes: &Argon2Seed,
+        new_keychain: &KeyChain,
+        data: &WalletData,
+    ) -> Result<()> {
+        let proof_storage_key = usize::to_le_bytes(data.proof_key);
+        let argon2_config = data.settings.argon_params.into_config();
+        let new_proof = derive_key(&new_seed_bytes[..PROOF_SIZE], PROOF_SALT, &argon2_config)
+            .map_err(WalletErrors::ArgonCipherErrors)?;
+        let new_cipher_proof = new_keychain.make_proof(&new_proof, &data.settings.cipher_orders)?;
+        self.storage.set(&proof_storage_key, &new_cipher_proof)?;
         Ok(())
     }
 }

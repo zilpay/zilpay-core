@@ -78,7 +78,7 @@ impl Wallet {
     }
 
     fn unlock_iternel(&self, seed_bytes: &Argon2Seed) -> Result<KeyChain> {
-        let keychain = KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
+        let keychain = KeyChain::from_seed(seed_bytes)?;
         let data = self.get_wallet_data()?;
 
         let proof_key = usize::to_le_bytes(data.proof_key);
