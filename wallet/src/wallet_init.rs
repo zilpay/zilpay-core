@@ -119,15 +119,11 @@ impl WalletInit for Wallet {
         config: WalletConfig,
         ftokens: Vec<FToken>,
     ) -> Result<Self> {
-        let sk_as_bytes = params
-            .sk
-            .to_bytes()
-            .map_err(WalletErrors::FailToGetSKBytes)?;
+        let sk_as_bytes = params.sk.to_bytes()?;
 
         let cipher_sk = config
             .keychain
-            .encrypt(sk_as_bytes.to_vec(), &config.settings.cipher_orders)
-            .or(Err(WalletErrors::TryEncryptSecretKeyError))?;
+            .encrypt(sk_as_bytes.to_vec(), &config.settings.cipher_orders)?;
         let cipher_proof = config
             .keychain
             .make_proof(&params.proof, &config.settings.cipher_orders)?;

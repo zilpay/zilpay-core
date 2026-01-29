@@ -134,8 +134,7 @@ impl WalletCrypto for Wallet {
 
         match data.wallet_type {
             WalletTypes::SecretPhrase((key, _)) => {
-                let keychain =
-                    KeyChain::from_seed(seed_bytes).map_err(WalletErrors::KeyChainError)?;
+                let keychain = KeyChain::from_seed(seed_bytes)?;
                 let storage_key = usize::to_le_bytes(key);
                 let cipher = self.storage.get(&storage_key)?;
                 let decypted = keychain.decrypt(cipher, &data.settings.cipher_orders)?;

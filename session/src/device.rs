@@ -1,5 +1,5 @@
+use config::{cipher::PROOF_SALT, sha::SHA512_SIZE};
 use sha2::{Digest, Sha512};
-use std::io;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 use crate::keychain_store_apple::get_device_identifier;
@@ -13,9 +13,9 @@ use crate::keychain_store_linux::get_device_identifier;
 #[cfg(target_os = "windows")]
 use crate::keychain_store_windows::get_device_identifier;
 
-pub fn get_device_signature() -> Result<[u8; 64], io::Error> {
-    let identifiers = get_device_identifier()?;
-    let combined = identifiers.join("");
+pub fn get_device_signature() -> [u8; SHA512_SIZE] {
+    let identifiers = get_device_identifier().unwrap_or_default();
+    let combined = identifiers.join("") + PROOF_SALT;
 
     let mut hasher = Sha512::new();
     hasher.update(combined.as_bytes());
@@ -24,7 +24,7 @@ pub fn get_device_signature() -> Result<[u8; 64], io::Error> {
     let mut signature = [0u8; 64];
     signature.copy_from_slice(&result);
 
-    Ok(signature)
+    signature
 }
 
 #[cfg(test)]
@@ -33,10 +33,10 @@ mod tests {
 
     #[test]
     fn test_get_device_signature() {
-        let signature = get_device_signature().expect("Should generate device signature");
+        let signature = get_device_signature();
         assert_eq!(signature.len(), 64);
 
-        let signature2 = get_device_signature().expect("Should generate device signature again");
+        let signature2 = get_device_signature();
         assert_eq!(signature, signature2);
         assert_ne!(signature, [0u8; 64]);
     }
