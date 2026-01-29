@@ -51,7 +51,6 @@ pub trait WalletManagement {
         &mut self,
         params: BackgroundLedgerParams,
         wallet_settings: WalletSettings,
-        device_indicators: &[String],
     ) -> std::result::Result<(), Self::Error>;
 
     async fn add_sk_wallet<'a>(
@@ -289,13 +288,12 @@ impl WalletManagement for Background {
         &mut self,
         params: BackgroundLedgerParams,
         wallet_settings: WalletSettings,
-        device_indicators: &[String],
     ) -> Result<()> {
         let provider = self.get_provider(params.chain_hash)?;
-        let device_indicator = device_indicators.join(":");
+        let device_salt = session::device::get_device_signature();
         let argon_seed = argon2::derive_key(
-            device_indicator.as_bytes(),
-            &device_indicator.as_bytes(),
+            &device_salt,
+            b"",
             &wallet_settings.argon_params.into_config(),
         )?;
         let keychain = KeyChain::from_seed(&argon_seed)?;
