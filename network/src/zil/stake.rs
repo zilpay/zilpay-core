@@ -18,14 +18,6 @@ pub struct LPToken {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
-pub struct ZilValidator {
-    pub future_stake: U256,
-    pub pending_withdrawals: U256,
-    pub reward_address: String,
-    pub status: bool,
-}
-
-#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct FinalOutput {
     pub name: String,
@@ -36,11 +28,7 @@ pub struct FinalOutput {
     pub claimable_amount: U256,
     pub apr: Option<f64>,
     pub commission: Option<f64>,
-    pub total_rewards: Option<U256>,
-    pub total_stake: Option<U256>,
-    pub total_network_stake: Option<U256>,
-    pub unbonding_period: Option<u64>,
-    pub avg_block_time_ms: Option<u64>,
+    pub unbonding_period_seconds: Option<u64>,
     pub lst_price_change_percent: Option<f32>,
     pub tag: String,
     pub current_block: Option<u64>,
@@ -53,35 +41,13 @@ mod tests {
     use crate::zil::{ZilliqaEVMStakeing, ZilliqaScillaStakeing};
 
     use proto::address::Address;
-    use rpc::network_config::ChainConfig;
-
-    fn create_zilliqa_config() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 0],
-            name: "Zilliqa".to_string(),
-            chain: "ZIL".to_string(),
-            short_name: String::new(),
-            rpc: vec![
-                "https://ssn.zilpay.io".to_string(),
-                "https://api.zilliqa.com".to_string(),
-            ],
-            features: vec![],
-            slip_44: 313,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        }
-    }
+    use test_data::gen_zil_mainnet_conf;
 
     #[tokio::test]
     async fn test_get_scilla_stake() {
         let addr = Address::from_zil_bech32("zil1wl38cwww2u3g8wzgutxlxtxwwc0rf7jf27zace").unwrap();
 
-        let net_conf = create_zilliqa_config();
+        let net_conf = gen_zil_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let result = provider.fetch_scilla_stake(&addr).await;
         let final_output = result.unwrap();
@@ -91,9 +57,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_evm_stake() {
-        let addr = Address::from_eth_address("0x87A97043de457beefd0eCFEc19c8294F2E65Eb8B").unwrap();
+        let addr = Address::from_eth_address("0xBea3dcB8884b403845fc3B12E22abA621E50BBD5").unwrap();
 
-        let net_conf = create_zilliqa_config();
+        let net_conf = gen_zil_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let result = provider.fetch_evm_stake(&addr).await;
         let final_output = result.unwrap();
