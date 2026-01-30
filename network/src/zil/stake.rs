@@ -34,21 +34,17 @@ pub struct FinalOutput {
     pub deleg_amt: U256,
     pub rewards: U256,
     pub claimable_amount: U256,
-    pub vote_power: Option<f64>,
     pub apr: Option<f64>,
     pub commission: Option<f64>,
     pub total_rewards: Option<U256>,
     pub total_stake: Option<U256>,
     pub total_network_stake: Option<U256>,
-    pub version: Option<String>,
     pub unbonding_period: Option<u64>,
+    pub avg_block_time_ms: Option<u64>,
+    pub lst_price_change_percent: Option<f32>,
     pub tag: String,
     pub current_block: Option<u64>,
     pub pending_withdrawals: Vec<PendingWithdrawal>,
-    pub validators: Vec<ZilValidator>,
-    pub hide: bool,
-    pub uptime: u8,
-    pub can_stake: bool,
 }
 
 #[cfg(test)]

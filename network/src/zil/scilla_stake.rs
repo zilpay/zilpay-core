@@ -274,9 +274,6 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                         withdrawal_block: 0,
                         claimable: true,
                     }],
-                    hide: false,
-                    uptime: 0,
-                    can_stake: false,
                     ..Default::default()
                 });
             }
@@ -296,15 +293,11 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                             token: None,
                             deleg_amt: balance,
                             rewards: U256::ZERO,
-                            vote_power: None,
                             apr: None,
                             commission: None,
                             tag: "scilla".to_string(),
                             current_block: None,
                             pending_withdrawals: vec![],
-                            hide: false,
-                            uptime: 0,
-                            can_stake: false,
                             ..Default::default()
                         });
                     }
@@ -411,15 +404,11 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                     token: None,
                     deleg_amt: stake_amount,
                     rewards: rewards_amount,
-                    vote_power: None,
                     apr: None,
                     commission: Some(f64::from(commission_rate) / 10000000.0),
                     tag: "scilla".to_string(),
                     current_block: None,
                     pending_withdrawals: vec![],
-                    hide: false,
-                    uptime: 0,
-                    can_stake: false,
                     ..Default::default()
                 });
             }
@@ -443,7 +432,6 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                             token: None,
                             deleg_amt: amount,
                             rewards: U256::ZERO,
-                            vote_power: None,
                             apr: None,
                             commission: None,
                             tag: "scilla".to_string(),
@@ -453,9 +441,6 @@ impl ZilliqaScillaStakeing for NetworkProvider {
                                 withdrawal_block: 0,
                                 claimable: true,
                             }],
-                            hide: false,
-                            uptime: 0,
-                            can_stake: false,
                             ..Default::default()
                         });
                     }
