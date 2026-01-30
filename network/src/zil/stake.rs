@@ -30,6 +30,7 @@ pub struct FinalOutput {
     pub commission: Option<f64>,
     pub unbonding_period_seconds: Option<u64>,
     pub lst_price_change_percent: Option<f32>,
+    pub avg_block_time_ms: Option<u64>,
     pub tag: String,
     pub current_block: Option<u64>,
     pub pending_withdrawals: Vec<PendingWithdrawal>,

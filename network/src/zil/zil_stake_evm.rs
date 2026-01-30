@@ -348,6 +348,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
                     name: pool.pool_name.clone(),
                     address: pool.pool_address.clone(),
                     token,
+                    avg_block_time_ms: Some(pool.avg_block_time_ms),
                     commission: Some(pool.commission as f64 / 100.0),
                     unbonding_period_seconds,
                     lst_price_change_percent: pool.lst_price_change_percent.parse::<f32>().ok(),
