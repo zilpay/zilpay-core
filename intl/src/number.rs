@@ -21,7 +21,7 @@ pub const CURRENCY_SYMBOLS: &[(&str, &str)] = &[
     ("SOL", "◎"),
     ("USDT", "₮"),
     ("DOGE", "Ð"),
-    ("GOLD", "Au"),
+    ("XAUT", "🟡"),
     ("SILVER", "Ag"),
     ("OIL", "🛢️"),
     ("GAS", "⛽"),
