@@ -529,7 +529,15 @@ impl TransactionsManagement for Background {
 
                 key_pair.sign_message(&hash)?
             }
-            Address::Secp256k1Keccak256(_) => key_pair.sign_message(message.as_bytes())?,
+            Address::Secp256k1Keccak256(_) => {
+                let bytes = if message.starts_with("0x") || message.starts_with("0X") {
+                    hex::decode(&message[2..])
+                        .unwrap_or_else(|_| message.as_bytes().to_vec())
+                } else {
+                    message.as_bytes().to_vec()
+                };
+                key_pair.sign_message(&bytes)?
+            }
         };
         let pub_key = key_pair.get_pubkey()?;
 
