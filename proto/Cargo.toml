@@ -22,10 +22,14 @@ tokio.workspace = true
 bitcoin.workspace = true
 bincode.workspace = true
 prost = "0.13.5"
+prost-types = "0.13.5"
 
 crypto = { path = "../crypto" }
 config = { path = "../config" }
 errors = { path = "../errors" }
+
+[build-dependencies]
+prost-build = "0.13.5"
 
 [dev-dependencies]
 mockito = "1.5.0"

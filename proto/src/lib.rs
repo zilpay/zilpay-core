@@ -5,6 +5,8 @@ pub mod keypair;
 pub mod pubkey;
 pub mod secret_key;
 pub mod signature;
+pub mod tron_generated;
+pub mod tron_tx;
 pub mod tx;
 pub mod utils;
 pub mod zil_address;
