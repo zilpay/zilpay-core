@@ -542,6 +542,7 @@ mod tests {
             evm: None,
             scilla: None,
             btc: Some(json!({"txid": tx_hash}).to_string()),
+            tron: None,
             signed_message: None,
             timestamp: 0,
         };

@@ -6,4 +6,5 @@ pub mod btc;
 pub mod common;
 pub mod evm;
 pub mod provider;
+pub mod tron;
 pub mod zil;

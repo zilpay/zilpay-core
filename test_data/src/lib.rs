@@ -241,6 +241,40 @@ pub mod anvil_accounts {
         "0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6";
 }
 
+pub fn gen_tron_testnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [2494104990, 0],
+        name: "Tron(testnet)".to_string(),
+        chain: "TRX".to_string(),
+        short_name: "tron".to_string(),
+        rpc: vec!["https://api.shasta.trongrid.io".to_string()],
+        features: vec![],
+        slip_44: slip44::TRON,
+        ens: None,
+        explorers: vec![],
+        fallback_enabled: false,
+    }
+}
+
+pub fn gen_tron_token() -> FToken {
+    FToken {
+        rate: 0f64,
+        name: "Tron".to_string(),
+        symbol: "TRX".to_string(),
+        decimals: 6,
+        addr: Address::Secp256k1Tron([0u8; ADDR_LEN]),
+        logo: None,
+        balances: HashMap::new(),
+        default: true,
+        native: true,
+        chain_hash: gen_tron_testnet_conf().hash(),
+    }
+}
+
 #[allow(dead_code)]
 pub mod tron_addresses {
     pub const ADDR_0: &str = "TWer2Ygk5TEheHp3TPuYeqxmB6SsGZmaL6";

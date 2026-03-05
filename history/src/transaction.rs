@@ -21,6 +21,7 @@ pub struct HistoricalTransaction {
     pub evm: Option<String>,
     pub scilla: Option<String>,
     pub btc: Option<String>,
+    pub tron: Option<String>,
     pub signed_message: Option<String>,
     pub timestamp: u64,
 }
@@ -50,6 +51,16 @@ impl HistoricalTransaction {
 
     pub fn set_btc(&mut self, value: Value) {
         self.btc = serde_json::to_string(&value).ok();
+    }
+
+    pub fn get_tron(&self) -> Option<Value> {
+        self.tron
+            .as_ref()
+            .and_then(|s| serde_json::from_str(s).ok())
+    }
+
+    pub fn set_tron(&mut self, value: Value) {
+        self.tron = serde_json::to_string(&value).ok();
     }
 
     pub fn get_signed_message(&self) -> Option<Value> {
@@ -95,6 +106,7 @@ impl HistoricalTransaction {
             evm: None,
             scilla: None,
             btc: None,
+            tron: None,
             signed_message: serde_json::to_string(&signed_msg).ok(),
             timestamp,
         }
@@ -135,6 +147,7 @@ impl HistoricalTransaction {
             evm: None,
             scilla: None,
             btc: None,
+            tron: None,
             signed_message: serde_json::to_string(&signed_msg).ok(),
             timestamp,
         }
@@ -182,6 +195,7 @@ impl HistoricalTransaction {
                     evm: None,
                     scilla: serde_json::to_string(&scilla).ok(),
                     btc: None,
+                    tron: None,
                     signed_message: None,
                     timestamp,
                 })
@@ -234,6 +248,7 @@ impl HistoricalTransaction {
                     evm: serde_json::to_string(&evm).ok(),
                     scilla: None,
                     btc: None,
+                    tron: None,
                     signed_message: None,
                     timestamp,
                 })
@@ -256,11 +271,31 @@ impl HistoricalTransaction {
                     evm: None,
                     scilla: None,
                     btc: serde_json::to_string(&btc).ok(),
+                    tron: None,
                     signed_message: None,
                     timestamp,
                 })
             }
-            TransactionReceipt::Tron(_) => todo!(),
+            TransactionReceipt::Tron((tron_tx, metadata)) => {
+                let tx_id = alloy::hex::encode(tron_tx.tx_id);
+
+                let tron = json!({
+                    "txID": tx_id,
+                    "ownerAddress": tron_tx.owner_address.auto_format(),
+                    "signature": alloy::hex::encode(&tron_tx.signature),
+                });
+
+                Ok(Self {
+                    status: TransactionStatus::Pending,
+                    metadata,
+                    evm: None,
+                    scilla: None,
+                    btc: None,
+                    tron: serde_json::to_string(&tron).ok(),
+                    signed_message: None,
+                    timestamp,
+                })
+            }
         }
     }
 
