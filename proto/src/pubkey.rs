@@ -14,6 +14,7 @@ pub enum PubKey {
     Secp256k1Sha256([u8; PUB_KEY_SIZE]),    // ZILLIQA
     Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
     Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)), // Bitcoin
+    Secp256k1Tron([u8; PUB_KEY_SIZE]),      // Tron
     Ed25519Solana([u8; PUB_KEY_SIZE]),      // Solana
 }
 
@@ -51,6 +52,7 @@ impl PubKey {
             PubKey::Secp256k1Keccak256(v) => v,
             PubKey::Secp256k1Sha256(v) => v,
             PubKey::Secp256k1Bitcoin((v, _, _)) => v,
+            PubKey::Secp256k1Tron(v) => v,
             PubKey::Ed25519Solana(v) => v,
         }
     }
@@ -82,6 +84,11 @@ impl PubKey {
             }
             PubKey::Ed25519Solana(pk) => {
                 let mut result = vec![3u8];
+                result.extend_from_slice(pk);
+                Ok(result)
+            }
+            PubKey::Secp256k1Tron(pk) => {
+                let mut result = vec![4u8];
                 result.extend_from_slice(pk);
                 Ok(result)
             }
@@ -161,8 +168,8 @@ impl TryFrom<&[u8]> for PubKey {
         let key_type = slice[0];
 
         match key_type {
-            0 | 1 | 3 => {
-                // Zilliqa, Ethereum, Solana: 1 + 33 bytes
+            0 | 1 | 3 | 4 => {
+                // Zilliqa, Ethereum, Solana, Tron: 1 + 33 bytes
                 if slice.len() != PUB_KEY_SIZE + 1 {
                     return Err(PubKeyError::InvalidLength);
                 }
@@ -174,6 +181,7 @@ impl TryFrom<&[u8]> for PubKey {
                     0 => Ok(PubKey::Secp256k1Sha256(key_data)),
                     1 => Ok(PubKey::Secp256k1Keccak256(key_data)),
                     3 => Ok(PubKey::Ed25519Solana(key_data)),
+                    4 => Ok(PubKey::Secp256k1Tron(key_data)),
                     _ => unreachable!(),
                 }
             }
@@ -201,6 +209,7 @@ impl AsRef<[u8]> for PubKey {
             PubKey::Secp256k1Sha256(data) => data,
             PubKey::Secp256k1Keccak256(data) => data,
             PubKey::Secp256k1Bitcoin((data, _, _)) => data,
+            PubKey::Secp256k1Tron(data) => data,
             PubKey::Ed25519Solana(data) => data,
         }
     }

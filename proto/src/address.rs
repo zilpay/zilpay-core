@@ -6,6 +6,7 @@ use crate::{
     },
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use sha2::{Digest, Sha256};
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
@@ -19,6 +20,7 @@ pub enum Address {
     Secp256k1Sha256([u8; ADDR_LEN]),    // ZILLIQA
     Secp256k1Keccak256([u8; ADDR_LEN]), // Ethereum
     Secp256k1Bitcoin(Vec<u8>),          // Bitcoin (UTF-8 encoded address string)
+    Secp256k1Tron([u8; ADDR_LEN]),      // Tron
 }
 
 impl Address {
@@ -36,6 +38,7 @@ impl Address {
             Address::Secp256k1Sha256(_) => self.get_zil_bech32().unwrap_or_default(),
             Address::Secp256k1Keccak256(_) => self.to_eth_checksummed().unwrap_or_default(),
             Address::Secp256k1Bitcoin(data) => String::from_utf8(data.clone()).unwrap_or_default(),
+            Address::Secp256k1Tron(bytes) => Self::tron_to_base58check(bytes),
         }
     }
 
@@ -46,6 +49,10 @@ impl Address {
 
         if addr.starts_with("0x") {
             return Self::from_eth_address(addr);
+        }
+
+        if Self::is_tron_address(addr) {
+            return Self::from_tron_address(addr);
         }
 
         if Self::is_bitcoin_address(addr) {
@@ -150,6 +157,57 @@ impl Address {
         Ok(addr.to_checksum(None))
     }
 
+    pub fn is_tron_address(addr: &str) -> bool {
+        addr.starts_with('T') && addr.len() == 34
+    }
+
+    pub fn from_tron_address(addr: &str) -> Result<Self> {
+        let decoded = bs58::decode(addr)
+            .into_vec()
+            .map_err(|e| AddressError::InvalidTronAddress(e.to_string()))?;
+
+        if decoded.len() != 25 {
+            return Err(AddressError::InvalidTronAddress(
+                "Invalid decoded length".to_string(),
+            ));
+        }
+
+        if decoded[0] != 0x41 {
+            return Err(AddressError::InvalidTronAddress(
+                "Invalid version byte".to_string(),
+            ));
+        }
+
+        // Verify checksum (double SHA256)
+        let payload = &decoded[..21];
+        let checksum = &decoded[21..];
+        let hash1 = Sha256::digest(payload);
+        let hash2 = Sha256::digest(&hash1);
+        if &hash2[..4] != checksum {
+            return Err(AddressError::InvalidTronAddress(
+                "Invalid checksum".to_string(),
+            ));
+        }
+
+        let addr_bytes: [u8; ADDR_LEN] = decoded[1..21]
+            .try_into()
+            .map_err(|_| AddressError::InvalidLength)?;
+
+        Ok(Self::Secp256k1Tron(addr_bytes))
+    }
+
+    pub fn tron_to_base58check(bytes: &[u8; ADDR_LEN]) -> String {
+        let mut payload = Vec::with_capacity(25);
+        payload.push(0x41u8); // Tron mainnet prefix
+        payload.extend_from_slice(bytes);
+
+        let hash1 = Sha256::digest(&payload);
+        let hash2 = Sha256::digest(&hash1);
+        payload.extend_from_slice(&hash2[..4]);
+
+        bs58::encode(payload).into_string()
+    }
+
     pub fn from_pubkey(pk: &PubKey) -> Result<Self> {
         match pk {
             PubKey::Secp256k1Sha256(pk) => {
@@ -170,6 +228,12 @@ impl Address {
 
                 Ok(Self::Secp256k1Bitcoin(addr_string.into_bytes()))
             }
+            PubKey::Secp256k1Tron(_) => {
+                let k256_pubkey: alloy::signers::k256::ecdsa::VerifyingKey = pk.try_into()?;
+                let addr = alloy::primitives::Address::from_public_key(&k256_pubkey);
+
+                Ok(Self::Secp256k1Tron(addr.into()))
+            }
             PubKey::Ed25519Solana(_) => Err(AddressError::NotImpl),
         }
     }
@@ -179,6 +243,7 @@ impl Address {
             Address::Secp256k1Sha256(_) => 0,
             Address::Secp256k1Keccak256(_) => 1,
             Address::Secp256k1Bitcoin(_) => 2,
+            Address::Secp256k1Tron(_) => 4,
         }
     }
 
@@ -193,6 +258,7 @@ impl Address {
             Address::Secp256k1Sha256(v) => v,
             Address::Secp256k1Keccak256(v) => v,
             Address::Secp256k1Bitcoin(v) => v,
+            Address::Secp256k1Tron(v) => v,
         }
     }
 
@@ -215,6 +281,7 @@ impl Address {
                 Ok(addr)
             }
             Address::Secp256k1Bitcoin(_) => Err(AddressError::InvalidAddressType),
+            Address::Secp256k1Tron(_) => Err(AddressError::InvalidAddressType),
         }
     }
 
@@ -231,6 +298,7 @@ impl Address {
                 to_checksum_address(&addr)
             }
             Address::Secp256k1Bitcoin(_) => Err(AddressError::InvalidAddressType),
+            Address::Secp256k1Tron(_) => Err(AddressError::InvalidAddressType),
         }
     }
 }
@@ -247,6 +315,9 @@ impl std::fmt::Display for Address {
             }
             Self::Secp256k1Bitcoin(_) => {
                 write!(f, "{}", self.auto_format())
+            }
+            Self::Secp256k1Tron(bytes) => {
+                write!(f, "{}", Self::tron_to_base58check(bytes))
             }
         }
     }
@@ -265,6 +336,9 @@ impl std::fmt::Debug for Address {
             Self::Secp256k1Bitcoin(_) => {
                 write!(f, "{}", self.auto_format())
             }
+            Self::Secp256k1Tron(bytes) => {
+                write!(f, "{}", Self::tron_to_base58check(bytes))
+            }
         }
     }
 }
@@ -275,6 +349,7 @@ impl Hash for Address {
             Address::Secp256k1Sha256(_) => 0u8.hash(state),
             Address::Secp256k1Keccak256(_) => 1u8.hash(state),
             Address::Secp256k1Bitcoin(_) => 2u8.hash(state),
+            Address::Secp256k1Tron(_) => 4u8.hash(state),
         }
 
         self.as_ref().hash(state);
@@ -339,6 +414,15 @@ impl TryFrom<&[u8]> for Address {
                 let addr_bytes = slice[1..].to_vec();
                 Ok(Address::Secp256k1Bitcoin(addr_bytes))
             }
+            4 => {
+                if slice.len() != ADDR_LEN + 1 {
+                    return Err(AddressError::InvalidLength);
+                }
+                let key_data: [u8; ADDR_LEN] = slice[1..]
+                    .try_into()
+                    .map_err(|_| AddressError::InvalidLength)?;
+                Ok(Address::Secp256k1Tron(key_data))
+            }
             _ => Err(AddressError::InvalidKeyType),
         }
     }
@@ -350,6 +434,7 @@ impl AsRef<[u8]> for Address {
             Address::Secp256k1Sha256(data) => data,
             Address::Secp256k1Keccak256(data) => data,
             Address::Secp256k1Bitcoin(data) => data,
+            Address::Secp256k1Tron(data) => data,
         }
     }
 }
@@ -741,5 +826,27 @@ mod tests {
 
         assert_eq!(addr, roundtrip_addr);
         assert_eq!(roundtrip_addr.auto_format(), addr_str);
+    }
+
+    #[test]
+    fn test_tron_addresses() {
+        for addr_str in test_data::tron_addresses::ALL {
+            let addr = Address::from_tron_address(addr_str).unwrap();
+
+            assert!(matches!(addr, Address::Secp256k1Tron(_)));
+            assert!(Address::is_tron_address(addr_str));
+            assert_eq!(addr.prefix_type(), 4);
+
+            let serialized = serde_json::to_string(&addr).unwrap();
+            let deserialized: Address = serde_json::from_str(&serialized).unwrap();
+            assert_eq!(addr, deserialized);
+
+            let bytes = addr.to_bytes();
+            let from_bytes: Address = bytes.as_slice().try_into().unwrap();
+            assert_eq!(addr, from_bytes);
+
+            assert_eq!(addr.to_string(), addr_str);
+            assert_eq!(addr.auto_format(), addr_str);
+        }
     }
 }

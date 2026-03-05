@@ -40,6 +40,7 @@ pub enum KeyPair {
             bitcoin::AddressType,
         ),
     ),
+    Secp256k1Tron(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
 }
 
 impl Zeroize for KeyPair {
@@ -54,6 +55,10 @@ impl Zeroize for KeyPair {
                 sk.zeroize();
             }
             KeyPair::Secp256k1Bitcoin((pk, sk, _, _)) => {
+                pk.zeroize();
+                sk.zeroize();
+            }
+            KeyPair::Secp256k1Tron((pk, sk)) => {
                 pk.zeroize();
                 sk.zeroize();
             }
@@ -82,11 +87,18 @@ impl KeyPair {
         Ok(Self::Secp256k1Bitcoin((pk, sk, network, addr_type)))
     }
 
+    pub fn gen_tron() -> Result<Self> {
+        let keys = Self::gen_keys_bytes()?;
+
+        Ok(Self::Secp256k1Tron(keys))
+    }
+
     pub fn to_sha256(self) -> Self {
         match self {
             Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Sha256(vlaue),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Sha256(value),
             Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Sha256((pk, sk)),
+            Self::Secp256k1Tron(value) => Self::Secp256k1Sha256(value),
         }
     }
 
@@ -95,6 +107,7 @@ impl KeyPair {
             Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Keccak256(vlaue),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Keccak256(value),
             Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Keccak256((pk, sk)),
+            Self::Secp256k1Tron(value) => Self::Secp256k1Keccak256(value),
         }
     }
 
@@ -107,6 +120,16 @@ impl KeyPair {
             Self::Secp256k1Bitcoin((pk, sk, _, _)) => {
                 Self::Secp256k1Bitcoin((pk, sk, network, addr_type))
             }
+            Self::Secp256k1Tron((pk, sk)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
+        }
+    }
+
+    pub fn to_tron(self) -> Self {
+        match self {
+            Self::Secp256k1Sha256(value) => Self::Secp256k1Tron(value),
+            Self::Secp256k1Keccak256(value) => Self::Secp256k1Tron(value),
+            Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Tron((pk, sk)),
+            Self::Secp256k1Tron(value) => Self::Secp256k1Tron(value),
         }
     }
 
@@ -162,6 +185,7 @@ impl KeyPair {
             SecretKey::Secp256k1Bitcoin((sk, network, addr_type)) => {
                 Ok(KeyPair::Secp256k1Bitcoin((pub_key, sk, network, addr_type)))
             }
+            SecretKey::Secp256k1Tron(sk) => Ok(KeyPair::Secp256k1Tron((pub_key, sk))),
         }
     }
 
@@ -192,6 +216,7 @@ impl KeyPair {
                     pub_key, secret_key, network, addr_type,
                 )))
             }
+            slip44::TRON => Ok(Self::Secp256k1Tron((pub_key, secret_key))),
             _ => {
                 return Err(KeyPairError::ExtendedPrivKeyDeriveError(
                     Bip329Errors::InvalidSlip44(bip49.slip44),
@@ -214,6 +239,7 @@ impl KeyPair {
             KeyPair::Secp256k1Bitcoin((_, sk, network, addr_type)) => {
                 Ok(SecretKey::Secp256k1Bitcoin((*sk, *network, *addr_type)))
             }
+            KeyPair::Secp256k1Tron((_, sk)) => Ok(SecretKey::Secp256k1Tron(*sk)),
         }
     }
 
@@ -224,6 +250,7 @@ impl KeyPair {
             KeyPair::Secp256k1Bitcoin((pk, _, network, addr_type)) => {
                 Ok(PubKey::Secp256k1Bitcoin((*pk, *network, *addr_type)))
             }
+            KeyPair::Secp256k1Tron((pk, _)) => Ok(PubKey::Secp256k1Tron(*pk)),
         }
     }
 
@@ -232,6 +259,7 @@ impl KeyPair {
             KeyPair::Secp256k1Sha256((pk, _)) => pk,
             KeyPair::Secp256k1Keccak256((pk, _)) => pk,
             KeyPair::Secp256k1Bitcoin((pk, _, _, _)) => pk,
+            KeyPair::Secp256k1Tron((pk, _)) => pk,
         }
     }
 
@@ -240,6 +268,7 @@ impl KeyPair {
             KeyPair::Secp256k1Sha256((_, sk)) => *sk,
             KeyPair::Secp256k1Keccak256((_, sk)) => *sk,
             KeyPair::Secp256k1Bitcoin((_, sk, _, _)) => *sk,
+            KeyPair::Secp256k1Tron((_, sk)) => *sk,
         }
     }
 
@@ -277,7 +306,7 @@ impl KeyPair {
 
                 Ok(sig)
             }
-            KeyPair::Secp256k1Bitcoin((_, _sk, _, _)) => {
+            KeyPair::Secp256k1Bitcoin((_, _sk, _, _)) | KeyPair::Secp256k1Tron((_, _sk)) => {
                 let signer = self.get_local_eth_siger()?;
                 let sig = signer
                     .sign_message_sync(msg)
@@ -309,6 +338,7 @@ impl KeyPair {
             }
             KeyPair::Secp256k1Sha256((_, _)) => Err(KeyPairError::InvalidSecp256k1Sha256),
             KeyPair::Secp256k1Bitcoin((_, _, _, _)) => Err(KeyPairError::InvalidSecp256k1Bitcoin),
+            KeyPair::Secp256k1Tron((_, _)) => Err(KeyPairError::InvalidSecp256k1Tron),
         }
     }
 
@@ -349,6 +379,12 @@ impl KeyPair {
                 result.extend_from_slice(sk);
                 Ok(result)
             }
+            KeyPair::Secp256k1Tron((pk, sk)) => {
+                let mut result = vec![3u8];
+                result.extend_from_slice(pk);
+                result.extend_from_slice(sk);
+                Ok(result)
+            }
         }
     }
 
@@ -360,7 +396,7 @@ impl KeyPair {
         let key_type = bytes[0];
 
         match key_type {
-            0 | 1 => {
+            0 | 1 | 3 => {
                 if bytes.len() != KEYPAIR_BYTES_SIZE {
                     return Err(KeyPairError::InvalidLength);
                 }
@@ -374,6 +410,7 @@ impl KeyPair {
                 match key_type {
                     0 => Ok(KeyPair::Secp256k1Sha256((pk, sk))),
                     1 => Ok(KeyPair::Secp256k1Keccak256((pk, sk))),
+                    3 => Ok(KeyPair::Secp256k1Tron((pk, sk))),
                     _ => unreachable!(),
                 }
             }
@@ -461,7 +498,7 @@ mod tests_keypair {
     #[test]
     fn test_from_bytes_invalid_key_type() {
         let mut bytes = vec![0u8; KEYPAIR_BYTES_SIZE];
-        bytes[0] = 3;
+        bytes[0] = 99;
         let result = KeyPair::from_bytes(Cow::Borrowed(&bytes));
         assert!(matches!(result, Err(KeyPairError::InvalidKeyType)));
     }

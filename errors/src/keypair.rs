@@ -55,6 +55,9 @@ pub enum KeyPairError {
     #[error("Bitcoin keys do not support EIP712")]
     InvalidSecp256k1Bitcoin,
 
+    #[error("Tron keys do not support EIP712")]
+    InvalidSecp256k1Tron,
+
     #[error("eip712 error: {0}")]
     Eip712Error(String),
 }

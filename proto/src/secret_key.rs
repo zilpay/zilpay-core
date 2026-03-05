@@ -18,6 +18,7 @@ pub enum SecretKey {
             bitcoin::AddressType,
         ),
     ),
+    Secp256k1Tron([u8; SECRET_KEY_SIZE]),
 }
 
 impl Zeroize for SecretKey {
@@ -26,6 +27,7 @@ impl Zeroize for SecretKey {
             SecretKey::Secp256k1Sha256Zilliqa(key) => key.zeroize(),
             SecretKey::Secp256k1Keccak256Ethereum(key) => key.zeroize(),
             SecretKey::Secp256k1Bitcoin((key, _, _)) => key.zeroize(),
+            SecretKey::Secp256k1Tron(key) => key.zeroize(),
         }
     }
 }
@@ -92,6 +94,11 @@ impl SecretKey {
                 result.extend_from_slice(sk);
                 Ok(result)
             }
+            SecretKey::Secp256k1Tron(sk) => {
+                let mut result = vec![3u8];
+                result.extend_from_slice(sk);
+                Ok(result)
+            }
         }
     }
 
@@ -103,7 +110,7 @@ impl SecretKey {
         let key_type = bytes[0];
 
         match key_type {
-            0 | 1 => {
+            0 | 1 | 3 => {
                 if bytes.len() != SECRET_KEY_SIZE + 1 {
                     return Err(SecretKeyError::InvalidLength);
                 }
@@ -114,6 +121,7 @@ impl SecretKey {
                 match key_type {
                     0 => Ok(SecretKey::Secp256k1Sha256Zilliqa(key_data)),
                     1 => Ok(SecretKey::Secp256k1Keccak256Ethereum(key_data)),
+                    3 => Ok(SecretKey::Secp256k1Tron(key_data)),
                     _ => unreachable!(),
                 }
             }
@@ -148,6 +156,7 @@ impl AsRef<[u8]> for SecretKey {
             SecretKey::Secp256k1Sha256Zilliqa(data) => data,
             SecretKey::Secp256k1Keccak256Ethereum(data) => data,
             SecretKey::Secp256k1Bitcoin((data, _, _)) => data,
+            SecretKey::Secp256k1Tron(data) => data,
         }
     }
 }

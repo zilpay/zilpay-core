@@ -61,6 +61,9 @@ pub enum AddressError {
     #[error("Invalid HRP")]
     InvalidHrp,
 
+    #[error("Invalid Tron address: {0}")]
+    InvalidTronAddress(String),
+
     #[error("Not implemented")]
     NotImpl,
 
