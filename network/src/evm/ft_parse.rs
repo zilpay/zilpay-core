@@ -120,11 +120,8 @@ pub fn build_token_requests<'a>(
         Address::Secp256k1Keccak256(_) => {
             build_eth_requests(contract, accounts, native, &mut requests)?;
         }
-        Address::Secp256k1Bitcoin(_) => {
-            // Bitcoin support not yet implemented
-            return Err(TokenError::NetworkError(
-                "Bitcoin tokens not yet supported".to_string(),
-            ))?;
+        _ => {
+            return Err(TokenError::NetworkError("not supported".to_string()))?;
         }
     }
 

@@ -30,7 +30,7 @@ pub fn build_last_block_header_request(address: &Address, block_number: Option<u
                 EvmMethods::GetBlockByNumber,
             )
         }
-        Address::Secp256k1Bitcoin(_) => Value::Null,
+        _ => Value::Null,
     }
 }
 
@@ -55,7 +55,7 @@ pub fn process_get_timestampt_block_response(
             .and_then(|v| v.as_str())
             .and_then(|v| u64::from_str_radix(v.trim_start_matches("0x"), 16).ok())
             .unwrap_or_default(),
-        Address::Secp256k1Bitcoin(_) => 0,
+        _ => 0,
     };
     let blocknumber = match address_type {
         Address::Secp256k1Sha256(_) => response
@@ -73,7 +73,7 @@ pub fn process_get_timestampt_block_response(
             .and_then(|v| v.as_str())
             .and_then(|v| u128::from_str_radix(v.trim_start_matches("0x"), 16).ok())
             .unwrap_or_default(),
-        Address::Secp256k1Bitcoin(_) => 0,
+        _ => 0,
     };
 
     (blocknumber, timestamp)

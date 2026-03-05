@@ -531,8 +531,7 @@ impl TransactionsManagement for Background {
             }
             Address::Secp256k1Keccak256(_) => {
                 let bytes = if message.starts_with("0x") || message.starts_with("0X") {
-                    hex::decode(&message[2..])
-                        .unwrap_or_else(|_| message.as_bytes().to_vec())
+                    hex::decode(&message[2..]).unwrap_or_else(|_| message.as_bytes().to_vec())
                 } else {
                     message.as_bytes().to_vec()
                 };

@@ -346,10 +346,7 @@ impl EvmOperations for NetworkProvider {
                         tokens[*token_idx].balances.insert(account_index, balance);
                     }
                 }
-                Address::Secp256k1Bitcoin(_) => {
-                    dbg!(&response);
-                    // TODO: fix it.
-                }
+                _ => {}
             }
         }
 
@@ -371,9 +368,6 @@ impl EvmOperations for NetworkProvider {
             .map_err(NetworkErrors::Request)?;
 
         match contract {
-            Address::Secp256k1Bitcoin(_) => {
-                return Err(NetworkErrors::EIPNotSupporting(0));
-            }
             Address::Secp256k1Sha256(_) => {
                 let (name, symbol, decimals) = process_zil_metadata_response(
                     responses[0]
@@ -457,6 +451,9 @@ impl EvmOperations for NetworkProvider {
                     chain_hash: self.config.hash(),
                     rate: 0f64,
                 })
+            }
+            _ => {
+                return Err(NetworkErrors::EIPNotSupporting(0));
             }
         }
     }

@@ -432,4 +432,251 @@ mod tests {
         let result = sk_zil.to_wif(true);
         assert!(matches!(result, Err(SecretKeyError::InvalidWif(_))));
     }
+
+    #[test]
+    fn test_tron_private_keys_from_csv() {
+        use crate::keypair::KeyPair;
+
+        let test_cases = vec![
+            (
+                "15f0bbb1774be40b7a8d7965d637f324bda2f711fc5726a3dcc19585c6950954",
+                "TWer2Ygk5TEheHp3TPuYeqxmB6SsGZmaL6",
+            ),
+            (
+                "9b6ac6a6faf1dc64240f654475a7e668141e4205262367feb7269ef332113929",
+                "TPjjvMwjPoDC32V2dGDYTkLH4E5LAtBZ6C",
+            ),
+            (
+                "0c88a7fee5bfbe5a354c225bfa8a9d09557466cdf56f887cc2d000e7354f9453",
+                "TB7mhtkvfhsRBRhe5FuRa4tFXSEyGDe4eA",
+            ),
+            (
+                "68c9a7dcaa4677fdeba9f72c8a1d86d0adf34932cdbdb52d90a2d01504d9d4be",
+                "TEb822rMZ5QkYReuqdqK61zkheaan97PZZ",
+            ),
+            (
+                "a01527c0c2d83e71c8827f2f0ee5c1a6f715a0c9bace1c3da50c6690a4e69fe7",
+                "TYc2iBENTQ7kwx5jbjW3JDqugR7kogQZn3",
+            ),
+            (
+                "679733f6af4143c82ea340e70029e86fda0fc0232a434172b7f233d96f6ff70f",
+                "TNWtoufpsNepTJdNzbcimHrPEUSHLDCJE1",
+            ),
+            (
+                "c41ac8920442be2469a0d6f04c9959e7e9faa3c6be4c3723224a2e06f4fd3aec",
+                "TYMprjNZ1Lhc2zAsmRbGuBzY6iQ4FB4amn",
+            ),
+            (
+                "ff46c996d2494137bff12940698eae445b696e6da4769933687d607a8fa06dc3",
+                "TDmEWPYotmrXW4X49WMJTMostcezCiksPw",
+            ),
+            (
+                "47e922c77f526dea6dcd1bb5d9af55239815fd982799745abe1f646f04ffe776",
+                "TPoh8thAmjTXgxPwtFT9oYVyJXPVqLJHhh",
+            ),
+            (
+                "529ca9c20dd90893928ef9ce2bdfcecbc191ffc5ee93a0171427d9a28ea77718",
+                "TJtuRzHcZ12gHZA8gKjqq589S7h4fYW8N1",
+            ),
+        ];
+
+        for (private_key_hex, expected_address) in test_cases {
+            let sk_bytes = hex::decode(private_key_hex).unwrap();
+            let sk_array: [u8; SECRET_KEY_SIZE] = sk_bytes.try_into().unwrap();
+            let sk = SecretKey::Secp256k1Tron(sk_array);
+
+            let keypair = KeyPair::from_secret_key(sk).unwrap();
+            let addr = keypair.get_addr().unwrap();
+            let addr_str = addr.auto_format();
+
+            assert_eq!(
+                addr_str, expected_address,
+                "Address mismatch for private key: {}",
+                private_key_hex
+            );
+        }
+    }
+
+    #[test]
+    fn test_tron_secret_key_roundtrip() {
+        let test_keys = vec![
+            "15f0bbb1774be40b7a8d7965d637f324bda2f711fc5726a3dcc19585c6950954",
+            "9b6ac6a6faf1dc64240f654475a7e668141e4205262367feb7269ef332113929",
+            "0c88a7fee5bfbe5a354c225bfa8a9d09557466cdf56f887cc2d000e7354f9453",
+        ];
+
+        for key_hex in test_keys {
+            let sk_bytes = hex::decode(key_hex).unwrap();
+            let sk_array: [u8; SECRET_KEY_SIZE] = sk_bytes.try_into().unwrap();
+            let sk = SecretKey::Secp256k1Tron(sk_array);
+
+            let bytes = sk.to_bytes().unwrap();
+            let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+            assert_eq!(sk, recovered);
+        }
+    }
+
+    #[test]
+    fn test_tron_secret_key_display_roundtrip() {
+        let sk_hex = "15f0bbb1774be40b7a8d7965d637f324bda2f711fc5726a3dcc19585c6950954";
+        let sk_bytes = hex::decode(sk_hex).unwrap();
+        let sk_array: [u8; SECRET_KEY_SIZE] = sk_bytes.try_into().unwrap();
+        let sk = SecretKey::Secp256k1Tron(sk_array);
+
+        let sk_str = sk.to_string();
+        let recovered = SecretKey::from_str(&sk_str).unwrap();
+
+        assert_eq!(sk, recovered);
+    }
+
+    #[test]
+    fn test_tron_secret_key_as_ref() {
+        let sk_hex = "15f0bbb1774be40b7a8d7965d637f324bda2f711fc5726a3dcc19585c6950954";
+        let sk_bytes = hex::decode(sk_hex).unwrap();
+        let sk_array: [u8; SECRET_KEY_SIZE] = sk_bytes.try_into().unwrap();
+        let sk = SecretKey::Secp256k1Tron(sk_array);
+
+        assert_eq!(sk.as_ref(), sk_array.as_slice());
+    }
+
+    #[test]
+    fn test_all_csv_tron_addresses() {
+        use crate::keypair::KeyPair;
+
+        let test_cases = vec![
+            (
+                "15f0bbb1774be40b7a8d7965d637f324bda2f711fc5726a3dcc19585c6950954",
+                "TWer2Ygk5TEheHp3TPuYeqxmB6SsGZmaL6",
+            ),
+            (
+                "9b6ac6a6faf1dc64240f654475a7e668141e4205262367feb7269ef332113929",
+                "TPjjvMwjPoDC32V2dGDYTkLH4E5LAtBZ6C",
+            ),
+            (
+                "0c88a7fee5bfbe5a354c225bfa8a9d09557466cdf56f887cc2d000e7354f9453",
+                "TB7mhtkvfhsRBRhe5FuRa4tFXSEyGDe4eA",
+            ),
+            (
+                "68c9a7dcaa4677fdeba9f72c8a1d86d0adf34932cdbdb52d90a2d01504d9d4be",
+                "TEb822rMZ5QkYReuqdqK61zkheaan97PZZ",
+            ),
+            (
+                "a01527c0c2d83e71c8827f2f0ee5c1a6f715a0c9bace1c3da50c6690a4e69fe7",
+                "TYc2iBENTQ7kwx5jbjW3JDqugR7kogQZn3",
+            ),
+            (
+                "679733f6af4143c82ea340e70029e86fda0fc0232a434172b7f233d96f6ff70f",
+                "TNWtoufpsNepTJdNzbcimHrPEUSHLDCJE1",
+            ),
+            (
+                "c41ac8920442be2469a0d6f04c9959e7e9faa3c6be4c3723224a2e06f4fd3aec",
+                "TYMprjNZ1Lhc2zAsmRbGuBzY6iQ4FB4amn",
+            ),
+            (
+                "ff46c996d2494137bff12940698eae445b696e6da4769933687d607a8fa06dc3",
+                "TDmEWPYotmrXW4X49WMJTMostcezCiksPw",
+            ),
+            (
+                "47e922c77f526dea6dcd1bb5d9af55239815fd982799745abe1f646f04ffe776",
+                "TPoh8thAmjTXgxPwtFT9oYVyJXPVqLJHhh",
+            ),
+            (
+                "529ca9c20dd90893928ef9ce2bdfcecbc191ffc5ee93a0171427d9a28ea77718",
+                "TJtuRzHcZ12gHZA8gKjqq589S7h4fYW8N1",
+            ),
+            (
+                "0f3f9e6e0e5852633037bac2027ed1348d0f838a074606a97fbb25e2fa73bdd5",
+                "TQJXL6yjWWMwHBG7Pc8ofcsoChoyzMx6EJ",
+            ),
+            (
+                "440a44e5fe4fe4dbb66bc52dadc48339b6f5c23a162013cec1eb103ee996e0c2",
+                "TY36GCuD93n6qZXYM1G7zFaSLJNcydNSbE",
+            ),
+            (
+                "9eb62d6eeebe7b2aa685e9348662bd4f321ff89f8780e9ad69144393f5de8340",
+                "TPoMkBpKEtMKjRDEjuj18wwrDawmmui1xr",
+            ),
+            (
+                "be9c96cb4108418357640ee207035aff222758d3017310776360d97d6d125be0",
+                "TV9zSp3gCzZV3Vb7dSFKiszz758ssHxkZk",
+            ),
+            (
+                "619e85874210d20343f60017456af0944ba2e5a05d9958cf69acef07233feae1",
+                "TXBqVsdSZxK8TWVELkszohx2isK14oHXQr",
+            ),
+            (
+                "6cdc8a402c9587011d70ef5241bcd83165d78c36ab18f87c78e14ee2f01c9928",
+                "TRgTpCjTj588SszvJSBEesjGo6BcMopxEw",
+            ),
+            (
+                "91c353acfc7a8b6ee175f105aac745ce93c84454edf5a8afec3e1c6c4368a380",
+                "TDqFiJvNmfmprXueksX1gHqpujpKrNcEYm",
+            ),
+            (
+                "a3c85975131f7c2a4a54af27a4f31f9425972049a03919cd35140ccb211141f8",
+                "TUZN9nyGkpc1VEWHXt4kzcPnJaDoPXNiSM",
+            ),
+            (
+                "b910cc7612f40a9a340d0e91d8d0dc9387a45e1222cc0ace2fbae73e9d8fc5c5",
+                "TMyzpv258fdLbG1RNSWA1xYQZyk3XNSduP",
+            ),
+            (
+                "ef0ae59787ca357e93f2eca372bcb2cdcc66aef2cd9aa54d1ab6ee2b5ed6a5e0",
+                "TECoRud4FyZnEqRqwjAkYsqWT7Xbf5pBUi",
+            ),
+        ];
+
+        for (private_key_hex, expected_address) in test_cases {
+            let sk_bytes = hex::decode(private_key_hex).unwrap();
+            let sk_array: [u8; SECRET_KEY_SIZE] = sk_bytes.try_into().unwrap();
+            let sk = SecretKey::Secp256k1Tron(sk_array);
+
+            let keypair = KeyPair::from_secret_key(sk).unwrap();
+            let addr = keypair.get_addr().unwrap();
+            let addr_str = addr.auto_format();
+
+            assert_eq!(
+                addr_str, expected_address,
+                "Address mismatch for private key: {}",
+                private_key_hex
+            );
+        }
+    }
+
+    #[test]
+    fn test_tron_public_key_derivation() {
+        use crate::keypair::KeyPair;
+
+        let test_cases = vec![
+            (
+                "15f0bbb1774be40b7a8d7965d637f324bda2f711fc5726a3dcc19585c6950954",
+                "030738c1aa72b07ff1a894198374a34c760913db0e6a5679d48477873b8f1fa865",
+            ),
+            (
+                "9b6ac6a6faf1dc64240f654475a7e668141e4205262367feb7269ef332113929",
+                "02c535cb0bdd16fa25620fd200879166cafbf31c269880fc033879ad2b280e8742",
+            ),
+            (
+                "0c88a7fee5bfbe5a354c225bfa8a9d09557466cdf56f887cc2d000e7354f9453",
+                "03c86b9ec1fb63bd8dc2ce65c666f98ef986a9d1b476f8be37d334431c0be784fa",
+            ),
+        ];
+
+        for (private_key_hex, expected_pubkey_hex) in test_cases {
+            let sk_bytes = hex::decode(private_key_hex).unwrap();
+            let sk_array: [u8; SECRET_KEY_SIZE] = sk_bytes.try_into().unwrap();
+            let sk = SecretKey::Secp256k1Tron(sk_array);
+
+            let keypair = KeyPair::from_secret_key(sk).unwrap();
+            let pubkey = keypair.get_pubkey().unwrap();
+            let pubkey_hex = pubkey.as_hex_str();
+
+            assert_eq!(
+                pubkey_hex, expected_pubkey_hex,
+                "Public key mismatch for private key: {}",
+                private_key_hex
+            );
+        }
+    }
 }
