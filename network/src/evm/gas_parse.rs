@@ -66,7 +66,7 @@ pub fn build_batch_gas_request(
                 EvmMethods::GasPrice,
             ));
         }
-        TransactionRequest::Bitcoin(_) => {
+        _ => {
             return Err(TransactionErrors::InvalidTransaction)?;
         }
     }
@@ -85,7 +85,7 @@ pub fn build_batch_gas_request(
 
             val
         }
-        TransactionRequest::Bitcoin(_) => {
+        _ => {
             return Err(TransactionErrors::InvalidTransaction)?;
         }
     };

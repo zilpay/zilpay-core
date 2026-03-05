@@ -260,6 +260,7 @@ impl HistoricalTransaction {
                     timestamp,
                 })
             }
+            TransactionReceipt::Tron(_) => todo!(),
         }
     }
 

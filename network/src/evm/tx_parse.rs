@@ -28,8 +28,8 @@ pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
                 EvmMethods::SendRawTransaction,
             )
         }
-        TransactionReceipt::Bitcoin(_) => {
-            json!({"error": "Bitcoin transactions not supported in EVM operations"})
+        _ => {
+            json!({"error": "transactions not supported in EVM operations"})
         }
     }
 }
@@ -151,8 +151,8 @@ pub fn process_tx_send_response(
                 Err(NetworkErrors::RPCError("Invalid response".to_string()))
             }
         }
-        TransactionReceipt::Bitcoin(_) => Err(NetworkErrors::RPCError(
-            "Bitcoin transactions not supported in EVM operations".to_string(),
+        _ => Err(NetworkErrors::RPCError(
+            "transactions not supported in EVM operations".to_string(),
         )),
     }
 }
