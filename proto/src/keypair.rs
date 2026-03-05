@@ -1115,4 +1115,158 @@ mod tests_keypair {
             }
         }
     }
+
+    #[test]
+    fn test_gen_tron_keypair() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        assert!(matches!(keypair, KeyPair::Secp256k1Tron(_)));
+
+        let pubkey = keypair.get_pubkey().unwrap();
+        assert!(matches!(pubkey, PubKey::Secp256k1Tron(_)));
+
+        let secret_key = keypair.get_secretkey().unwrap();
+        assert!(matches!(secret_key, SecretKey::Secp256k1Tron(_)));
+    }
+
+    #[test]
+    fn test_tron_keypair_get_addr() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let addr = keypair.get_addr().unwrap();
+
+        assert!(matches!(addr, Address::Secp256k1Tron(_)));
+
+        let tron_addr_str = addr.auto_format();
+        assert!(tron_addr_str.starts_with('T'));
+        assert_eq!(tron_addr_str.len(), 34);
+    }
+
+    #[test]
+    fn test_tron_keypair_to_bytes() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let bytes = keypair.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 3);
+        assert_eq!(bytes.len(), PUB_KEY_SIZE + SECRET_KEY_SIZE + 1);
+    }
+
+    #[test]
+    fn test_tron_keypair_from_bytes() {
+        let original = KeyPair::gen_tron().unwrap();
+        let bytes = original.to_bytes().unwrap();
+        let recovered = KeyPair::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+
+        assert_eq!(original, recovered);
+    }
+
+    #[test]
+    fn test_tron_keypair_sign_message() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let message = b"Hello Tron!";
+
+        let signature = keypair.sign_message(message);
+        assert!(signature.is_ok());
+
+        let sig = signature.unwrap();
+        let verify = keypair.verify_sig(message, &sig);
+        assert!(verify.is_ok());
+        assert!(verify.unwrap());
+    }
+
+    #[test]
+    fn test_tron_keypair_conversion() {
+        let keypair_zil = KeyPair::gen_sha256().unwrap();
+        let keypair_tron = keypair_zil.to_tron();
+
+        assert!(matches!(keypair_tron, KeyPair::Secp256k1Tron(_)));
+
+        let keypair_eth = KeyPair::gen_keccak256().unwrap();
+        let keypair_tron_from_eth = keypair_eth.to_tron();
+
+        assert!(matches!(keypair_tron_from_eth, KeyPair::Secp256k1Tron(_)));
+    }
+
+    #[test]
+    fn test_tron_from_secret_key() {
+        let sk = SecretKey::Secp256k1Tron([42u8; SECRET_KEY_SIZE]);
+        let result = KeyPair::from_secret_key(sk);
+
+        assert!(result.is_ok());
+        let keypair = result.unwrap();
+        assert!(matches!(keypair, KeyPair::Secp256k1Tron(_)));
+    }
+
+    #[test]
+    fn test_tron_bip39_derivation() {
+        use test_data::ANVIL_MNEMONIC;
+
+        let m = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
+        let seed = m.to_seed("").unwrap();
+
+        let tron_path = DerivationPath::new(slip44::TRON, 0, DerivationPath::BIP44_PURPOSE, None);
+        let tron_key_pair = KeyPair::from_bip39_seed(&seed, &tron_path).unwrap();
+        let tron_addr = tron_key_pair.get_addr().unwrap();
+
+        assert!(matches!(tron_key_pair, KeyPair::Secp256k1Tron(_)));
+        assert!(matches!(tron_addr, Address::Secp256k1Tron(_)));
+
+        let tron_addr_str = tron_addr.auto_format();
+        assert!(tron_addr_str.starts_with('T'));
+        assert_eq!(tron_addr_str.len(), 34);
+    }
+
+    #[test]
+    fn test_tron_derivation_path() {
+        let tron_path = DerivationPath::new(slip44::TRON, 0, DerivationPath::BIP44_PURPOSE, None);
+
+        assert_eq!(tron_path.get_path(), "m/44'/195'/0'/0/0");
+        assert_eq!(tron_path.get_base_path(), "m/44'/195'/0'/0/");
+    }
+
+    #[test]
+    fn test_tron_keypair_roundtrip() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let bytes = keypair.to_bytes().unwrap();
+        let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
+
+        assert_eq!(keypair, recovered);
+
+        let addr_original = keypair.get_addr().unwrap();
+        let addr_recovered = recovered.get_addr().unwrap();
+        assert_eq!(addr_original, addr_recovered);
+    }
+
+    #[test]
+    fn test_tron_keypair_sign_verify() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let message = b"Test message for Tron signing";
+
+        let signature = keypair.sign_message(message).unwrap();
+        let is_valid = keypair.verify_sig(message, &signature).unwrap();
+
+        assert!(is_valid);
+    }
+
+    #[test]
+    fn test_tron_multiple_addresses_from_mnemonic() {
+        use test_data::ANVIL_MNEMONIC;
+
+        let m = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
+        let seed = m.to_seed("").unwrap();
+
+        let expected_addresses = test_data::tron_addresses::ALL;
+
+        for (index, expected_addr) in expected_addresses.iter().enumerate() {
+            let tron_path =
+                DerivationPath::new(slip44::TRON, index, DerivationPath::BIP44_PURPOSE, None);
+            let keypair = KeyPair::from_bip39_seed(&seed, &tron_path).unwrap();
+            let addr = keypair.get_addr().unwrap();
+            let derived_addr = addr.auto_format();
+
+            assert_eq!(
+                derived_addr, *expected_addr,
+                "Address mismatch at index {}: expected {}, got {}",
+                index, expected_addr, derived_addr
+            );
+        }
+    }
 }

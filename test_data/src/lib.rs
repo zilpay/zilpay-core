@@ -243,16 +243,16 @@ pub mod anvil_accounts {
 
 #[allow(dead_code)]
 pub mod tron_addresses {
-    pub const ADDR_0: &str = "TNgVsm5hG8EJMbpUCJXSutDBiEfumk7fTD";
-    pub const ADDR_1: &str = "TVL6xQUTfQ9FZ3NejP8LNHfdgQQvE5e1uE";
-    pub const ADDR_2: &str = "TLY3K2mspSXRtzfiaoiVKBJjtdke6fvv38";
-    pub const ADDR_3: &str = "TUBeFgtGT58KZiD5GSrieb4AiExLAzYk5j";
-    pub const ADDR_4: &str = "TWogvmG6NyzR3NE4Ggqohwf4kvoHCmVPLa";
-    pub const ADDR_5: &str = "TEGK9NX2RrKQchm2EaPJc7AAJ5iPb5o9y1";
-    pub const ADDR_6: &str = "TAffr3kmGp7gzp2Vf2NyVetm86tCbmkBgx";
-    pub const ADDR_7: &str = "TW9SumtR9vBKq2v33UjEfE2LUWk2gV6BeM";
-    pub const ADDR_8: &str = "TAFrGKmhx2eGqan1mHTwVWGm3usk9B1caA";
-    pub const ADDR_9: &str = "TLQUNoYFm6QRN7mmEttUtkWHwNK5urnHEW";
+    pub const ADDR_0: &str = "TWer2Ygk5TEheHp3TPuYeqxmB6SsGZmaL6";
+    pub const ADDR_1: &str = "TPjjvMwjPoDC32V2dGDYTkLH4E5LAtBZ6C";
+    pub const ADDR_2: &str = "TB7mhtkvfhsRBRhe5FuRa4tFXSEyGDe4eA";
+    pub const ADDR_3: &str = "TEb822rMZ5QkYReuqdqK61zkheaan97PZZ";
+    pub const ADDR_4: &str = "TYc2iBENTQ7kwx5jbjW3JDqugR7kogQZn3";
+    pub const ADDR_5: &str = "TNWtoufpsNepTJdNzbcimHrPEUSHLDCJE1";
+    pub const ADDR_6: &str = "TYMprjNZ1Lhc2zAsmRbGuBzY6iQ4FB4amn";
+    pub const ADDR_7: &str = "TDmEWPYotmrXW4X49WMJTMostcezCiksPw";
+    pub const ADDR_8: &str = "TPoh8thAmjTXgxPwtFT9oYVyJXPVqLJHhh";
+    pub const ADDR_9: &str = "TJtuRzHcZ12gHZA8gKjqq589S7h4fYW8N1";
 
     pub const ALL: [&str; 10] = [
         ADDR_0, ADDR_1, ADDR_2, ADDR_3, ADDR_4, ADDR_5, ADDR_6, ADDR_7, ADDR_8, ADDR_9,
