@@ -5,6 +5,7 @@ use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::evm::generate_erc20_transfer_data;
 use proto::{
     address::Address,
+    tron_tx::{TronContractCall, TronTransactionRequest},
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
     zil_tx::ZILTransactionRequest,
 };
@@ -168,6 +169,35 @@ impl TokensManagement for Background {
                     }
                 };
                 let txn = TransactionRequest::Zilliqa((transfer_request, metadata));
+
+                Ok(txn)
+            }
+            Address::Secp256k1Tron(_) => {
+                let contract = if token.native {
+                    TronContractCall::Transfer {
+                        to_address: to,
+                        amount: amount.to::<i64>(),
+                    }
+                } else {
+                    let transfer_data = network::evm::generate_erc20_transfer_data(&to, amount)?;
+                    TronContractCall::TriggerSmartContract {
+                        contract_address: token.addr.clone(),
+                        call_value: 0,
+                        data: transfer_data.to_vec(),
+                        call_token_value: 0,
+                        token_id: 0,
+                    }
+                };
+                let tron_tx = TronTransactionRequest {
+                    owner_address: sender.addr.clone(),
+                    ref_block_bytes: Vec::new(),
+                    ref_block_hash: Vec::new(),
+                    expiration: 0,
+                    timestamp: 0,
+                    fee_limit: 0,
+                    contract,
+                };
+                let txn = TransactionRequest::Tron((tron_tx, metadata));
 
                 Ok(txn)
             }

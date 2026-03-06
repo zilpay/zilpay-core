@@ -258,6 +258,13 @@ pub fn update_tx_from_params(
                 }
             }
         }
+        TransactionRequest::Tron((ref mut tron_tx, _metadata)) => {
+            let fee: i64 = params
+                .current
+                .try_into()
+                .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
+            tron_tx.fee_limit = fee;
+        }
         TransactionRequest::Bitcoin((ref mut btc_tx, ref metadata)) => {
             if params.current == U256::ZERO {
                 return Ok(());
@@ -452,6 +459,13 @@ impl TransactionsManagement for Background {
 
                 Ok(hash.0)
             }
+            Address::Secp256k1Tron(_) => {
+                let prefix = format!("\x19TRON Signed Message:\n{}", message.len());
+                let full_message = format!("{}{}", prefix, message);
+                let hash = keccak256(full_message.as_bytes());
+
+                Ok(hash.0)
+            }
         }
     }
 
@@ -529,7 +543,7 @@ impl TransactionsManagement for Background {
 
                 key_pair.sign_message(&hash)?
             }
-            Address::Secp256k1Keccak256(_) => {
+            Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => {
                 let bytes = if message.starts_with("0x") || message.starts_with("0X") {
                     hex::decode(&message[2..]).unwrap_or_else(|_| message.as_bytes().to_vec())
                 } else {
