@@ -531,7 +531,7 @@ impl TronOperations for NetworkProvider {
         let timestamp =
             block_timestamp(&block).ok_or(NetworkErrors::ResponseParseError)? as i64;
         tx.timestamp = timestamp;
-        tx.expiration = timestamp + 60_000;
+        tx.expiration = timestamp + 300_000;
 
         Ok(())
     }
