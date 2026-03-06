@@ -12,8 +12,10 @@ use errors::tx::TransactionErrors;
 use history::status::TransactionStatus;
 use history::transaction::HistoricalTransaction;
 use proto::address::Address;
-use proto::tron_tx::TronContractCall;
+use proto::tron_tx::{TronContractCall, TronTransactionRequest};
 use proto::tx::{TransactionReceipt, TransactionRequest};
+use prost::Message;
+use proto::tron_generated::protocol;
 use serde_json::{json, Value};
 use token::ft::FToken;
 
@@ -238,6 +240,7 @@ pub trait TronOperations {
         accounts: &[&Address],
     ) -> Result<()>;
     async fn tron_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken>;
+    async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()>;
 }
 
 #[async_trait]
@@ -361,14 +364,19 @@ impl TronOperations for NetworkProvider {
             };
 
             let tx_id_hex = alloy::hex::encode(tron_tx.tx_id);
-            let body = json!({
-                "raw_data_hex": alloy::hex::encode(&tron_tx.raw_data_bytes),
-                "txID": tx_id_hex,
-                "signature": [alloy::hex::encode(&tron_tx.signature)],
-                "visible": false,
-            });
 
-            let response = self.tron_post("/wallet/broadcasttransaction", body).await?;
+            let raw = protocol::transaction::Raw::decode(tron_tx.raw_data_bytes.as_slice())
+                .map_err(|e| NetworkErrors::RPCError(format!("Decode raw_data: {}", e)))?;
+            let full_tx = protocol::Transaction {
+                raw_data: Some(raw),
+                signature: vec![tron_tx.signature.clone()],
+                ret: Vec::new(),
+            };
+            let full_tx_hex = alloy::hex::encode(full_tx.encode_to_vec());
+
+            let response = self
+                .tron_post("/wallet/broadcasthex", json!({ "transaction": full_tx_hex }))
+                .await?;
 
             if !response
                 .get("result")
@@ -500,6 +508,32 @@ impl TronOperations for NetworkProvider {
             chain_hash: self.config.hash(),
             rate: 0f64,
         })
+    }
+
+    async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()> {
+        let block = self.tron_post("/wallet/getnowblock", json!({})).await?;
+
+        let block_id = block
+            .get("blockID")
+            .and_then(|v| v.as_str())
+            .ok_or(NetworkErrors::ResponseParseError)?;
+
+        let block_id_bytes =
+            alloy::hex::decode(block_id).map_err(|_| NetworkErrors::ResponseParseError)?;
+
+        if block_id_bytes.len() < 16 {
+            return Err(NetworkErrors::ResponseParseError);
+        }
+
+        tx.ref_block_bytes = block_id_bytes[6..8].to_vec();
+        tx.ref_block_hash = block_id_bytes[8..16].to_vec();
+
+        let timestamp =
+            block_timestamp(&block).ok_or(NetworkErrors::ResponseParseError)? as i64;
+        tx.timestamp = timestamp;
+        tx.expiration = timestamp + 60_000;
+
+        Ok(())
     }
 }
 

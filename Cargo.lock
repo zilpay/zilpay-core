@@ -3724,6 +3724,7 @@ dependencies = [
  "errors",
  "history",
  "mockito",
+ "prost 0.13.5",
  "proto",
  "rand 0.8.5",
  "reqwest",

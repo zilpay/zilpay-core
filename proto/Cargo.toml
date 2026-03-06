@@ -21,8 +21,8 @@ hmac.workspace = true
 tokio.workspace = true
 bitcoin.workspace = true
 bincode.workspace = true
-prost = "0.13.5"
-prost-types = "0.13.5"
+prost.workspace = true
+prost-types.workspace = true
 
 crypto = { path = "../crypto" }
 config = { path = "../config" }

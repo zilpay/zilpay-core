@@ -1145,4 +1145,111 @@ mod tests_background_transactions {
         let txns = vec![signed_tx];
         bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_sign_and_send_tron_tx() {
+        use crypto::{bip49::DerivationPath, slip44};
+        use test_data::{gen_tron_testnet_conf, gen_tron_token, tron_addresses};
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_tron_testnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [
+            (
+                DerivationPath::new(slip44::TRON, 0, DerivationPath::BIP44_PURPOSE, None),
+                "Tron Acc 0".to_string(),
+            ),
+            (
+                DerivationPath::new(slip44::TRON, 1, DerivationPath::BIP44_PURPOSE, None),
+                "Tron Acc 1".to_string(),
+            ),
+        ];
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: &password,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Tron wallet".to_string(),
+            biometric_type: Default::default(),
+            ftokens: vec![gen_tron_token()],
+        })
+        .await
+        .unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
+
+        dbg!(&balance);
+
+        let account_0 = data.accounts.first().unwrap();
+        assert_eq!(account_0.addr.auto_format(), tron_addresses::ADDR_0);
+
+        let account_1 = data.accounts.get(1).unwrap();
+
+        let mut tron_tx = proto::tron_tx::TronTransactionRequest {
+            owner_address: account_0.addr.clone(),
+            ref_block_bytes: vec![],
+            ref_block_hash: vec![],
+            expiration: 0,
+            timestamp: 0,
+            fee_limit: 0,
+            contract: proto::tron_tx::TronContractCall::Transfer {
+                to_address: account_1.addr.clone(),
+                amount: 1_000_000,
+            },
+        };
+
+        let metadata = proto::tx::TransactionMetadata {
+            chain_hash: net_config.hash(),
+            ..Default::default()
+        };
+        let mut tx_request = TransactionRequest::Tron((tron_tx.clone(), metadata.clone()));
+
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
+
+        let params = provider
+            .estimate_params_batch(&tx_request, &account_0.addr, 1, None)
+            .await
+            .unwrap();
+
+        super::update_tx_from_params(&mut tx_request, params, balance).unwrap();
+
+        // Extract updated fee_limit from tx_request
+        if let TransactionRequest::Tron((ref updated, _)) = tx_request {
+            tron_tx.fee_limit = updated.fee_limit;
+        }
+
+        provider.tron_fill_block_ref(&mut tron_tx).await.unwrap();
+
+        let tx_request = TransactionRequest::Tron((tron_tx, metadata));
+
+        let argon_seed = bg
+            .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .await
+            .unwrap();
+        let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        let signed = tx_request.sign(&keypair).await.unwrap();
+        assert!(signed.verify().unwrap());
+
+        let txns = vec![signed];
+        let txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+
+        assert_eq!(txns.len(), 1);
+        for tx in &txns {
+            assert!(tx.metadata.hash.is_some());
+        }
+    }
 }

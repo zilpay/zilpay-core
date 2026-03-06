@@ -283,7 +283,10 @@ mod tests_background_tokens {
     use test_data::{
         anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_testnet_conf, ANVIL_MNEMONIC,
     };
-    use test_data::{gen_eth_account, gen_zil_account, gen_zil_testnet_conf, TEST_PASSWORD};
+    use test_data::{
+        gen_eth_account, gen_tron_account, gen_tron_testnet_conf, gen_tron_token, gen_zil_account,
+        gen_zil_testnet_conf, tron_addresses, TEST_PASSWORD,
+    };
     use tokio;
     use wallet::wallet_token::TokenManagement;
     use wallet::wallet_transaction::WalletTransaction;
@@ -1037,5 +1040,81 @@ mod tests_background_tokens {
                 dbg!(e);
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_fetch_tron_ftoken_meta() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_tron_testnet_conf();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [gen_tron_account(0, "Tron Acc 0")];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: &password,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Tron wallet".to_string(),
+            biometric_type: Default::default(),
+            ftokens: vec![gen_tron_token()],
+        })
+        .await
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        assert_eq!(data.accounts[0].addr.auto_format(), tron_addresses::ADDR_0);
+
+        let btt_contract =
+            Address::from_tron_address("TNuoKL1ni8aoshfFL1ASca1Gou9RXwAzfn").unwrap();
+        let btt_meta = bg.fetch_ftoken_meta(0, btt_contract).await.unwrap();
+
+        assert!(!btt_meta.name.is_empty());
+        assert!(!btt_meta.symbol.is_empty());
+        assert!(btt_meta.decimals > 0);
+        assert_eq!(btt_meta.chain_hash, net_config.hash());
+        assert!(!btt_meta.native);
+        assert!(!btt_meta.default);
+        assert!(btt_meta.balances.contains_key(&0));
+
+        bg.wallets
+            .first_mut()
+            .unwrap()
+            .add_ftoken(btt_meta)
+            .unwrap();
+
+        let usdt_contract =
+            Address::from_tron_address("TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf").unwrap();
+        let usdt_meta = bg.fetch_ftoken_meta(0, usdt_contract).await.unwrap();
+
+        assert!(!usdt_meta.name.is_empty());
+        assert!(!usdt_meta.symbol.is_empty());
+        assert!(usdt_meta.decimals > 0);
+        assert_eq!(usdt_meta.chain_hash, net_config.hash());
+        assert!(!usdt_meta.native);
+        assert!(!usdt_meta.default);
+        assert!(usdt_meta.balances.contains_key(&0));
+
+        bg.wallets
+            .first_mut()
+            .unwrap()
+            .add_ftoken(usdt_meta)
+            .unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        let ftokens = bg.wallets.first().unwrap().get_ftokens().unwrap();
+
+        assert_eq!(ftokens.len(), 3);
+        assert!(ftokens[0].native);
+        assert!(ftokens[0].default);
+        assert!(!ftokens[1].native);
+        assert!(!ftokens[2].native);
     }
 }

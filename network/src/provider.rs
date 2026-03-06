@@ -12,6 +12,7 @@ use errors::network::NetworkErrors;
 use errors::rpc::RpcError;
 use history::transaction::HistoricalTransaction;
 use proto::address::Address;
+use proto::tron_tx::TronTransactionRequest;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use rpc::common::JsonRPC;
 use rpc::network_config::ChainConfig;
@@ -179,6 +180,10 @@ impl NetworkProvider {
                 self.config.name
             ))),
         }
+    }
+
+    pub async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()> {
+        TronOperations::tron_fill_block_ref(self, tx).await
     }
 
     #[inline]

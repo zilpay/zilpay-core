@@ -101,6 +101,18 @@ pub fn gen_zil_account(index: u32, name: &str) -> (DerivationPath, String) {
     )
 }
 
+pub fn gen_tron_account(index: u32, name: &str) -> (DerivationPath, String) {
+    (
+        DerivationPath::new(
+            slip44::TRON,
+            index as usize,
+            DerivationPath::BIP44_PURPOSE,
+            None,
+        ),
+        name.to_string(),
+    )
+}
+
 pub fn gen_device_indicators(device_name: &str) -> [String; 2] {
     [device_name.to_string(), "0000".to_string()]
 }
@@ -251,7 +263,7 @@ pub fn gen_tron_testnet_conf() -> ChainConfig {
         name: "Tron(testnet)".to_string(),
         chain: "TRX".to_string(),
         short_name: "tron".to_string(),
-        rpc: vec!["https://api.shasta.trongrid.io".to_string()],
+        rpc: vec!["https://nile.trongrid.io".to_string()],
         features: vec![],
         slip_44: slip44::TRON,
         ens: None,
