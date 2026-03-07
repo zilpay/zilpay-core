@@ -263,7 +263,7 @@ pub fn gen_tron_testnet_conf() -> ChainConfig {
         name: "Tron(testnet)".to_string(),
         chain: "TRX".to_string(),
         short_name: "tron".to_string(),
-        rpc: vec!["https://nile.trongrid.io".to_string()],
+        rpc: vec!["grpc.nile.trongrid.io:50051".to_string()],
         features: vec![],
         slip_44: slip44::TRON,
         ens: None,

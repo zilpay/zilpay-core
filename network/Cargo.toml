@@ -12,6 +12,7 @@ reqwest.workspace = true
 async-trait.workspace = true
 bincode.workspace = true
 prost.workspace = true
+tonic.workspace = true
 bitcoin.workspace = true
 electrum-client.workspace = true
 storage = { path = "../storage" }
