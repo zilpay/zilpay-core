@@ -1291,7 +1291,10 @@ mod tests_background_transactions {
 
         let contract = Address::from_tron_address("TNuoKL1ni8aoshfFL1ASca1Gou9RXwAzfn").unwrap();
         let trc20 = bg.fetch_ftoken_meta(0, contract).await.unwrap();
-        eprintln!("[TRC20] fetched token: {} ({}) decimals={}", trc20.name, trc20.symbol, trc20.decimals);
+        eprintln!(
+            "[TRC20] fetched token: {} ({}) decimals={}",
+            trc20.name, trc20.symbol, trc20.decimals
+        );
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         wallet.add_ftoken(trc20).unwrap();
@@ -1335,14 +1338,23 @@ mod tests_background_transactions {
             .unwrap();
 
         eprintln!("[TRC20] gas_price (energy_fee): {}", params.gas_price);
-        eprintln!("[TRC20] tx_estimate_gas (energy*price): {}", params.tx_estimate_gas);
+        eprintln!(
+            "[TRC20] tx_estimate_gas (energy*price): {}",
+            params.tx_estimate_gas
+        );
         eprintln!("[TRC20] slow:    {}", params.slow);
         eprintln!("[TRC20] market:  {}", params.market);
         eprintln!("[TRC20] current: {}", params.current);
         eprintln!("[TRC20] fast:    {}", params.fast);
 
-        assert!(params.tx_estimate_gas > U256::ZERO, "energy estimate must be > 0");
-        assert!(params.current > U256::ZERO, "fee_limit (current) must be > 0");
+        assert!(
+            params.tx_estimate_gas > U256::ZERO,
+            "energy estimate must be > 0"
+        );
+        assert!(
+            params.current > U256::ZERO,
+            "fee_limit (current) must be > 0"
+        );
 
         super::update_tx_from_params(&mut tx_request, params, trx_balance).unwrap();
 
@@ -1355,7 +1367,10 @@ mod tests_background_transactions {
         assert!(tron_tx.fee_limit > 0, "fee_limit must be > 0");
 
         provider.tron_fill_block_ref(&mut tron_tx).await.unwrap();
-        eprintln!("[TRC20] block ref filled, expiration: {}", tron_tx.expiration);
+        eprintln!(
+            "[TRC20] block ref filled, expiration: {}",
+            tron_tx.expiration
+        );
 
         let metadata = proto::tx::TransactionMetadata {
             chain_hash: net_config.hash(),
@@ -1379,7 +1394,10 @@ mod tests_background_transactions {
         assert_eq!(txns.len(), 1);
         for tx in &txns {
             assert!(tx.metadata.hash.is_some());
-            eprintln!("[TRC20] broadcast OK, txID: {}", tx.metadata.hash.as_ref().unwrap());
+            eprintln!(
+                "[TRC20] broadcast OK, txID: {}",
+                tx.metadata.hash.as_ref().unwrap()
+            );
         }
     }
 }
