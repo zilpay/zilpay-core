@@ -18,15 +18,36 @@ use proto::tron_generated::protocol::wallet_client::WalletClient;
 use proto::tron_tx::{TronContractCall, TronTransactionRequest};
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use serde_json::json;
+use std::time::Duration;
 use token::ft::FToken;
 use tonic::transport::Channel;
 
+const TRON_TIMEOUT_SECS: u64 = 5;
 const TRON_BLOCK_TIME_SECS: u64 = 3;
 const TRON_DEFAULT_ENERGY_FEE: u64 = 420;
 const TRON_DEFAULT_FREE_BANDWIDTH: u64 = 600;
 const TRON_BANDWIDTH_PER_TRANSFER: u64 = 280;
 const TRON_BANDWIDTH_PRICE: u64 = 1000;
 const BLOCK_SAMPLE_SIZE: u64 = 10;
+
+macro_rules! tron_retry {
+    ($self:expr, |$client:ident| $body:expr) => {{
+        let mut _last_error = None;
+        for _endpoint in $self.tron_endpoints() {
+            match (async {
+                let mut $client = NetworkProvider::tron_connect(&_endpoint).await?;
+                $body
+            })
+            .await
+            {
+                Ok(val) => return Ok(val),
+                Err(e) => _last_error = Some(e),
+            }
+        }
+        Err(_last_error
+            .unwrap_or_else(|| NetworkErrors::RPCError("No Tron nodes configured".into())))
+    }};
+}
 
 struct AbiHelper {
     abi: JsonAbi,
@@ -94,31 +115,31 @@ fn grpc_err(e: tonic::Status) -> NetworkErrors {
 }
 
 impl NetworkProvider {
-    async fn tron_client(&self) -> Result<WalletClient<Channel>> {
-        let mut last_error = None;
-
-        for url in &self.config.rpc {
-            let endpoint = if url.starts_with("http://") || url.starts_with("https://") {
-                url.clone()
-            } else {
-                format!("http://{}", url)
-            };
-
-            match Channel::from_shared(endpoint.clone()) {
-                Ok(ep) => match ep.connect().await {
-                    Ok(ch) => return Ok(WalletClient::new(ch)),
-                    Err(e) => {
-                        last_error = Some(NetworkErrors::RPCError(format!("{}: {}", endpoint, e)));
-                    }
-                },
-                Err(e) => {
-                    last_error = Some(NetworkErrors::RPCError(format!("{}: {}", endpoint, e)));
+    fn tron_endpoints(&self) -> Vec<String> {
+        self.config
+            .rpc
+            .iter()
+            .map(|url| {
+                if url.starts_with("http://") || url.starts_with("https://") {
+                    url.clone()
+                } else {
+                    format!("http://{}", url)
                 }
-            }
-        }
+            })
+            .collect()
+    }
 
-        Err(last_error
-            .unwrap_or_else(|| NetworkErrors::RPCError("No nodes URLs configured".to_string())))
+    async fn tron_connect(
+        endpoint: &str,
+    ) -> std::result::Result<WalletClient<Channel>, NetworkErrors> {
+        let ch = Channel::from_shared(endpoint.to_string())
+            .map_err(|e| NetworkErrors::RPCError(format!("{}: {}", endpoint, e)))?
+            .connect_timeout(Duration::from_secs(TRON_TIMEOUT_SECS))
+            .timeout(Duration::from_secs(TRON_TIMEOUT_SECS))
+            .connect()
+            .await
+            .map_err(|e| NetworkErrors::RPCError(format!("{}: {}", endpoint, e)))?;
+        Ok(WalletClient::new(ch))
     }
 
     async fn tron_trigger_constant(
@@ -218,57 +239,57 @@ pub trait TronOperations {
 #[async_trait]
 impl TronOperations for NetworkProvider {
     async fn tron_get_current_block_number(&self) -> Result<u64> {
-        let mut client = self.tron_client().await?;
-
-        client
-            .get_now_block2(protocol::EmptyMessage {})
-            .await
-            .map_err(grpc_err)?
-            .into_inner()
-            .block_header
-            .and_then(|h| h.raw_data)
-            .map(|r| r.number as u64)
-            .ok_or(NetworkErrors::ResponseParseError.into())
+        tron_retry!(self, |client| {
+            client
+                .get_now_block2(protocol::EmptyMessage {})
+                .await
+                .map_err(grpc_err)?
+                .into_inner()
+                .block_header
+                .and_then(|h| h.raw_data)
+                .map(|r| r.number as u64)
+                .ok_or(NetworkErrors::ResponseParseError)
+        })
     }
 
     async fn tron_estimate_block_time(&self) -> Result<u64> {
-        let mut client = self.tron_client().await?;
+        tron_retry!(self, |client| {
+            let current = client
+                .get_now_block2(protocol::EmptyMessage {})
+                .await
+                .map_err(grpc_err)?
+                .into_inner();
 
-        let current = client
-            .get_now_block2(protocol::EmptyMessage {})
-            .await
-            .map_err(grpc_err)?
-            .into_inner();
+            let header = current
+                .block_header
+                .and_then(|h| h.raw_data)
+                .ok_or(NetworkErrors::ResponseParseError)?;
+            let current_num = header.number as u64;
+            let current_ts = header.timestamp as u64;
 
-        let header = current
-            .block_header
-            .and_then(|h| h.raw_data)
-            .ok_or(NetworkErrors::ResponseParseError)?;
-        let current_num = header.number as u64;
-        let current_ts = header.timestamp as u64;
+            if current_num < BLOCK_SAMPLE_SIZE {
+                return Ok(TRON_BLOCK_TIME_SECS);
+            }
 
-        if current_num < BLOCK_SAMPLE_SIZE {
-            return Ok(TRON_BLOCK_TIME_SECS);
-        }
+            let earlier_ts = client
+                .get_block_by_num(protocol::NumberMessage {
+                    num: (current_num - BLOCK_SAMPLE_SIZE) as i64,
+                })
+                .await
+                .map_err(grpc_err)?
+                .into_inner()
+                .block_header
+                .and_then(|h| h.raw_data)
+                .map(|r| r.timestamp as u64)
+                .ok_or(NetworkErrors::ResponseParseError)?;
 
-        let earlier_ts = client
-            .get_block_by_num(protocol::NumberMessage {
-                num: (current_num - BLOCK_SAMPLE_SIZE) as i64,
-            })
-            .await
-            .map_err(grpc_err)?
-            .into_inner()
-            .block_header
-            .and_then(|h| h.raw_data)
-            .map(|r| r.timestamp as u64)
-            .ok_or(NetworkErrors::ResponseParseError)?;
+            let time_diff_ms = current_ts.saturating_sub(earlier_ts);
+            if time_diff_ms == 0 {
+                return Ok(TRON_BLOCK_TIME_SECS);
+            }
 
-        let time_diff_ms = current_ts.saturating_sub(earlier_ts);
-        if time_diff_ms == 0 {
-            return Ok(TRON_BLOCK_TIME_SECS);
-        }
-
-        Ok((time_diff_ms / (BLOCK_SAMPLE_SIZE * 1000)).max(1))
+            Ok((time_diff_ms / (BLOCK_SAMPLE_SIZE * 1000)).max(1))
+        })
     }
 
     async fn tron_estimate_params_batch(
@@ -276,89 +297,89 @@ impl TronOperations for NetworkProvider {
         tx: &TransactionRequest,
         sender: &Address,
     ) -> Result<RequiredTxParams> {
-        let mut client = self.tron_client().await?;
+        tron_retry!(self, |client| {
+            let account_resource = client
+                .get_account_resource(protocol::Account {
+                    address: addr_to_tron_bytes(sender),
+                    ..Default::default()
+                })
+                .await
+                .ok()
+                .map(|r| r.into_inner());
 
-        let account_resource = client
-            .get_account_resource(protocol::Account {
-                address: addr_to_tron_bytes(sender),
-                ..Default::default()
-            })
-            .await
-            .ok()
-            .map(|r| r.into_inner());
+            let chain_params = client
+                .get_chain_parameters(protocol::EmptyMessage {})
+                .await
+                .ok()
+                .map(|r| r.into_inner());
 
-        let chain_params = client
-            .get_chain_parameters(protocol::EmptyMessage {})
-            .await
-            .ok()
-            .map(|r| r.into_inner());
+            let energy_fee = chain_params
+                .as_ref()
+                .and_then(|cp| {
+                    cp.chain_parameter
+                        .iter()
+                        .find(|p| p.key == "getEnergyFee")
+                        .map(|p| p.value as u64)
+                })
+                .unwrap_or(TRON_DEFAULT_ENERGY_FEE);
 
-        let energy_fee = chain_params
-            .as_ref()
-            .and_then(|cp| {
-                cp.chain_parameter
-                    .iter()
-                    .find(|p| p.key == "getEnergyFee")
-                    .map(|p| p.value as u64)
-            })
-            .unwrap_or(TRON_DEFAULT_ENERGY_FEE);
+            let fee_estimate = match tx {
+                TransactionRequest::Tron((tron_tx, _)) => match &tron_tx.contract {
+                    TronContractCall::Transfer { .. } => {
+                        let free_bw = account_resource
+                            .as_ref()
+                            .map(|r| r.free_net_limit as u64)
+                            .unwrap_or(TRON_DEFAULT_FREE_BANDWIDTH);
+                        let used_bw = account_resource
+                            .as_ref()
+                            .map(|r| r.free_net_used as u64)
+                            .unwrap_or(0);
 
-        let fee_estimate = match tx {
-            TransactionRequest::Tron((tron_tx, _)) => match &tron_tx.contract {
-                TronContractCall::Transfer { .. } => {
-                    let free_bw = account_resource
-                        .as_ref()
-                        .map(|r| r.free_net_limit as u64)
-                        .unwrap_or(TRON_DEFAULT_FREE_BANDWIDTH);
-                    let used_bw = account_resource
-                        .as_ref()
-                        .map(|r| r.free_net_used as u64)
-                        .unwrap_or(0);
-
-                    if free_bw.saturating_sub(used_bw) > TRON_BANDWIDTH_PER_TRANSFER {
-                        0u64
-                    } else {
-                        TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE
+                        if free_bw.saturating_sub(used_bw) > TRON_BANDWIDTH_PER_TRANSFER {
+                            0u64
+                        } else {
+                            TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE
+                        }
                     }
-                }
-                TronContractCall::TriggerSmartContract {
-                    contract_address,
-                    call_value,
-                    data,
-                    ..
-                } => {
-                    let estimate = client
-                        .estimate_energy(protocol::TriggerSmartContract {
-                            owner_address: addr_to_tron_bytes(sender),
-                            contract_address: addr_to_tron_bytes(contract_address),
-                            call_value: *call_value,
-                            data: data.clone(),
-                            ..Default::default()
-                        })
-                        .await
-                        .map_err(grpc_err)?
-                        .into_inner();
+                    TronContractCall::TriggerSmartContract {
+                        contract_address,
+                        call_value,
+                        data,
+                        ..
+                    } => {
+                        let estimate = client
+                            .estimate_energy(protocol::TriggerSmartContract {
+                                owner_address: addr_to_tron_bytes(sender),
+                                contract_address: addr_to_tron_bytes(contract_address),
+                                call_value: *call_value,
+                                data: data.clone(),
+                                ..Default::default()
+                            })
+                            .await
+                            .map_err(grpc_err)?
+                            .into_inner();
 
-                    (estimate.energy_required as u64) * energy_fee
-                }
+                        (estimate.energy_required as u64) * energy_fee
+                    }
+                    _ => 0u64,
+                },
                 _ => 0u64,
-            },
-            _ => 0u64,
-        };
+            };
 
-        let base = U256::from(fee_estimate);
+            let base = U256::from(fee_estimate);
 
-        Ok(RequiredTxParams {
-            gas_price: U256::from(energy_fee),
-            max_priority_fee: U256::ZERO,
-            fee_history: GasFeeHistory::default(),
-            tx_estimate_gas: U256::from(fee_estimate),
-            blob_base_fee: U256::ZERO,
-            nonce: 0,
-            slow: base,
-            market: base * U256::from(105) / U256::from(100),
-            fast: base * U256::from(110) / U256::from(100),
-            current: base * U256::from(105) / U256::from(100),
+            Ok(RequiredTxParams {
+                gas_price: U256::from(energy_fee),
+                max_priority_fee: U256::ZERO,
+                fee_history: GasFeeHistory::default(),
+                tx_estimate_gas: U256::from(fee_estimate),
+                blob_base_fee: U256::ZERO,
+                nonce: 0,
+                slow: base,
+                market: base * U256::from(105) / U256::from(100),
+                fast: base * U256::from(110) / U256::from(100),
+                current: base * U256::from(105) / U256::from(100),
+            })
         })
     }
 
@@ -374,127 +395,138 @@ impl TronOperations for NetworkProvider {
             }
         }
 
-        let mut client = self.tron_client().await?;
+        tron_retry!(self, |client| {
+            for tx in txns.iter_mut() {
+                let (tron_tx, metadata) = match tx {
+                    TransactionReceipt::Tron((t, m)) => (t, m),
+                    _ => {
+                        return Err(NetworkErrors::RPCError(
+                            "Expected Tron transaction".to_string(),
+                        ))
+                    }
+                };
 
-        for tx in txns.iter_mut() {
-            let (tron_tx, metadata) = match tx {
-                TransactionReceipt::Tron((t, m)) => (t, m),
-                _ => {
-                    return Err(NetworkErrors::RPCError(
-                        "Expected Tron transaction".to_string(),
-                    ))
+                let tx_id_hex = alloy::hex::encode(&tron_tx.tx_id);
+
+                let raw =
+                    protocol::transaction::Raw::decode(tron_tx.raw_data_bytes.as_slice())
+                        .map_err(|e| {
+                            NetworkErrors::RPCError(format!("Decode raw_data: {}", e))
+                        })?;
+
+                let ret = client
+                    .broadcast_transaction(protocol::Transaction {
+                        raw_data: Some(raw),
+                        signature: vec![tron_tx.signature.clone()],
+                        ret: Vec::new(),
+                    })
+                    .await
+                    .map_err(grpc_err)?
+                    .into_inner();
+
+                if !ret.result {
+                    let msg = String::from_utf8(ret.message)
+                        .unwrap_or_else(|e| format!("Invalid UTF-8: {}", e));
+                    return Err(NetworkErrors::RPCError(format!(
+                        "Broadcast failed: {}",
+                        msg
+                    )));
                 }
-            };
 
-            let tx_id_hex = alloy::hex::encode(tron_tx.tx_id);
-
-            let raw = protocol::transaction::Raw::decode(tron_tx.raw_data_bytes.as_slice())
-                .map_err(|e| NetworkErrors::RPCError(format!("Decode raw_data: {}", e)))?;
-
-            let ret = client
-                .broadcast_transaction(protocol::Transaction {
-                    raw_data: Some(raw),
-                    signature: vec![tron_tx.signature.clone()],
-                    ret: Vec::new(),
-                })
-                .await
-                .map_err(grpc_err)?
-                .into_inner();
-
-            if !ret.result {
-                let msg = String::from_utf8(ret.message)
-                    .unwrap_or_else(|e| format!("Invalid UTF-8: {}", e));
-                return Err(NetworkErrors::RPCError(format!(
-                    "Broadcast failed: {}",
-                    msg
-                )));
+                metadata.hash = Some(tx_id_hex);
             }
 
-            metadata.hash = Some(tx_id_hex);
-        }
-
-        Ok(txns)
+            Ok(txns.clone())
+        })
     }
 
     async fn tron_update_transactions_receipt(
         &self,
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
-        let mut client = self.tron_client().await?;
-
-        for tx in txns.iter_mut() {
-            let tx_id = match tx
-                .get_tron()
-                .and_then(|t| t.get("txID").and_then(|id| id.as_str()).map(String::from))
-                .or_else(|| tx.metadata.hash.clone())
-            {
-                Some(id) => id,
-                None => continue,
-            };
-
-            let tx_id_bytes =
-                alloy::hex::decode(&tx_id).map_err(|_| NetworkErrors::ResponseParseError)?;
-
-            let info = client
-                .get_transaction_info_by_id(protocol::BytesMessage { value: tx_id_bytes })
-                .await
-                .map_err(grpc_err)?
-                .into_inner();
-
-            if info.id.is_empty() {
-                continue;
-            }
-
-            let mut tron_data = tx.get_tron().unwrap_or_else(|| json!({}));
-
-            if let Some(obj) = tron_data.as_object_mut() {
-                obj.insert("txID".to_string(), json!(tx_id));
-                obj.insert("blockNumber".to_string(), json!(info.block_number));
-                obj.insert("fee".to_string(), json!(info.fee));
-
-                if let Some(receipt) = &info.receipt {
-                    let contract_result =
-                        protocol::transaction::result::ContractResult::try_from(receipt.result)
-                            .ok();
-                    obj.insert(
-                        "receipt".to_string(),
-                        json!({ "result": contract_result.map(|r| r.as_str_name().to_string()) }),
-                    );
-                }
-
-                obj.insert("result".to_string(), json!(info.result));
-
-                if !info.contract_result.is_empty() {
-                    let hex_results: Vec<String> = info
-                        .contract_result
-                        .iter()
-                        .map(alloy::hex::encode)
-                        .collect();
-                    obj.insert("contractResult".to_string(), json!(hex_results));
-                }
-            }
-
-            tx.set_tron(tron_data);
-
-            if info.block_number > 0 {
-                let receipt_result = info.receipt.as_ref().and_then(|r| {
-                    protocol::transaction::result::ContractResult::try_from(r.result).ok()
-                });
-
-                tx.status = match receipt_result {
-                    Some(protocol::transaction::result::ContractResult::Revert)
-                    | Some(protocol::transaction::result::ContractResult::OutOfEnergy) => {
-                        TransactionStatus::Failed
-                    }
-                    _ if info.result == protocol::transaction_info::Code::Failed as i32 => {
-                        TransactionStatus::Failed
-                    }
-                    _ => TransactionStatus::Success,
+        tron_retry!(self, |client| {
+            for tx in txns.iter_mut() {
+                let tx_id = match tx
+                    .get_tron()
+                    .and_then(|t| {
+                        t.get("txID").and_then(|id| id.as_str()).map(String::from)
+                    })
+                    .or_else(|| tx.metadata.hash.clone())
+                {
+                    Some(id) => id,
+                    None => continue,
                 };
-            }
-        }
 
-        Ok(())
+                let tx_id_bytes = alloy::hex::decode(&tx_id)
+                    .map_err(|_| NetworkErrors::ResponseParseError)?;
+
+                let info = client
+                    .get_transaction_info_by_id(protocol::BytesMessage {
+                        value: tx_id_bytes,
+                    })
+                    .await
+                    .map_err(grpc_err)?
+                    .into_inner();
+
+                if info.id.is_empty() {
+                    continue;
+                }
+
+                let mut tron_data = tx.get_tron().unwrap_or_else(|| json!({}));
+
+                if let Some(obj) = tron_data.as_object_mut() {
+                    obj.insert("txID".to_string(), json!(tx_id));
+                    obj.insert("blockNumber".to_string(), json!(info.block_number));
+                    obj.insert("fee".to_string(), json!(info.fee));
+
+                    if let Some(receipt) = &info.receipt {
+                        let contract_result =
+                            protocol::transaction::result::ContractResult::try_from(
+                                receipt.result,
+                            )
+                            .ok();
+                        obj.insert(
+                            "receipt".to_string(),
+                            json!({ "result": contract_result.map(|r| r.as_str_name().to_string()) }),
+                        );
+                    }
+
+                    obj.insert("result".to_string(), json!(info.result));
+
+                    if !info.contract_result.is_empty() {
+                        let hex_results: Vec<String> = info
+                            .contract_result
+                            .iter()
+                            .map(alloy::hex::encode)
+                            .collect();
+                        obj.insert("contractResult".to_string(), json!(hex_results));
+                    }
+                }
+
+                tx.set_tron(tron_data);
+
+                if info.block_number > 0 {
+                    let receipt_result = info.receipt.as_ref().and_then(|r| {
+                        protocol::transaction::result::ContractResult::try_from(r.result).ok()
+                    });
+
+                    tx.status = match receipt_result {
+                        Some(protocol::transaction::result::ContractResult::Revert)
+                        | Some(
+                            protocol::transaction::result::ContractResult::OutOfEnergy,
+                        ) => TransactionStatus::Failed,
+                        _ if info.result
+                            == protocol::transaction_info::Code::Failed as i32 =>
+                        {
+                            TransactionStatus::Failed
+                        }
+                        _ => TransactionStatus::Success,
+                    };
+                }
+            }
+
+            Ok(())
+        })
     }
 
     async fn tron_update_balances(
@@ -506,106 +538,107 @@ impl TronOperations for NetworkProvider {
             return Ok(());
         }
 
-        let mut client = self.tron_client().await?;
-
-        for token in tokens.iter_mut() {
-            for (idx, account) in accounts.iter().enumerate() {
-                let balance = if token.native {
-                    Self::tron_get_native_balance(&mut client, account).await
-                } else {
-                    Self::tron_get_trc20_balance(&mut client, &token.addr, account).await
-                };
-                token.balances.insert(idx, balance);
+        tron_retry!(self, |client| {
+            for token in tokens.iter_mut() {
+                for (idx, account) in accounts.iter().enumerate() {
+                    let balance = if token.native {
+                        Self::tron_get_native_balance(&mut client, account).await
+                    } else {
+                        Self::tron_get_trc20_balance(&mut client, &token.addr, account).await
+                    };
+                    token.balances.insert(idx, balance);
+                }
             }
-        }
 
-        Ok(())
+            Ok(())
+        })
     }
 
     async fn tron_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
-        let mut client = self.tron_client().await?;
-        let abi = AbiHelper::new()?;
-        let contract_bytes = addr_to_tron_bytes(&contract);
-        let owner_bytes = accounts
-            .first()
-            .map(|a| addr_to_tron_bytes(a))
-            .unwrap_or_else(|| contract_bytes.clone());
+        tron_retry!(self, |client| {
+            let abi = AbiHelper::new()?;
+            let contract_bytes = addr_to_tron_bytes(&contract);
+            let owner_bytes = accounts
+                .first()
+                .map(|a| addr_to_tron_bytes(a))
+                .unwrap_or_else(|| contract_bytes.clone());
 
-        let name_bytes = Self::tron_trigger_constant(
-            &mut client,
-            owner_bytes.clone(),
-            contract_bytes.clone(),
-            abi.encode("name", &[])?,
-        )
-        .await?;
-        let name = abi.decode_string("name", &name_bytes)?;
+            let name_bytes = Self::tron_trigger_constant(
+                &mut client,
+                owner_bytes.clone(),
+                contract_bytes.clone(),
+                abi.encode("name", &[])?,
+            )
+            .await?;
+            let name = abi.decode_string("name", &name_bytes)?;
 
-        let symbol_bytes = Self::tron_trigger_constant(
-            &mut client,
-            owner_bytes.clone(),
-            contract_bytes.clone(),
-            abi.encode("symbol", &[])?,
-        )
-        .await?;
-        let symbol = abi.decode_string("symbol", &symbol_bytes)?;
+            let symbol_bytes = Self::tron_trigger_constant(
+                &mut client,
+                owner_bytes.clone(),
+                contract_bytes.clone(),
+                abi.encode("symbol", &[])?,
+            )
+            .await?;
+            let symbol = abi.decode_string("symbol", &symbol_bytes)?;
 
-        let decimals_bytes = Self::tron_trigger_constant(
-            &mut client,
-            owner_bytes,
-            contract_bytes,
-            abi.encode("decimals", &[])?,
-        )
-        .await?;
-        let decimals = abi.decode_u8("decimals", &decimals_bytes)?;
+            let decimals_bytes = Self::tron_trigger_constant(
+                &mut client,
+                owner_bytes,
+                contract_bytes,
+                abi.encode("decimals", &[])?,
+            )
+            .await?;
+            let decimals = abi.decode_u8("decimals", &decimals_bytes)?;
 
-        let mut balances = std::collections::HashMap::new();
-        for (idx, account) in accounts.iter().enumerate() {
-            balances.insert(
-                idx,
-                Self::tron_get_trc20_balance(&mut client, &contract, account).await,
-            );
-        }
+            let mut balances = std::collections::HashMap::new();
+            for (idx, account) in accounts.iter().enumerate() {
+                balances.insert(
+                    idx,
+                    Self::tron_get_trc20_balance(&mut client, &contract, account).await,
+                );
+            }
 
-        Ok(FToken {
-            balances,
-            name,
-            symbol,
-            decimals,
-            addr: contract,
-            logo: None,
-            default: false,
-            native: false,
-            chain_hash: self.config.hash(),
-            rate: 0f64,
+            Ok(FToken {
+                balances,
+                name,
+                symbol,
+                decimals,
+                addr: contract.clone(),
+                logo: None,
+                default: false,
+                native: false,
+                chain_hash: self.config.hash(),
+                rate: 0f64,
+            })
         })
     }
 
     async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()> {
-        let mut client = self.tron_client().await?;
+        tron_retry!(self, |client| {
+            let block = client
+                .get_now_block2(protocol::EmptyMessage {})
+                .await
+                .map_err(grpc_err)?
+                .into_inner();
 
-        let block = client
-            .get_now_block2(protocol::EmptyMessage {})
-            .await
-            .map_err(grpc_err)?
-            .into_inner();
+            if block.blockid.len() < 16 {
+                return Err(NetworkErrors::ResponseParseError);
+            }
 
-        if block.blockid.len() < 16 {
-            return Err(NetworkErrors::ResponseParseError);
-        }
+            tx.ref_block_bytes = block.blockid[6..8].to_vec();
+            tx.ref_block_hash = block.blockid[8..16].to_vec();
 
-        tx.ref_block_bytes = block.blockid[6..8].to_vec();
-        tx.ref_block_hash = block.blockid[8..16].to_vec();
+            let timestamp = block
+                .block_header
+                .and_then(|h| h.raw_data)
+                .map(|r| r.timestamp)
+                .ok_or(NetworkErrors::ResponseParseError)?;
 
-        let timestamp = block
-            .block_header
-            .and_then(|h| h.raw_data)
-            .map(|r| r.timestamp)
-            .ok_or(NetworkErrors::ResponseParseError)?;
+            tx.timestamp = timestamp;
+            tx.expiration = timestamp + 300_000;
 
-        tx.timestamp = timestamp;
-        tx.expiration = timestamp + 300_000;
-
-        Ok(())
+            Ok(())
+        })
     }
 }
 
