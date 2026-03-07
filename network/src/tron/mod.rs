@@ -22,12 +22,10 @@ use token::ft::FToken;
 use tonic::transport::Channel;
 
 const TRON_BLOCK_TIME_SECS: u64 = 3;
-const TRON_DEFAULT_FEE_LIMIT: u64 = 100_000_000;
 const TRON_DEFAULT_ENERGY_FEE: u64 = 420;
 const TRON_DEFAULT_FREE_BANDWIDTH: u64 = 600;
 const TRON_BANDWIDTH_PER_TRANSFER: u64 = 280;
 const TRON_BANDWIDTH_PRICE: u64 = 1000;
-const TRON_SMART_CONTRACT_ENERGY: u64 = 30_000;
 const BLOCK_SAMPLE_SIZE: u64 = 10;
 
 struct AbiHelper {
@@ -40,7 +38,11 @@ impl AbiHelper {
         Ok(Self { abi })
     }
 
-    fn encode(&self, name: &str, inputs: &[DynSolValue]) -> std::result::Result<Vec<u8>, NetworkErrors> {
+    fn encode(
+        &self,
+        name: &str,
+        inputs: &[DynSolValue],
+    ) -> std::result::Result<Vec<u8>, NetworkErrors> {
         self.abi
             .function(name)
             .and_then(|f| f.first())
@@ -49,7 +51,11 @@ impl AbiHelper {
             .map_err(|_| NetworkErrors::ResponseParseError)
     }
 
-    fn decode(&self, name: &str, data: &[u8]) -> std::result::Result<Vec<DynSolValue>, NetworkErrors> {
+    fn decode(
+        &self,
+        name: &str,
+        data: &[u8],
+    ) -> std::result::Result<Vec<DynSolValue>, NetworkErrors> {
         self.abi
             .function(name)
             .and_then(|f| f.first())
@@ -112,7 +118,7 @@ impl NetworkProvider {
         }
 
         Err(last_error
-            .unwrap_or_else(|| NetworkErrors::RPCError("No RPC URLs configured".to_string())))
+            .unwrap_or_else(|| NetworkErrors::RPCError("No nodes URLs configured".to_string())))
     }
 
     async fn tron_trigger_constant(
@@ -161,7 +167,10 @@ impl NetworkProvider {
             Ok(a) => a,
             Err(_) => return U256::ZERO,
         };
-        let data = match abi.encode("balanceOf", &[DynSolValue::Address(account.to_alloy_addr())]) {
+        let data = match abi.encode(
+            "balanceOf",
+            &[DynSolValue::Address(account.to_alloy_addr())],
+        ) {
             Ok(d) => d,
             Err(_) => return U256::ZERO,
         };
@@ -294,7 +303,7 @@ impl TronOperations for NetworkProvider {
             })
             .unwrap_or(TRON_DEFAULT_ENERGY_FEE);
 
-        let (fee_estimate, is_smart_contract) = match tx {
+        let fee_estimate = match tx {
             TransactionRequest::Tron((tron_tx, _)) => match &tron_tx.contract {
                 TronContractCall::Transfer { .. } => {
                     let free_bw = account_resource
@@ -307,24 +316,37 @@ impl TronOperations for NetworkProvider {
                         .unwrap_or(0);
 
                     if free_bw.saturating_sub(used_bw) > TRON_BANDWIDTH_PER_TRANSFER {
-                        (0u64, false)
+                        0u64
                     } else {
-                        (TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE, false)
+                        TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE
                     }
                 }
-                TronContractCall::TriggerSmartContract { .. } => {
-                    (TRON_SMART_CONTRACT_ENERGY * energy_fee, true)
+                TronContractCall::TriggerSmartContract {
+                    contract_address,
+                    call_value,
+                    data,
+                    ..
+                } => {
+                    let estimate = client
+                        .estimate_energy(protocol::TriggerSmartContract {
+                            owner_address: addr_to_tron_bytes(sender),
+                            contract_address: addr_to_tron_bytes(contract_address),
+                            call_value: *call_value,
+                            data: data.clone(),
+                            ..Default::default()
+                        })
+                        .await
+                        .map_err(grpc_err)?
+                        .into_inner();
+
+                    (estimate.energy_required as u64) * energy_fee
                 }
-                _ => (0u64, false),
+                _ => 0u64,
             },
-            _ => (0u64, false),
+            _ => 0u64,
         };
 
-        let fast = if is_smart_contract {
-            U256::from(TRON_DEFAULT_FEE_LIMIT)
-        } else {
-            U256::from(fee_estimate)
-        };
+        let base = U256::from(fee_estimate);
 
         Ok(RequiredTxParams {
             gas_price: U256::from(energy_fee),
@@ -333,10 +355,10 @@ impl TronOperations for NetworkProvider {
             tx_estimate_gas: U256::from(fee_estimate),
             blob_base_fee: U256::ZERO,
             nonce: 0,
-            slow: U256::from(fee_estimate),
-            market: U256::from(fee_estimate),
-            fast,
-            current: U256::from(fee_estimate),
+            slow: base,
+            market: base * U256::from(105) / U256::from(100),
+            fast: base * U256::from(110) / U256::from(100),
+            current: base * U256::from(105) / U256::from(100),
         })
     }
 
@@ -346,7 +368,9 @@ impl TronOperations for NetworkProvider {
     ) -> Result<Vec<TransactionReceipt>> {
         for tx in &txns {
             if !tx.verify()? {
-                return Err(TransactionErrors::SignatureError(SignatureError::InvalidLength))?;
+                return Err(TransactionErrors::SignatureError(
+                    SignatureError::InvalidLength,
+                ))?;
             }
         }
 
@@ -380,7 +404,10 @@ impl TronOperations for NetworkProvider {
             if !ret.result {
                 let msg = String::from_utf8(ret.message)
                     .unwrap_or_else(|e| format!("Invalid UTF-8: {}", e));
-                return Err(NetworkErrors::RPCError(format!("Broadcast failed: {}", msg)));
+                return Err(NetworkErrors::RPCError(format!(
+                    "Broadcast failed: {}",
+                    msg
+                )));
             }
 
             metadata.hash = Some(tx_id_hex);
@@ -409,9 +436,7 @@ impl TronOperations for NetworkProvider {
                 alloy::hex::decode(&tx_id).map_err(|_| NetworkErrors::ResponseParseError)?;
 
             let info = client
-                .get_transaction_info_by_id(protocol::BytesMessage {
-                    value: tx_id_bytes,
-                })
+                .get_transaction_info_by_id(protocol::BytesMessage { value: tx_id_bytes })
                 .await
                 .map_err(grpc_err)?
                 .into_inner();
@@ -429,7 +454,8 @@ impl TronOperations for NetworkProvider {
 
                 if let Some(receipt) = &info.receipt {
                     let contract_result =
-                        protocol::transaction::result::ContractResult::try_from(receipt.result).ok();
+                        protocol::transaction::result::ContractResult::try_from(receipt.result)
+                            .ok();
                     obj.insert(
                         "receipt".to_string(),
                         json!({ "result": contract_result.map(|r| r.as_str_name().to_string()) }),
@@ -439,8 +465,11 @@ impl TronOperations for NetworkProvider {
                 obj.insert("result".to_string(), json!(info.result));
 
                 if !info.contract_result.is_empty() {
-                    let hex_results: Vec<String> =
-                        info.contract_result.iter().map(alloy::hex::encode).collect();
+                    let hex_results: Vec<String> = info
+                        .contract_result
+                        .iter()
+                        .map(alloy::hex::encode)
+                        .collect();
                     obj.insert("contractResult".to_string(), json!(hex_results));
                 }
             }
@@ -503,18 +532,30 @@ impl TronOperations for NetworkProvider {
             .unwrap_or_else(|| contract_bytes.clone());
 
         let name_bytes = Self::tron_trigger_constant(
-            &mut client, owner_bytes.clone(), contract_bytes.clone(), abi.encode("name", &[])?,
-        ).await?;
+            &mut client,
+            owner_bytes.clone(),
+            contract_bytes.clone(),
+            abi.encode("name", &[])?,
+        )
+        .await?;
         let name = abi.decode_string("name", &name_bytes)?;
 
         let symbol_bytes = Self::tron_trigger_constant(
-            &mut client, owner_bytes.clone(), contract_bytes.clone(), abi.encode("symbol", &[])?,
-        ).await?;
+            &mut client,
+            owner_bytes.clone(),
+            contract_bytes.clone(),
+            abi.encode("symbol", &[])?,
+        )
+        .await?;
         let symbol = abi.decode_string("symbol", &symbol_bytes)?;
 
         let decimals_bytes = Self::tron_trigger_constant(
-            &mut client, owner_bytes, contract_bytes, abi.encode("decimals", &[])?,
-        ).await?;
+            &mut client,
+            owner_bytes,
+            contract_bytes,
+            abi.encode("decimals", &[])?,
+        )
+        .await?;
         let decimals = abi.decode_u8("decimals", &decimals_bytes)?;
 
         let mut balances = std::collections::HashMap::new();
@@ -645,5 +686,50 @@ mod tests {
             .unwrap();
 
         assert!(params.gas_price > U256::ZERO);
+    }
+
+    #[tokio::test]
+    async fn test_tron_estimate_params_trc20() {
+        let provider = NetworkProvider::new(gen_tron_testnet_conf());
+        let sender = Address::from_tron_address(test_data::tron_addresses::ADDR_0).unwrap();
+        let contract = Address::from_tron_address("TNuoKL1ni8aoshfFL1ASca1Gou9RXwAzfn").unwrap();
+
+        let abi = AbiHelper::new().unwrap();
+        let to = Address::from_tron_address(test_data::tron_addresses::ADDR_1).unwrap();
+        let data = abi
+            .encode(
+                "transfer",
+                &[
+                    DynSolValue::Address(to.to_alloy_addr()),
+                    DynSolValue::Uint(U256::from(1_000_000), 256),
+                ],
+            )
+            .unwrap();
+
+        let tron_tx = proto::tron_tx::TronTransactionRequest {
+            owner_address: sender.clone(),
+            ref_block_bytes: vec![],
+            ref_block_hash: vec![],
+            expiration: 0,
+            timestamp: 0,
+            fee_limit: 0,
+            contract: TronContractCall::TriggerSmartContract {
+                contract_address: contract,
+                call_value: 0,
+                data,
+                call_token_value: 0,
+                token_id: 0,
+            },
+        };
+        let tx = TransactionRequest::Tron((tron_tx, proto::tx::TransactionMetadata::default()));
+
+        let params = provider
+            .tron_estimate_params_batch(&tx, &sender)
+            .await
+            .unwrap();
+
+        assert!(params.gas_price > U256::ZERO);
+        assert!(params.tx_estimate_gas > U256::ZERO);
+        assert!(params.fast > params.slow);
     }
 }
