@@ -122,6 +122,8 @@ impl NetworkProvider {
             .map(|url| {
                 if url.starts_with("http://") || url.starts_with("https://") {
                     url.clone()
+                } else if url.starts_with("grpc://") {
+                    format!("http://{}", &url[7..])
                 } else {
                     format!("http://{}", url)
                 }
@@ -136,9 +138,7 @@ impl NetworkProvider {
             .map_err(|e| NetworkErrors::RPCError(format!("{}: {}", endpoint, e)))?
             .connect_timeout(Duration::from_secs(TRON_TIMEOUT_SECS))
             .timeout(Duration::from_secs(TRON_TIMEOUT_SECS))
-            .connect()
-            .await
-            .map_err(|e| NetworkErrors::RPCError(format!("{}: {}", endpoint, e)))?;
+            .connect_lazy();
         Ok(WalletClient::new(ch))
     }
 
@@ -645,7 +645,102 @@ impl TronOperations for NetworkProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
     use test_data::gen_tron_testnet_conf;
+
+    #[test]
+    fn test_tron_endpoints_grpc_prefix() {
+        let mut conf = gen_tron_testnet_conf();
+        conf.rpc = vec!["grpc://grpc.nile.trongrid.io:50051".to_string()];
+        let provider = NetworkProvider::new(conf);
+        let endpoints = provider.tron_endpoints();
+        assert_eq!(endpoints, vec!["http://grpc.nile.trongrid.io:50051"]);
+    }
+
+    #[test]
+    fn test_tron_endpoints_http_passthrough() {
+        let mut conf = gen_tron_testnet_conf();
+        conf.rpc = vec![
+            "http://localhost:50051".to_string(),
+            "https://secure.node:50051".to_string(),
+        ];
+        let provider = NetworkProvider::new(conf);
+        let endpoints = provider.tron_endpoints();
+        assert_eq!(
+            endpoints,
+            vec![
+                "http://localhost:50051",
+                "https://secure.node:50051",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_tron_endpoints_bare_host() {
+        let mut conf = gen_tron_testnet_conf();
+        conf.rpc = vec!["grpc.nile.trongrid.io:50051".to_string()];
+        let provider = NetworkProvider::new(conf);
+        let endpoints = provider.tron_endpoints();
+        assert_eq!(endpoints, vec!["http://grpc.nile.trongrid.io:50051"]);
+    }
+
+    #[tokio::test]
+    async fn test_tron_connect_timeout_unreachable() {
+        let mut conf = gen_tron_testnet_conf();
+        conf.rpc = vec!["http://192.0.2.1:50051".to_string()];
+        let provider = NetworkProvider::new(conf);
+
+        let start = Instant::now();
+        let result = provider.tron_get_current_block_number().await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err());
+        assert!(
+            elapsed.as_secs() <= TRON_TIMEOUT_SECS + 2,
+            "Request took {}s, expected <= {}s",
+            elapsed.as_secs(),
+            TRON_TIMEOUT_SECS + 2
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tron_connect_invalid_host_fails_fast() {
+        let mut conf = gen_tron_testnet_conf();
+        conf.rpc = vec!["http://localhost:1".to_string()];
+        let provider = NetworkProvider::new(conf);
+
+        let start = Instant::now();
+        let result = provider.tron_get_current_block_number().await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err());
+        assert!(
+            elapsed.as_secs() < TRON_TIMEOUT_SECS,
+            "Connection refused should fail fast, took {}s",
+            elapsed.as_secs()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tron_retry_skips_bad_node() {
+        let mut conf = gen_tron_testnet_conf();
+        conf.rpc = vec![
+            "http://localhost:1".to_string(),
+            "http://grpc.nile.trongrid.io:50051".to_string(),
+        ];
+        let provider = NetworkProvider::new(conf);
+
+        let start = Instant::now();
+        let result = provider.tron_get_current_block_number().await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_ok(), "Should succeed via second node: {:?}", result);
+        assert!(
+            elapsed.as_secs() <= TRON_TIMEOUT_SECS + 2,
+            "Retry took {}s, too slow",
+            elapsed.as_secs()
+        );
+    }
 
     #[tokio::test]
     async fn test_tron_get_block_number() {
