@@ -23,6 +23,8 @@ use token::ft::FToken;
 use tonic::transport::Channel;
 
 const TRON_TIMEOUT_SECS: u64 = 5;
+const TRON_TOTAL_TIMEOUT_SECS: u64 = 15;
+const TRON_MAX_RETRIES: usize = 3;
 const TRON_BLOCK_TIME_SECS: u64 = 3;
 const TRON_DEFAULT_ENERGY_FEE: u64 = 420;
 const TRON_DEFAULT_FREE_BANDWIDTH: u64 = 600;
@@ -31,20 +33,41 @@ const TRON_BANDWIDTH_PRICE: u64 = 1000;
 const BLOCK_SAMPLE_SIZE: u64 = 10;
 
 macro_rules! tron_retry {
-    ($self:expr, |$client:ident| $body:expr) => {{
-        let mut _last_error = None;
-        for _endpoint in $self.tron_endpoints() {
-            match (async {
-                let mut $client = NetworkProvider::tron_connect(&_endpoint).await?;
-                $body
-            })
+    ($self:expr, $method:expr, |$client:ident| $body:expr) => {{
+        let retry_start = std::time::Instant::now();
+        let total_deadline = Duration::from_secs(TRON_TOTAL_TIMEOUT_SECS);
+        let mut last_error = None;
+        let endpoints = $self.tron_endpoints();
+        for (_i, endpoint) in endpoints.iter().take(TRON_MAX_RETRIES).enumerate() {
+            let elapsed = retry_start.elapsed();
+            if elapsed >= total_deadline {
+                break;
+            }
+            let remaining = total_deadline - elapsed;
+            let per_attempt = Duration::from_secs(TRON_TIMEOUT_SECS).min(remaining);
+            match tokio::time::timeout(
+                per_attempt,
+                async {
+                    let mut $client = NetworkProvider::tron_connect(&endpoint).await?;
+                    $body
+                }
+            )
             .await
             {
-                Ok(val) => return Ok(val),
-                Err(e) => _last_error = Some(e),
+                Ok(Ok(val)) => {
+                    return Ok(val);
+                }
+                Ok(Err(e)) => {
+                    last_error = Some(e);
+                }
+                Err(_) => {
+                    last_error = Some(NetworkErrors::RPCError(
+                        format!("Timeout {}s: {}", TRON_TIMEOUT_SECS, endpoint)
+                    ));
+                }
             }
         }
-        Err(_last_error
+        Err(last_error
             .unwrap_or_else(|| NetworkErrors::RPCError("No Tron nodes configured".into())))
     }};
 }
@@ -239,7 +262,7 @@ pub trait TronOperations {
 #[async_trait]
 impl TronOperations for NetworkProvider {
     async fn tron_get_current_block_number(&self) -> Result<u64> {
-        tron_retry!(self, |client| {
+        tron_retry!(self, "get_block_number", |client| {
             client
                 .get_now_block2(protocol::EmptyMessage {})
                 .await
@@ -253,7 +276,7 @@ impl TronOperations for NetworkProvider {
     }
 
     async fn tron_estimate_block_time(&self) -> Result<u64> {
-        tron_retry!(self, |client| {
+        tron_retry!(self, "estimate_block_time", |client| {
             let current = client
                 .get_now_block2(protocol::EmptyMessage {})
                 .await
@@ -297,7 +320,7 @@ impl TronOperations for NetworkProvider {
         tx: &TransactionRequest,
         sender: &Address,
     ) -> Result<RequiredTxParams> {
-        tron_retry!(self, |client| {
+        tron_retry!(self, "estimate_params_batch", |client| {
             let account_resource = client
                 .get_account_resource(protocol::Account {
                     address: addr_to_tron_bytes(sender),
@@ -395,7 +418,7 @@ impl TronOperations for NetworkProvider {
             }
         }
 
-        tron_retry!(self, |client| {
+        tron_retry!(self, "broadcast_txns", |client| {
             for tx in txns.iter_mut() {
                 let (tron_tx, metadata) = match tx {
                     TransactionReceipt::Tron((t, m)) => (t, m),
@@ -444,7 +467,7 @@ impl TronOperations for NetworkProvider {
         &self,
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
-        tron_retry!(self, |client| {
+        tron_retry!(self, "update_tx_receipt", |client| {
             for tx in txns.iter_mut() {
                 let tx_id = match tx
                     .get_tron()
@@ -538,7 +561,7 @@ impl TronOperations for NetworkProvider {
             return Ok(());
         }
 
-        tron_retry!(self, |client| {
+        tron_retry!(self, "update_balances", |client| {
             for token in tokens.iter_mut() {
                 for (idx, account) in accounts.iter().enumerate() {
                     let balance = if token.native {
@@ -555,7 +578,7 @@ impl TronOperations for NetworkProvider {
     }
 
     async fn tron_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
-        tron_retry!(self, |client| {
+        tron_retry!(self, "ftoken_meta", |client| {
             let abi = AbiHelper::new()?;
             let contract_bytes = addr_to_tron_bytes(&contract);
             let owner_bytes = accounts
@@ -592,10 +615,8 @@ impl TronOperations for NetworkProvider {
 
             let mut balances = std::collections::HashMap::new();
             for (idx, account) in accounts.iter().enumerate() {
-                balances.insert(
-                    idx,
-                    Self::tron_get_trc20_balance(&mut client, &contract, account).await,
-                );
+                let bal = Self::tron_get_trc20_balance(&mut client, &contract, account).await;
+                balances.insert(idx, bal);
             }
 
             Ok(FToken {
@@ -614,7 +635,7 @@ impl TronOperations for NetworkProvider {
     }
 
     async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()> {
-        tron_retry!(self, |client| {
+        tron_retry!(self, "fill_block_ref", |client| {
             let block = client
                 .get_now_block2(protocol::EmptyMessage {})
                 .await
