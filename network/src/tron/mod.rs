@@ -19,12 +19,12 @@ use std::sync::Arc;
 use std::time::Duration;
 use tonic::transport::Channel;
 
-const TRON_TIMEOUT_SECS: u64 = 5;
-const TRON_TOTAL_TIMEOUT_SECS: u64 = 15;
+const TRON_REQUEST_TIMEOUT_SECS: u64 = 8;
+const TRON_ATTEMPT_TIMEOUT_SECS: u64 = 25;
+const TRON_TOTAL_TIMEOUT_SECS: u64 = 60;
 const TRON_MAX_RETRIES: usize = 3;
 const TRON_BLOCK_TIME_SECS: u64 = 3;
 const TRON_DEFAULT_ENERGY_FEE: u64 = 420;
-const TRON_DEFAULT_FREE_BANDWIDTH: u64 = 600;
 const TRON_BANDWIDTH_PER_TRANSFER: u64 = 280;
 const TRON_BANDWIDTH_PRICE: u64 = 1000;
 const BLOCK_SAMPLE_SIZE: u64 = 10;
@@ -43,7 +43,7 @@ macro_rules! tron_retry {
                 break;
             }
             let remaining = total_deadline - elapsed;
-            let per_attempt = Duration::from_secs(TRON_TIMEOUT_SECS).min(remaining);
+            let per_attempt = Duration::from_secs(TRON_ATTEMPT_TIMEOUT_SECS).min(remaining);
             match tokio::time::timeout(per_attempt, async {
                 let $client = NetworkProvider::tron_connect(&endpoint).await?;
                 $body
@@ -59,7 +59,7 @@ macro_rules! tron_retry {
                 Err(_) => {
                     last_error = Some(NetworkErrors::RPCError(format!(
                         "Timeout {}s: {}",
-                        TRON_TIMEOUT_SECS, endpoint
+                        TRON_REQUEST_TIMEOUT_SECS, endpoint
                     )));
                 }
             }
@@ -100,8 +100,8 @@ impl NetworkProvider {
     async fn tron_connect(endpoint: &str) -> std::result::Result<TronClient, NetworkErrors> {
         let ch = Channel::from_shared(endpoint.to_string())
             .map_err(|e| NetworkErrors::RPCError(format!("{}: {}", endpoint, e)))?
-            .connect_timeout(Duration::from_secs(TRON_TIMEOUT_SECS))
-            .timeout(Duration::from_secs(TRON_TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(TRON_REQUEST_TIMEOUT_SECS))
+            .timeout(Duration::from_secs(TRON_REQUEST_TIMEOUT_SECS))
             .connect_lazy();
         Ok(Arc::new(WalletClient::new(ch)))
     }
@@ -192,14 +192,6 @@ impl TronOperations for NetworkProvider {
     ) -> Result<RequiredTxParams> {
         tron_retry!(self, "estimate_params_batch", |client| {
             let mut c = WalletClient::clone(&Arc::clone(&client));
-            let account_resource = c
-                .get_account_resource(protocol::Account {
-                    address: addr_to_tron_bytes(sender),
-                    ..Default::default()
-                })
-                .await
-                .ok()
-                .map(|r| r.into_inner());
 
             let chain_params = c
                 .get_chain_parameters(protocol::EmptyMessage {})
@@ -220,20 +212,7 @@ impl TronOperations for NetworkProvider {
             let fee_estimate = match tx {
                 TransactionRequest::Tron((tron_tx, _)) => match &tron_tx.contract {
                     TronContractCall::Transfer { .. } => {
-                        let free_bw = account_resource
-                            .as_ref()
-                            .map(|r| r.free_net_limit as u64)
-                            .unwrap_or(TRON_DEFAULT_FREE_BANDWIDTH);
-                        let used_bw = account_resource
-                            .as_ref()
-                            .map(|r| r.free_net_used as u64)
-                            .unwrap_or(0);
-
-                        if free_bw.saturating_sub(used_bw) > TRON_BANDWIDTH_PER_TRANSFER {
-                            0u64
-                        } else {
-                            TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE
-                        }
+                        TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE
                     }
                     TronContractCall::TriggerSmartContract {
                         contract_address,
@@ -241,19 +220,53 @@ impl TronOperations for NetworkProvider {
                         data,
                         ..
                     } => {
+                        let contract_bytes = addr_to_tron_bytes(contract_address);
+
+                        let trigger = protocol::TriggerSmartContract {
+                            owner_address: addr_to_tron_bytes(sender),
+                            contract_address: contract_bytes.clone(),
+                            call_value: *call_value,
+                            data: data.clone(),
+                            ..Default::default()
+                        };
+
                         let estimate = c
-                            .estimate_energy(protocol::TriggerSmartContract {
-                                owner_address: addr_to_tron_bytes(sender),
-                                contract_address: addr_to_tron_bytes(contract_address),
-                                call_value: *call_value,
-                                data: data.clone(),
-                                ..Default::default()
-                            })
+                            .estimate_energy(trigger.clone())
                             .await
                             .map_err(grpc_err)?
                             .into_inner();
 
-                        (estimate.energy_required as u64) * energy_fee
+                        let energy_required = if estimate.energy_required > 0 {
+                            estimate.energy_required as u64
+                        } else {
+                            let simulated = c
+                                .trigger_constant_contract(trigger)
+                                .await
+                                .map_err(grpc_err)?
+                                .into_inner()
+                                .energy_used as u64;
+                            if simulated == 0 {
+                                return Err(NetworkErrors::RPCError(
+                                    "Failed to estimate energy: all methods returned 0".into(),
+                                ));
+                            }
+                            simulated
+                        };
+
+                        let energy_factor = c
+                            .get_contract_info(protocol::BytesMessage {
+                                value: contract_bytes,
+                            })
+                            .await
+                            .ok()
+                            .and_then(|r| r.into_inner().contract_state)
+                            .map(|s| s.energy_factor.max(0) as u64)
+                            .unwrap_or(0);
+
+                        let adjusted_energy =
+                            energy_required * (10000 + energy_factor) / 10000;
+
+                        adjusted_energy * energy_fee
                     }
                     _ => 0u64,
                 },
@@ -515,10 +528,10 @@ mod tests {
 
         assert!(result.is_err());
         assert!(
-            elapsed.as_secs() <= TRON_TIMEOUT_SECS + 2,
+            elapsed.as_secs() <= TRON_REQUEST_TIMEOUT_SECS + 2,
             "Request took {}s, expected <= {}s",
             elapsed.as_secs(),
-            TRON_TIMEOUT_SECS + 2
+            TRON_REQUEST_TIMEOUT_SECS + 2
         );
     }
 
@@ -534,7 +547,7 @@ mod tests {
 
         assert!(result.is_err());
         assert!(
-            elapsed.as_secs() < TRON_TIMEOUT_SECS,
+            elapsed.as_secs() < TRON_REQUEST_TIMEOUT_SECS,
             "Connection refused should fail fast, took {}s",
             elapsed.as_secs()
         );
@@ -559,7 +572,7 @@ mod tests {
             result
         );
         assert!(
-            elapsed.as_secs() <= TRON_TIMEOUT_SECS + 2,
+            elapsed.as_secs() <= TRON_REQUEST_TIMEOUT_SECS + 2,
             "Retry took {}s, too slow",
             elapsed.as_secs()
         );
@@ -605,6 +618,8 @@ mod tests {
             .unwrap();
 
         assert!(params.gas_price > U256::ZERO);
+        assert!(params.tx_estimate_gas > U256::ZERO);
+        assert!(params.current > U256::ZERO);
     }
 
     #[tokio::test]
