@@ -1,6 +1,7 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
+use crypto::slip44::TRON;
 use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::evm::generate_erc20_transfer_data;
 use proto::{
@@ -216,7 +217,12 @@ impl TokensManagement for Background {
         let provider = self.get_provider(selected.chain_hash)?;
         let mut token_meta = provider.ftoken_meta(contract, &accounts).await?;
 
-        if let Some(t) = w.get_ftokens()?.into_iter().next() {
+        if provider.config.slip_44 == TRON {
+            token_meta.logo = Some(format!(
+                "https://static.tronscan.org/production/upload/logo/new/{}.png",
+                token_meta.addr.auto_format(),
+            ));
+        } else if let Some(t) = w.get_ftokens()?.into_iter().next() {
             token_meta.logo = t.logo;
         }
 
