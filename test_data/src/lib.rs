@@ -127,7 +127,10 @@ pub fn gen_zil_mainnet_conf() -> ChainConfig {
         name: "Zilliqa".to_string(),
         chain: "ZIL".to_string(),
         short_name: String::new(),
-        rpc: vec!["https://api.zilliqa.com".to_string()],
+        rpc: vec![
+            "https://ssn.zilpay.io".to_string(),
+            "https://api.zilliqa.com".to_string(),
+        ],
         features: vec![155],
         slip_44: slip44::ZILLIQA,
         ens: None,
@@ -263,7 +266,10 @@ pub fn gen_tron_testnet_conf() -> ChainConfig {
         name: "Tron(testnet)".to_string(),
         chain: "TRX".to_string(),
         short_name: "tron".to_string(),
-        rpc: vec!["grpc://grpc.nile.trongrid.io:50051".to_string()],
+        rpc: vec![
+            "https://nile.trongrid.io/jsonrpc".to_string(),
+            "grpc://grpc.nile.trongrid.io:50051".to_string(),
+        ],
         features: vec![],
         slip_44: slip44::TRON,
         ens: None,

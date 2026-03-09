@@ -338,7 +338,7 @@ impl EvmOperations for NetworkProvider {
                             .insert(account_index, U256::from(balance));
                     }
                 }
-                Address::Secp256k1Keccak256(_) => {
+                Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => {
                     let balance = process_eth_balance_response(response)?;
 
                     if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
@@ -403,7 +403,7 @@ impl EvmOperations for NetworkProvider {
                     rate: 0f64,
                 })
             }
-            Address::Secp256k1Keccak256(_) => {
+            Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => {
                 let mut metadata_iter = responses.iter();
                 let name = process_eth_metadata_response(
                     metadata_iter

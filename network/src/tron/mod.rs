@@ -1,11 +1,8 @@
 use crate::evm::{GasFeeHistory, RequiredTxParams};
 use crate::provider::NetworkProvider;
 use crate::Result;
-use alloy::dyn_abi::{DynSolValue, FunctionExt, JsonAbiExt};
-use alloy::json_abi::JsonAbi;
 use alloy::primitives::U256;
 use async_trait::async_trait;
-use config::abi::ERC20_ABI;
 use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
 use errors::tx::TransactionErrors;
@@ -20,8 +17,6 @@ use proto::tx::{TransactionReceipt, TransactionRequest};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
-use token::ft::FToken;
-use tokio::task::JoinSet;
 use tonic::transport::Channel;
 
 const TRON_TIMEOUT_SECS: u64 = 5;
@@ -74,60 +69,6 @@ macro_rules! tron_retry {
     }};
 }
 
-struct AbiHelper {
-    abi: JsonAbi,
-}
-
-impl AbiHelper {
-    fn new() -> std::result::Result<Self, NetworkErrors> {
-        let abi = serde_json::from_str(ERC20_ABI).map_err(|_| NetworkErrors::ResponseParseError)?;
-        Ok(Self { abi })
-    }
-
-    fn encode(
-        &self,
-        name: &str,
-        inputs: &[DynSolValue],
-    ) -> std::result::Result<Vec<u8>, NetworkErrors> {
-        self.abi
-            .function(name)
-            .and_then(|f| f.first())
-            .ok_or(NetworkErrors::ResponseParseError)?
-            .abi_encode_input(inputs)
-            .map_err(|_| NetworkErrors::ResponseParseError)
-    }
-
-    fn decode(
-        &self,
-        name: &str,
-        data: &[u8],
-    ) -> std::result::Result<Vec<DynSolValue>, NetworkErrors> {
-        self.abi
-            .function(name)
-            .and_then(|f| f.first())
-            .ok_or(NetworkErrors::ResponseParseError)?
-            .abi_decode_output(data)
-            .map_err(|_| NetworkErrors::ResponseParseError)
-    }
-
-    fn decode_string(&self, name: &str, data: &[u8]) -> std::result::Result<String, NetworkErrors> {
-        self.decode(name, data)?
-            .into_iter()
-            .next()
-            .and_then(|v| v.as_str().map(String::from))
-            .ok_or(NetworkErrors::ResponseParseError)
-    }
-
-    fn decode_u8(&self, name: &str, data: &[u8]) -> std::result::Result<u8, NetworkErrors> {
-        self.decode(name, data)?
-            .into_iter()
-            .next()
-            .and_then(|v| v.as_uint())
-            .map(|(val, _)| val.to::<u8>())
-            .ok_or(NetworkErrors::ResponseParseError)
-    }
-}
-
 fn addr_to_tron_bytes(addr: &Address) -> Vec<u8> {
     let mut bytes = Vec::with_capacity(21);
     bytes.push(0x41);
@@ -144,13 +85,13 @@ impl NetworkProvider {
         self.config
             .rpc
             .iter()
-            .map(|url| {
+            .filter_map(|url| {
                 if url.starts_with("http://") || url.starts_with("https://") {
-                    url.clone()
+                    None
                 } else if url.starts_with("grpc://") {
-                    format!("http://{}", &url[7..])
+                    Some(format!("http://{}", &url[7..]))
                 } else {
-                    format!("http://{}", url)
+                    Some(format!("http://{}", url))
                 }
             })
             .collect()
@@ -165,82 +106,6 @@ impl NetworkProvider {
         Ok(Arc::new(WalletClient::new(ch)))
     }
 
-    async fn tron_trigger_constant(
-        client: &TronClient,
-        owner: Vec<u8>,
-        contract_addr: Vec<u8>,
-        data: Vec<u8>,
-    ) -> Result<Vec<u8>> {
-        let mut c = WalletClient::clone(&Arc::clone(client));
-        c.trigger_constant_contract(protocol::TriggerSmartContract {
-            owner_address: owner,
-            contract_address: contract_addr,
-            data,
-            ..Default::default()
-        })
-        .await
-        .map_err(grpc_err)?
-        .into_inner()
-        .constant_result
-        .into_iter()
-        .next()
-        .ok_or(NetworkErrors::ResponseParseError.into())
-    }
-
-    async fn tron_get_native_balance(client: &TronClient, account: &Address) -> U256 {
-        let mut c = WalletClient::clone(&Arc::clone(client));
-        c.get_account(protocol::Account {
-            address: addr_to_tron_bytes(account),
-            ..Default::default()
-        })
-        .await
-        .ok()
-        .map(|r| U256::from(r.into_inner().balance.max(0) as u64))
-        .unwrap_or(U256::ZERO)
-    }
-
-    async fn tron_get_trc20_balance(
-        client: &TronClient,
-        contract: &Address,
-        account: &Address,
-    ) -> U256 {
-        let abi = match AbiHelper::new() {
-            Ok(a) => a,
-            Err(_) => return U256::ZERO,
-        };
-        let data = match abi.encode(
-            "balanceOf",
-            &[DynSolValue::Address(account.to_alloy_addr())],
-        ) {
-            Ok(d) => d,
-            Err(_) => return U256::ZERO,
-        };
-
-        Self::tron_trigger_constant(
-            client,
-            addr_to_tron_bytes(account),
-            addr_to_tron_bytes(contract),
-            data,
-        )
-        .await
-        .ok()
-        .filter(|b| !b.is_empty())
-        .map(|b| U256::from_be_slice(&b))
-        .unwrap_or(U256::ZERO)
-    }
-
-    async fn tron_fetch_balance(
-        client: &TronClient,
-        native: bool,
-        contract: &Address,
-        account: &Address,
-    ) -> U256 {
-        if native {
-            Self::tron_get_native_balance(client, account).await
-        } else {
-            Self::tron_get_trc20_balance(client, contract, account).await
-        }
-    }
 }
 
 #[async_trait]
@@ -260,12 +125,6 @@ pub trait TronOperations {
         &self,
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()>;
-    async fn tron_update_balances(
-        &self,
-        tokens: Vec<&mut FToken>,
-        accounts: &[&Address],
-    ) -> Result<()>;
-    async fn tron_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken>;
     async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()>;
 }
 
@@ -555,105 +414,6 @@ impl TronOperations for NetworkProvider {
         })
     }
 
-    async fn tron_update_balances(
-        &self,
-        mut tokens: Vec<&mut FToken>,
-        accounts: &[&Address],
-    ) -> Result<()> {
-        if accounts.is_empty() || tokens.is_empty() {
-            return Ok(());
-        }
-
-        tron_retry!(self, "update_balances", |client| {
-            for token in tokens.iter_mut() {
-                let mut set = JoinSet::new();
-                for (idx, account) in accounts.iter().enumerate() {
-                    let c = Arc::clone(&client);
-                    let native = token.native;
-                    let addr = token.addr.clone();
-                    let acc = (*account).clone();
-                    set.spawn(async move {
-                        (
-                            idx,
-                            NetworkProvider::tron_fetch_balance(&c, native, &addr, &acc).await,
-                        )
-                    });
-                }
-                while let Some(Ok((idx, balance))) = set.join_next().await {
-                    token.balances.insert(idx, balance);
-                }
-            }
-
-            Ok(())
-        })
-    }
-
-    async fn tron_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
-        tron_retry!(self, "ftoken_meta", |client| {
-            let abi = AbiHelper::new()?;
-            let contract_bytes = addr_to_tron_bytes(&contract);
-            let owner_bytes = accounts
-                .first()
-                .map(|a| addr_to_tron_bytes(a))
-                .unwrap_or_else(|| contract_bytes.clone());
-
-            let (name_res, symbol_res, decimals_res) = tokio::join!(
-                Self::tron_trigger_constant(
-                    &client,
-                    owner_bytes.clone(),
-                    contract_bytes.clone(),
-                    abi.encode("name", &[])?,
-                ),
-                Self::tron_trigger_constant(
-                    &client,
-                    owner_bytes.clone(),
-                    contract_bytes.clone(),
-                    abi.encode("symbol", &[])?,
-                ),
-                Self::tron_trigger_constant(
-                    &client,
-                    owner_bytes,
-                    contract_bytes,
-                    abi.encode("decimals", &[])?,
-                ),
-            );
-
-            let name = abi.decode_string("name", &name_res?)?;
-            let symbol = abi.decode_string("symbol", &symbol_res?)?;
-            let decimals = abi.decode_u8("decimals", &decimals_res?)?;
-
-            let mut set = JoinSet::new();
-            for (idx, account) in accounts.iter().enumerate() {
-                let c = Arc::clone(&client);
-                let contract = contract.clone();
-                let acc = (*account).clone();
-                set.spawn(async move {
-                    (
-                        idx,
-                        NetworkProvider::tron_get_trc20_balance(&c, &contract, &acc).await,
-                    )
-                });
-            }
-            let mut balances = std::collections::HashMap::new();
-            while let Some(Ok((idx, bal))) = set.join_next().await {
-                balances.insert(idx, bal);
-            }
-
-            Ok(FToken {
-                balances,
-                name,
-                symbol,
-                decimals,
-                addr: contract.clone(),
-                logo: None,
-                default: false,
-                native: false,
-                chain_hash: self.config.hash(),
-                rate: 0f64,
-            })
-        })
-    }
-
     async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()> {
         tron_retry!(self, "fill_block_ref", |client| {
             let mut c = WalletClient::clone(&Arc::clone(&client));
@@ -687,6 +447,9 @@ impl TronOperations for NetworkProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy::dyn_abi::{DynSolValue, JsonAbiExt};
+    use alloy::json_abi::JsonAbi;
+    use config::abi::ERC20_ABI;
     use std::time::Instant;
     use test_data::gen_tron_testnet_conf;
 
@@ -700,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tron_endpoints_http_passthrough() {
+    fn test_tron_endpoints_skips_jsonrpc() {
         let mut conf = gen_tron_testnet_conf();
         conf.rpc = vec![
             "http://localhost:50051".to_string(),
@@ -708,10 +471,7 @@ mod tests {
         ];
         let provider = NetworkProvider::new(conf);
         let endpoints = provider.tron_endpoints();
-        assert_eq!(
-            endpoints,
-            vec!["http://localhost:50051", "https://secure.node:50051",]
-        );
+        assert!(endpoints.is_empty());
     }
 
     #[test]
@@ -723,10 +483,30 @@ mod tests {
         assert_eq!(endpoints, vec!["http://grpc.nile.trongrid.io:50051"]);
     }
 
+    #[test]
+    fn test_tron_endpoints_mixed() {
+        let mut conf = gen_tron_testnet_conf();
+        conf.rpc = vec![
+            "https://api.trongrid.io".to_string(),
+            "grpc://grpc.nile.trongrid.io:50051".to_string(),
+            "http://localhost:8090".to_string(),
+            "some.node:50051".to_string(),
+        ];
+        let provider = NetworkProvider::new(conf);
+        let endpoints = provider.tron_endpoints();
+        assert_eq!(
+            endpoints,
+            vec![
+                "http://grpc.nile.trongrid.io:50051",
+                "http://some.node:50051",
+            ]
+        );
+    }
+
     #[tokio::test]
     async fn test_tron_connect_timeout_unreachable() {
         let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec!["http://192.0.2.1:50051".to_string()];
+        conf.rpc = vec!["grpc://192.0.2.1:50051".to_string()];
         let provider = NetworkProvider::new(conf);
 
         let start = Instant::now();
@@ -745,7 +525,7 @@ mod tests {
     #[tokio::test]
     async fn test_tron_connect_invalid_host_fails_fast() {
         let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec!["http://localhost:1".to_string()];
+        conf.rpc = vec!["localhost:1".to_string()];
         let provider = NetworkProvider::new(conf);
 
         let start = Instant::now();
@@ -764,8 +544,8 @@ mod tests {
     async fn test_tron_retry_skips_bad_node() {
         let mut conf = gen_tron_testnet_conf();
         conf.rpc = vec![
-            "http://localhost:1".to_string(),
-            "http://grpc.nile.trongrid.io:50051".to_string(),
+            "localhost:1".to_string(),
+            "grpc://grpc.nile.trongrid.io:50051".to_string(),
         ];
         let provider = NetworkProvider::new(conf);
 
@@ -797,38 +577,6 @@ mod tests {
         let provider = NetworkProvider::new(gen_tron_testnet_conf());
         let block_time = provider.tron_estimate_block_time().await.unwrap();
         assert!(block_time >= 1 && block_time <= 10);
-    }
-
-    #[tokio::test]
-    async fn test_tron_update_balances() {
-        let provider = NetworkProvider::new(gen_tron_testnet_conf());
-        let addr = Address::from_tron_address(test_data::tron_addresses::ADDR_0).unwrap();
-        let accounts = [&addr];
-        let mut trx_token = test_data::gen_tron_token();
-
-        provider
-            .tron_update_balances(vec![&mut trx_token], &accounts)
-            .await
-            .unwrap();
-
-        assert!(trx_token.balances.contains_key(&0));
-    }
-
-    #[tokio::test]
-    async fn test_tron_ftoken_meta() {
-        let provider = NetworkProvider::new(gen_tron_testnet_conf());
-        let contract = Address::from_tron_address("TNuoKL1ni8aoshfFL1ASca1Gou9RXwAzfn").unwrap();
-        let addr = Address::from_tron_address(test_data::tron_addresses::ADDR_0).unwrap();
-        let accounts = [&addr];
-
-        let token = provider
-            .tron_ftoken_meta(contract, &accounts)
-            .await
-            .unwrap();
-
-        assert!(!token.name.is_empty());
-        assert!(!token.symbol.is_empty());
-        assert!(token.decimals > 0);
     }
 
     #[tokio::test]
@@ -865,16 +613,14 @@ mod tests {
         let sender = Address::from_tron_address(test_data::tron_addresses::ADDR_0).unwrap();
         let contract = Address::from_tron_address("TNuoKL1ni8aoshfFL1ASca1Gou9RXwAzfn").unwrap();
 
-        let abi = AbiHelper::new().unwrap();
+        let abi: JsonAbi = serde_json::from_str(ERC20_ABI).unwrap();
         let to = Address::from_tron_address(test_data::tron_addresses::ADDR_1).unwrap();
-        let data = abi
-            .encode(
-                "transfer",
-                &[
-                    DynSolValue::Address(to.to_alloy_addr()),
-                    DynSolValue::Uint(U256::from(1_000_000), 256),
-                ],
-            )
+        let func = abi.function("transfer").and_then(|f| f.first()).unwrap();
+        let data = func
+            .abi_encode_input(&[
+                DynSolValue::Address(to.to_alloy_addr()),
+                DynSolValue::Uint(U256::from(1_000_000), 256),
+            ])
             .unwrap();
 
         let tron_tx = proto::tron_tx::TronTransactionRequest {

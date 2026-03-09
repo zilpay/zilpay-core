@@ -108,7 +108,7 @@ pub fn build_token_requests<'a>(
 ) -> RequestResult<'a> {
     let size = match contract {
         Address::Secp256k1Sha256(_) => 1 + accounts.len(),
-        Address::Secp256k1Keccak256(_) => 3 + accounts.len(),
+        Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => 3 + accounts.len(),
         _ => 0,
     };
     let mut requests = Vec::with_capacity(size);
@@ -117,7 +117,7 @@ pub fn build_token_requests<'a>(
         Address::Secp256k1Sha256(_) => {
             build_zil_requests(contract, accounts, native, &mut requests)?;
         }
-        Address::Secp256k1Keccak256(_) => {
+        Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => {
             build_eth_requests(contract, accounts, native, &mut requests)?;
         }
         _ => {

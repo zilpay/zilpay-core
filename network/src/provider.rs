@@ -158,9 +158,10 @@ impl NetworkProvider {
         accounts: &[&Address],
     ) -> Result<()> {
         match self.config.slip_44 {
-            slip44::ETHEREUM | slip44::ZILLIQA => self.evm_update_balances(tokens, accounts).await,
+            slip44::ETHEREUM | slip44::ZILLIQA | slip44::TRON => {
+                self.evm_update_balances(tokens, accounts).await
+            }
             slip44::BITCOIN => self.btc_update_balances(tokens, accounts).await,
-            slip44::TRON => self.tron_update_balances(tokens, accounts).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
@@ -170,11 +171,12 @@ impl NetworkProvider {
 
     pub async fn ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
         match self.config.slip_44 {
-            slip44::ETHEREUM | slip44::ZILLIQA => self.evm_ftoken_meta(contract, accounts).await,
+            slip44::ETHEREUM | slip44::ZILLIQA | slip44::TRON => {
+                self.evm_ftoken_meta(contract, accounts).await
+            }
             slip44::BITCOIN => Err(NetworkErrors::RPCError(
                 "Bitcoin does not support tokens".to_string(),
             )),
-            slip44::TRON => self.tron_ftoken_meta(contract, accounts).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
@@ -210,7 +212,8 @@ mod tests_network {
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};
     use rand::Rng;
     use test_data::{
-        gen_anvil_net_conf, gen_bsc_testnet_conf, gen_eth_mainnet_conf, gen_zil_testnet_conf,
+        gen_anvil_net_conf, gen_bsc_testnet_conf, gen_eth_mainnet_conf, gen_zil_mainnet_conf,
+        gen_zil_testnet_conf,
     };
     use tokio;
 
@@ -220,28 +223,6 @@ mod tests_network {
 
         let storage = LocalStorage::from(&dir).unwrap();
         Arc::new(storage)
-    }
-
-    fn create_mainnet_zilliqa_config() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 1],
-            name: "Zilliqa".to_string(),
-            chain: "ZIL".to_string(),
-            short_name: String::new(),
-            rpc: vec![
-                "https://ssn.zilpay.io".to_string(),
-                "https://api.zilliqa.com".to_string(),
-            ],
-            features: vec![],
-            slip_44: 313,
-            ens: None,
-            explorers: vec![],
-            fallback_enabled: true,
-        }
     }
 
     #[tokio::test]
@@ -267,7 +248,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_ftoken_meta_zil_legacy() {
-        let net_conf = create_mainnet_zilliqa_config();
+        let net_conf = gen_zil_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let token_addr =
@@ -288,7 +269,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_update_balance_scilla() {
-        let net_conf = create_mainnet_zilliqa_config();
+        let net_conf = gen_zil_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
         let mut tokens = vec![
             FToken::zil(0),
@@ -494,7 +475,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_nonce_scilla() {
-        let net_conf = create_mainnet_zilliqa_config();
+        let net_conf = gen_zil_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let accounts = [
@@ -706,7 +687,7 @@ mod tests_network {
 
     #[tokio::test]
     async fn test_get_tx_prams_scilla() {
-        let net_conf = create_mainnet_zilliqa_config();
+        let net_conf = gen_zil_mainnet_conf();
         let provider = NetworkProvider::new(net_conf);
 
         let to = Address::from_zil_bech32("zil1xjj35ymsvf9ajqhprwh6pkvejm2lm2e9y4q4ev").unwrap();

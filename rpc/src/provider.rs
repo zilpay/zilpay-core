@@ -40,6 +40,10 @@ where
         let mut errors = String::with_capacity(200);
 
         for url in self.network.nodes() {
+            if !url.starts_with("http://") && !url.starts_with("https://") {
+                continue;
+            }
+
             let res = client
                 .post(url)
                 .timeout(Duration::from_secs(TIME_OUT_SEC))
