@@ -11,6 +11,7 @@ use proto::{
     address::Address,
     pubkey::PubKey,
     signature::Signature,
+    tron_tx::TronContractCall,
     tx::{TransactionReceipt, TransactionRequest},
 };
 use sha2::{Digest, Sha256};
@@ -264,6 +265,19 @@ pub fn update_tx_from_params(
                 .try_into()
                 .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
             tron_tx.fee_limit = fee;
+
+            if let TronContractCall::Transfer { ref mut amount, .. } = tron_tx.contract {
+                if *amount > 0 && U256::from(*amount as u64) == balance {
+                    let adjusted = *amount - fee;
+                    if adjusted <= 0 {
+                        return Err(TransactionErrors::ConvertTxError(format!(
+                            "Insufficient TRX: balance {} sun <= fee {} sun",
+                            *amount, fee
+                        )));
+                    }
+                    *amount = adjusted;
+                }
+            }
         }
         TransactionRequest::Bitcoin((ref mut btc_tx, ref metadata)) => {
             if params.current == U256::ZERO {
@@ -1148,8 +1162,7 @@ mod tests_background_transactions {
 
     #[tokio::test]
     async fn test_sign_and_send_tron_tx() {
-        use crypto::{bip49::DerivationPath, slip44};
-        use test_data::{gen_tron_testnet_conf, gen_tron_token, tron_addresses};
+        use test_data::{gen_tron_account, gen_tron_testnet_conf, gen_tron_token, tron_addresses};
 
         let (mut bg, _dir) = setup_test_background();
         let net_config = gen_tron_testnet_conf();
@@ -1157,14 +1170,8 @@ mod tests_background_transactions {
         bg.add_provider(net_config.clone()).unwrap();
 
         let accounts = [
-            (
-                DerivationPath::new(slip44::TRON, 0, DerivationPath::BIP44_PURPOSE, None),
-                "Tron Acc 0".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::TRON, 1, DerivationPath::BIP44_PURPOSE, None),
-                "Tron Acc 1".to_string(),
-            ),
+            gen_tron_account(0, "Tron Acc 0"),
+            gen_tron_account(1, "Tron Acc 1"),
         ];
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
@@ -1254,8 +1261,7 @@ mod tests_background_transactions {
     #[tokio::test]
     async fn test_sign_and_send_tron_trc20_tx() {
         use crate::bg_token::TokensManagement;
-        use crypto::{bip49::DerivationPath, slip44};
-        use test_data::{gen_tron_testnet_conf, gen_tron_token, tron_addresses};
+        use test_data::{gen_tron_account, gen_tron_testnet_conf, gen_tron_token, tron_addresses};
         use wallet::wallet_token::TokenManagement;
 
         let (mut bg, _dir) = setup_test_background();
@@ -1263,14 +1269,8 @@ mod tests_background_transactions {
         bg.add_provider(net_config.clone()).unwrap();
 
         let accounts = [
-            (
-                DerivationPath::new(slip44::TRON, 0, DerivationPath::BIP44_PURPOSE, None),
-                "Tron Acc 0".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::TRON, 1, DerivationPath::BIP44_PURPOSE, None),
-                "Tron Acc 1".to_string(),
-            ),
+            gen_tron_account(0, "Tron Acc 0"),
+            gen_tron_account(1, "Tron Acc 1"),
         ];
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
@@ -1398,6 +1398,131 @@ mod tests_background_transactions {
                 "[TRC20] broadcast OK, txID: {}",
                 tx.metadata.hash.as_ref().unwrap()
             );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sign_and_send_tron_max_balance_tx() {
+        use test_data::{gen_tron_account, gen_tron_testnet_conf, gen_tron_token, tron_addresses};
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_tron_testnet_conf();
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [
+            gen_tron_account(0, "Tron Acc 0"),
+            gen_tron_account(1, "Tron Acc 1"),
+        ];
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: &password,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Tron wallet".to_string(),
+            biometric_type: Default::default(),
+            ftokens: vec![gen_tron_token()],
+        })
+        .await
+        .unwrap();
+
+        bg.sync_ftokens_balances(0).await.unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance_0 = *ftokens.first().unwrap().balances.get(&0).unwrap();
+        let balance_1 = *ftokens.first().unwrap().balances.get(&1).unwrap();
+
+        let account_0 = data.accounts.first().unwrap();
+        let account_1 = data.accounts.get(1).unwrap();
+        assert_eq!(account_0.addr.auto_format(), tron_addresses::ADDR_0);
+
+        let (sender_idx, sender, recipient, sender_balance) = if balance_0 >= balance_1 && balance_0 > U256::ZERO {
+            (0usize, account_0, &account_1.addr, balance_0)
+        } else if balance_1 > U256::ZERO {
+            (1usize, account_1, &account_0.addr, balance_1)
+        } else {
+            panic!("both accounts have zero TRX balance — fund at least one on Nile testnet");
+        };
+
+        let amount_sun: i64 = sender_balance
+            .try_into()
+            .expect("balance must fit in i64");
+
+        let mut tron_tx = proto::tron_tx::TronTransactionRequest {
+            owner_address: sender.addr.clone(),
+            ref_block_bytes: vec![],
+            ref_block_hash: vec![],
+            expiration: 0,
+            timestamp: 0,
+            fee_limit: 0,
+            contract: proto::tron_tx::TronContractCall::Transfer {
+                to_address: recipient.clone(),
+                amount: amount_sun,
+            },
+        };
+
+        let metadata = proto::tx::TransactionMetadata {
+            chain_hash: net_config.hash(),
+            ..Default::default()
+        };
+        let mut tx_request = TransactionRequest::Tron((tron_tx.clone(), metadata.clone()));
+
+        let providers = bg.get_providers();
+        let provider = providers.first().unwrap();
+
+        let params = provider
+            .estimate_params_batch(&tx_request, &sender.addr, 1, None)
+            .await
+            .unwrap();
+
+        let fee: i64 = params.current.try_into().expect("fee must fit in i64");
+        assert!(fee > 0, "bandwidth fee must be > 0");
+
+        super::update_tx_from_params(&mut tx_request, params, sender_balance).unwrap();
+
+        if let TransactionRequest::Tron((ref updated, _)) = tx_request {
+            if let proto::tron_tx::TronContractCall::Transfer { amount, .. } = updated.contract {
+                assert_eq!(
+                    amount,
+                    amount_sun - fee,
+                    "amount must be reduced by the bandwidth fee"
+                );
+            } else {
+                panic!("expected Transfer contract");
+            }
+            tron_tx = updated.clone();
+        }
+
+        provider.tron_fill_block_ref(&mut tron_tx).await.unwrap();
+
+        let tx_request = TransactionRequest::Tron((tron_tx, metadata));
+
+        let argon_seed = bg
+            .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .await
+            .unwrap();
+        let keypair = wallet
+            .reveal_keypair(sender_idx, &argon_seed, None)
+            .unwrap();
+
+        let signed = tx_request.sign(&keypair).await.unwrap();
+        assert!(signed.verify().unwrap());
+
+        let txns = vec![signed];
+        let txns = bg
+            .broadcast_signed_transactions(0, sender_idx, txns)
+            .await
+            .unwrap();
+
+        assert_eq!(txns.len(), 1);
+        for tx in &txns {
+            assert!(tx.metadata.hash.is_some());
         }
     }
 }
