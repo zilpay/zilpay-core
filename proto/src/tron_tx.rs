@@ -7,13 +7,6 @@ use sha2::{Digest, Sha256};
 
 use protocol::transaction::contract::ContractType;
 
-fn addr_to_tron_bytes(addr: &Address) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(21);
-    bytes.push(0x41);
-    bytes.extend_from_slice(addr.as_ref());
-    bytes
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TronResource {
     Bandwidth,
@@ -127,13 +120,13 @@ pub struct TronTransactionReceipt {
 
 impl TronTransactionRequest {
     fn encode_contract(&self) -> (String, Vec<u8>, ContractType) {
-        let owner = addr_to_tron_bytes(&self.owner_address);
+        let owner = self.owner_address.to_tron_bytes();
 
         match &self.contract {
             TronContractCall::Transfer { to_address, amount } => {
                 let c = protocol::TransferContract {
                     owner_address: owner,
-                    to_address: addr_to_tron_bytes(to_address),
+                    to_address: to_address.to_tron_bytes(),
                     amount: *amount,
                 };
                 (
@@ -151,7 +144,7 @@ impl TronTransactionRequest {
             } => {
                 let c = protocol::TriggerSmartContract {
                     owner_address: owner,
-                    contract_address: addr_to_tron_bytes(contract_address),
+                    contract_address: contract_address.to_tron_bytes(),
                     call_value: *call_value,
                     data: data.clone(),
                     call_token_value: *call_token_value,
@@ -214,7 +207,7 @@ impl TronTransactionRequest {
                     owner_address: owner,
                     resource: resource.to_proto(),
                     balance: *balance,
-                    receiver_address: addr_to_tron_bytes(receiver_address),
+                    receiver_address: receiver_address.to_tron_bytes(),
                     lock: *lock,
                     lock_period: *lock_period,
                 };
@@ -233,7 +226,7 @@ impl TronTransactionRequest {
                     owner_address: owner,
                     resource: resource.to_proto(),
                     balance: *balance,
-                    receiver_address: addr_to_tron_bytes(receiver_address),
+                    receiver_address: receiver_address.to_tron_bytes(),
                 };
                 (
                     "type.googleapis.com/protocol.UnDelegateResourceContract".into(),
@@ -259,7 +252,7 @@ impl TronTransactionRequest {
                 let c = protocol::TransferAssetContract {
                     asset_name: asset_name.clone(),
                     owner_address: owner,
-                    to_address: addr_to_tron_bytes(to_address),
+                    to_address: to_address.to_tron_bytes(),
                     amount: *amount,
                 };
                 (
@@ -272,7 +265,7 @@ impl TronTransactionRequest {
                 let vote_list = votes
                     .iter()
                     .map(|(addr, count)| protocol::vote_witness_contract::Vote {
-                        vote_address: addr_to_tron_bytes(addr),
+                        vote_address: addr.to_tron_bytes(),
                         vote_count: *count,
                     })
                     .collect();
@@ -293,7 +286,7 @@ impl TronTransactionRequest {
             } => {
                 let c = protocol::AccountCreateContract {
                     owner_address: owner,
-                    account_address: addr_to_tron_bytes(account_address),
+                    account_address: account_address.to_tron_bytes(),
                     r#type: *account_type,
                 };
                 (

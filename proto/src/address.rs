@@ -208,6 +208,13 @@ impl Address {
         bs58::encode(payload).into_string()
     }
 
+    pub fn to_tron_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(21);
+        bytes.push(0x41);
+        bytes.extend_from_slice(self.as_ref());
+        bytes
+    }
+
     pub fn from_pubkey(pk: &PubKey) -> Result<Self> {
         match pk {
             PubKey::Secp256k1Sha256(pk) => {

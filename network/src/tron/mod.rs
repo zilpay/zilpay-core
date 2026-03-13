@@ -69,13 +69,6 @@ macro_rules! tron_retry {
     }};
 }
 
-fn addr_to_tron_bytes(addr: &Address) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(21);
-    bytes.push(0x41);
-    bytes.extend_from_slice(addr.as_ref());
-    bytes
-}
-
 fn grpc_err(e: tonic::Status) -> NetworkErrors {
     NetworkErrors::RPCError(format!("gRPC: {}", e))
 }
@@ -220,10 +213,10 @@ impl TronOperations for NetworkProvider {
                         data,
                         ..
                     } => {
-                        let contract_bytes = addr_to_tron_bytes(contract_address);
+                        let contract_bytes = contract_address.to_tron_bytes();
 
                         let trigger = protocol::TriggerSmartContract {
-                            owner_address: addr_to_tron_bytes(sender),
+                            owner_address: sender.to_tron_bytes(),
                             contract_address: contract_bytes.clone(),
                             call_value: *call_value,
                             data: data.clone(),
