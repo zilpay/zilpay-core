@@ -420,6 +420,16 @@ impl TronTransactionRequest {
         raw.encode_to_vec()
     }
 
+    pub fn from_raw_data_hex(
+        hex: &str,
+    ) -> Result<protocol::transaction::Raw, errors::tx::TransactionErrors> {
+        let bytes = hex::decode(hex)
+            .map_err(|e| errors::tx::TransactionErrors::ConvertTxError(e.to_string()))?;
+
+        protocol::transaction::Raw::decode(bytes.as_slice())
+            .map_err(|e| errors::tx::TransactionErrors::ConvertTxError(e.to_string()))
+    }
+
     pub fn tx_id(&self) -> [u8; 32] {
         let raw_bytes = self.to_raw_data_bytes();
         let hash = Sha256::digest(&raw_bytes);
@@ -740,5 +750,45 @@ mod tests {
 
         let receipt = sign_tron_tx(&request, &keypair);
         assert!(receipt.verify().unwrap());
+    }
+
+    #[test]
+    fn test_from_raw_data_hex() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let owner = keypair.get_addr().unwrap();
+        let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
+
+        let request = TronTransactionRequest {
+            owner_address: owner,
+            ref_block_bytes: vec![0x00, 0x0a],
+            ref_block_hash: vec![0x77; 8],
+            expiration: 1700000000000,
+            timestamp: 1699999990000,
+            fee_limit: 0,
+            contract: TronContractCall::Transfer {
+                to_address: to,
+                amount: 3_000_000,
+            },
+        };
+
+        let raw_bytes = request.to_raw_data_bytes();
+        let hex_string = hex::encode(&raw_bytes);
+
+        let decoded = TronTransactionRequest::from_raw_data_hex(&hex_string).unwrap();
+
+        assert_eq!(decoded.ref_block_bytes, vec![0x00, 0x0a]);
+        assert_eq!(decoded.ref_block_hash, vec![0x77; 8]);
+        assert_eq!(decoded.expiration, 1700000000000);
+        assert_eq!(decoded.timestamp, 1699999990000);
+        assert_eq!(decoded.contract.len(), 1);
+
+        let contract = &decoded.contract[0];
+        assert_eq!(contract.r#type, ContractType::TransferContract as i32);
+    }
+
+    #[test]
+    fn test_from_raw_data_hex_invalid() {
+        let result = TronTransactionRequest::from_raw_data_hex("invalid_hex_string!!!");
+        assert!(result.is_err());
     }
 }
