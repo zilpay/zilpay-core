@@ -31,6 +31,7 @@ pub enum TronContractCall {
     TriggerSmartContract {
         contract_address: Address,
         call_value: i64,
+        #[serde(with = "hex::serde")]
         data: Vec<u8>,
         call_token_value: i64,
         token_id: i64,
@@ -58,6 +59,7 @@ pub enum TronContractCall {
     },
     CancelAllUnfreezeV2,
     TransferAsset {
+        #[serde(with = "hex::serde")]
         asset_name: Vec<u8>,
         to_address: Address,
         amount: i64,
@@ -70,15 +72,19 @@ pub enum TronContractCall {
         account_type: i32,
     },
     AccountUpdate {
+        #[serde(with = "hex::serde")]
         account_name: Vec<u8>,
     },
     WitnessCreate {
+        #[serde(with = "hex::serde")]
         url: Vec<u8>,
     },
     WitnessUpdate {
+        #[serde(with = "hex::serde")]
         update_url: Vec<u8>,
     },
     CreateSmartContract {
+        #[serde(with = "hex::serde")]
         new_contract: Vec<u8>,
         call_token_value: i64,
         token_id: i64,
@@ -94,6 +100,7 @@ pub enum TronContractCall {
         proposal_id: i64,
     },
     AccountPermissionUpdate {
+        #[serde(with = "hex::serde")]
         raw_data: Vec<u8>,
     },
 }
@@ -101,7 +108,9 @@ pub enum TronContractCall {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TronTransactionRequest {
     pub owner_address: Address,
+    #[serde(with = "hex::serde")]
     pub ref_block_bytes: Vec<u8>,
+    #[serde(with = "hex::serde")]
     pub ref_block_hash: Vec<u8>,
     pub expiration: i64,
     pub timestamp: i64,
@@ -111,8 +120,11 @@ pub struct TronTransactionRequest {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TronTransactionReceipt {
+    #[serde(with = "hex::serde")]
     pub raw_data_bytes: Vec<u8>,
+    #[serde(with = "hex::serde")]
     pub tx_id: [u8; 32],
+    #[serde(with = "hex::serde")]
     pub signature: Vec<u8>,
     pub owner_address: Address,
     pub contract: TronContractCall,
