@@ -165,7 +165,7 @@ impl StorageOperations for Wallet {
         let new_history = {
             match self.get_history() {
                 Ok(mut db_history) => {
-                    db_history.extend_from_slice(&history);
+                    db_history.extend_from_slice(history);
                     db_history
                 }
                 Err(_) => history.to_vec(),

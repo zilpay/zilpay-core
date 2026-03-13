@@ -182,7 +182,7 @@ impl Address {
         let payload = &decoded[..21];
         let checksum = &decoded[21..];
         let hash1 = Sha256::digest(payload);
-        let hash2 = Sha256::digest(&hash1);
+        let hash2 = Sha256::digest(hash1);
         if &hash2[..4] != checksum {
             return Err(AddressError::InvalidTronAddress(
                 "Invalid checksum".to_string(),
@@ -202,7 +202,7 @@ impl Address {
         payload.extend_from_slice(bytes);
 
         let hash1 = Sha256::digest(&payload);
-        let hash2 = Sha256::digest(&hash1);
+        let hash2 = Sha256::digest(hash1);
         payload.extend_from_slice(&hash2[..4]);
 
         bs58::encode(payload).into_string()
@@ -260,7 +260,7 @@ impl Address {
         result
     }
 
-    pub fn addr_bytes<'a>(&'a self) -> &'a [u8] {
+    pub fn addr_bytes(&self) -> &[u8] {
         match self {
             Address::Secp256k1Sha256(v) => v,
             Address::Secp256k1Keccak256(v) => v,

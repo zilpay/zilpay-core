@@ -164,11 +164,7 @@ fn convert_u256_to_f64(value: U256, decimals: u8) -> f64 {
 
     let value_str = value.to_string();
     let len = value_str.len();
-    let decimal_position = if len <= decimals as usize {
-        0
-    } else {
-        len - decimals as usize
-    };
+    let decimal_position = len.saturating_sub(decimals as usize);
 
     let mut result_str = String::new();
     if decimal_position == 0 {
@@ -319,7 +315,7 @@ fn format_integer_part(integer_part: &str, locale: &Locale) -> String {
             let mut result = String::with_capacity(integer_part.len() * 4 / 3);
             let len = integer_part.len();
             for (i, c) in integer_part.chars().enumerate() {
-                if i > 0 && (len - i) % 3 == 0 {
+                if i > 0 && (len - i).is_multiple_of(3) {
                     result.push_str(separator);
                 }
                 result.push(c);
@@ -342,14 +338,11 @@ fn format_indian_grouping(s: &str, separator: &str) -> String {
     let remaining = &s[..len - 3];
 
     let mut result = String::with_capacity(len + len / 2);
-    let mut count = 0;
-
-    for c in remaining.chars().rev() {
+    for (count, c) in remaining.chars().rev().enumerate() {
         if count > 0 && count % 2 == 0 {
             result.push_str(separator);
         }
         result.push(c);
-        count += 1;
     }
 
     format!(

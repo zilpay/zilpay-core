@@ -81,8 +81,8 @@ impl NetworkProvider {
             .filter_map(|url| {
                 if url.starts_with("http://") || url.starts_with("https://") {
                     None
-                } else if url.starts_with("grpc://") {
-                    Some(format!("http://{}", &url[7..]))
+                } else if let Some(stripped) = url.strip_prefix("grpc://") {
+                    Some(format!("http://{}", stripped))
                 } else {
                     Some(format!("http://{}", url))
                 }
@@ -307,7 +307,7 @@ impl TronOperations for NetworkProvider {
                     }
                 };
 
-                let tx_id_hex = alloy::hex::encode(&tron_tx.tx_id);
+                let tx_id_hex = alloy::hex::encode(tron_tx.tx_id);
 
                 let raw = protocol::transaction::Raw::decode(tron_tx.raw_data_bytes.as_slice())
                     .map_err(|e| NetworkErrors::RPCError(format!("Decode raw_data: {}", e)))?;

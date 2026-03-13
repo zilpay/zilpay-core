@@ -47,7 +47,7 @@ impl PubKey {
         hex::encode(self.as_bytes())
     }
 
-    pub fn as_bytes<'a>(&'a self) -> &'a [u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         match self {
             PubKey::Secp256k1Keccak256(v) => v,
             PubKey::Secp256k1Sha256(v) => v,
@@ -58,7 +58,7 @@ impl PubKey {
     }
 
     pub fn get_addr(&self) -> Result<Address> {
-        let addr = Address::from_pubkey(&self)?;
+        let addr = Address::from_pubkey(self)?;
 
         Ok(addr)
     }

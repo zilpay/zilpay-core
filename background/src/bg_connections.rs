@@ -60,7 +60,7 @@ impl ConnectionManagement for Background {
     }
 
     fn get_connections(&self, wallet_index: usize) -> Vec<Connection> {
-        if let Some(key) = self.get_db_key(wallet_index).ok() {
+        if let Ok(key) = self.get_db_key(wallet_index) {
             let bytes = self.storage.get(&key).unwrap_or_default();
 
             if bytes.is_empty() {

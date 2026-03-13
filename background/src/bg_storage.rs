@@ -195,7 +195,7 @@ impl StorageManagement for Background {
                     BackgroundError::Bip39Error(pqbip39::errors::Bip39Error::UnknownWord(0))
                 })?;
                 let mnemonic = Mnemonic::parse_str_without_checksum(&EN_WORDS, &words)?;
-                let mnemonic_entropy: Vec<u8> = mnemonic.to_entropy().into_iter().collect();
+                let mnemonic_entropy: Vec<u8> = mnemonic.to_entropy().collect();
                 let cipher_entropy = keychain.encrypt(mnemonic_entropy, &cipher_orders)?;
                 let cipher_entropy_key =
                     Wallet::safe_storage_save(&cipher_entropy, Arc::clone(&self.storage))?;

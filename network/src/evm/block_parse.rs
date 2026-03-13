@@ -46,7 +46,7 @@ pub fn process_get_timestampt_block_response(
             .and_then(|h| h.get("Timestamp"))
             .and_then(|t| t.as_str())
             .and_then(|t| t.parse::<u64>().ok())
-            .and_then(|t| Some(t / 1000000)) // Zilliqa shit time
+            .map(|t| t / 1000000) // Zilliqa shit time
             .unwrap_or_default(),
         Address::Secp256k1Keccak256(_) => response
             .result

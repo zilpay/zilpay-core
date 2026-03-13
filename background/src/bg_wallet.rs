@@ -131,7 +131,7 @@ impl WalletManagement for Background {
             let device_indicator = device_indicators.join(":");
             let argon_seed = argon2::derive_key(
                 password.expose_secret().as_bytes(),
-                &device_indicator.as_bytes(),
+                device_indicator.as_bytes(),
                 &data.settings.argon_params.into_config(),
             )?;
 

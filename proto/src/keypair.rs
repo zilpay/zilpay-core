@@ -218,7 +218,7 @@ impl KeyPair {
             }
             slip44::TRON => Ok(Self::Secp256k1Tron((pub_key, secret_key))),
             _ => {
-                return Err(KeyPairError::ExtendedPrivKeyDeriveError(
+                Err(KeyPairError::ExtendedPrivKeyDeriveError(
                     Bip329Errors::InvalidSlip44(bip49.slip44),
                 ))
             }
@@ -299,7 +299,7 @@ impl KeyPair {
             KeyPair::Secp256k1Sha256((_, sk)) => {
                 let secret_key =
                     K256SecretKey::from_slice(sk).or(Err(KeyPairError::InvalidSecretKey))?;
-                let sig: Signature = schnorr::sign(&msg, &secret_key)
+                let sig: Signature = schnorr::sign(msg, &secret_key)
                     .map_err(KeyPairError::SchorrError)?
                     .try_into()
                     .map_err(KeyPairError::InvalidSignature)?;

@@ -191,7 +191,7 @@ impl BtcOperations for NetworkProvider {
             let results = client.batch_call(&batch);
 
             if let Ok(histogram_results) = results {
-                if let Some(histogram_value) = histogram_results.get(0) {
+                if let Some(histogram_value) = histogram_results.first() {
                     if let Some((slow_rate, market_rate, fast_rate)) =
                         parse_fee_histogram(histogram_value)
                     {
@@ -215,7 +215,7 @@ impl BtcOperations for NetworkProvider {
                 .map_err(|e| NetworkErrors::RPCError(format!("Failed to estimate fee: {}", e)))?;
 
             let fast_fee_btc = results
-                .get(0)
+                .first()
                 .and_then(|v| v.as_f64())
                 .unwrap_or(DEFAULT_FEE_RATE_BTC);
             let market_fee_btc = results

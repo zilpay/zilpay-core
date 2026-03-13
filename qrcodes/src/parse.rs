@@ -26,10 +26,7 @@ impl FromStr for QRcodeScanResult {
         }
 
         let (uri, params) = clean_input.split_once('?').unwrap_or((clean_input, ""));
-        let parts: Vec<&str> = uri
-            .split(|c| c == ':' || c == '/')
-            .filter(|s| !s.is_empty())
-            .collect();
+        let parts: Vec<&str> = uri.split([':', '/']).filter(|s| !s.is_empty()).collect();
         let network = parts
             .first()
             .ok_or(QRCodeError::InvalidProvider)?

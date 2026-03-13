@@ -5,10 +5,7 @@ pub fn create_wallet_device_indicator(
     device_indicators: &[String],
 ) -> Vec<u8> {
     let total_size = wallet_address.len()
-        + device_indicators
-            .iter()
-            .map(|s| s.as_bytes().len())
-            .sum::<usize>()
+        + device_indicators.iter().map(|s| s.len()).sum::<usize>()
         + device_indicators.len();
     let mut result = Vec::with_capacity(total_size);
 

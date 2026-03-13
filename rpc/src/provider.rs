@@ -72,7 +72,7 @@ where
                     }
                 },
                 Err(e) => {
-                    errors.push_str(&format!("Request failed: {}", e.to_string()));
+                    errors.push_str(&format!("Request failed: {}", e));
                     last_error = Some(RpcError::BadRequest(errors.to_string()));
                 }
             }

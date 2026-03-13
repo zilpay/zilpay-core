@@ -91,7 +91,7 @@ impl AccountManagement for Wallet {
         chain: &ChainConfig,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
-        let m = self.reveal_mnemonic(&seed_bytes)?;
+        let m = self.reveal_mnemonic(seed_bytes)?;
         let mnemonic_seed = m.to_seed(passphrase)?;
         let has_account = data
             .accounts

@@ -43,7 +43,7 @@ impl<'a> SessionManager<'a> {
         Self {
             storage,
             ttl: Duration::from_secs(ttl_secs),
-            wallet_key: wallet_key,
+            wallet_key,
             cipher_orders,
         }
     }
@@ -111,7 +111,7 @@ impl<'a> SessionManagement for SessionManager<'a> {
 
         let keychain = KeyChain::from_seed(&random_key)?;
         let encrypted_words = keychain
-            .encrypt(secret_bytes.expose_secret().to_vec(), &self.cipher_orders)
+            .encrypt(secret_bytes.expose_secret().to_vec(), self.cipher_orders)
             .map_err(SessionErrors::KeychainError)?;
 
         let timestamp = Self::current_timestamp()?;
@@ -149,8 +149,8 @@ impl<'a> SessionManagement for SessionManager<'a> {
             Err(_) => return Err(SessionErrors::InvalidDecryptSession),
         };
 
-        let keychain = KeyChain::from_seed(&retrieved_key.into())?;
-        let data = keychain.decrypt(encrypted_secret, &self.cipher_orders)?;
+        let keychain = KeyChain::from_seed(&retrieved_key)?;
+        let data = keychain.decrypt(encrypted_secret, self.cipher_orders)?;
 
         Ok(data.into())
     }

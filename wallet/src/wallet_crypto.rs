@@ -144,10 +144,8 @@ impl WalletCrypto for Wallet {
 
                 // TODO: add more Languages
                 // 32 this is max which can be entropy
-                let m = if let Some(mnemonic_str) = String::from_utf8(decypted.clone()).ok() {
-                    if let Some(m) =
-                        Mnemonic::parse_str_without_checksum(&EN_WORDS, &mnemonic_str).ok()
-                    {
+                let m = if let Ok(mnemonic_str) = String::from_utf8(decypted.clone()) {
+                    if let Ok(m) = Mnemonic::parse_str_without_checksum(&EN_WORDS, &mnemonic_str) {
                         m
                     } else {
                         Mnemonic::from_entropy(&EN_WORDS, &decypted)?

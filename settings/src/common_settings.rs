@@ -2,7 +2,7 @@ use crate::{browser::BrowserSettings, notifications::Notifications, theme::Theme
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CommonSettings {
     #[serde(default)]
     pub notifications: Notifications,
@@ -15,17 +15,6 @@ pub struct CommonSettings {
 
     #[serde(default)]
     pub browser: BrowserSettings,
-}
-
-impl Default for CommonSettings {
-    fn default() -> Self {
-        Self {
-            notifications: Notifications::default(),
-            theme: Theme::default(),
-            locale: None,
-            browser: BrowserSettings::default(),
-        }
-    }
 }
 
 impl CommonSettings {

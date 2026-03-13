@@ -60,7 +60,7 @@ impl Cache {
                 fs::read(&file_path).map_err(|e| CacheError::ReadFileError(e.to_string()))?;
             let extension = file_name
                 .split('.')
-                .last()
+                .next_back()
                 .ok_or(CacheError::UnknownImageFormat)?
                 .to_string();
             return Ok((bytes, extension));

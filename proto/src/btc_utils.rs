@@ -69,7 +69,7 @@ pub fn create_btc_address(
     let hrp: KnownHrp = network.into();
 
     let addr = match addr_type {
-        bitcoin::AddressType::P2pkh => bitcoin::Address::p2pkh(&compressed_pk, network),
+        bitcoin::AddressType::P2pkh => bitcoin::Address::p2pkh(compressed_pk, network),
         bitcoin::AddressType::P2wpkh => bitcoin::Address::p2wpkh(&compressed_pk, hrp),
         bitcoin::AddressType::P2sh => {
             // BIP49: P2SH-P2WPKH (Nested SegWit)

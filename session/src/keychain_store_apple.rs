@@ -157,12 +157,11 @@ fn extract_quoted_value(text: &str, field: &str) -> Option<String> {
 #[cfg(target_os = "macos")]
 pub fn get_device_identifier() -> Result<Vec<String>, io::Error> {
     let output = Command::new("ioreg")
-        .args(&["-rd1", "-c", "IOPlatformExpertDevice"])
+        .args(["-rd1", "-c", "IOPlatformExpertDevice"])
         .output()?;
 
     if !output.status.success() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
+        return Err(io::Error::other(
             "ioreg command failed",
         ));
     }

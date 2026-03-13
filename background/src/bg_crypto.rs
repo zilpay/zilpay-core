@@ -36,7 +36,7 @@ impl CryptoOperations for Background {
         }
 
         let entropy_bits = (count as usize * 11) - (count as usize / 3);
-        let entropy_bytes = (entropy_bits + 7) / 8;
+        let entropy_bytes = entropy_bits.div_ceil(8);
         let mut rng = ChaCha20Rng::from_entropy();
         let mut entropy = vec![0u8; entropy_bytes];
 

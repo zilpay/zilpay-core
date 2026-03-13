@@ -66,17 +66,13 @@ pub fn build_batch_gas_request(
                 EvmMethods::GasPrice,
             ));
         }
-        _ => {
-            return Err(TransactionErrors::InvalidTransaction)?;
-        }
+        _ => Err(TransactionErrors::InvalidTransaction)?,
     }
 
     let tx_object = match tx {
-        TransactionRequest::Zilliqa(_) => {
-            return Err(TransactionErrors::InvalidTransaction)?;
-        }
+        TransactionRequest::Zilliqa(_) => Err(TransactionErrors::InvalidTransaction)?,
         TransactionRequest::Ethereum((tx, _)) => {
-            let mut val = serde_json::to_value(&tx)
+            let mut val = serde_json::to_value(tx)
                 .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
 
             if let Some(obj) = val.as_object_mut() {
@@ -85,9 +81,7 @@ pub fn build_batch_gas_request(
 
             val
         }
-        _ => {
-            return Err(TransactionErrors::InvalidTransaction)?;
-        }
+        _ => Err(TransactionErrors::InvalidTransaction)?,
     };
     let request_estimate_gas =
         RpcProvider::<ChainConfig>::build_payload(json!([tx_object]), EvmMethods::EstimateGas);

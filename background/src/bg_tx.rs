@@ -163,7 +163,7 @@ pub fn update_tx_from_params(
 
             if balance == U256::from(zil_tx.amount) {
                 let current_fee: u128 = params.current.try_into().unwrap_or_default();
-                zil_tx.amount = zil_tx.amount - current_fee;
+                zil_tx.amount -= current_fee;
             }
 
             zil_tx.gas_price = params
@@ -300,9 +300,9 @@ pub fn update_tx_from_params(
 
             let output_count = btc_tx.output.len();
             if output_count == 0 {
-                return Err(TransactionErrors::ConvertTxError(
+                Err(TransactionErrors::ConvertTxError(
                     "No outputs in transaction".to_string(),
-                ))?;
+                ))?
             }
 
             let balance_sat: u64 = balance.try_into().unwrap_or(0);
@@ -330,10 +330,10 @@ pub fn update_tx_from_params(
 
                     if new_amount < dust_limit {
                         let min_required = new_fee + dust_limit;
-                        return Err(TransactionErrors::ConvertTxError(format!(
+                        Err(TransactionErrors::ConvertTxError(format!(
                             "Insufficient funds: need {} sats (fee) + {} sats (min output) = {} sats, but only have {} sats",
                             new_fee, dust_limit, min_required, total_input
-                        )))?;
+                        )))?
                     }
 
                     btc_tx.output[0].value = bitcoin::Amount::from_sat(new_amount);
@@ -364,9 +364,9 @@ pub fn update_tx_from_params(
                 } else if output_count > 1 {
                     btc_tx.output.pop();
                 } else {
-                    return Err(TransactionErrors::ConvertTxError(
+                    Err(TransactionErrors::ConvertTxError(
                         "Insufficient funds for fee".to_string(),
-                    ))?;
+                    ))?
                 }
             }
         }
@@ -455,9 +455,9 @@ impl TransactionsManagement for Background {
 
         match account.addr {
             Address::Secp256k1Bitcoin(_) => {
-                return Err(BackgroundError::BincodeError(
+                Err(BackgroundError::BincodeError(
                     "BTC not impl yet".to_string(),
-                ));
+                ))?
             }
             Address::Secp256k1Sha256(_) => {
                 let mut hasher = Sha256::new();
@@ -507,7 +507,7 @@ impl TransactionsManagement for Background {
             .get(account_index)
             .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
-        let typed_data: TypedData = serde_json::from_str(&typed_data_json.to_string())
+        let typed_data: TypedData = serde_json::from_str(typed_data_json)
             .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
         let signature = key_pair.sign_typed_data_eip712(typed_data).await?;
         let pub_key = key_pair.get_pubkey()?;
@@ -629,7 +629,7 @@ impl TransactionsManagement for Background {
         let txns = provider.broadcast_signed_transactions(txns).await?;
         let history = txns
             .into_iter()
-            .map(|receipt| HistoricalTransaction::try_from(receipt))
+            .map(HistoricalTransaction::try_from)
             .collect::<std::result::Result<Vec<HistoricalTransaction>, TransactionErrors>>()?;
 
         wallet.add_history(&history)?;

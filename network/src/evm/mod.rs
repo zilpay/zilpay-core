@@ -80,7 +80,7 @@ impl EvmOperations for NetworkProvider {
             .result
             .as_ref()
             .and_then(|result| result.as_str())
-            .and_then(|block_str| u64::from_str_radix(&block_str.trim_start_matches("0x"), 16).ok())
+            .and_then(|block_str| u64::from_str_radix(block_str.trim_start_matches("0x"), 16).ok())
             .ok_or(NetworkErrors::ResponseParseError)?;
 
         Ok(block_number)
@@ -98,7 +98,7 @@ impl EvmOperations for NetworkProvider {
         let requests = build_batch_gas_request(
             tx,
             block_count,
-            &percentiles_to_use,
+            percentiles_to_use,
             &self.config.features,
             sender,
         )?;
@@ -120,44 +120,41 @@ impl EvmOperations for NetworkProvider {
 
         let nonce = response
             .first()
-            .and_then(|res| process_nonce_response(&res, sender).ok())
+            .and_then(|res| process_nonce_response(res, sender).ok())
             .unwrap_or_default();
 
         let gas_price_response = response
             .get(1)
             .and_then(|res| res.result.as_ref())
             .and_then(|result| result.as_str())
-            .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+            .and_then(Self::parse_str_to_u256)
             .unwrap_or_default();
 
-        match tx {
-            TransactionRequest::Zilliqa((zil_tx, _)) => {
-                let gas_limit = U256::from(zil_tx.gas_limit);
-                let slow = gas_price_response * gas_limit;
-                let market = gas_price_response.saturating_mul(U256::from(2)) * gas_limit;
-                let fast = gas_price_response.saturating_mul(U256::from(3)) * gas_limit;
+        if let TransactionRequest::Zilliqa((zil_tx, _)) = tx {
+            let gas_limit = U256::from(zil_tx.gas_limit);
+            let slow = gas_price_response * gas_limit;
+            let market = gas_price_response.saturating_mul(U256::from(2)) * gas_limit;
+            let fast = gas_price_response.saturating_mul(U256::from(3)) * gas_limit;
 
-                return Ok(RequiredTxParams {
-                    blob_base_fee: U256::ZERO,
-                    nonce,
-                    max_priority_fee: U256::ZERO,
-                    gas_price: gas_price_response,
-                    fee_history: Default::default(),
-                    tx_estimate_gas: U256::ZERO,
-                    slow,
-                    market,
-                    fast,
-                    current: market,
-                });
-            }
-            _ => {}
+            return Ok(RequiredTxParams {
+                blob_base_fee: U256::ZERO,
+                nonce,
+                max_priority_fee: U256::ZERO,
+                gas_price: gas_price_response,
+                fee_history: Default::default(),
+                tx_estimate_gas: U256::ZERO,
+                slow,
+                market,
+                fast,
+                current: market,
+            });
         }
 
         let tx_estimate_gas_response = response.get(2);
         let tx_estimate_gas_response = tx_estimate_gas_response
             .and_then(|res| res.result.as_ref())
             .and_then(|result| result.as_str())
-            .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+            .and_then(Self::parse_str_to_u256)
             .unwrap_or(U256::from(21000));
 
         let (max_priority_fee_per_gas_response, fee_history_response) =
@@ -166,7 +163,7 @@ impl EvmOperations for NetworkProvider {
                     .get(3)
                     .and_then(|res| res.result.as_ref())
                     .and_then(|result| result.as_str())
-                    .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+                    .and_then(Self::parse_str_to_u256)
                     .unwrap_or_default();
 
                 let fee_history_response = response
@@ -185,7 +182,7 @@ impl EvmOperations for NetworkProvider {
                 .first()
                 .and_then(|res| res.result.as_ref())
                 .and_then(|result| result.as_str())
-                .and_then(|gas_str| Self::parse_str_to_u256(&gas_str))
+                .and_then(Self::parse_str_to_u256)
                 .unwrap_or_default()
         } else {
             U256::ZERO
@@ -247,7 +244,7 @@ impl EvmOperations for NetworkProvider {
         let mut requests: Vec<Value> = Vec::with_capacity(txns.len());
 
         for tx in txns.iter() {
-            requests.push(build_payload_tx_receipt(&tx));
+            requests.push(build_payload_tx_receipt(tx));
         }
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);

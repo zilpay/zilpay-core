@@ -120,9 +120,7 @@ pub fn build_token_requests<'a>(
         Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => {
             build_eth_requests(contract, accounts, native, &mut requests)?;
         }
-        _ => {
-            return Err(TokenError::NetworkError("not supported".to_string()))?;
-        }
+        _ => Err(TokenError::NetworkError("not supported".to_string()))?,
     }
 
     Ok(requests)

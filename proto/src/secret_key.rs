@@ -41,11 +41,7 @@ impl SecretKey {
         let private_key = bitcoin::PrivateKey::from_wif(wif)
             .map_err(|e| SecretKeyError::InvalidWif(e.to_string()))?;
 
-        let secret_bytes: [u8; SECRET_KEY_SIZE] = private_key
-            .inner
-            .secret_bytes()
-            .try_into()
-            .map_err(|_| SecretKeyError::InvalidLength)?;
+        let secret_bytes: [u8; SECRET_KEY_SIZE] = private_key.inner.secret_bytes();
 
         let network = match private_key.network {
             NetworkKind::Main => bitcoin::Network::Bitcoin,

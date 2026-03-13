@@ -7,7 +7,7 @@ use token::ft::FToken;
 
 use crate::common::{NetworkConfigTrait, Result};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Explorer {
     pub name: String,
     pub url: String,
@@ -155,17 +155,6 @@ impl NetworkConfigTrait for ChainConfig {
             &self.rpc
         } else {
             &self.rpc[..1]
-        }
-    }
-}
-
-impl Default for Explorer {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            url: String::new(),
-            icon: None,
-            standard: 0,
         }
     }
 }

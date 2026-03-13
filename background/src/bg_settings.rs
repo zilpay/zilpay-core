@@ -45,9 +45,7 @@ impl SettingsManagement for Background {
     type Error = BackgroundError;
 
     fn get_global_settings(&self) -> CommonSettings {
-        let global_settings = Background::load_global_settings(Arc::clone(&self.storage));
-
-        global_settings
+        Background::load_global_settings(Arc::clone(&self.storage))
     }
 
     fn set_browser_settings(&self, new_settings: BrowserSettings) -> Result<()> {

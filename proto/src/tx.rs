@@ -371,7 +371,7 @@ impl TransactionRequest {
     pub fn to_rlp_encode(&self, pub_key: &PubKey) -> Result<Vec<u8>, TransactionErrors> {
         match self {
             TransactionRequest::Zilliqa((tx, _metadata)) => {
-                let proto_buf = create_proto_tx(&tx, pub_key).encode_proto_bytes();
+                let proto_buf = create_proto_tx(tx, pub_key).encode_proto_bytes();
 
                 Ok(proto_buf)
             }

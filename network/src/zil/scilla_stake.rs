@@ -236,7 +236,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
         ];
         let initial_results = self.batch_query(&initial_queries).await?;
         let deposits_result = initial_results
-            .get(0)
+            .first()
             .and_then(|r| r.result.as_ref())
             .unwrap_or(&Value::Null);
         let ssn_list_result = initial_results
@@ -325,17 +325,17 @@ impl ZilliqaScillaStakeing for NetworkProvider {
 
             for ssn_addr in &staked_ssn_addresses {
                 reward_queries.push((
-                    &SCILLA_GZIL_CONTRACT,
+                    SCILLA_GZIL_CONTRACT,
                     "stake_ssn_per_cycle",
                     vec![ssn_addr.clone()],
                 ));
                 reward_queries.push((
-                    &SCILLA_GZIL_CONTRACT,
+                    SCILLA_GZIL_CONTRACT,
                     "direct_deposit_deleg",
                     vec![wallet_address.to_string(), ssn_addr.clone()],
                 ));
                 reward_queries.push((
-                    &SCILLA_GZIL_CONTRACT,
+                    SCILLA_GZIL_CONTRACT,
                     "buff_deposit_deleg",
                     vec![wallet_address.to_string(), ssn_addr.clone()],
                 ));
@@ -556,10 +556,9 @@ fn calculate_rewards(
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(U256::ZERO);
-            let last_amt = deleg_stake_per_cycle_map
+            let last_amt = *deleg_stake_per_cycle_map
                 .get(&c1)
-                .unwrap_or(&zero_bigint)
-                .clone();
+                .unwrap_or(&zero_bigint);
 
             deleg_stake_per_cycle_map.insert(cycle, last_amt + dir_amt + buf_amt);
         }
@@ -584,7 +583,7 @@ fn calculate_rewards(
                 if let Some(deleg_stake_for_cycle) = deleg_stake_per_cycle_map.get(&cycle) {
                     if !deleg_stake_for_cycle.is_zero() && !total_stake_for_cycle.is_zero() {
                         total_ssn_reward += (deleg_stake_for_cycle * total_rewards_for_cycle)
-                            / &total_stake_for_cycle;
+                            / total_stake_for_cycle;
                     }
                 }
             }

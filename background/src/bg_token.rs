@@ -61,7 +61,7 @@ impl TokensManagement for Background {
         let erc20_transfer = || -> Result<ETHTransactionRequest> {
             let transfer_data = generate_erc20_transfer_data(&to, amount)?;
             let token_transfer_request = ETHTransactionRequest {
-                from: Some(sender.addr.to_alloy_addr().into()),
+                from: Some(sender.addr.to_alloy_addr()),
                 to: Some(token.addr.to_alloy_addr().into()),
                 value: Some(U256::ZERO),
                 nonce: Some(0),
