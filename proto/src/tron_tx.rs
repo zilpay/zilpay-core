@@ -1,121 +1,514 @@
 use crate::address::Address;
+use crate::keypair::KeyPair;
 use crate::tron_generated::protocol;
 use config::address::ADDR_LEN;
+use errors::tx::TransactionErrors;
 use prost::Message;
+use protocol::transaction::contract::ContractType;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use protocol::transaction::contract::ContractType;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum TronResource {
     Bandwidth,
     Energy,
 }
 
 impl TronResource {
-    fn to_proto(&self) -> i32 {
+    pub fn to_proto(self) -> i32 {
         match self {
             TronResource::Bandwidth => 0,
             TronResource::Energy => 1,
         }
     }
+
+    pub fn from_proto(value: i32) -> Option<Self> {
+        match value {
+            0 => Some(TronResource::Bandwidth),
+            1 => Some(TronResource::Energy),
+            _ => None,
+        }
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum TronContractCall {
-    Transfer {
-        to_address: Address,
-        amount: i64,
-    },
-    TriggerSmartContract {
-        contract_address: Address,
+#[derive(Debug, Clone, Deserialize)]
+pub struct TronWebSignRequest {
+    pub method: String,
+    pub params: TronWebParams,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TronWebParams {
+    pub transaction: TronWebTransaction,
+    #[serde(rename = "useTronHeader")]
+    pub use_tron_header: Option<bool>,
+    pub input: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TronWebTransaction {
+    pub visible: Option<bool>,
+    #[serde(rename = "txID")]
+    pub tx_id: Option<String>,
+    pub raw_data: TronWebRawData,
+    #[serde(rename = "raw_data_hex")]
+    pub raw_data_hex: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TronWebRawData {
+    pub contract: Vec<TronWebContract>,
+    #[serde(default)]
+    pub ref_block_bytes: String,
+    #[serde(default)]
+    pub ref_block_hash: String,
+    pub expiration: i64,
+    pub fee_limit: Option<i64>,
+    pub timestamp: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TronWebContract {
+    #[serde(rename = "type")]
+    pub contract_type: String,
+    pub parameter: TronWebParameter,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TronWebParameter {
+    pub type_url: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TronTransaction {
+    raw: protocol::transaction::Raw,
+}
+
+impl Serialize for TronTransaction {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let encoded = self.raw.encode_to_vec();
+        serializer.serialize_str(&hex::encode(encoded))
+    }
+}
+
+impl<'de> Deserialize<'de> for TronTransaction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let hex_str = String::deserialize(deserializer)?;
+        let bytes = hex::decode(&hex_str).map_err(|e| serde::de::Error::custom(e.to_string()))?;
+        let raw = protocol::transaction::Raw::decode(&bytes[..])
+            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+        Ok(Self { raw })
+    }
+}
+
+impl TronTransaction {
+    pub fn from_tron_web(tx: &TronWebTransaction) -> Result<Self, TransactionErrors> {
+        let hex_str = tx
+            .raw_data_hex
+            .strip_prefix("0x")
+            .unwrap_or(&tx.raw_data_hex);
+        let bytes =
+            hex::decode(hex_str).map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+        let raw = protocol::transaction::Raw::decode(&bytes[..])
+            .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+        Ok(Self { raw })
+    }
+
+    pub fn from_hex(hex: &str) -> Result<Self, TransactionErrors> {
+        let hex_str = hex.strip_prefix("0x").unwrap_or(hex);
+        let bytes =
+            hex::decode(hex_str).map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+        let raw = protocol::transaction::Raw::decode(&bytes[..])
+            .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+        Ok(Self { raw })
+    }
+
+    pub fn from_raw(raw: protocol::transaction::Raw) -> Self {
+        Self { raw }
+    }
+
+    pub fn builder() -> TronTransactionBuilder {
+        TronTransactionBuilder::default()
+    }
+
+    pub fn raw(&self) -> &protocol::transaction::Raw {
+        &self.raw
+    }
+
+    pub fn raw_mut(&mut self) -> &mut protocol::transaction::Raw {
+        &mut self.raw
+    }
+
+    pub fn fee_limit(&self) -> i64 {
+        self.raw.fee_limit
+    }
+
+    pub fn expiration(&self) -> i64 {
+        self.raw.expiration
+    }
+
+    pub fn timestamp(&self) -> i64 {
+        self.raw.timestamp
+    }
+
+    pub fn ref_block_bytes(&self) -> &[u8] {
+        &self.raw.ref_block_bytes
+    }
+
+    pub fn ref_block_hash(&self) -> &[u8] {
+        &self.raw.ref_block_hash
+    }
+
+    pub fn owner_address(&self) -> Result<Address, TransactionErrors> {
+        let contract = self
+            .raw
+            .contract
+            .first()
+            .ok_or(TransactionErrors::InvalidContract)?;
+        let param = contract
+            .parameter
+            .as_ref()
+            .ok_or(TransactionErrors::InvalidContract)?;
+        extract_owner_from_parameter(&param.value, &param.type_url)
+    }
+
+    pub fn to_address(&self) -> Result<Address, TransactionErrors> {
+        let contract = self
+            .raw
+            .contract
+            .first()
+            .ok_or(TransactionErrors::InvalidContract)?;
+        let param = contract
+            .parameter
+            .as_ref()
+            .ok_or(TransactionErrors::InvalidContract)?;
+        extract_to_address_from_parameter(&param.value, &param.type_url, &self.raw)
+    }
+
+    pub fn contract_type(&self) -> Option<&str> {
+        self.raw.contract.first().and_then(|c| {
+            c.parameter.as_ref().map(|p| {
+                p.type_url
+                    .strip_prefix("type.googleapis.com/protocol.")
+                    .unwrap_or(&p.type_url)
+            })
+        })
+    }
+
+    pub fn set_fee_limit(&mut self, fee_limit: i64) -> &mut Self {
+        self.raw.fee_limit = fee_limit;
+        self
+    }
+
+    pub fn set_expiration(&mut self, expiration: i64) -> &mut Self {
+        self.raw.expiration = expiration;
+        self
+    }
+
+    pub fn set_timestamp(&mut self, timestamp: i64) -> &mut Self {
+        self.raw.timestamp = timestamp;
+        self
+    }
+
+    pub fn set_block_ref(
+        &mut self,
+        ref_block_bytes: Vec<u8>,
+        ref_block_hash: Vec<u8>,
+    ) -> &mut Self {
+        self.raw.ref_block_bytes = ref_block_bytes;
+        self.raw.ref_block_hash = ref_block_hash;
+        self
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        self.raw.encode_to_vec()
+    }
+
+    pub fn tx_id(&self) -> [u8; 32] {
+        let bytes = self.encode();
+        Sha256::digest(&bytes).into()
+    }
+
+    pub fn sign(&self, keypair: &KeyPair) -> Result<TronTransactionReceipt, TransactionErrors> {
+        use k256::ecdsa::SigningKey;
+
+        let raw_data_bytes = self.encode();
+        let tx_id: [u8; 32] = Sha256::digest(&raw_data_bytes).into();
+
+        let sk_bytes = keypair.get_sk_bytes();
+        let signing_key =
+            SigningKey::from_slice(&sk_bytes).map_err(|_| TransactionErrors::InvalidSecretKey)?;
+
+        let (sig, recovery_id) = signing_key
+            .sign_prehash_recoverable(&tx_id)
+            .map_err(|_| TransactionErrors::InvalidSignature)?;
+
+        let mut signature = sig.to_bytes().to_vec();
+        signature.push(recovery_id.to_byte());
+
+        Ok(TronTransactionReceipt {
+            raw_data_bytes,
+            tx_id,
+            signature,
+            owner_address: self.owner_address()?,
+        })
+    }
+}
+
+#[derive(Default)]
+pub struct TronTransactionBuilder {
+    ref_block_bytes: Vec<u8>,
+    ref_block_hash: Vec<u8>,
+    expiration: i64,
+    timestamp: i64,
+    fee_limit: i64,
+    contract: Option<protocol::transaction::Contract>,
+}
+
+impl TronTransactionBuilder {
+    pub fn ref_block(mut self, bytes: Vec<u8>, hash: Vec<u8>) -> Self {
+        self.ref_block_bytes = bytes;
+        self.ref_block_hash = hash;
+        self
+    }
+
+    pub fn expiration(mut self, exp: i64) -> Self {
+        self.expiration = exp;
+        self
+    }
+
+    pub fn timestamp(mut self, ts: i64) -> Self {
+        self.timestamp = ts;
+        self
+    }
+
+    pub fn fee_limit(mut self, fee: i64) -> Self {
+        self.fee_limit = fee;
+        self
+    }
+
+    pub fn transfer(self, owner: &Address, to: &Address, amount: i64) -> Self {
+        let contract = protocol::TransferContract {
+            owner_address: owner.to_tron_bytes(),
+            to_address: to.to_tron_bytes(),
+            amount,
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.TransferContract",
+            contract.encode_to_vec(),
+            ContractType::TransferContract,
+        )
+    }
+
+    pub fn trigger_smart_contract(
+        self,
+        owner: &Address,
+        contract_addr: &Address,
         call_value: i64,
-        #[serde(with = "hex::serde")]
         data: Vec<u8>,
         call_token_value: i64,
         token_id: i64,
-    },
-    FreezeBalanceV2 {
+    ) -> Self {
+        let contract = protocol::TriggerSmartContract {
+            owner_address: owner.to_tron_bytes(),
+            contract_address: contract_addr.to_tron_bytes(),
+            call_value,
+            data,
+            call_token_value,
+            token_id,
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.TriggerSmartContract",
+            contract.encode_to_vec(),
+            ContractType::TriggerSmartContract,
+        )
+    }
+
+    pub fn freeze_balance_v2(
+        self,
+        owner: &Address,
         frozen_balance: i64,
         resource: TronResource,
-    },
-    UnfreezeBalanceV2 {
+    ) -> Self {
+        let contract = protocol::FreezeBalanceV2Contract {
+            owner_address: owner.to_tron_bytes(),
+            frozen_balance,
+            resource: resource.to_proto(),
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.FreezeBalanceV2Contract",
+            contract.encode_to_vec(),
+            ContractType::FreezeBalanceV2Contract,
+        )
+    }
+
+    pub fn unfreeze_balance_v2(
+        self,
+        owner: &Address,
         unfreeze_balance: i64,
         resource: TronResource,
-    },
-    WithdrawExpireUnfreeze,
-    DelegateResource {
+    ) -> Self {
+        let contract = protocol::UnfreezeBalanceV2Contract {
+            owner_address: owner.to_tron_bytes(),
+            unfreeze_balance,
+            resource: resource.to_proto(),
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.UnfreezeBalanceV2Contract",
+            contract.encode_to_vec(),
+            ContractType::UnfreezeBalanceV2Contract,
+        )
+    }
+
+    pub fn withdraw_expire_unfreeze(self, owner: &Address) -> Self {
+        let contract = protocol::WithdrawExpireUnfreezeContract {
+            owner_address: owner.to_tron_bytes(),
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.WithdrawExpireUnfreezeContract",
+            contract.encode_to_vec(),
+            ContractType::WithdrawExpireUnfreezeContract,
+        )
+    }
+
+    pub fn delegate_resource(
+        self,
+        owner: &Address,
         resource: TronResource,
         balance: i64,
-        receiver_address: Address,
+        receiver: &Address,
         lock: bool,
         lock_period: i64,
-    },
-    UnDelegateResource {
+    ) -> Self {
+        let contract = protocol::DelegateResourceContract {
+            owner_address: owner.to_tron_bytes(),
+            resource: resource.to_proto(),
+            balance,
+            receiver_address: receiver.to_tron_bytes(),
+            lock,
+            lock_period,
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.DelegateResourceContract",
+            contract.encode_to_vec(),
+            ContractType::DelegateResourceContract,
+        )
+    }
+
+    pub fn undelegate_resource(
+        self,
+        owner: &Address,
         resource: TronResource,
         balance: i64,
-        receiver_address: Address,
-    },
-    CancelAllUnfreezeV2,
-    TransferAsset {
-        #[serde(with = "hex::serde")]
-        asset_name: Vec<u8>,
-        to_address: Address,
-        amount: i64,
-    },
-    VoteWitness {
-        votes: Vec<(Address, i64)>,
-    },
-    AccountCreate {
-        account_address: Address,
-        account_type: i32,
-    },
-    AccountUpdate {
-        #[serde(with = "hex::serde")]
-        account_name: Vec<u8>,
-    },
-    WitnessCreate {
-        #[serde(with = "hex::serde")]
-        url: Vec<u8>,
-    },
-    WitnessUpdate {
-        #[serde(with = "hex::serde")]
-        update_url: Vec<u8>,
-    },
-    CreateSmartContract {
-        #[serde(with = "hex::serde")]
-        new_contract: Vec<u8>,
-        call_token_value: i64,
-        token_id: i64,
-    },
-    ProposalCreate {
-        parameters: Vec<(i64, i64)>,
-    },
-    ProposalApprove {
-        proposal_id: i64,
-        is_add_approval: bool,
-    },
-    ProposalDelete {
-        proposal_id: i64,
-    },
-    AccountPermissionUpdate {
-        #[serde(with = "hex::serde")]
-        raw_data: Vec<u8>,
-    },
-}
+        receiver: &Address,
+    ) -> Self {
+        let contract = protocol::UnDelegateResourceContract {
+            owner_address: owner.to_tron_bytes(),
+            resource: resource.to_proto(),
+            balance,
+            receiver_address: receiver.to_tron_bytes(),
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.UnDelegateResourceContract",
+            contract.encode_to_vec(),
+            ContractType::UnDelegateResourceContract,
+        )
+    }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct TronTransactionRequest {
-    pub owner_address: Address,
-    #[serde(with = "hex::serde")]
-    pub ref_block_bytes: Vec<u8>,
-    #[serde(with = "hex::serde")]
-    pub ref_block_hash: Vec<u8>,
-    pub expiration: i64,
-    pub timestamp: i64,
-    pub fee_limit: i64,
-    pub contract: TronContractCall,
+    pub fn cancel_all_unfreeze_v2(self, owner: &Address) -> Self {
+        let contract = protocol::CancelAllUnfreezeV2Contract {
+            owner_address: owner.to_tron_bytes(),
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.CancelAllUnfreezeV2Contract",
+            contract.encode_to_vec(),
+            ContractType::CancelAllUnfreezeV2Contract,
+        )
+    }
+
+    pub fn transfer_asset(
+        self,
+        owner: &Address,
+        asset_name: Vec<u8>,
+        to: &Address,
+        amount: i64,
+    ) -> Self {
+        let contract = protocol::TransferAssetContract {
+            asset_name,
+            owner_address: owner.to_tron_bytes(),
+            to_address: to.to_tron_bytes(),
+            amount,
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.TransferAssetContract",
+            contract.encode_to_vec(),
+            ContractType::TransferAssetContract,
+        )
+    }
+
+    pub fn vote_witness(self, owner: &Address, votes: Vec<(Address, i64)>) -> Self {
+        let vote_list = votes
+            .iter()
+            .map(|(addr, count)| protocol::vote_witness_contract::Vote {
+                vote_address: addr.to_tron_bytes(),
+                vote_count: *count,
+            })
+            .collect();
+        let contract = protocol::VoteWitnessContract {
+            owner_address: owner.to_tron_bytes(),
+            votes: vote_list,
+            support: false,
+        };
+        self.with_contract(
+            "type.googleapis.com/protocol.VoteWitnessContract",
+            contract.encode_to_vec(),
+            ContractType::VoteWitnessContract,
+        )
+    }
+
+    fn with_contract(
+        mut self,
+        type_url: &str,
+        value: Vec<u8>,
+        contract_type: ContractType,
+    ) -> Self {
+        self.contract = Some(protocol::transaction::Contract {
+            r#type: contract_type as i32,
+            parameter: Some(prost_types::Any {
+                type_url: type_url.to_string(),
+                value,
+            }),
+            provider: Vec::new(),
+            contract_name: Vec::new(),
+            permission_id: 0,
+        });
+        self
+    }
+
+    pub fn build(self) -> Result<TronTransaction, TransactionErrors> {
+        let contract = self.contract.ok_or(TransactionErrors::InvalidContract)?;
+        Ok(TronTransaction {
+            raw: protocol::transaction::Raw {
+                ref_block_bytes: self.ref_block_bytes,
+                ref_block_num: 0,
+                ref_block_hash: self.ref_block_hash,
+                expiration: self.expiration,
+                auths: Vec::new(),
+                data: Vec::new(),
+                contract: vec![contract],
+                scripts: Vec::new(),
+                timestamp: self.timestamp,
+                fee_limit: self.fee_limit,
+            },
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -127,350 +520,10 @@ pub struct TronTransactionReceipt {
     #[serde(with = "hex::serde")]
     pub signature: Vec<u8>,
     pub owner_address: Address,
-    pub contract: TronContractCall,
-}
-
-impl TronTransactionRequest {
-    fn encode_contract(&self) -> (String, Vec<u8>, ContractType) {
-        let owner = self.owner_address.to_tron_bytes();
-
-        match &self.contract {
-            TronContractCall::Transfer { to_address, amount } => {
-                let c = protocol::TransferContract {
-                    owner_address: owner,
-                    to_address: to_address.to_tron_bytes(),
-                    amount: *amount,
-                };
-                (
-                    "type.googleapis.com/protocol.TransferContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::TransferContract,
-                )
-            }
-            TronContractCall::TriggerSmartContract {
-                contract_address,
-                call_value,
-                data,
-                call_token_value,
-                token_id,
-            } => {
-                let c = protocol::TriggerSmartContract {
-                    owner_address: owner,
-                    contract_address: contract_address.to_tron_bytes(),
-                    call_value: *call_value,
-                    data: data.clone(),
-                    call_token_value: *call_token_value,
-                    token_id: *token_id,
-                };
-                (
-                    "type.googleapis.com/protocol.TriggerSmartContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::TriggerSmartContract,
-                )
-            }
-            TronContractCall::FreezeBalanceV2 {
-                frozen_balance,
-                resource,
-            } => {
-                let c = protocol::FreezeBalanceV2Contract {
-                    owner_address: owner,
-                    frozen_balance: *frozen_balance,
-                    resource: resource.to_proto(),
-                };
-                (
-                    "type.googleapis.com/protocol.FreezeBalanceV2Contract".into(),
-                    c.encode_to_vec(),
-                    ContractType::FreezeBalanceV2Contract,
-                )
-            }
-            TronContractCall::UnfreezeBalanceV2 {
-                unfreeze_balance,
-                resource,
-            } => {
-                let c = protocol::UnfreezeBalanceV2Contract {
-                    owner_address: owner,
-                    unfreeze_balance: *unfreeze_balance,
-                    resource: resource.to_proto(),
-                };
-                (
-                    "type.googleapis.com/protocol.UnfreezeBalanceV2Contract".into(),
-                    c.encode_to_vec(),
-                    ContractType::UnfreezeBalanceV2Contract,
-                )
-            }
-            TronContractCall::WithdrawExpireUnfreeze => {
-                let c = protocol::WithdrawExpireUnfreezeContract {
-                    owner_address: owner,
-                };
-                (
-                    "type.googleapis.com/protocol.WithdrawExpireUnfreezeContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::WithdrawExpireUnfreezeContract,
-                )
-            }
-            TronContractCall::DelegateResource {
-                resource,
-                balance,
-                receiver_address,
-                lock,
-                lock_period,
-            } => {
-                let c = protocol::DelegateResourceContract {
-                    owner_address: owner,
-                    resource: resource.to_proto(),
-                    balance: *balance,
-                    receiver_address: receiver_address.to_tron_bytes(),
-                    lock: *lock,
-                    lock_period: *lock_period,
-                };
-                (
-                    "type.googleapis.com/protocol.DelegateResourceContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::DelegateResourceContract,
-                )
-            }
-            TronContractCall::UnDelegateResource {
-                resource,
-                balance,
-                receiver_address,
-            } => {
-                let c = protocol::UnDelegateResourceContract {
-                    owner_address: owner,
-                    resource: resource.to_proto(),
-                    balance: *balance,
-                    receiver_address: receiver_address.to_tron_bytes(),
-                };
-                (
-                    "type.googleapis.com/protocol.UnDelegateResourceContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::UnDelegateResourceContract,
-                )
-            }
-            TronContractCall::CancelAllUnfreezeV2 => {
-                let c = protocol::CancelAllUnfreezeV2Contract {
-                    owner_address: owner,
-                };
-                (
-                    "type.googleapis.com/protocol.CancelAllUnfreezeV2Contract".into(),
-                    c.encode_to_vec(),
-                    ContractType::CancelAllUnfreezeV2Contract,
-                )
-            }
-            TronContractCall::TransferAsset {
-                asset_name,
-                to_address,
-                amount,
-            } => {
-                let c = protocol::TransferAssetContract {
-                    asset_name: asset_name.clone(),
-                    owner_address: owner,
-                    to_address: to_address.to_tron_bytes(),
-                    amount: *amount,
-                };
-                (
-                    "type.googleapis.com/protocol.TransferAssetContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::TransferAssetContract,
-                )
-            }
-            TronContractCall::VoteWitness { votes } => {
-                let vote_list = votes
-                    .iter()
-                    .map(|(addr, count)| protocol::vote_witness_contract::Vote {
-                        vote_address: addr.to_tron_bytes(),
-                        vote_count: *count,
-                    })
-                    .collect();
-                let c = protocol::VoteWitnessContract {
-                    owner_address: owner,
-                    votes: vote_list,
-                    support: false,
-                };
-                (
-                    "type.googleapis.com/protocol.VoteWitnessContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::VoteWitnessContract,
-                )
-            }
-            TronContractCall::AccountCreate {
-                account_address,
-                account_type,
-            } => {
-                let c = protocol::AccountCreateContract {
-                    owner_address: owner,
-                    account_address: account_address.to_tron_bytes(),
-                    r#type: *account_type,
-                };
-                (
-                    "type.googleapis.com/protocol.AccountCreateContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::AccountCreateContract,
-                )
-            }
-            TronContractCall::AccountUpdate { account_name } => {
-                let c = protocol::AccountUpdateContract {
-                    account_name: account_name.clone(),
-                    owner_address: owner,
-                };
-                (
-                    "type.googleapis.com/protocol.AccountUpdateContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::AccountUpdateContract,
-                )
-            }
-            TronContractCall::WitnessCreate { url } => {
-                let c = protocol::WitnessCreateContract {
-                    owner_address: owner,
-                    url: url.clone(),
-                };
-                (
-                    "type.googleapis.com/protocol.WitnessCreateContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::WitnessCreateContract,
-                )
-            }
-            TronContractCall::WitnessUpdate { update_url } => {
-                let c = protocol::WitnessUpdateContract {
-                    owner_address: owner,
-                    update_url: update_url.clone(),
-                };
-                (
-                    "type.googleapis.com/protocol.WitnessUpdateContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::WitnessUpdateContract,
-                )
-            }
-            TronContractCall::CreateSmartContract {
-                new_contract,
-                call_token_value,
-                token_id,
-            } => {
-                let c = protocol::CreateSmartContract {
-                    owner_address: owner,
-                    new_contract: Some(
-                        protocol::SmartContract::decode(new_contract.as_slice())
-                            .unwrap_or_default(),
-                    ),
-                    call_token_value: *call_token_value,
-                    token_id: *token_id,
-                };
-                (
-                    "type.googleapis.com/protocol.CreateSmartContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::CreateSmartContract,
-                )
-            }
-            TronContractCall::ProposalCreate { parameters } => {
-                let c = protocol::ProposalCreateContract {
-                    owner_address: owner,
-                    parameters: parameters.iter().cloned().collect(),
-                };
-                (
-                    "type.googleapis.com/protocol.ProposalCreateContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::ProposalCreateContract,
-                )
-            }
-            TronContractCall::ProposalApprove {
-                proposal_id,
-                is_add_approval,
-            } => {
-                let c = protocol::ProposalApproveContract {
-                    owner_address: owner,
-                    proposal_id: *proposal_id,
-                    is_add_approval: *is_add_approval,
-                };
-                (
-                    "type.googleapis.com/protocol.ProposalApproveContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::ProposalApproveContract,
-                )
-            }
-            TronContractCall::ProposalDelete { proposal_id } => {
-                let c = protocol::ProposalDeleteContract {
-                    owner_address: owner,
-                    proposal_id: *proposal_id,
-                };
-                (
-                    "type.googleapis.com/protocol.ProposalDeleteContract".into(),
-                    c.encode_to_vec(),
-                    ContractType::ProposalDeleteContract,
-                )
-            }
-            TronContractCall::AccountPermissionUpdate { raw_data } => (
-                "type.googleapis.com/protocol.AccountPermissionUpdateContract".into(),
-                raw_data.clone(),
-                ContractType::AccountPermissionUpdateContract,
-            ),
-        }
-    }
-
-    pub fn to_raw_data_bytes(&self) -> Vec<u8> {
-        let (type_url, value, contract_type) = self.encode_contract();
-
-        let contract = protocol::transaction::Contract {
-            r#type: contract_type as i32,
-            parameter: Some(prost_types::Any { type_url, value }),
-            provider: Vec::new(),
-            contract_name: Vec::new(),
-            permission_id: 0,
-        };
-
-        let raw = protocol::transaction::Raw {
-            ref_block_bytes: self.ref_block_bytes.clone(),
-            ref_block_num: 0,
-            ref_block_hash: self.ref_block_hash.clone(),
-            expiration: self.expiration,
-            auths: Vec::new(),
-            data: Vec::new(),
-            contract: vec![contract],
-            scripts: Vec::new(),
-            timestamp: self.timestamp,
-            fee_limit: self.fee_limit,
-        };
-
-        raw.encode_to_vec()
-    }
-
-    pub fn from_raw_data_hex(
-        hex: &str,
-    ) -> Result<protocol::transaction::Raw, errors::tx::TransactionErrors> {
-        let bytes = hex::decode(hex)
-            .map_err(|e| errors::tx::TransactionErrors::ConvertTxError(e.to_string()))?;
-
-        protocol::transaction::Raw::decode(bytes.as_slice())
-            .map_err(|e| errors::tx::TransactionErrors::ConvertTxError(e.to_string()))
-    }
-
-    pub fn tx_id(&self) -> [u8; 32] {
-        let raw_bytes = self.to_raw_data_bytes();
-        let hash = Sha256::digest(&raw_bytes);
-        hash.into()
-    }
-
-    pub fn to_address(&self) -> Address {
-        match &self.contract {
-            TronContractCall::Transfer { to_address, .. } => to_address.clone(),
-            TronContractCall::TriggerSmartContract {
-                contract_address, ..
-            } => contract_address.clone(),
-            TronContractCall::DelegateResource {
-                receiver_address, ..
-            } => receiver_address.clone(),
-            TronContractCall::UnDelegateResource {
-                receiver_address, ..
-            } => receiver_address.clone(),
-            TronContractCall::TransferAsset { to_address, .. } => to_address.clone(),
-            TronContractCall::AccountCreate {
-                account_address, ..
-            } => account_address.clone(),
-            _ => self.owner_address.clone(),
-        }
-    }
 }
 
 impl TronTransactionReceipt {
-    pub fn verify(&self) -> Result<bool, errors::tx::TransactionErrors> {
+    pub fn verify(&self) -> Result<bool, TransactionErrors> {
         use k256::ecdsa::{RecoveryId, Signature, VerifyingKey};
 
         let hash = Sha256::digest(&self.raw_data_bytes);
@@ -484,17 +537,149 @@ impl TronTransactionReceipt {
         }
 
         let sig = Signature::from_slice(&self.signature[..64])
-            .map_err(|_| errors::tx::TransactionErrors::InvalidSignature)?;
+            .map_err(|_| TransactionErrors::InvalidSignature)?;
         let recovery_id = RecoveryId::try_from(self.signature[64])
-            .map_err(|_| errors::tx::TransactionErrors::InvalidSignature)?;
+            .map_err(|_| TransactionErrors::InvalidSignature)?;
 
         let recovered_key = VerifyingKey::recover_from_prehash(&self.tx_id, &sig, recovery_id)
-            .map_err(|_| errors::tx::TransactionErrors::InvalidSignature)?;
+            .map_err(|_| TransactionErrors::InvalidSignature)?;
 
         let addr = alloy::primitives::Address::from_public_key(&recovered_key);
         let addr_bytes: [u8; ADDR_LEN] = addr.into();
 
         Ok(addr_bytes == *self.owner_address.as_ref())
+    }
+
+    pub fn tx_id_hex(&self) -> String {
+        hex::encode(self.tx_id)
+    }
+
+    pub fn signature_hex(&self) -> String {
+        hex::encode(&self.signature)
+    }
+}
+
+fn extract_owner_from_parameter(
+    value: &[u8],
+    type_url: &str,
+) -> Result<Address, TransactionErrors> {
+    match type_url {
+        "type.googleapis.com/protocol.TransferContract" => {
+            let c = protocol::TransferContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.TriggerSmartContract" => {
+            let c = protocol::TriggerSmartContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.FreezeBalanceV2Contract" => {
+            let c = protocol::FreezeBalanceV2Contract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.UnfreezeBalanceV2Contract" => {
+            let c = protocol::UnfreezeBalanceV2Contract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.WithdrawExpireUnfreezeContract" => {
+            let c = protocol::WithdrawExpireUnfreezeContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.DelegateResourceContract" => {
+            let c = protocol::DelegateResourceContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.UnDelegateResourceContract" => {
+            let c = protocol::UnDelegateResourceContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.CancelAllUnfreezeV2Contract" => {
+            let c = protocol::CancelAllUnfreezeV2Contract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.TransferAssetContract" => {
+            let c = protocol::TransferAssetContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.VoteWitnessContract" => {
+            let c = protocol::VoteWitnessContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.AccountCreateContract" => {
+            let c = protocol::AccountCreateContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.AccountUpdateContract" => {
+            let c = protocol::AccountUpdateContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.AccountPermissionUpdateContract" => {
+            let c = protocol::AccountPermissionUpdateContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.owner_address).map_err(TransactionErrors::AddressError)
+        }
+        _ => Err(TransactionErrors::InvalidContract),
+    }
+}
+
+fn extract_to_address_from_parameter(
+    value: &[u8],
+    type_url: &str,
+    raw: &protocol::transaction::Raw,
+) -> Result<Address, TransactionErrors> {
+    match type_url {
+        "type.googleapis.com/protocol.TransferContract" => {
+            let c = protocol::TransferContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.to_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.TriggerSmartContract" => {
+            let c = protocol::TriggerSmartContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.contract_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.DelegateResourceContract" => {
+            let c = protocol::DelegateResourceContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.receiver_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.UnDelegateResourceContract" => {
+            let c = protocol::UnDelegateResourceContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.receiver_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.TransferAssetContract" => {
+            let c = protocol::TransferAssetContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.to_address).map_err(TransactionErrors::AddressError)
+        }
+        "type.googleapis.com/protocol.AccountCreateContract" => {
+            let c = protocol::AccountCreateContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Address::from_tron_bytes(&c.account_address).map_err(TransactionErrors::AddressError)
+        }
+        _ => {
+            let contract = raw
+                .contract
+                .first()
+                .ok_or(TransactionErrors::InvalidContract)?;
+            let param = contract
+                .parameter
+                .as_ref()
+                .ok_or(TransactionErrors::InvalidContract)?;
+            extract_owner_from_parameter(&param.value, &param.type_url)
+        }
     }
 }
 
@@ -502,28 +687,6 @@ impl TronTransactionReceipt {
 mod tests {
     use super::*;
     use crate::keypair::KeyPair;
-    use k256::ecdsa::SigningKey;
-
-    fn sign_tron_tx(request: &TronTransactionRequest, keypair: &KeyPair) -> TronTransactionReceipt {
-        let raw_data_bytes = request.to_raw_data_bytes();
-        let tx_id = Sha256::digest(&raw_data_bytes);
-        let tx_id: [u8; 32] = tx_id.into();
-
-        let sk_bytes = keypair.get_sk_bytes();
-        let signing_key = SigningKey::from_slice(&sk_bytes).unwrap();
-        let (sig, recovery_id) = signing_key.sign_prehash_recoverable(&tx_id).unwrap();
-
-        let mut signature = sig.to_bytes().to_vec();
-        signature.push(recovery_id.to_byte());
-
-        TronTransactionReceipt {
-            raw_data_bytes,
-            tx_id,
-            signature,
-            owner_address: request.owner_address.clone(),
-            contract: request.contract.clone(),
-        }
-    }
 
     #[test]
     fn test_transfer_sign_verify() {
@@ -531,20 +694,15 @@ mod tests {
         let owner = keypair.get_addr().unwrap();
         let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
 
-        let request = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x01],
-            ref_block_hash: vec![0xab; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 1_000_000,
-            },
-        };
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x01], vec![0xab; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner, &to, 1_000_000)
+            .build()
+            .unwrap();
 
-        let receipt = sign_tron_tx(&request, &keypair);
+        let receipt = tx.sign(&keypair).unwrap();
         assert!(receipt.verify().unwrap());
     }
 
@@ -561,62 +719,210 @@ mod tests {
         data.extend_from_slice(&[0u8; 31]);
         data.push(0x01);
 
-        let request = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x02],
-            ref_block_hash: vec![0xcd; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 100_000_000,
-            contract: TronContractCall::TriggerSmartContract {
-                contract_address: contract_addr,
-                call_value: 0,
-                data,
-                call_token_value: 0,
-                token_id: 0,
-            },
-        };
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x02], vec![0xcd; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .fee_limit(100_000_000)
+            .trigger_smart_contract(&owner, &contract_addr, 0, data, 0, 0)
+            .build()
+            .unwrap();
 
-        let receipt = sign_tron_tx(&request, &keypair);
+        let receipt = tx.sign(&keypair).unwrap();
         assert!(receipt.verify().unwrap());
     }
 
     #[test]
-    fn test_with_external_signature() {
+    fn test_from_hex_roundtrip() {
         let keypair = KeyPair::gen_tron().unwrap();
         let owner = keypair.get_addr().unwrap();
         let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
 
-        let request = TronTransactionRequest {
-            owner_address: owner.clone(),
-            ref_block_bytes: vec![0x00, 0x03],
-            ref_block_hash: vec![0xef; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 500_000,
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x03], vec![0xef; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner, &to, 2_000_000)
+            .build()
+            .unwrap();
+
+        let hex = hex::encode(tx.encode());
+        let decoded = TronTransaction::from_hex(&hex).unwrap();
+
+        assert_eq!(decoded.fee_limit(), tx.fee_limit());
+        assert_eq!(decoded.expiration(), tx.expiration());
+        assert_eq!(decoded.timestamp(), tx.timestamp());
+        assert_eq!(decoded.owner_address().unwrap(), owner);
+    }
+
+    #[test]
+    fn test_modify_fee_limit() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let owner = keypair.get_addr().unwrap();
+        let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
+
+        let mut tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x04], vec![0x11; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner, &to, 1_000_000)
+            .build()
+            .unwrap();
+
+        assert_eq!(tx.fee_limit(), 0);
+
+        tx.set_fee_limit(500_000_000);
+        assert_eq!(tx.fee_limit(), 500_000_000);
+
+        let receipt = tx.sign(&keypair).unwrap();
+        assert!(receipt.verify().unwrap());
+    }
+
+    #[test]
+    fn test_tron_web_json_parsing() {
+        let json = r#"{
+            "visible": false,
+            "txID": "536a4c369fb07663a21a826cc1f4bd35ff2d83b3042fa242b240217f44912cd0",
+            "raw_data": {
+                "contract": [{
+                    "parameter": {
+                        "value": {
+                            "data": "095ea7b3000000000000000000000000be365314f2e77fd1257d60c346bb32dbda369403ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                            "owner_address": "41cad64aace72b5465e7c4f6f27c8683b977341e8c",
+                            "contract_address": "41751f6515e355dc49474a8565a1234bf3424b9fe4"
+                        },
+                        "type_url": "type.googleapis.com/protocol.TriggerSmartContract"
+                    },
+                    "type": "TriggerSmartContract"
+                }],
+                "ref_block_bytes": "a653",
+                "ref_block_hash": "96e2b982db3d40d8",
+                "expiration": 1773409017000,
+                "fee_limit": 1000000000,
+                "timestamp": 1773408959995
             },
-        };
+            "raw_data_hex": "0a02a653220896e2b982db3d40d840a8b9a8bbce335aae01081f12a9010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412740a1541cad64aace72b5465e7c4f6f27c8683b977341e8c121541751f6515e355dc49474a8565a1234bf3424b9fe42244095ea7b3000000000000000000000000be365314f2e77fd1257d60c346bb32dbda369403ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff70fbfba4bbce3390018094ebdc03"
+        }"#;
 
-        let raw_data_bytes = request.to_raw_data_bytes();
-        let tx_id: [u8; 32] = Sha256::digest(&raw_data_bytes).into();
+        let web_tx: TronWebTransaction = serde_json::from_str(json).unwrap();
+        let tx = TronTransaction::from_tron_web(&web_tx).unwrap();
 
-        let sk_bytes = keypair.get_sk_bytes();
-        let signing_key = SigningKey::from_slice(&sk_bytes).unwrap();
-        let (sig, recovery_id) = signing_key.sign_prehash_recoverable(&tx_id).unwrap();
-        let mut signature = sig.to_bytes().to_vec();
-        signature.push(recovery_id.to_byte());
+        assert_eq!(tx.expiration(), 1773409017000);
+        assert_eq!(tx.fee_limit(), 1000000000);
+        assert_eq!(tx.timestamp(), 1773408959995);
+        assert_eq!(tx.contract_type(), Some("TriggerSmartContract"));
+    }
 
-        let receipt = TronTransactionReceipt {
-            raw_data_bytes,
-            tx_id,
-            signature,
-            owner_address: owner,
-            contract: request.contract.clone(),
-        };
+    #[test]
+    fn test_tron_sign_request_full_flow() {
+        let json = r#"{
+            "method": "tron_sign",
+            "params": {
+                "transaction": {
+                    "visible": false,
+                    "txID": "536a4c369fb07663a21a826cc1f4bd35ff2d83b3042fa242b240217f44912cd0",
+                    "raw_data": {
+                        "contract": [{
+                            "parameter": {
+                                "value": {
+                                    "data": "095ea7b3000000000000000000000000be365314f2e77fd1257d60c346bb32dbda369403ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                                    "owner_address": "41cad64aace72b5465e7c4f6f27c8683b977341e8c",
+                                    "contract_address": "41751f6515e355dc49474a8565a1234bf3424b9fe4"
+                                },
+                                "type_url": "type.googleapis.com/protocol.TriggerSmartContract"
+                            },
+                            "type": "TriggerSmartContract"
+                        }],
+                        "ref_block_bytes": "a653",
+                        "ref_block_hash": "96e2b982db3d40d8",
+                        "expiration": 1773409017000,
+                        "fee_limit": 1000000000,
+                        "timestamp": 1773408959995
+                    },
+                    "raw_data_hex": "0a02a653220896e2b982db3d40d840a8b9a8bbce335aae01081f12a9010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412740a1541cad64aace72b5465e7c4f6f27c8683b977341e8c121541751f6515e355dc49474a8565a1234bf3424b9fe42244095ea7b3000000000000000000000000be365314f2e77fd1257d60c346bb32dbda369403ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff70fbfba4bbce3390018094ebdc03"
+                },
+                "useTronHeader": true,
+                "input": {
+                    "data": "095ea7b3000000000000000000000000be365314f2e77fd1257d60c346bb32dbda369403ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+                    "owner_address": "41cad64aace72b5465e7c4f6f27c8683b977341e8c",
+                    "contract_address": "41751f6515e355dc49474a8565a1234bf3424b9fe4"
+                }
+            }
+        }"#;
 
+        let sign_request: TronWebSignRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(sign_request.method, "tron_sign");
+
+        let mut tx = TronTransaction::from_tron_web(&sign_request.params.transaction).unwrap();
+
+        assert_eq!(tx.contract_type(), Some("TriggerSmartContract"));
+        assert_eq!(tx.fee_limit(), 1000000000);
+
+        let original_tx_id = tx.tx_id();
+        let original_tx_id_hex = hex::encode(original_tx_id);
+        assert_eq!(
+            original_tx_id_hex,
+            "536a4c369fb07663a21a826cc1f4bd35ff2d83b3042fa242b240217f44912cd0"
+        );
+
+        tx.set_fee_limit(500_000_000);
+        assert_eq!(tx.fee_limit(), 500_000_000);
+
+        let modified_tx_id = tx.tx_id();
+        assert_ne!(
+            original_tx_id, modified_tx_id,
+            "txID should change after modification"
+        );
+
+        let owner = tx.owner_address().unwrap();
+        assert_eq!(owner.auto_format(), "TUTiD4GUapWtyQeV1NZbCxpqCQJ9L5veGh");
+
+        let contract_addr = tx.to_address().unwrap();
+        assert_eq!(
+            contract_addr.auto_format(),
+            "TLeVfrdym8RoJreJ23dAGyfJDygRtiWKBZ"
+        );
+    }
+
+    #[test]
+    fn test_freeze_balance_v2() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let owner = keypair.get_addr().unwrap();
+
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x05], vec![0x55; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .freeze_balance_v2(&owner, 10_000_000, TronResource::Energy)
+            .build()
+            .unwrap();
+
+        let receipt = tx.sign(&keypair).unwrap();
+        assert!(receipt.verify().unwrap());
+    }
+
+    #[test]
+    fn test_delegate_resource() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let owner = keypair.get_addr().unwrap();
+        let receiver = KeyPair::gen_tron().unwrap().get_addr().unwrap();
+
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x06], vec![0x66; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .delegate_resource(
+                &owner,
+                TronResource::Bandwidth,
+                5_000_000,
+                &receiver,
+                false,
+                0,
+            )
+            .build()
+            .unwrap();
+
+        let receipt = tx.sign(&keypair).unwrap();
         assert!(receipt.verify().unwrap());
     }
 
@@ -627,180 +933,15 @@ mod tests {
         let owner1 = keypair1.get_addr().unwrap();
         let to = keypair2.get_addr().unwrap();
 
-        let request = TronTransactionRequest {
-            owner_address: owner1,
-            ref_block_bytes: vec![0x00, 0x04],
-            ref_block_hash: vec![0x11; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 100_000,
-            },
-        };
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x07], vec![0x77; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner1, &to, 100_000)
+            .build()
+            .unwrap();
 
-        let receipt = sign_tron_tx(&request, &keypair2);
+        let receipt = tx.sign(&keypair2).unwrap();
         assert!(!receipt.verify().unwrap());
-    }
-
-    #[test]
-    fn test_to_address() {
-        let keypair = KeyPair::gen_tron().unwrap();
-        let owner = keypair.get_addr().unwrap();
-        let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
-
-        let request = TronTransactionRequest {
-            owner_address: owner.clone(),
-            ref_block_bytes: vec![0x00, 0x05],
-            ref_block_hash: vec![0x22; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to.clone(),
-                amount: 100_000,
-            },
-        };
-
-        assert_eq!(request.to_address(), to);
-
-        let freeze_request = TronTransactionRequest {
-            owner_address: owner.clone(),
-            ref_block_bytes: vec![0x00, 0x06],
-            ref_block_hash: vec![0x33; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::FreezeBalanceV2 {
-                frozen_balance: 10_000_000,
-                resource: TronResource::Energy,
-            },
-        };
-
-        assert_eq!(freeze_request.to_address(), owner);
-    }
-
-    #[test]
-    fn test_protobuf_roundtrip() {
-        let keypair = KeyPair::gen_tron().unwrap();
-        let owner = keypair.get_addr().unwrap();
-        let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
-
-        let request = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x07],
-            ref_block_hash: vec![0x44; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 2_000_000,
-            },
-        };
-
-        let raw_bytes = request.to_raw_data_bytes();
-
-        let decoded = protocol::transaction::Raw::decode(raw_bytes.as_slice()).unwrap();
-        assert_eq!(decoded.ref_block_bytes, vec![0x00, 0x07]);
-        assert_eq!(decoded.ref_block_hash, vec![0x44; 8]);
-        assert_eq!(decoded.expiration, 1700000000000);
-        assert_eq!(decoded.timestamp, 1699999990000);
-        assert_eq!(decoded.contract.len(), 1);
-
-        let contract = &decoded.contract[0];
-        assert_eq!(contract.r#type, ContractType::TransferContract as i32);
-        let any = contract.parameter.as_ref().unwrap();
-        let transfer = protocol::TransferContract::decode(any.value.as_slice()).unwrap();
-        assert_eq!(transfer.amount, 2_000_000);
-    }
-
-    #[test]
-    fn test_freeze_balance_v2_sign_verify() {
-        let keypair = KeyPair::gen_tron().unwrap();
-        let owner = keypair.get_addr().unwrap();
-
-        let request = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x08],
-            ref_block_hash: vec![0x55; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::FreezeBalanceV2 {
-                frozen_balance: 10_000_000,
-                resource: TronResource::Energy,
-            },
-        };
-
-        let receipt = sign_tron_tx(&request, &keypair);
-        assert!(receipt.verify().unwrap());
-    }
-
-    #[test]
-    fn test_delegate_resource_sign_verify() {
-        let keypair = KeyPair::gen_tron().unwrap();
-        let owner = keypair.get_addr().unwrap();
-        let receiver = KeyPair::gen_tron().unwrap().get_addr().unwrap();
-
-        let request = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x09],
-            ref_block_hash: vec![0x66; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::DelegateResource {
-                resource: TronResource::Bandwidth,
-                balance: 5_000_000,
-                receiver_address: receiver,
-                lock: false,
-                lock_period: 0,
-            },
-        };
-
-        let receipt = sign_tron_tx(&request, &keypair);
-        assert!(receipt.verify().unwrap());
-    }
-
-    #[test]
-    fn test_from_raw_data_hex() {
-        let keypair = KeyPair::gen_tron().unwrap();
-        let owner = keypair.get_addr().unwrap();
-        let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
-
-        let request = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x0a],
-            ref_block_hash: vec![0x77; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 3_000_000,
-            },
-        };
-
-        let raw_bytes = request.to_raw_data_bytes();
-        let hex_string = hex::encode(&raw_bytes);
-
-        let decoded = TronTransactionRequest::from_raw_data_hex(&hex_string).unwrap();
-
-        assert_eq!(decoded.ref_block_bytes, vec![0x00, 0x0a]);
-        assert_eq!(decoded.ref_block_hash, vec![0x77; 8]);
-        assert_eq!(decoded.expiration, 1700000000000);
-        assert_eq!(decoded.timestamp, 1699999990000);
-        assert_eq!(decoded.contract.len(), 1);
-
-        let contract = &decoded.contract[0];
-        assert_eq!(contract.r#type, ContractType::TransferContract as i32);
-    }
-
-    #[test]
-    fn test_from_raw_data_hex_invalid() {
-        let result = TronTransactionRequest::from_raw_data_hex("invalid_hex_string!!!");
-        assert!(result.is_err());
     }
 }

@@ -2,7 +2,7 @@ use crate::address::Address;
 use crate::keypair::KeyPair;
 use crate::pubkey::PubKey;
 use crate::signature::Signature;
-use crate::tron_tx::{TronTransactionReceipt, TronTransactionRequest};
+use crate::tron_tx::{TronTransaction, TronTransactionReceipt};
 use crate::zil_tx::{ZILTransactionReceipt, ZILTransactionRequest};
 use crate::zq1_proto::{create_proto_tx, version_from_chainid};
 use alloy::consensus::transaction::SignerRecoverable;
@@ -55,7 +55,7 @@ pub enum TransactionRequest {
     Zilliqa((ZILTransactionRequest, TransactionMetadata)),
     Ethereum((ETHTransactionRequest, TransactionMetadata)),
     Bitcoin((BTCTransactionRequest, TransactionMetadata)),
-    Tron((TronTransactionRequest, TransactionMetadata)),
+    Tron((TronTransaction, TransactionMetadata)),
 }
 
 impl TransactionReceipt {
@@ -234,33 +234,11 @@ impl TransactionRequest {
                 Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
             }
             TransactionRequest::Tron((tx, mut metadata)) => {
-                use k256::ecdsa::SigningKey;
-                use sha2::{Digest, Sha256};
-
-                let raw_data_bytes = tx.to_raw_data_bytes();
-                let tx_id: [u8; 32] = Sha256::digest(&raw_data_bytes).into();
-
-                let sk_bytes = keypair.get_sk_bytes();
-                let signing_key = SigningKey::from_slice(&sk_bytes)
-                    .map_err(|_| TransactionErrors::InvalidSecretKey)?;
-                let (sig, recovery_id) = signing_key
-                    .sign_prehash_recoverable(&tx_id)
-                    .map_err(|_| TransactionErrors::InvalidSignature)?;
-
-                let mut signature = sig.to_bytes().to_vec();
-                signature.push(recovery_id.to_byte());
-
-                let tx_id_hex = hex::encode(tx_id);
+                let tx_id_hex = hex::encode(tx.tx_id());
                 metadata.hash = Some(tx_id_hex);
                 metadata.signer = Some(keypair.get_pubkey()?);
 
-                let receipt = TronTransactionReceipt {
-                    raw_data_bytes,
-                    tx_id,
-                    signature,
-                    owner_address: tx.owner_address.clone(),
-                    contract: tx.contract.clone(),
-                };
+                let receipt = tx.sign(keypair)?;
 
                 Ok(TransactionReceipt::Tron((receipt, metadata)))
             }
@@ -418,7 +396,7 @@ impl TransactionRequest {
                 Ok(rlp_bytes)
             }
             TransactionRequest::Bitcoin((tx, _)) => Ok(bitcoin::consensus::encode::serialize(tx)),
-            TransactionRequest::Tron((tx, _)) => Ok(tx.to_raw_data_bytes()),
+            TransactionRequest::Tron((tx, _)) => Ok(tx.encode()),
         }
     }
 
@@ -497,8 +475,9 @@ impl TransactionRequest {
                     return Err(TransactionErrors::InvalidSignature);
                 }
 
-                let raw_data_bytes = tx.to_raw_data_bytes();
+                let raw_data_bytes = tx.encode();
                 let tx_id: [u8; 32] = Sha256::digest(&raw_data_bytes).into();
+                let owner_address = tx.owner_address()?;
 
                 metadata.hash = Some(hex::encode(tx_id));
                 metadata.signer = Some(pub_key.clone());
@@ -507,8 +486,7 @@ impl TransactionRequest {
                     raw_data_bytes,
                     tx_id,
                     signature: signature_bytes,
-                    owner_address: tx.owner_address.clone(),
-                    contract: tx.contract.clone(),
+                    owner_address,
                 };
 
                 Ok(TransactionReceipt::Tron((receipt, metadata)))
@@ -549,7 +527,7 @@ impl TransactionRequest {
                     Address::Secp256k1Bitcoin(Vec::new())
                 }
             }
-            TransactionRequest::Tron((tx, _)) => tx.to_address(),
+            TransactionRequest::Tron((tx, _)) => tx.to_address().unwrap_or(Address::Secp256k1Tron(Address::ZERO)),
         }
     }
 
@@ -794,24 +772,17 @@ mod tests_tx {
 
     #[tokio::test]
     async fn test_sign_verify_tron_transfer() {
-        use crate::tron_tx::{TronContractCall, TronTransactionRequest};
-
         let keypair = KeyPair::gen_tron().unwrap();
         let owner = keypair.get_addr().unwrap();
         let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
 
-        let tron_tx = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x01],
-            ref_block_hash: vec![0xab; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to.clone(),
-                amount: 1_000_000,
-            },
-        };
+        let tron_tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x01], vec![0xab; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner, &to, 1_000_000)
+            .build()
+            .unwrap();
 
         let tx_req = TransactionRequest::Tron((tron_tx, Default::default()));
 
@@ -827,8 +798,6 @@ mod tests_tx {
 
     #[tokio::test]
     async fn test_sign_verify_tron_trigger_smart_contract() {
-        use crate::tron_tx::{TronContractCall, TronTransactionRequest};
-
         let keypair = KeyPair::gen_tron().unwrap();
         let owner = keypair.get_addr().unwrap();
         let contract_addr = KeyPair::gen_tron().unwrap().get_addr().unwrap();
@@ -840,21 +809,14 @@ mod tests_tx {
         data.extend_from_slice(&[0u8; 31]);
         data.push(0x01);
 
-        let tron_tx = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x02],
-            ref_block_hash: vec![0xcd; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 100_000_000,
-            contract: TronContractCall::TriggerSmartContract {
-                contract_address: contract_addr.clone(),
-                call_value: 0,
-                data,
-                call_token_value: 0,
-                token_id: 0,
-            },
-        };
+        let tron_tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x02], vec![0xcd; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .fee_limit(100_000_000)
+            .trigger_smart_contract(&owner, &contract_addr, 0, data, 0, 0)
+            .build()
+            .unwrap();
 
         let tx_req = TransactionRequest::Tron((tron_tx, Default::default()));
 
@@ -869,7 +831,6 @@ mod tests_tx {
 
     #[tokio::test]
     async fn test_tron_with_signature() {
-        use crate::tron_tx::{TronContractCall, TronTransactionRequest};
         use k256::ecdsa::SigningKey;
         use sha2::{Digest, Sha256};
 
@@ -878,20 +839,15 @@ mod tests_tx {
         let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
         let pub_key = keypair.get_pubkey().unwrap();
 
-        let tron_tx = TronTransactionRequest {
-            owner_address: owner,
-            ref_block_bytes: vec![0x00, 0x03],
-            ref_block_hash: vec![0xef; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 500_000,
-            },
-        };
+        let tron_tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x03], vec![0xef; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner, &to, 500_000)
+            .build()
+            .unwrap();
 
-        let tx_req = TransactionRequest::Tron((tron_tx.clone(), Default::default()));
+        let tx_req = TransactionRequest::Tron((tron_tx, Default::default()));
         let raw_bytes = tx_req.to_rlp_encode(&pub_key).unwrap();
 
         let tx_id: [u8; 32] = Sha256::digest(&raw_bytes).into();
@@ -910,25 +866,18 @@ mod tests_tx {
 
     #[tokio::test]
     async fn test_tron_wrong_keypair_fails() {
-        use crate::tron_tx::{TronContractCall, TronTransactionRequest};
-
         let keypair1 = KeyPair::gen_tron().unwrap();
         let keypair2 = KeyPair::gen_tron().unwrap();
         let owner1 = keypair1.get_addr().unwrap();
         let to = keypair2.get_addr().unwrap();
 
-        let tron_tx = TronTransactionRequest {
-            owner_address: owner1,
-            ref_block_bytes: vec![0x00, 0x04],
-            ref_block_hash: vec![0x11; 8],
-            expiration: 1700000000000,
-            timestamp: 1699999990000,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 100_000,
-            },
-        };
+        let tron_tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x04], vec![0x11; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner1, &to, 100_000)
+            .build()
+            .unwrap();
 
         let tx_req = TransactionRequest::Tron((tron_tx, Default::default()));
         let tx_res = tx_req.sign(&keypair2).await.unwrap();

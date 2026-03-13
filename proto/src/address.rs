@@ -215,6 +215,18 @@ impl Address {
         bytes
     }
 
+    pub fn from_tron_bytes(bytes: &[u8]) -> Result<Self> {
+        if bytes.len() != 21 || bytes[0] != 0x41 {
+            return Err(AddressError::InvalidTronAddress(
+                "Expected 21 bytes starting with 0x41".to_string(),
+            ));
+        }
+        let addr_bytes: [u8; ADDR_LEN] = bytes[1..21]
+            .try_into()
+            .map_err(|_| AddressError::InvalidLength)?;
+        Ok(Self::Secp256k1Tron(addr_bytes))
+    }
+
     pub fn from_pubkey(pk: &PubKey) -> Result<Self> {
         match pk {
             PubKey::Secp256k1Sha256(pk) => {

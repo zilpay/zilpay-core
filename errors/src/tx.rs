@@ -50,6 +50,9 @@ pub enum TransactionErrors {
     #[error("Invalid address")]
     InvalidAddress,
 
+    #[error("Invalid contract")]
+    InvalidContract,
+
     #[error("Invalid input index")]
     InvalidInputIndex,
 
