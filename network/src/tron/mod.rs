@@ -26,6 +26,7 @@ const TRON_TOTAL_TIMEOUT_SECS: u64 = 60;
 const TRON_MAX_RETRIES: usize = 3;
 const TRON_BLOCK_TIME_SECS: u64 = 3;
 const BLOCK_SAMPLE_SIZE: u64 = 10;
+const TRON_SIGNATURE_SIZE: i64 = 65;
 
 macro_rules! tron_retry {
     ($self:expr, $method:expr, |$client:ident| $body:expr) => {{
@@ -164,6 +165,19 @@ impl TronHttpClient {
         });
         self.post("/wallet/gettransactioninfobyid", &body).await
     }
+
+    async fn get_account_net(
+        &self,
+        address: &Address,
+    ) -> std::result::Result<AccountNetResponse, NetworkErrors> {
+        let tron_addr = address.auto_format();
+        dbg!(&tron_addr);
+        let body = json!({
+            "address": &tron_addr,
+            "visible": true
+        });
+        self.post("/wallet/getaccountnet", &body).await
+    }
 }
 
 impl NetworkProvider {
@@ -260,11 +274,41 @@ impl TronOperations for NetworkProvider {
                     NetworkErrors::RPCError("getEnergyFee not found in chain parameters".into())
                 })?;
 
+            let transaction_fee = chain_params
+                .chain_parameter
+                .iter()
+                .find(|p| p.key == "getTransactionFee")
+                .map(|p| p.value as u64)
+                .unwrap_or(1000);
+
             let fee_estimate = match tx {
                 TransactionRequest::Tron((tron_tx, _)) => {
                     let contract_type = tron_tx.contract_type().unwrap_or("");
                     match contract_type {
-                        "TransferContract" => 0u64,
+                        "TransferContract" => {
+                            let account_net = client.get_account_net(sender).await?;
+
+                            let encoded_size = tron_tx.encode().len() as i64;
+                            let tx_size = encoded_size + TRON_SIGNATURE_SIZE;
+                            let free_net_available =
+                                account_net.free_net_limit - account_net.free_net_used;
+
+                            dbg!(
+                                encoded_size,
+                                tx_size,
+                                free_net_available,
+                                account_net.free_net_limit,
+                                account_net.free_net_used
+                            );
+
+                            if free_net_available >= tx_size {
+                                0u64
+                            } else {
+                                let bandwidth_needed = tx_size - free_net_available.max(0);
+                                dbg!(bandwidth_needed, transaction_fee);
+                                bandwidth_needed as u64 * transaction_fee
+                            }
+                        }
                         "TriggerSmartContract" => {
                             let contract_address = tron_tx.to_address()?;
 
@@ -363,6 +407,7 @@ impl TronOperations for NetworkProvider {
                     .to_tron_web_json()
                     .map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
+                dbg!(&tx_json);
                 let ret = client.broadcast_transaction(&tx_json).await?;
 
                 let success = ret.result.unwrap_or(false);
@@ -550,13 +595,14 @@ mod tests {
 
         println!("=== Tron Transfer Gas Estimation ===");
         println!("gas_price (energy_fee): {}", params.gas_price);
-        println!("tx_estimate_gas: {}", params.tx_estimate_gas);
+        println!(
+            "tx_estimate_gas (bandwidth fee): {}",
+            params.tx_estimate_gas
+        );
         println!("current: {}", params.current);
         println!("====================================");
 
         assert!(params.gas_price > U256::ZERO);
-        assert_eq!(params.tx_estimate_gas, U256::ZERO);
-        assert_eq!(params.current, U256::ZERO);
     }
 
     #[tokio::test]

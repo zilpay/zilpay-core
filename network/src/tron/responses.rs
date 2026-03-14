@@ -104,3 +104,11 @@ pub struct TriggerSmartContractRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub call_value: Option<i64>,
 }
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct AccountNetResponse {
+    #[serde(default, rename = "freeNetUsed")]
+    pub free_net_used: i64,
+    #[serde(default, rename = "freeNetLimit")]
+    pub free_net_limit: i64,
+}

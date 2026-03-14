@@ -1457,10 +1457,13 @@ mod tests_background_transactions {
             chain_hash: net_config.hash(),
             ..Default::default()
         };
-        let mut tx_request = TransactionRequest::Tron((tron_tx.clone(), metadata.clone()));
 
         let providers = bg.get_providers();
         let provider = providers.first().unwrap();
+
+        provider.tron_fill_block_ref(&mut tron_tx).await.unwrap();
+
+        let mut tx_request = TransactionRequest::Tron((tron_tx.clone(), metadata.clone()));
 
         let params = provider
             .estimate_params_batch(&tx_request, &sender.addr, 1, None)
@@ -1468,23 +1471,30 @@ mod tests_background_transactions {
             .unwrap();
 
         let fee: i64 = params.current.try_into().expect("fee must fit in i64");
-        assert_eq!(fee, 0, "TransferContract fee_limit must be 0");
+        dbg!(sender_balance, amount_sun, fee);
+        assert!(fee >= 0, "TransferContract fee_limit must be non-negative");
 
         super::update_tx_from_params(&mut tx_request, params, sender_balance).unwrap();
 
         if let TransactionRequest::Tron((ref updated, _)) = tx_request {
             if let Some(amount) = updated.transfer_amount() {
-                assert_eq!(
-                    amount, amount_sun,
-                    "amount must stay unchanged for zero fee_limit"
-                );
+                if fee > 0 {
+                    assert_eq!(
+                        amount,
+                        amount_sun - fee,
+                        "amount must be reduced by fee for max balance transfer"
+                    );
+                } else {
+                    assert_eq!(
+                        amount, amount_sun,
+                        "amount must stay unchanged for zero fee_limit"
+                    );
+                }
             } else {
                 panic!("expected Transfer contract");
             }
             tron_tx = updated.clone();
         }
-
-        provider.tron_fill_block_ref(&mut tron_tx).await.unwrap();
 
         let tx_request = TransactionRequest::Tron((tron_tx, metadata));
 
