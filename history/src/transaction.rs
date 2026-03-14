@@ -277,13 +277,7 @@ impl HistoricalTransaction {
                 })
             }
             TransactionReceipt::Tron((tron_tx, metadata)) => {
-                let tx_id = alloy::hex::encode(tron_tx.tx_id);
-
-                let tron = json!({
-                    "txID": tx_id,
-                    "ownerAddress": tron_tx.owner_address.auto_format(),
-                    "signature": alloy::hex::encode(&tron_tx.signature),
-                });
+                let tron = tron_tx.to_tron_web_json()?;
 
                 Ok(Self {
                     status: TransactionStatus::Pending,

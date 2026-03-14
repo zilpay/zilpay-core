@@ -453,11 +453,9 @@ impl TransactionsManagement for Background {
             .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
 
         match account.addr {
-            Address::Secp256k1Bitcoin(_) => {
-                Err(BackgroundError::BincodeError(
-                    "BTC not impl yet".to_string(),
-                ))?
-            }
+            Address::Secp256k1Bitcoin(_) => Err(BackgroundError::BincodeError(
+                "BTC not impl yet".to_string(),
+            ))?,
             Address::Secp256k1Sha256(_) => {
                 let mut hasher = Sha256::new();
                 hasher.update(message.as_bytes());
@@ -1438,17 +1436,16 @@ mod tests_background_transactions {
         let account_1 = data.accounts.get(1).unwrap();
         assert_eq!(account_0.addr.auto_format(), tron_addresses::ADDR_0);
 
-        let (sender_idx, sender, recipient, sender_balance) = if balance_0 >= balance_1 && balance_0 > U256::ZERO {
-            (0usize, account_0, &account_1.addr, balance_0)
-        } else if balance_1 > U256::ZERO {
-            (1usize, account_1, &account_0.addr, balance_1)
-        } else {
-            panic!("both accounts have zero TRX balance — fund at least one on Nile testnet");
-        };
+        let (sender_idx, sender, recipient, sender_balance) =
+            if balance_0 >= balance_1 && balance_0 > U256::ZERO {
+                (0usize, account_0, &account_1.addr, balance_0)
+            } else if balance_1 > U256::ZERO {
+                (1usize, account_1, &account_0.addr, balance_1)
+            } else {
+                panic!("both accounts have zero TRX balance — fund at least one on Nile testnet");
+            };
 
-        let amount_sun: i64 = sender_balance
-            .try_into()
-            .expect("balance must fit in i64");
+        let amount_sun: i64 = sender_balance.try_into().expect("balance must fit in i64");
 
         let mut tron_tx = proto::tron_tx::TronTransaction::builder()
             .transfer(&sender.addr, recipient, amount_sun)

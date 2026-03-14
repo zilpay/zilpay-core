@@ -642,6 +642,63 @@ impl TronTransactionReceipt {
     pub fn signature_hex(&self) -> String {
         hex::encode(&self.signature)
     }
+
+    pub fn to_tron_web_json(&self) -> Result<serde_json::Value, TransactionErrors> {
+        use serde_json::json;
+
+        let raw = protocol::transaction::Raw::decode(&self.raw_data_bytes[..])
+            .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+
+        let contracts: Vec<serde_json::Value> = raw
+            .contract
+            .iter()
+            .map(|c| {
+                let param = c
+                    .parameter
+                    .as_ref()
+                    .ok_or(TransactionErrors::InvalidContract)?;
+                let contract_type = param
+                    .type_url
+                    .strip_prefix("type.googleapis.com/protocol.")
+                    .unwrap_or(&param.type_url)
+                    .to_string();
+
+                let value = contract_value_to_json(&param.value, &param.type_url)?;
+
+                Ok(json!({
+                    "type": contract_type,
+                    "parameter": {
+                        "type_url": param.type_url,
+                        "value": value
+                    }
+                }))
+            })
+            .collect::<Result<Vec<_>, TransactionErrors>>()?;
+
+        let mut raw_data = serde_json::Map::new();
+        raw_data.insert("contract".to_string(), json!(contracts));
+        raw_data.insert(
+            "ref_block_bytes".to_string(),
+            json!(hex::encode(&raw.ref_block_bytes)),
+        );
+        raw_data.insert(
+            "ref_block_hash".to_string(),
+            json!(hex::encode(&raw.ref_block_hash)),
+        );
+        raw_data.insert("expiration".to_string(), json!(raw.expiration));
+        if raw.fee_limit > 0 {
+            raw_data.insert("fee_limit".to_string(), json!(raw.fee_limit));
+        }
+        raw_data.insert("timestamp".to_string(), json!(raw.timestamp));
+
+        Ok(json!({
+            "visible": false,
+            "txID": hex::encode(self.tx_id),
+            "raw_data": raw_data,
+            "raw_data_hex": hex::encode(&self.raw_data_bytes),
+            "signature": [hex::encode(&self.signature)]
+        }))
+    }
 }
 
 fn contract_value_to_json(
@@ -1189,5 +1246,104 @@ mod tests {
 
         let receipt = tx.sign(&keypair2).unwrap();
         assert!(!receipt.verify().unwrap());
+    }
+
+    #[test]
+    fn test_receipt_to_tron_web_json() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let owner = keypair.get_addr().unwrap();
+        let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
+
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x01], vec![0xab; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner, &to, 1_000_000)
+            .build()
+            .unwrap();
+
+        let receipt = tx.sign(&keypair).unwrap();
+        let json = receipt.to_tron_web_json().unwrap();
+
+        assert_eq!(json["visible"], false);
+        assert_eq!(json["txID"], hex::encode(receipt.tx_id));
+        assert!(json["raw_data"].is_object());
+        assert!(json["raw_data"]["contract"].is_array());
+        assert_eq!(
+            json["raw_data"]["expiration"].as_i64().unwrap(),
+            1700000000000
+        );
+        assert_eq!(
+            json["raw_data"]["timestamp"].as_i64().unwrap(),
+            1699999990000
+        );
+        assert_eq!(json["raw_data_hex"], hex::encode(&receipt.raw_data_bytes));
+        assert!(json["signature"].is_array());
+        assert_eq!(json["signature"][0], hex::encode(&receipt.signature));
+    }
+
+    #[test]
+    fn test_receipt_to_tron_web_json_trigger_contract() {
+        let keypair = KeyPair::gen_tron().unwrap();
+        let owner = keypair.get_addr().unwrap();
+        let contract_addr = KeyPair::gen_tron().unwrap().get_addr().unwrap();
+
+        let mut data = Vec::new();
+        data.extend_from_slice(&hex::decode("a9059cbb").unwrap());
+
+        let tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x02], vec![0xcd; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .fee_limit(100_000_000)
+            .trigger_smart_contract(&owner, &contract_addr, 0, data, 0, 0)
+            .build()
+            .unwrap();
+
+        let receipt = tx.sign(&keypair).unwrap();
+        let json = receipt.to_tron_web_json().unwrap();
+
+        assert_eq!(json["visible"], false);
+        assert_eq!(json["txID"], hex::encode(receipt.tx_id));
+        assert!(json["raw_data"]["contract"].is_array());
+        assert_eq!(
+            json["raw_data"]["contract"][0]["type"],
+            "TriggerSmartContract"
+        );
+        assert_eq!(json["raw_data"]["fee_limit"].as_i64().unwrap(), 100_000_000);
+        assert!(json["signature"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_transaction_request_sign_to_json() {
+        use crate::tx::{TransactionMetadata, TransactionReceipt, TransactionRequest};
+        let keypair = KeyPair::gen_tron().unwrap();
+        let owner = keypair.get_addr().unwrap();
+        let to = KeyPair::gen_tron().unwrap().get_addr().unwrap();
+
+        let tron_tx = TronTransaction::builder()
+            .ref_block(vec![0x00, 0x01], vec![0xab; 8])
+            .expiration(1700000000000)
+            .timestamp(1699999990000)
+            .transfer(&owner, &to, 1_000_000)
+            .build()
+            .unwrap();
+
+        let tx_req = TransactionRequest::Tron((tron_tx, TransactionMetadata::default()));
+        let receipt = tx_req.sign(&keypair).await.unwrap();
+
+        if let TransactionReceipt::Tron((tron_receipt, _meta)) = receipt {
+            let json = tron_receipt.to_tron_web_json().unwrap();
+
+            assert_eq!(json["visible"], false);
+            assert!(json["txID"].is_string());
+            assert!(json["raw_data"].is_object());
+            assert!(json["raw_data"]["contract"].is_array());
+            assert!(json["raw_data_hex"].is_string());
+            assert!(json["signature"].is_array());
+            assert_eq!(json["signature"].as_array().unwrap().len(), 1);
+        } else {
+            panic!("Expected Tron transaction receipt");
+        }
     }
 }
