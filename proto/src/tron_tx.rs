@@ -691,19 +691,12 @@ impl TronTransactionReceipt {
         }
         raw_data.insert("timestamp".to_string(), json!(raw.timestamp));
 
-        let tx_id_hex = hex::encode(self.tx_id);
-        let transaction = json!({
-            "visible": false,
-            "txID": tx_id_hex.clone(),
-            "raw_data": raw_data,
-            "raw_data_hex": hex::encode(&self.raw_data_bytes),
-            "signature": [hex::encode(&self.signature)]
-        });
-
         Ok(json!({
-            "result": true,
-            "txid": tx_id_hex,
-            "transaction": transaction
+            "visible": false,
+            "txID": hex::encode(self.tx_id),
+            "raw_data_hex": hex::encode(&self.raw_data_bytes),
+            "raw_data": raw_data,
+            "signature": [hex::encode(&self.signature)]
         }))
     }
 }
@@ -1271,25 +1264,25 @@ mod tests {
 
         let receipt = tx.sign(&keypair).unwrap();
         let json = receipt.to_tron_web_json().unwrap();
-        let tx_json = &json["transaction"];
 
-        assert_eq!(json["result"], true);
-        assert_eq!(json["txid"], hex::encode(receipt.tx_id));
-        assert_eq!(tx_json["visible"], false);
-        assert_eq!(tx_json["txID"], hex::encode(receipt.tx_id));
-        assert!(tx_json["raw_data"].is_object());
-        assert!(tx_json["raw_data"]["contract"].is_array());
+        assert_eq!(json["visible"], false);
+        assert_eq!(json["txID"], hex::encode(receipt.tx_id));
+        assert!(json["raw_data"].is_object());
+        assert!(json["raw_data"]["contract"].is_array());
         assert_eq!(
-            tx_json["raw_data"]["expiration"].as_i64().unwrap(),
+            json["raw_data"]["expiration"].as_i64().unwrap(),
             1700000000000
         );
         assert_eq!(
-            tx_json["raw_data"]["timestamp"].as_i64().unwrap(),
+            json["raw_data"]["timestamp"].as_i64().unwrap(),
             1699999990000
         );
-        assert_eq!(tx_json["raw_data_hex"], hex::encode(&receipt.raw_data_bytes));
-        assert!(tx_json["signature"].is_array());
-        assert_eq!(tx_json["signature"][0], hex::encode(&receipt.signature));
+        assert_eq!(
+            json["raw_data_hex"],
+            hex::encode(&receipt.raw_data_bytes)
+        );
+        assert!(json["signature"].is_array());
+        assert_eq!(json["signature"][0], hex::encode(&receipt.signature));
     }
 
     #[test]
@@ -1312,19 +1305,19 @@ mod tests {
 
         let receipt = tx.sign(&keypair).unwrap();
         let json = receipt.to_tron_web_json().unwrap();
-        let tx_json = &json["transaction"];
 
-        assert_eq!(json["result"], true);
-        assert_eq!(json["txid"], hex::encode(receipt.tx_id));
-        assert_eq!(tx_json["visible"], false);
-        assert_eq!(tx_json["txID"], hex::encode(receipt.tx_id));
-        assert!(tx_json["raw_data"]["contract"].is_array());
+        assert_eq!(json["visible"], false);
+        assert_eq!(json["txID"], hex::encode(receipt.tx_id));
+        assert!(json["raw_data"]["contract"].is_array());
         assert_eq!(
-            tx_json["raw_data"]["contract"][0]["type"],
+            json["raw_data"]["contract"][0]["type"],
             "TriggerSmartContract"
         );
-        assert_eq!(tx_json["raw_data"]["fee_limit"].as_i64().unwrap(), 100_000_000);
-        assert!(tx_json["signature"].is_array());
+        assert_eq!(
+            json["raw_data"]["fee_limit"].as_i64().unwrap(),
+            100_000_000
+        );
+        assert!(json["signature"].is_array());
     }
 
     #[tokio::test]
@@ -1347,17 +1340,14 @@ mod tests {
 
         if let TransactionReceipt::Tron((tron_receipt, _meta)) = receipt {
             let json = tron_receipt.to_tron_web_json().unwrap();
-            let tx_json = &json["transaction"];
 
-            assert_eq!(json["result"], true);
-            assert!(json["txid"].is_string());
-            assert_eq!(tx_json["visible"], false);
-            assert!(tx_json["txID"].is_string());
-            assert!(tx_json["raw_data"].is_object());
-            assert!(tx_json["raw_data"]["contract"].is_array());
-            assert!(tx_json["raw_data_hex"].is_string());
-            assert!(tx_json["signature"].is_array());
-            assert_eq!(tx_json["signature"].as_array().unwrap().len(), 1);
+            assert_eq!(json["visible"], false);
+            assert!(json["txID"].is_string());
+            assert!(json["raw_data"].is_object());
+            assert!(json["raw_data"]["contract"].is_array());
+            assert!(json["raw_data_hex"].is_string());
+            assert!(json["signature"].is_array());
+            assert_eq!(json["signature"].as_array().unwrap().len(), 1);
         } else {
             panic!("Expected Tron transaction receipt");
         }
