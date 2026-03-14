@@ -202,6 +202,41 @@ impl TronTransaction {
         })
     }
 
+    pub fn is_transfer(&self) -> bool {
+        self.contract_type() == Some("TransferContract")
+    }
+
+    pub fn transfer_amount(&self) -> Option<i64> {
+        if !self.is_transfer() {
+            return None;
+        }
+        let contract = self.raw.contract.first()?;
+        let param = contract.parameter.as_ref()?;
+        let transfer = protocol::TransferContract::decode(&param.value[..]).ok()?;
+        Some(transfer.amount)
+    }
+
+    pub fn set_transfer_amount(&mut self, amount: i64) -> Result<(), TransactionErrors> {
+        if !self.is_transfer() {
+            return Err(TransactionErrors::InvalidContract);
+        }
+        let contract = self
+            .raw
+            .contract
+            .first_mut()
+            .ok_or(TransactionErrors::InvalidContract)?;
+        let param = contract
+            .parameter
+            .as_mut()
+            .ok_or(TransactionErrors::InvalidContract)?;
+
+        let mut transfer = protocol::TransferContract::decode(&param.value[..])
+            .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+        transfer.amount = amount;
+        param.value = transfer.encode_to_vec();
+        Ok(())
+    }
+
     pub fn set_fee_limit(&mut self, fee_limit: i64) -> &mut Self {
         self.raw.fee_limit = fee_limit;
         self

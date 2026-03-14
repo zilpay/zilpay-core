@@ -11,7 +11,6 @@ use proto::{
     address::Address,
     pubkey::PubKey,
     signature::Signature,
-    tron_tx::TronContractCall,
     tx::{TransactionReceipt, TransactionRequest},
 };
 use sha2::{Digest, Sha256};
@@ -264,18 +263,18 @@ pub fn update_tx_from_params(
                 .current
                 .try_into()
                 .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
-            tron_tx.fee_limit = fee;
+            tron_tx.set_fee_limit(fee);
 
-            if let TronContractCall::Transfer { ref mut amount, .. } = tron_tx.contract {
-                if *amount > 0 && U256::from(*amount as u64) == balance {
-                    let adjusted = *amount - fee;
+            if let Some(amount) = tron_tx.transfer_amount() {
+                if amount > 0 && U256::from(amount as u64) == balance {
+                    let adjusted = amount - fee;
                     if adjusted <= 0 {
                         return Err(TransactionErrors::ConvertTxError(format!(
                             "Insufficient TRX: balance {} sun <= fee {} sun",
-                            *amount, fee
+                            amount, fee
                         )));
                     }
-                    *amount = adjusted;
+                    tron_tx.set_transfer_amount(adjusted)?;
                 }
             }
         }
@@ -1202,18 +1201,10 @@ mod tests_background_transactions {
 
         let account_1 = data.accounts.get(1).unwrap();
 
-        let mut tron_tx = proto::tron_tx::TronTransactionRequest {
-            owner_address: account_0.addr.clone(),
-            ref_block_bytes: vec![],
-            ref_block_hash: vec![],
-            expiration: 0,
-            timestamp: 0,
-            fee_limit: 0,
-            contract: proto::tron_tx::TronContractCall::Transfer {
-                to_address: account_1.addr.clone(),
-                amount: 1_000_000,
-            },
-        };
+        let mut tron_tx = proto::tron_tx::TronTransaction::builder()
+            .transfer(&account_0.addr, &account_1.addr, 1_000_000)
+            .build()
+            .unwrap();
 
         let metadata = proto::tx::TransactionMetadata {
             chain_hash: net_config.hash(),
@@ -1231,9 +1222,8 @@ mod tests_background_transactions {
 
         super::update_tx_from_params(&mut tx_request, params, balance).unwrap();
 
-        // Extract updated fee_limit from tx_request
         if let TransactionRequest::Tron((ref updated, _)) = tx_request {
-            tron_tx.fee_limit = updated.fee_limit;
+            tron_tx = updated.clone();
         }
 
         provider.tron_fill_block_ref(&mut tron_tx).await.unwrap();
@@ -1296,10 +1286,14 @@ mod tests_background_transactions {
             trc20.name, trc20.symbol, trc20.decimals
         );
 
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
         let wallet = bg.get_wallet_by_index(0).unwrap();
         wallet.add_ftoken(trc20).unwrap();
 
         bg.sync_ftokens_balances(0).await.unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
@@ -1326,8 +1320,10 @@ mod tests_background_transactions {
         eprintln!("[TRC20] tx built via build_token_transfer");
 
         if let TransactionRequest::Tron((ref t, _)) = tx_request {
-            eprintln!("[TRC20] fee_limit before estimate: {}", t.fee_limit);
+            eprintln!("[TRC20] fee_limit before estimate: {}", t.fee_limit());
         }
+
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         let providers = bg.get_providers();
         let provider = providers.first().unwrap();
@@ -1363,13 +1359,13 @@ mod tests_background_transactions {
             _ => panic!("expected Tron tx"),
         };
 
-        eprintln!("[TRC20] fee_limit after update: {}", tron_tx.fee_limit);
-        assert!(tron_tx.fee_limit > 0, "fee_limit must be > 0");
+        eprintln!("[TRC20] fee_limit after update: {}", tron_tx.fee_limit());
+        assert!(tron_tx.fee_limit() > 0, "fee_limit must be > 0");
 
         provider.tron_fill_block_ref(&mut tron_tx).await.unwrap();
         eprintln!(
             "[TRC20] block ref filled, expiration: {}",
-            tron_tx.expiration
+            tron_tx.expiration()
         );
 
         let metadata = proto::tx::TransactionMetadata {
@@ -1454,18 +1450,10 @@ mod tests_background_transactions {
             .try_into()
             .expect("balance must fit in i64");
 
-        let mut tron_tx = proto::tron_tx::TronTransactionRequest {
-            owner_address: sender.addr.clone(),
-            ref_block_bytes: vec![],
-            ref_block_hash: vec![],
-            expiration: 0,
-            timestamp: 0,
-            fee_limit: 0,
-            contract: proto::tron_tx::TronContractCall::Transfer {
-                to_address: recipient.clone(),
-                amount: amount_sun,
-            },
-        };
+        let mut tron_tx = proto::tron_tx::TronTransaction::builder()
+            .transfer(&sender.addr, recipient, amount_sun)
+            .build()
+            .unwrap();
 
         let metadata = proto::tx::TransactionMetadata {
             chain_hash: net_config.hash(),
@@ -1487,7 +1475,7 @@ mod tests_background_transactions {
         super::update_tx_from_params(&mut tx_request, params, sender_balance).unwrap();
 
         if let TransactionRequest::Tron((ref updated, _)) = tx_request {
-            if let proto::tron_tx::TronContractCall::Transfer { amount, .. } = updated.contract {
+            if let Some(amount) = updated.transfer_amount() {
                 assert_eq!(
                     amount,
                     amount_sun - fee,

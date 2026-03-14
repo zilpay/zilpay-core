@@ -12,7 +12,7 @@ use prost::Message;
 use proto::address::Address;
 use proto::tron_generated::protocol;
 use proto::tron_generated::protocol::wallet_client::WalletClient;
-use proto::tron_tx::{TronContractCall, TronTransactionRequest};
+use proto::tron_tx::TronTransaction;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use serde_json::json;
 use std::sync::Arc;
@@ -98,7 +98,6 @@ impl NetworkProvider {
             .connect_lazy();
         Ok(Arc::new(WalletClient::new(ch)))
     }
-
 }
 
 #[async_trait]
@@ -118,7 +117,7 @@ pub trait TronOperations {
         &self,
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()>;
-    async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()>;
+    async fn tron_fill_block_ref(&self, tx: &mut TronTransaction) -> Result<()>;
 }
 
 #[async_trait]
@@ -203,66 +202,72 @@ impl TronOperations for NetworkProvider {
                 .unwrap_or(TRON_DEFAULT_ENERGY_FEE);
 
             let fee_estimate = match tx {
-                TransactionRequest::Tron((tron_tx, _)) => match &tron_tx.contract {
-                    TronContractCall::Transfer { .. } => {
-                        TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE
-                    }
-                    TronContractCall::TriggerSmartContract {
-                        contract_address,
-                        call_value,
-                        data,
-                        ..
-                    } => {
-                        let contract_bytes = contract_address.to_tron_bytes();
+                TransactionRequest::Tron((tron_tx, _)) => {
+                    let contract_type = tron_tx.contract_type().unwrap_or("");
+                    match contract_type {
+                        "TransferContract" => TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE,
+                        "TriggerSmartContract" => {
+                            let contract_address = tron_tx.to_address()?;
+                            let contract_bytes = contract_address.to_tron_bytes();
 
-                        let trigger = protocol::TriggerSmartContract {
-                            owner_address: sender.to_tron_bytes(),
-                            contract_address: contract_bytes.clone(),
-                            call_value: *call_value,
-                            data: data.clone(),
-                            ..Default::default()
-                        };
+                            let trigger = protocol::TriggerSmartContract {
+                                owner_address: sender.to_tron_bytes(),
+                                contract_address: contract_bytes.clone(),
+                                call_value: 0,
+                                data: tron_tx
+                                    .raw()
+                                    .contract
+                                    .first()
+                                    .and_then(|c| c.parameter.as_ref())
+                                    .map(|p| {
+                                        protocol::TriggerSmartContract::decode(&p.value[..])
+                                            .map(|t| t.data)
+                                            .unwrap_or_default()
+                                    })
+                                    .unwrap_or_default(),
+                                ..Default::default()
+                            };
 
-                        let estimate = c
-                            .estimate_energy(trigger.clone())
-                            .await
-                            .map_err(grpc_err)?
-                            .into_inner();
-
-                        let energy_required = if estimate.energy_required > 0 {
-                            estimate.energy_required as u64
-                        } else {
-                            let simulated = c
-                                .trigger_constant_contract(trigger)
+                            let estimate = c
+                                .estimate_energy(trigger.clone())
                                 .await
                                 .map_err(grpc_err)?
-                                .into_inner()
-                                .energy_used as u64;
-                            if simulated == 0 {
-                                return Err(NetworkErrors::RPCError(
-                                    "Failed to estimate energy: all methods returned 0".into(),
-                                ));
-                            }
-                            simulated
-                        };
+                                .into_inner();
 
-                        let energy_factor = c
-                            .get_contract_info(protocol::BytesMessage {
-                                value: contract_bytes,
-                            })
-                            .await
-                            .ok()
-                            .and_then(|r| r.into_inner().contract_state)
-                            .map(|s| s.energy_factor.max(0) as u64)
-                            .unwrap_or(0);
+                            let energy_required = if estimate.energy_required > 0 {
+                                estimate.energy_required as u64
+                            } else {
+                                let simulated =
+                                    c.trigger_constant_contract(trigger)
+                                        .await
+                                        .map_err(grpc_err)?
+                                        .into_inner()
+                                        .energy_used as u64;
+                                if simulated == 0 {
+                                    return Err(NetworkErrors::RPCError(
+                                        "Failed to estimate energy: all methods returned 0".into(),
+                                    ));
+                                }
+                                simulated
+                            };
 
-                        let adjusted_energy =
-                            energy_required * (10000 + energy_factor) / 10000;
+                            let energy_factor = c
+                                .get_contract_info(protocol::BytesMessage {
+                                    value: contract_bytes,
+                                })
+                                .await
+                                .ok()
+                                .and_then(|r| r.into_inner().contract_state)
+                                .map(|s| s.energy_factor.max(0) as u64)
+                                .unwrap_or(0);
 
-                        adjusted_energy * energy_fee
+                            let adjusted_energy = energy_required * (10000 + energy_factor) / 10000;
+
+                            adjusted_energy * energy_fee
+                        }
+                        _ => 0u64,
                     }
-                    _ => 0u64,
-                },
+                }
                 _ => 0u64,
             };
 
@@ -420,7 +425,7 @@ impl TronOperations for NetworkProvider {
         })
     }
 
-    async fn tron_fill_block_ref(&self, tx: &mut TronTransactionRequest) -> Result<()> {
+    async fn tron_fill_block_ref(&self, tx: &mut TronTransaction) -> Result<()> {
         tron_retry!(self, "fill_block_ref", |client| {
             let mut c = WalletClient::clone(&Arc::clone(&client));
             let block = c
@@ -433,8 +438,8 @@ impl TronOperations for NetworkProvider {
                 return Err(NetworkErrors::ResponseParseError);
             }
 
-            tx.ref_block_bytes = block.blockid[6..8].to_vec();
-            tx.ref_block_hash = block.blockid[8..16].to_vec();
+            let ref_block_bytes = block.blockid[6..8].to_vec();
+            let ref_block_hash = block.blockid[8..16].to_vec();
 
             let timestamp = block
                 .block_header
@@ -442,8 +447,9 @@ impl TronOperations for NetworkProvider {
                 .map(|r| r.timestamp)
                 .ok_or(NetworkErrors::ResponseParseError)?;
 
-            tx.timestamp = timestamp;
-            tx.expiration = timestamp + 300_000;
+            tx.set_block_ref(ref_block_bytes, ref_block_hash);
+            tx.set_timestamp(timestamp);
+            tx.set_expiration(timestamp + 300_000);
 
             Ok(())
         })
@@ -591,18 +597,10 @@ mod tests {
         let sender = Address::from_tron_address(test_data::tron_addresses::ADDR_0).unwrap();
         let to = Address::from_tron_address(test_data::tron_addresses::ADDR_1).unwrap();
 
-        let tron_tx = proto::tron_tx::TronTransactionRequest {
-            owner_address: sender.clone(),
-            ref_block_bytes: vec![],
-            ref_block_hash: vec![],
-            expiration: 0,
-            timestamp: 0,
-            fee_limit: 0,
-            contract: TronContractCall::Transfer {
-                to_address: to,
-                amount: 1_000_000,
-            },
-        };
+        let tron_tx = TronTransaction::builder()
+            .transfer(&sender, &to, 1_000_000)
+            .build()
+            .unwrap();
         let tx = TransactionRequest::Tron((tron_tx, proto::tx::TransactionMetadata::default()));
 
         let params = provider
@@ -631,21 +629,10 @@ mod tests {
             ])
             .unwrap();
 
-        let tron_tx = proto::tron_tx::TronTransactionRequest {
-            owner_address: sender.clone(),
-            ref_block_bytes: vec![],
-            ref_block_hash: vec![],
-            expiration: 0,
-            timestamp: 0,
-            fee_limit: 0,
-            contract: TronContractCall::TriggerSmartContract {
-                contract_address: contract,
-                call_value: 0,
-                data,
-                call_token_value: 0,
-                token_id: 0,
-            },
-        };
+        let tron_tx = TronTransaction::builder()
+            .trigger_smart_contract(&sender, &contract, 0, data, 0, 0)
+            .build()
+            .unwrap();
         let tx = TransactionRequest::Tron((tron_tx, proto::tx::TransactionMetadata::default()));
 
         let params = provider

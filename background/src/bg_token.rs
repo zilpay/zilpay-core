@@ -6,7 +6,7 @@ use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::evm::generate_erc20_transfer_data;
 use proto::{
     address::Address,
-    tron_tx::{TronContractCall, TronTransactionRequest},
+    tron_tx::TronTransaction,
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
     zil_tx::ZILTransactionRequest,
 };
@@ -174,29 +174,21 @@ impl TokensManagement for Background {
                 Ok(txn)
             }
             Address::Secp256k1Tron(_) => {
-                let contract = if token.native {
-                    TronContractCall::Transfer {
-                        to_address: to,
-                        amount: amount.to::<i64>(),
-                    }
+                let tron_tx = if token.native {
+                    TronTransaction::builder()
+                        .transfer(&sender.addr, &to, amount.to::<i64>())
+                        .build()
+                        .map_err(|e| BackgroundError::TransactionErrors(
+                            errors::tx::TransactionErrors::ConvertTxError(e.to_string())
+                        ))?
                 } else {
                     let transfer_data = network::evm::generate_erc20_transfer_data(&to, amount)?;
-                    TronContractCall::TriggerSmartContract {
-                        contract_address: token.addr.clone(),
-                        call_value: 0,
-                        data: transfer_data.to_vec(),
-                        call_token_value: 0,
-                        token_id: 0,
-                    }
-                };
-                let tron_tx = TronTransactionRequest {
-                    owner_address: sender.addr.clone(),
-                    ref_block_bytes: Vec::new(),
-                    ref_block_hash: Vec::new(),
-                    expiration: 0,
-                    timestamp: 0,
-                    fee_limit: 0,
-                    contract,
+                    TronTransaction::builder()
+                        .trigger_smart_contract(&sender.addr, &token.addr, 0, transfer_data.to_vec(), 0, 0)
+                        .build()
+                        .map_err(|e| BackgroundError::TransactionErrors(
+                            errors::tx::TransactionErrors::ConvertTxError(e.to_string())
+                        ))?
                 };
                 let txn = TransactionRequest::Tron((tron_tx, metadata));
 

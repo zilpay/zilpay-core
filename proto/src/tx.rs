@@ -527,7 +527,9 @@ impl TransactionRequest {
                     Address::Secp256k1Bitcoin(Vec::new())
                 }
             }
-            TransactionRequest::Tron((tx, _)) => tx.to_address().unwrap_or(Address::Secp256k1Tron(Address::ZERO)),
+            TransactionRequest::Tron((tx, _)) => tx
+                .to_address()
+                .unwrap_or(Address::Secp256k1Tron(Address::ZERO)),
         }
     }
 
