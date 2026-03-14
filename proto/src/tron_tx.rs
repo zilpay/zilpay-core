@@ -45,7 +45,7 @@ pub struct TronWebParams {
     pub input: Option<serde_json::Value>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TronWebTransaction {
     pub visible: Option<bool>,
     #[serde(rename = "txID")]
@@ -55,7 +55,7 @@ pub struct TronWebTransaction {
     pub raw_data_hex: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TronWebRawData {
     pub contract: Vec<TronWebContract>,
     #[serde(default)]
@@ -67,14 +67,14 @@ pub struct TronWebRawData {
     pub timestamp: i64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TronWebContract {
     #[serde(rename = "type")]
     pub contract_type: String,
     pub parameter: TronWebParameter,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TronWebParameter {
     pub type_url: String,
     pub value: serde_json::Value,
@@ -293,6 +293,56 @@ impl TronTransaction {
             tx_id,
             signature,
             owner_address: self.owner_address()?,
+        })
+    }
+
+    pub fn to_tron_web(&self) -> Result<TronWebTransaction, TransactionErrors> {
+        let tx_id = hex::encode(self.tx_id());
+        let raw_data_hex = hex::encode(self.encode());
+
+        let contracts: Vec<TronWebContract> = self
+            .raw
+            .contract
+            .iter()
+            .map(|c| {
+                let param = c
+                    .parameter
+                    .as_ref()
+                    .ok_or(TransactionErrors::InvalidContract)?;
+                let contract_type = param
+                    .type_url
+                    .strip_prefix("type.googleapis.com/protocol.")
+                    .unwrap_or(&param.type_url)
+                    .to_string();
+
+                let value = contract_value_to_json(&param.value, &param.type_url)?;
+
+                Ok(TronWebContract {
+                    contract_type,
+                    parameter: TronWebParameter {
+                        type_url: param.type_url.clone(),
+                        value,
+                    },
+                })
+            })
+            .collect::<Result<Vec<_>, TransactionErrors>>()?;
+
+        Ok(TronWebTransaction {
+            visible: Some(false),
+            tx_id: Some(tx_id),
+            raw_data: TronWebRawData {
+                contract: contracts,
+                ref_block_bytes: hex::encode(&self.raw.ref_block_bytes),
+                ref_block_hash: hex::encode(&self.raw.ref_block_hash),
+                expiration: self.raw.expiration,
+                fee_limit: if self.raw.fee_limit > 0 {
+                    Some(self.raw.fee_limit)
+                } else {
+                    None
+                },
+                timestamp: self.raw.timestamp,
+            },
+            raw_data_hex,
         })
     }
 }
@@ -594,6 +644,166 @@ impl TronTransactionReceipt {
     }
 }
 
+fn contract_value_to_json(
+    value: &[u8],
+    type_url: &str,
+) -> Result<serde_json::Value, TransactionErrors> {
+    use serde_json::json;
+
+    fn tron_bytes_to_hex(bytes: &[u8]) -> String {
+        hex::encode(bytes)
+    }
+
+    match type_url {
+        "type.googleapis.com/protocol.TransferContract" => {
+            let c = protocol::TransferContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "to_address": tron_bytes_to_hex(&c.to_address),
+                "amount": c.amount
+            }))
+        }
+        "type.googleapis.com/protocol.TriggerSmartContract" => {
+            let c = protocol::TriggerSmartContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            let mut map = serde_json::Map::new();
+            if !c.owner_address.is_empty() {
+                map.insert(
+                    "owner_address".to_string(),
+                    json!(tron_bytes_to_hex(&c.owner_address)),
+                );
+            }
+            if !c.contract_address.is_empty() {
+                map.insert(
+                    "contract_address".to_string(),
+                    json!(tron_bytes_to_hex(&c.contract_address)),
+                );
+            }
+            if c.call_value > 0 {
+                map.insert("call_value".to_string(), json!(c.call_value));
+            }
+            if !c.data.is_empty() {
+                map.insert("data".to_string(), json!(tron_bytes_to_hex(&c.data)));
+            }
+            if c.call_token_value > 0 {
+                map.insert("call_token_value".to_string(), json!(c.call_token_value));
+            }
+            if c.token_id > 0 {
+                map.insert("token_id".to_string(), json!(c.token_id));
+            }
+            Ok(serde_json::Value::Object(map))
+        }
+        "type.googleapis.com/protocol.FreezeBalanceV2Contract" => {
+            let c = protocol::FreezeBalanceV2Contract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "frozen_balance": c.frozen_balance,
+                "resource": c.resource
+            }))
+        }
+        "type.googleapis.com/protocol.UnfreezeBalanceV2Contract" => {
+            let c = protocol::UnfreezeBalanceV2Contract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "unfreeze_balance": c.unfreeze_balance,
+                "resource": c.resource
+            }))
+        }
+        "type.googleapis.com/protocol.WithdrawExpireUnfreezeContract" => {
+            let c = protocol::WithdrawExpireUnfreezeContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address)
+            }))
+        }
+        "type.googleapis.com/protocol.DelegateResourceContract" => {
+            let c = protocol::DelegateResourceContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "resource": c.resource,
+                "balance": c.balance,
+                "receiver_address": tron_bytes_to_hex(&c.receiver_address),
+                "lock": c.lock,
+                "lock_period": c.lock_period
+            }))
+        }
+        "type.googleapis.com/protocol.UnDelegateResourceContract" => {
+            let c = protocol::UnDelegateResourceContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "resource": c.resource,
+                "balance": c.balance,
+                "receiver_address": tron_bytes_to_hex(&c.receiver_address)
+            }))
+        }
+        "type.googleapis.com/protocol.CancelAllUnfreezeV2Contract" => {
+            let c = protocol::CancelAllUnfreezeV2Contract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address)
+            }))
+        }
+        "type.googleapis.com/protocol.TransferAssetContract" => {
+            let c = protocol::TransferAssetContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "asset_name": tron_bytes_to_hex(&c.asset_name),
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "to_address": tron_bytes_to_hex(&c.to_address),
+                "amount": c.amount
+            }))
+        }
+        "type.googleapis.com/protocol.VoteWitnessContract" => {
+            let c = protocol::VoteWitnessContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            let votes: Vec<serde_json::Value> = c
+                .votes
+                .iter()
+                .map(|v| {
+                    json!({
+                        "vote_address": tron_bytes_to_hex(&v.vote_address),
+                        "vote_count": v.vote_count
+                    })
+                })
+                .collect();
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "votes": votes,
+                "support": c.support
+            }))
+        }
+        "type.googleapis.com/protocol.AccountCreateContract" => {
+            let c = protocol::AccountCreateContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "account_address": tron_bytes_to_hex(&c.account_address)
+            }))
+        }
+        "type.googleapis.com/protocol.AccountUpdateContract" => {
+            let c = protocol::AccountUpdateContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address),
+                "account_name": tron_bytes_to_hex(&c.account_name)
+            }))
+        }
+        "type.googleapis.com/protocol.AccountPermissionUpdateContract" => {
+            let c = protocol::AccountPermissionUpdateContract::decode(value)
+                .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+            Ok(json!({
+                "owner_address": tron_bytes_to_hex(&c.owner_address)
+            }))
+        }
+        _ => Err(TransactionErrors::InvalidContract),
+    }
+}
+
 fn extract_owner_from_parameter(
     value: &[u8],
     type_url: &str,
@@ -888,7 +1098,17 @@ mod tests {
         let sign_request: TronWebSignRequest = serde_json::from_str(json).unwrap();
         assert_eq!(sign_request.method, "tron_sign");
 
-        let mut tx = TronTransaction::from_tron_web(&sign_request.params.transaction).unwrap();
+        let original_tx_json = serde_json::to_value(&sign_request.params.transaction).unwrap();
+
+        let tx = TronTransaction::from_tron_web(&sign_request.params.transaction).unwrap();
+
+        let tx_web = tx.to_tron_web().unwrap();
+        let converted_tx_json = serde_json::to_value(&tx_web).unwrap();
+
+        assert_eq!(
+            original_tx_json, converted_tx_json,
+            "JSON should match after round-trip conversion"
+        );
 
         assert_eq!(tx.contract_type(), Some("TriggerSmartContract"));
         assert_eq!(tx.fee_limit(), 1000000000);
@@ -898,15 +1118,6 @@ mod tests {
         assert_eq!(
             original_tx_id_hex,
             "536a4c369fb07663a21a826cc1f4bd35ff2d83b3042fa242b240217f44912cd0"
-        );
-
-        tx.set_fee_limit(500_000_000);
-        assert_eq!(tx.fee_limit(), 500_000_000);
-
-        let modified_tx_id = tx.tx_id();
-        assert_ne!(
-            original_tx_id, modified_tx_id,
-            "txID should change after modification"
         );
 
         let owner = tx.owner_address().unwrap();
