@@ -263,7 +263,8 @@ pub fn update_tx_from_params(
                 .current
                 .try_into()
                 .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
-            tron_tx.set_fee_limit(fee);
+            let existing_fee = tron_tx.fee_limit();
+            tron_tx.set_fee_limit(if existing_fee > 0 { existing_fee.max(fee) } else { fee });
 
             if let Some(amount) = tron_tx.transfer_amount() {
                 if amount > 0 && U256::from(amount as u64) == balance {
@@ -1467,16 +1468,15 @@ mod tests_background_transactions {
             .unwrap();
 
         let fee: i64 = params.current.try_into().expect("fee must fit in i64");
-        assert!(fee > 0, "bandwidth fee must be > 0");
+        assert_eq!(fee, 0, "TransferContract fee_limit must be 0");
 
         super::update_tx_from_params(&mut tx_request, params, sender_balance).unwrap();
 
         if let TransactionRequest::Tron((ref updated, _)) = tx_request {
             if let Some(amount) = updated.transfer_amount() {
                 assert_eq!(
-                    amount,
-                    amount_sun - fee,
-                    "amount must be reduced by the bandwidth fee"
+                    amount, amount_sun,
+                    "amount must stay unchanged for zero fee_limit"
                 );
             } else {
                 panic!("expected Transfer contract");

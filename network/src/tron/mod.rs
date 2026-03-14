@@ -24,9 +24,6 @@ const TRON_ATTEMPT_TIMEOUT_SECS: u64 = 25;
 const TRON_TOTAL_TIMEOUT_SECS: u64 = 60;
 const TRON_MAX_RETRIES: usize = 3;
 const TRON_BLOCK_TIME_SECS: u64 = 3;
-const TRON_DEFAULT_ENERGY_FEE: u64 = 420;
-const TRON_BANDWIDTH_PER_TRANSFER: u64 = 280;
-const TRON_BANDWIDTH_PRICE: u64 = 1000;
 const BLOCK_SAMPLE_SIZE: u64 = 10;
 
 type TronClient = Arc<WalletClient<Channel>>;
@@ -188,31 +185,29 @@ impl TronOperations for NetworkProvider {
             let chain_params = c
                 .get_chain_parameters(protocol::EmptyMessage {})
                 .await
-                .ok()
-                .map(|r| r.into_inner());
+                .map_err(grpc_err)?
+                .into_inner();
 
             let energy_fee = chain_params
-                .as_ref()
-                .and_then(|cp| {
-                    cp.chain_parameter
-                        .iter()
-                        .find(|p| p.key == "getEnergyFee")
-                        .map(|p| p.value as u64)
-                })
-                .unwrap_or(TRON_DEFAULT_ENERGY_FEE);
+                .chain_parameter
+                .iter()
+                .find(|p| p.key == "getEnergyFee")
+                .map(|p| p.value as u64)
+                .ok_or_else(|| {
+                    NetworkErrors::RPCError("getEnergyFee not found in chain parameters".into())
+                })?;
 
             let fee_estimate = match tx {
                 TransactionRequest::Tron((tron_tx, _)) => {
                     let contract_type = tron_tx.contract_type().unwrap_or("");
                     match contract_type {
-                        "TransferContract" => TRON_BANDWIDTH_PER_TRANSFER * TRON_BANDWIDTH_PRICE,
+                        "TransferContract" => 0u64,
                         "TriggerSmartContract" => {
                             let contract_address = tron_tx.to_address()?;
-                            let contract_bytes = contract_address.to_tron_bytes();
 
                             let trigger = protocol::TriggerSmartContract {
                                 owner_address: sender.to_tron_bytes(),
-                                contract_address: contract_bytes.clone(),
+                                contract_address: contract_address.to_tron_bytes(),
                                 call_value: 0,
                                 data: tron_tx
                                     .raw()
@@ -228,42 +223,28 @@ impl TronOperations for NetworkProvider {
                                 ..Default::default()
                             };
 
-                            let estimate = c
-                                .estimate_energy(trigger.clone())
+                            let sim = c
+                                .trigger_constant_contract(trigger)
                                 .await
                                 .map_err(grpc_err)?
                                 .into_inner();
 
-                            let energy_required = if estimate.energy_required > 0 {
-                                estimate.energy_required as u64
-                            } else {
-                                let simulated =
-                                    c.trigger_constant_contract(trigger)
-                                        .await
-                                        .map_err(grpc_err)?
-                                        .into_inner()
-                                        .energy_used as u64;
-                                if simulated == 0 {
-                                    return Err(NetworkErrors::RPCError(
-                                        "Failed to estimate energy: all methods returned 0".into(),
-                                    ));
-                                }
-                                simulated
-                            };
+                            let sim_reverted =
+                                sim.result.as_ref().map(|r| !r.result).unwrap_or(true);
 
-                            let energy_factor = c
-                                .get_contract_info(protocol::BytesMessage {
-                                    value: contract_bytes,
-                                })
-                                .await
-                                .ok()
-                                .and_then(|r| r.into_inner().contract_state)
-                                .map(|s| s.energy_factor.max(0) as u64)
-                                .unwrap_or(0);
+                            if sim_reverted || sim.energy_used == 0 {
+                                let msg = sim
+                                    .result
+                                    .as_ref()
+                                    .map(|r| String::from_utf8_lossy(&r.message).to_string())
+                                    .unwrap_or_default();
+                                return Err(NetworkErrors::RPCError(format!(
+                                    "Simulation reverted: {}",
+                                    msg
+                                )));
+                            }
 
-                            let adjusted_energy = energy_required * (10000 + energy_factor) / 10000;
-
-                            adjusted_energy * energy_fee
+                            sim.energy_used as u64 * energy_fee
                         }
                         _ => 0u64,
                     }
@@ -277,13 +258,13 @@ impl TronOperations for NetworkProvider {
                 gas_price: U256::from(energy_fee),
                 max_priority_fee: U256::ZERO,
                 fee_history: GasFeeHistory::default(),
-                tx_estimate_gas: U256::from(fee_estimate),
+                tx_estimate_gas: base,
                 blob_base_fee: U256::ZERO,
                 nonce: 0,
                 slow: base,
-                market: base * U256::from(105) / U256::from(100),
-                fast: base * U256::from(110) / U256::from(100),
-                current: base * U256::from(105) / U256::from(100),
+                market: base,
+                fast: base,
+                current: base,
             })
         })
     }
@@ -609,8 +590,8 @@ mod tests {
             .unwrap();
 
         assert!(params.gas_price > U256::ZERO);
-        assert!(params.tx_estimate_gas > U256::ZERO);
-        assert!(params.current > U256::ZERO);
+        assert_eq!(params.tx_estimate_gas, U256::ZERO);
+        assert_eq!(params.current, U256::ZERO);
     }
 
     #[tokio::test]
@@ -642,6 +623,6 @@ mod tests {
 
         assert!(params.gas_price > U256::ZERO);
         assert!(params.tx_estimate_gas > U256::ZERO);
-        assert!(params.fast > params.slow);
+        assert_eq!(params.slow, params.fast);
     }
 }
