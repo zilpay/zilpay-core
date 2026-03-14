@@ -375,7 +375,7 @@ mod tests {
     fn test_commodity() {
         let value = U256::from(500000);
         let (native, _) = format_u256(value, 2, "en", "GOLD", "USD", 0.0000001, false, 0.0);
-        assert_eq!(native, "5,000 Au");
+        assert_eq!(native, "5,000 GOLD");
     }
 
     #[test]
