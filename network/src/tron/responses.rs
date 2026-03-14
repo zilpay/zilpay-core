@@ -65,8 +65,8 @@ pub struct BroadcastResponse {
     pub result: Option<bool>,
     #[serde(default)]
     pub message: String,
-    #[serde(default)]
-    pub Error: Option<String>,
+    #[serde(default, alias = "Error")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

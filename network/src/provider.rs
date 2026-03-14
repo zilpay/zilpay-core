@@ -203,10 +203,7 @@ mod tests_network {
     use crate::evm::generate_erc20_transfer_data;
 
     use super::*;
-    use alloy::{
-        primitives::{map::HashMap, U256},
-        rpc::types::TransactionInput,
-    };
+    use alloy::{primitives::U256, rpc::types::TransactionInput};
     use config::address::ADDR_LEN;
     use history::status::TransactionStatus;
     use proto::{tx::ETHTransactionRequest, zil_tx::ZILTransactionRequest};

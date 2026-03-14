@@ -366,14 +366,20 @@ impl TronOperations for NetworkProvider {
                 let ret = client.broadcast_transaction(&tx_json).await?;
 
                 let success = ret.result.unwrap_or(false);
-                let error_msg = ret
-                    .Error
-                    .clone()
-                    .or_else(|| if ret.message.is_empty() { None } else { Some(ret.message.clone()) });
+                let error_msg = ret.error.clone().or_else(|| {
+                    if ret.message.is_empty() {
+                        None
+                    } else {
+                        Some(ret.message.clone())
+                    }
+                });
 
                 if !success {
                     let msg = error_msg.unwrap_or_else(|| "Unknown error".to_string());
-                    return Err(NetworkErrors::RPCError(format!("Broadcast failed: {}", msg)));
+                    return Err(NetworkErrors::RPCError(format!(
+                        "Broadcast failed: {}",
+                        msg
+                    )));
                 }
 
                 metadata.hash = Some(tx_id_hex);
@@ -582,7 +588,10 @@ mod tests {
 
         println!("=== Tron TRC20 Gas Estimation ===");
         println!("gas_price (energy_fee): {}", params.gas_price);
-        println!("tx_estimate_gas (energy_used * energy_fee): {}", params.tx_estimate_gas);
+        println!(
+            "tx_estimate_gas (energy_used * energy_fee): {}",
+            params.tx_estimate_gas
+        );
         println!("slow: {}", params.slow);
         println!("market: {}", params.market);
         println!("fast: {}", params.fast);
