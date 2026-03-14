@@ -178,6 +178,18 @@ impl TronHttpClient {
         });
         self.post("/wallet/getaccountnet", &body).await
     }
+
+    async fn get_account_resource(
+        &self,
+        address: &Address,
+    ) -> std::result::Result<AccountResourceResponse, NetworkErrors> {
+        let tron_addr = address.auto_format();
+        let body = json!({
+            "address": &tron_addr,
+            "visible": true
+        });
+        self.post("/wallet/getaccountresource", &body).await
+    }
 }
 
 impl NetworkProvider {
@@ -351,7 +363,21 @@ impl TronOperations for NetworkProvider {
                                 )));
                             }
 
-                            sim.energy_used as u64 * energy_fee
+                            let account_resource = client.get_account_resource(sender).await?;
+                            let free_energy = (account_resource.energy_limit
+                                - account_resource.energy_used)
+                                .max(0);
+                            let energy_needed = sim.energy_used;
+                            let energy_to_pay = (energy_needed - free_energy).max(0);
+
+                            dbg!(
+                                energy_needed,
+                                free_energy,
+                                energy_to_pay,
+                                energy_fee
+                            );
+
+                            energy_to_pay as u64 * energy_fee
                         }
                         _ => 0u64,
                     }
