@@ -171,7 +171,6 @@ impl TronHttpClient {
         address: &Address,
     ) -> std::result::Result<AccountNetResponse, NetworkErrors> {
         let tron_addr = address.auto_format();
-        dbg!(&tron_addr);
         let body = json!({
             "address": &tron_addr,
             "visible": true
@@ -305,19 +304,10 @@ impl TronOperations for NetworkProvider {
                             let free_net_available =
                                 account_net.free_net_limit - account_net.free_net_used;
 
-                            dbg!(
-                                encoded_size,
-                                tx_size,
-                                free_net_available,
-                                account_net.free_net_limit,
-                                account_net.free_net_used
-                            );
-
                             if free_net_available >= tx_size {
                                 0u64
                             } else {
                                 let bandwidth_needed = tx_size - free_net_available.max(0);
-                                dbg!(bandwidth_needed, transaction_fee);
                                 bandwidth_needed as u64 * transaction_fee
                             }
                         }
@@ -369,13 +359,6 @@ impl TronOperations for NetworkProvider {
                                 .max(0);
                             let energy_needed = sim.energy_used;
                             let energy_to_pay = (energy_needed - free_energy).max(0);
-
-                            dbg!(
-                                energy_needed,
-                                free_energy,
-                                energy_to_pay,
-                                energy_fee
-                            );
 
                             energy_to_pay as u64 * energy_fee
                         }
@@ -433,7 +416,6 @@ impl TronOperations for NetworkProvider {
                     .to_tron_web_json()
                     .map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
-                dbg!(&tx_json);
                 let ret = client.broadcast_transaction(&tx_json).await?;
 
                 let success = ret.result.unwrap_or(false);
