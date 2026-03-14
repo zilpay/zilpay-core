@@ -38,6 +38,7 @@ pub struct TransactionMetadata {
     pub signer: Option<PubKey>,
     pub token_info: Option<(U256, u8, String)>,
     pub btc_utxo_amounts: Option<Vec<u64>>,
+    pub broadcast: bool,
 }
 
 #[allow(clippy::large_enum_variant)]

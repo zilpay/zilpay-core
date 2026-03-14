@@ -82,6 +82,7 @@ impl TokensManagement for Background {
             signer: Some(sender.pub_key.clone()),
             token_info: Some((amount, token.decimals, token.symbol.clone())),
             btc_utxo_amounts: None,
+            broadcast: true,
         };
         let addr = if token.native {
             &sender.addr
@@ -119,6 +120,7 @@ impl TokensManagement for Background {
                     signer: Some(sender.pub_key.clone()),
                     token_info: Some((amount, token.decimals, token.symbol.clone())),
                     btc_utxo_amounts: Some(utxo_amounts),
+                    broadcast: true,
                 };
 
                 let txn = TransactionRequest::Bitcoin((tx, metadata));
@@ -178,17 +180,28 @@ impl TokensManagement for Background {
                     TronTransaction::builder()
                         .transfer(&sender.addr, &to, amount.to::<i64>())
                         .build()
-                        .map_err(|e| BackgroundError::TransactionErrors(
-                            errors::tx::TransactionErrors::ConvertTxError(e.to_string())
-                        ))?
+                        .map_err(|e| {
+                            BackgroundError::TransactionErrors(
+                                errors::tx::TransactionErrors::ConvertTxError(e.to_string()),
+                            )
+                        })?
                 } else {
                     let transfer_data = network::evm::generate_erc20_transfer_data(&to, amount)?;
                     TronTransaction::builder()
-                        .trigger_smart_contract(&sender.addr, &token.addr, 0, transfer_data.to_vec(), 0, 0)
+                        .trigger_smart_contract(
+                            &sender.addr,
+                            &token.addr,
+                            0,
+                            transfer_data.to_vec(),
+                            0,
+                            0,
+                        )
                         .build()
-                        .map_err(|e| BackgroundError::TransactionErrors(
-                            errors::tx::TransactionErrors::ConvertTxError(e.to_string())
-                        ))?
+                        .map_err(|e| {
+                            BackgroundError::TransactionErrors(
+                                errors::tx::TransactionErrors::ConvertTxError(e.to_string()),
+                            )
+                        })?
                 };
                 let txn = TransactionRequest::Tron((tron_tx, metadata));
 
