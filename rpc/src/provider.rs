@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use crypto::slip44::TRON;
 use errors::rpc::RpcError;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -39,13 +40,22 @@ where
         let mut last_error = None;
         let mut errors = String::with_capacity(200);
 
+        let is_tron = self.network.get_slip44() == TRON;
+
         for url in self.network.nodes() {
             if !url.starts_with("http://") && !url.starts_with("https://") {
                 continue;
             }
 
+            let rpc_url = if is_tron {
+                let base = url.trim_end_matches('/');
+                &format!("{}/jsonrpc", base)
+            } else {
+                &url
+            };
+
             let res = client
-                .post(url)
+                .post(rpc_url)
                 .timeout(Duration::from_secs(TIME_OUT_SEC))
                 .json(&payloads)
                 .send()

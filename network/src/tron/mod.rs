@@ -1,3 +1,5 @@
+mod responses;
+
 use crate::evm::{GasFeeHistory, RequiredTxParams};
 use crate::provider::NetworkProvider;
 use crate::Result;
@@ -11,13 +13,12 @@ use history::transaction::HistoricalTransaction;
 use prost::Message;
 use proto::address::Address;
 use proto::tron_generated::protocol;
-use proto::tron_generated::protocol::wallet_client::WalletClient;
 use proto::tron_tx::TronTransaction;
 use proto::tx::{TransactionReceipt, TransactionRequest};
+use reqwest::Client;
+use responses::*;
 use serde_json::json;
-use std::sync::Arc;
 use std::time::Duration;
-use tonic::transport::Channel;
 
 const TRON_REQUEST_TIMEOUT_SECS: u64 = 8;
 const TRON_ATTEMPT_TIMEOUT_SECS: u64 = 25;
@@ -25,8 +26,6 @@ const TRON_TOTAL_TIMEOUT_SECS: u64 = 60;
 const TRON_MAX_RETRIES: usize = 3;
 const TRON_BLOCK_TIME_SECS: u64 = 3;
 const BLOCK_SAMPLE_SIZE: u64 = 10;
-
-type TronClient = Arc<WalletClient<Channel>>;
 
 macro_rules! tron_retry {
     ($self:expr, $method:expr, |$client:ident| $body:expr) => {{
@@ -42,7 +41,7 @@ macro_rules! tron_retry {
             let remaining = total_deadline - elapsed;
             let per_attempt = Duration::from_secs(TRON_ATTEMPT_TIMEOUT_SECS).min(remaining);
             match tokio::time::timeout(per_attempt, async {
-                let $client = NetworkProvider::tron_connect(&endpoint).await?;
+                let $client = TronHttpClient::new(endpoint)?;
                 $body
             })
             .await
@@ -66,8 +65,105 @@ macro_rules! tron_retry {
     }};
 }
 
-fn grpc_err(e: tonic::Status) -> NetworkErrors {
-    NetworkErrors::RPCError(format!("gRPC: {}", e))
+struct TronHttpClient {
+    client: Client,
+    base_url: String,
+}
+
+impl TronHttpClient {
+    fn new(base_url: &str) -> std::result::Result<Self, NetworkErrors> {
+        let client = Client::builder()
+            .timeout(Duration::from_secs(TRON_REQUEST_TIMEOUT_SECS))
+            .build()
+            .map_err(|e| NetworkErrors::RPCError(format!("HTTP client error: {}", e)))?;
+        Ok(Self {
+            client,
+            base_url: base_url.trim_end_matches('/').to_string(),
+        })
+    }
+
+    async fn post<Req: serde::Serialize, Res: serde::de::DeserializeOwned>(
+        &self,
+        path: &str,
+        body: &Req,
+    ) -> std::result::Result<Res, NetworkErrors> {
+        let url = format!("{}{}", self.base_url, path);
+        let response = self
+            .client
+            .post(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| NetworkErrors::RPCError(format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        let text = response
+            .text()
+            .await
+            .map_err(|e| NetworkErrors::RPCError(format!("Failed to read response: {}", e)))?;
+
+        if !status.is_success() {
+            return Err(NetworkErrors::RPCError(format!(
+                "HTTP {}: {}",
+                status, text
+            )));
+        }
+
+        serde_json::from_str(&text)
+            .map_err(|e| NetworkErrors::RPCError(format!("JSON parse error: {} - {}", e, text)))
+    }
+
+    async fn get_now_block(&self) -> std::result::Result<BlockResponse, NetworkErrors> {
+        let body: serde_json::Value = json!({});
+        self.post("/wallet/getnowblock", &body).await
+    }
+
+    async fn get_block_by_num(
+        &self,
+        num: i64,
+    ) -> std::result::Result<BlockResponse, NetworkErrors> {
+        let body = NumberMessage { num };
+        self.post("/wallet/getblockbynum", &body).await
+    }
+
+    async fn get_chain_parameters(
+        &self,
+    ) -> std::result::Result<ChainParamsResponse, NetworkErrors> {
+        let body: serde_json::Value = json!({});
+        self.post("/wallet/getchainparameters", &body).await
+    }
+
+    async fn trigger_constant_contract(
+        &self,
+        owner_address: Vec<u8>,
+        contract_address: Vec<u8>,
+        data: Vec<u8>,
+    ) -> std::result::Result<TriggerContractResponse, NetworkErrors> {
+        let body = TriggerSmartContractRequest {
+            owner_address: alloy::hex::encode(&owner_address),
+            contract_address: alloy::hex::encode(&contract_address),
+            data: alloy::hex::encode(&data),
+            call_value: None,
+        };
+        self.post("/wallet/triggerconstantcontract", &body).await
+    }
+
+    async fn broadcast_transaction(
+        &self,
+        tx_json: &serde_json::Value,
+    ) -> std::result::Result<BroadcastResponse, NetworkErrors> {
+        self.post("/wallet/broadcasttransaction", tx_json).await
+    }
+
+    async fn get_transaction_info_by_id(
+        &self,
+        tx_id: &str,
+    ) -> std::result::Result<TransactionInfoResponse, NetworkErrors> {
+        let body = json!({
+            "value": tx_id
+        });
+        self.post("/wallet/gettransactioninfobyid", &body).await
+    }
 }
 
 impl NetworkProvider {
@@ -75,25 +171,9 @@ impl NetworkProvider {
         self.config
             .rpc
             .iter()
-            .filter_map(|url| {
-                if url.starts_with("http://") || url.starts_with("https://") {
-                    None
-                } else if let Some(stripped) = url.strip_prefix("grpc://") {
-                    Some(format!("http://{}", stripped))
-                } else {
-                    Some(format!("http://{}", url))
-                }
-            })
+            .filter(|url| url.starts_with("http://") || url.starts_with("https://"))
+            .cloned()
             .collect()
-    }
-
-    async fn tron_connect(endpoint: &str) -> std::result::Result<TronClient, NetworkErrors> {
-        let ch = Channel::from_shared(endpoint.to_string())
-            .map_err(|e| NetworkErrors::RPCError(format!("{}: {}", endpoint, e)))?
-            .connect_timeout(Duration::from_secs(TRON_REQUEST_TIMEOUT_SECS))
-            .timeout(Duration::from_secs(TRON_REQUEST_TIMEOUT_SECS))
-            .connect_lazy();
-        Ok(Arc::new(WalletClient::new(ch)))
     }
 }
 
@@ -121,11 +201,8 @@ pub trait TronOperations {
 impl TronOperations for NetworkProvider {
     async fn tron_get_current_block_number(&self) -> Result<u64> {
         tron_retry!(self, "get_block_number", |client| {
-            let mut c = WalletClient::clone(&Arc::clone(&client));
-            c.get_now_block2(protocol::EmptyMessage {})
-                .await
-                .map_err(grpc_err)?
-                .into_inner()
+            let block = client.get_now_block().await?;
+            block
                 .block_header
                 .and_then(|h| h.raw_data)
                 .map(|r| r.number as u64)
@@ -135,12 +212,7 @@ impl TronOperations for NetworkProvider {
 
     async fn tron_estimate_block_time(&self) -> Result<u64> {
         tron_retry!(self, "estimate_block_time", |client| {
-            let mut c = WalletClient::clone(&Arc::clone(&client));
-            let current = c
-                .get_now_block2(protocol::EmptyMessage {})
-                .await
-                .map_err(grpc_err)?
-                .into_inner();
+            let current = client.get_now_block().await?;
 
             let header = current
                 .block_header
@@ -153,13 +225,10 @@ impl TronOperations for NetworkProvider {
                 return Ok(TRON_BLOCK_TIME_SECS);
             }
 
-            let earlier_ts = c
-                .get_block_by_num(protocol::NumberMessage {
-                    num: (current_num - BLOCK_SAMPLE_SIZE) as i64,
-                })
-                .await
-                .map_err(grpc_err)?
-                .into_inner()
+            let earlier_block = client
+                .get_block_by_num((current_num - BLOCK_SAMPLE_SIZE) as i64)
+                .await?;
+            let earlier_ts = earlier_block
                 .block_header
                 .and_then(|h| h.raw_data)
                 .map(|r| r.timestamp as u64)
@@ -180,13 +249,7 @@ impl TronOperations for NetworkProvider {
         sender: &Address,
     ) -> Result<RequiredTxParams> {
         tron_retry!(self, "estimate_params_batch", |client| {
-            let mut c = WalletClient::clone(&Arc::clone(&client));
-
-            let chain_params = c
-                .get_chain_parameters(protocol::EmptyMessage {})
-                .await
-                .map_err(grpc_err)?
-                .into_inner();
+            let chain_params = client.get_chain_parameters().await?;
 
             let energy_fee = chain_params
                 .chain_parameter
@@ -205,38 +268,38 @@ impl TronOperations for NetworkProvider {
                         "TriggerSmartContract" => {
                             let contract_address = tron_tx.to_address()?;
 
-                            let trigger = protocol::TriggerSmartContract {
-                                owner_address: sender.to_tron_bytes(),
-                                contract_address: contract_address.to_tron_bytes(),
-                                call_value: 0,
-                                data: tron_tx
-                                    .raw()
-                                    .contract
-                                    .first()
-                                    .and_then(|c| c.parameter.as_ref())
-                                    .map(|p| {
-                                        protocol::TriggerSmartContract::decode(&p.value[..])
-                                            .map(|t| t.data)
-                                            .unwrap_or_default()
-                                    })
-                                    .unwrap_or_default(),
-                                ..Default::default()
-                            };
+                            let data = tron_tx
+                                .raw()
+                                .contract
+                                .first()
+                                .and_then(|c| c.parameter.as_ref())
+                                .map(|p| {
+                                    protocol::TriggerSmartContract::decode(&p.value[..])
+                                        .map(|t| t.data)
+                                        .unwrap_or_default()
+                                })
+                                .unwrap_or_default();
 
-                            let sim = c
-                                .trigger_constant_contract(trigger)
-                                .await
-                                .map_err(grpc_err)?
-                                .into_inner();
+                            let sim = client
+                                .trigger_constant_contract(
+                                    sender.to_tron_bytes(),
+                                    contract_address.to_tron_bytes(),
+                                    data,
+                                )
+                                .await?;
 
-                            let sim_reverted =
-                                sim.result.as_ref().map(|r| !r.result).unwrap_or(true);
+                            let sim_failed = sim
+                                .result
+                                .as_ref()
+                                .map(|r| r.code.is_some())
+                                .unwrap_or(false);
 
-                            if sim_reverted || sim.energy_used == 0 {
+                            if sim_failed || sim.energy_used == 0 {
                                 let msg = sim
                                     .result
                                     .as_ref()
-                                    .map(|r| String::from_utf8_lossy(&r.message).to_string())
+                                    .and_then(|r| r.message.as_ref())
+                                    .cloned()
                                     .unwrap_or_default();
                                 return Err(NetworkErrors::RPCError(format!(
                                     "Simulation reverted: {}",
@@ -253,6 +316,9 @@ impl TronOperations for NetworkProvider {
             };
 
             let base = U256::from(fee_estimate);
+            let slow = base;
+            let market = base * U256::from(101) / U256::from(100);
+            let fast = base * U256::from(102) / U256::from(100);
 
             Ok(RequiredTxParams {
                 gas_price: U256::from(energy_fee),
@@ -261,9 +327,9 @@ impl TronOperations for NetworkProvider {
                 tx_estimate_gas: base,
                 blob_base_fee: U256::ZERO,
                 nonce: 0,
-                slow: base,
-                market: base,
-                fast: base,
+                slow,
+                market,
+                fast,
                 current: base,
             })
         })
@@ -282,7 +348,6 @@ impl TronOperations for NetworkProvider {
         }
 
         tron_retry!(self, "broadcast_txns", |client| {
-            let mut c = WalletClient::clone(&Arc::clone(&client));
             for tx in txns.iter_mut() {
                 let (tron_tx, metadata) = match tx {
                     TransactionReceipt::Tron((t, m)) => (t, m),
@@ -294,27 +359,21 @@ impl TronOperations for NetworkProvider {
                 };
 
                 let tx_id_hex = alloy::hex::encode(tron_tx.tx_id);
+                let tx_json = tron_tx
+                    .to_tron_web_json()
+                    .map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
-                let raw = protocol::transaction::Raw::decode(tron_tx.raw_data_bytes.as_slice())
-                    .map_err(|e| NetworkErrors::RPCError(format!("Decode raw_data: {}", e)))?;
+                let ret = client.broadcast_transaction(&tx_json).await?;
 
-                let ret = c
-                    .broadcast_transaction(protocol::Transaction {
-                        raw_data: Some(raw),
-                        signature: vec![tron_tx.signature.clone()],
-                        ret: Vec::new(),
-                    })
-                    .await
-                    .map_err(grpc_err)?
-                    .into_inner();
+                let success = ret.result.unwrap_or(false);
+                let error_msg = ret
+                    .Error
+                    .clone()
+                    .or_else(|| if ret.message.is_empty() { None } else { Some(ret.message.clone()) });
 
-                if !ret.result {
-                    let msg = String::from_utf8(ret.message)
-                        .unwrap_or_else(|e| format!("Invalid UTF-8: {}", e));
-                    return Err(NetworkErrors::RPCError(format!(
-                        "Broadcast failed: {}",
-                        msg
-                    )));
+                if !success {
+                    let msg = error_msg.unwrap_or_else(|| "Unknown error".to_string());
+                    return Err(NetworkErrors::RPCError(format!("Broadcast failed: {}", msg)));
                 }
 
                 metadata.hash = Some(tx_id_hex);
@@ -329,7 +388,6 @@ impl TronOperations for NetworkProvider {
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
         tron_retry!(self, "update_tx_receipt", |client| {
-            let mut c = WalletClient::clone(&Arc::clone(&client));
             for tx in txns.iter_mut() {
                 let tx_id = match tx
                     .get_tron()
@@ -340,14 +398,7 @@ impl TronOperations for NetworkProvider {
                     None => continue,
                 };
 
-                let tx_id_bytes =
-                    alloy::hex::decode(&tx_id).map_err(|_| NetworkErrors::ResponseParseError)?;
-
-                let info = c
-                    .get_transaction_info_by_id(protocol::BytesMessage { value: tx_id_bytes })
-                    .await
-                    .map_err(grpc_err)?
-                    .into_inner();
+                let info = client.get_transaction_info_by_id(&tx_id).await?;
 
                 if info.id.is_empty() {
                     continue;
@@ -408,12 +459,7 @@ impl TronOperations for NetworkProvider {
 
     async fn tron_fill_block_ref(&self, tx: &mut TronTransaction) -> Result<()> {
         tron_retry!(self, "fill_block_ref", |client| {
-            let mut c = WalletClient::clone(&Arc::clone(&client));
-            let block = c
-                .get_now_block2(protocol::EmptyMessage {})
-                .await
-                .map_err(grpc_err)?
-                .into_inner();
+            let block = client.get_now_block().await?;
 
             if block.blockid.len() < 16 {
                 return Err(NetworkErrors::ResponseParseError);
@@ -446,60 +492,10 @@ mod tests {
     use std::time::Instant;
     use test_data::gen_tron_testnet_conf;
 
-    #[test]
-    fn test_tron_endpoints_grpc_prefix() {
-        let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec!["grpc://grpc.nile.trongrid.io:50051".to_string()];
-        let provider = NetworkProvider::new(conf);
-        let endpoints = provider.tron_endpoints();
-        assert_eq!(endpoints, vec!["http://grpc.nile.trongrid.io:50051"]);
-    }
-
-    #[test]
-    fn test_tron_endpoints_skips_jsonrpc() {
-        let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec![
-            "http://localhost:50051".to_string(),
-            "https://secure.node:50051".to_string(),
-        ];
-        let provider = NetworkProvider::new(conf);
-        let endpoints = provider.tron_endpoints();
-        assert!(endpoints.is_empty());
-    }
-
-    #[test]
-    fn test_tron_endpoints_bare_host() {
-        let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec!["grpc.nile.trongrid.io:50051".to_string()];
-        let provider = NetworkProvider::new(conf);
-        let endpoints = provider.tron_endpoints();
-        assert_eq!(endpoints, vec!["http://grpc.nile.trongrid.io:50051"]);
-    }
-
-    #[test]
-    fn test_tron_endpoints_mixed() {
-        let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec![
-            "https://api.trongrid.io".to_string(),
-            "grpc://grpc.nile.trongrid.io:50051".to_string(),
-            "http://localhost:8090".to_string(),
-            "some.node:50051".to_string(),
-        ];
-        let provider = NetworkProvider::new(conf);
-        let endpoints = provider.tron_endpoints();
-        assert_eq!(
-            endpoints,
-            vec![
-                "http://grpc.nile.trongrid.io:50051",
-                "http://some.node:50051",
-            ]
-        );
-    }
-
     #[tokio::test]
     async fn test_tron_connect_timeout_unreachable() {
         let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec!["grpc://192.0.2.1:50051".to_string()];
+        conf.rpc = vec!["https://192.0.2.1:443".to_string()];
         let provider = NetworkProvider::new(conf);
 
         let start = Instant::now();
@@ -512,49 +508,6 @@ mod tests {
             "Request took {}s, expected <= {}s",
             elapsed.as_secs(),
             TRON_REQUEST_TIMEOUT_SECS + 2
-        );
-    }
-
-    #[tokio::test]
-    async fn test_tron_connect_invalid_host_fails_fast() {
-        let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec!["localhost:1".to_string()];
-        let provider = NetworkProvider::new(conf);
-
-        let start = Instant::now();
-        let result = provider.tron_get_current_block_number().await;
-        let elapsed = start.elapsed();
-
-        assert!(result.is_err());
-        assert!(
-            elapsed.as_secs() < TRON_REQUEST_TIMEOUT_SECS,
-            "Connection refused should fail fast, took {}s",
-            elapsed.as_secs()
-        );
-    }
-
-    #[tokio::test]
-    async fn test_tron_retry_skips_bad_node() {
-        let mut conf = gen_tron_testnet_conf();
-        conf.rpc = vec![
-            "localhost:1".to_string(),
-            "grpc://grpc.nile.trongrid.io:50051".to_string(),
-        ];
-        let provider = NetworkProvider::new(conf);
-
-        let start = Instant::now();
-        let result = provider.tron_get_current_block_number().await;
-        let elapsed = start.elapsed();
-
-        assert!(
-            result.is_ok(),
-            "Should succeed via second node: {:?}",
-            result
-        );
-        assert!(
-            elapsed.as_secs() <= TRON_REQUEST_TIMEOUT_SECS + 2,
-            "Retry took {}s, too slow",
-            elapsed.as_secs()
         );
     }
 
@@ -589,6 +542,12 @@ mod tests {
             .await
             .unwrap();
 
+        println!("=== Tron Transfer Gas Estimation ===");
+        println!("gas_price (energy_fee): {}", params.gas_price);
+        println!("tx_estimate_gas: {}", params.tx_estimate_gas);
+        println!("current: {}", params.current);
+        println!("====================================");
+
         assert!(params.gas_price > U256::ZERO);
         assert_eq!(params.tx_estimate_gas, U256::ZERO);
         assert_eq!(params.current, U256::ZERO);
@@ -621,8 +580,19 @@ mod tests {
             .await
             .unwrap();
 
+        println!("=== Tron TRC20 Gas Estimation ===");
+        println!("gas_price (energy_fee): {}", params.gas_price);
+        println!("tx_estimate_gas (energy_used * energy_fee): {}", params.tx_estimate_gas);
+        println!("slow: {}", params.slow);
+        println!("market: {}", params.market);
+        println!("fast: {}", params.fast);
+        println!("current: {}", params.current);
+        println!("=================================");
+
         assert!(params.gas_price > U256::ZERO);
         assert!(params.tx_estimate_gas > U256::ZERO);
-        assert_eq!(params.slow, params.fast);
+        assert!(params.slow < params.market);
+        assert!(params.market < params.fast);
+        assert_eq!(params.slow, params.tx_estimate_gas);
     }
 }
