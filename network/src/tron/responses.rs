@@ -1,4 +1,4 @@
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{de::Deserializer, Deserialize, Serialize};
 
 fn deserialize_hex_to_vec<'de, D>(deserializer: D) -> std::result::Result<Vec<u8>, D::Error>
 where
@@ -69,50 +69,6 @@ pub struct BroadcastResponse {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct TransactionReceiptData {
-    #[serde(deserialize_with = "deserialize_receipt_result")]
-    pub result: i32,
-}
-
-fn deserialize_receipt_result<'de, D>(deserializer: D) -> std::result::Result<i32, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    use serde::de::Error;
-
-    let value = serde_json::Value::deserialize(deserializer)?;
-    match value {
-        serde_json::Value::Number(n) => n
-            .as_i64()
-            .map(|v| v as i32)
-            .ok_or_else(|| D::Error::custom("Invalid number")),
-        serde_json::Value::String(s) => match s.as_str() {
-            "SUCCESS" => Ok(0),
-            "REVERT" => Ok(1),
-            "OUT_OF_ENERGY" => Ok(2),
-            _ => Ok(0),
-        },
-        _ => Ok(0),
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct TransactionInfoResponse {
-    #[serde(default, deserialize_with = "deserialize_hex_to_vec")]
-    pub id: Vec<u8>,
-    #[serde(default)]
-    pub block_number: i64,
-    #[serde(default)]
-    pub fee: i64,
-    #[serde(default)]
-    pub receipt: Option<TransactionReceiptData>,
-    #[serde(default, deserialize_with = "deserialize_receipt_result")]
-    pub result: i32,
-    #[serde(default)]
-    pub contract_result: Vec<Vec<u8>>,
-}
-
 #[derive(Debug, Clone, Serialize)]
 pub struct NumberMessage {
     pub num: i64,
@@ -138,14 +94,6 @@ pub struct AccountNetResponse {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct AccountResourceResponse {
-    #[serde(default, rename = "freeNetUsed")]
-    pub free_net_used: i64,
-    #[serde(default, rename = "freeNetLimit")]
-    pub free_net_limit: i64,
-    #[serde(default, rename = "NetUsed")]
-    pub net_used: i64,
-    #[serde(default, rename = "NetLimit")]
-    pub net_limit: i64,
     #[serde(default, rename = "EnergyUsed")]
     pub energy_used: i64,
     #[serde(default, rename = "EnergyLimit")]

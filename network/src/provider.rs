@@ -104,9 +104,11 @@ impl NetworkProvider {
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
         match self.config.slip_44 {
-            slip44::ETHEREUM | slip44::ZILLIQA => self.evm_update_transactions_receipt(txns).await,
+            slip44::ETHEREUM | slip44::ZILLIQA | slip44::TRON => {
+                self.evm_update_transactions_receipt(txns).await
+            }
             slip44::BITCOIN => self.btc_update_transactions_receipt(txns).await,
-            slip44::TRON => self.tron_update_transactions_receipt(txns).await,
+            // slip44::TRON => self.tron_update_transactions_receipt(txns).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name

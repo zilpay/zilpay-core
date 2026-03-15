@@ -494,6 +494,7 @@ impl NetworkProvider {
 mod tests {
     use super::*;
     use alloy::primitives::U256;
+    use test_data::gen_tron_testnet_conf;
 
     #[test]
     fn test_calculate_eip1559_fee_tiers() {
@@ -507,5 +508,64 @@ mod tests {
         assert_eq!(U256::from(41706609000u128), slow);
         assert_eq!(U256::from(45498117000u128), market);
         assert_eq!(U256::from(87204726000u128), fast);
+    }
+
+    #[tokio::test]
+    async fn test_tron_evm_update_transactions_receipt() {
+        use history::status::TransactionStatus;
+        use proto::tx::TransactionMetadata;
+        use serde_json::json;
+
+        let provider = NetworkProvider::new(gen_tron_testnet_conf());
+
+        let tron_tx_json = json!({
+            "signature": [
+                "4735316cacefae2cfccd7d686ff25f8910ca7b05d11d2dd583c9b7c6af03427554f5a7017033bc0db9d5b654d0a9e864b4e30877c6a9b88798158c19e380f04201"
+            ],
+            "txID": "960188a94300ab78687bc8b9e42824c86d2c11a8ac7518022d868a96dd8c92a7",
+            "raw_data": {
+                "contract": [
+                    {
+                        "parameter": {
+                            "value": {
+                                "data": "a9059cbb000000000000000000000000e2e1a54926527fbb4e4420de4c6bab82beaee24d0000000000000000000000000000000000000000000000000de0b6b3a7640000",
+                                "owner_address": "419705bf55c3dcc6d277ebb8fe2a68762268822ba2",
+                                "contract_address": "418df49db5dbf07e498492d2dafcf7b305cdc72471"
+                            },
+                            "type_url": "type.googleapis.com/protocol.TriggerSmartContract"
+                        },
+                        "type": "TriggerSmartContract"
+                    }
+                ],
+                "ref_block_bytes": "6b48",
+                "ref_block_hash": "4448fdd628a1901b",
+                "expiration": 1773553356000_i64,
+                "fee_limit": 1340876,
+                "timestamp": 1773553056000_i64
+            },
+            "raw_data_hex": "0a026b4822084448fdd628a1901b40e0999280cf335aae01081f12a9010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412740a15419705bf55c3dcc6d277ebb8fe2a68762268822ba21215418df49db5dbf07e498492d2dafcf7b305cdc724712244a9059cbb000000000000000000000000e2e1a54926527fbb4e4420de4c6bab82beaee24d0000000000000000000000000000000000000000000000000de0b6b3a76400007080f2ffffce339001cceb51"
+        });
+
+        let mut tx = HistoricalTransaction {
+            status: TransactionStatus::Pending,
+            metadata: TransactionMetadata {
+                hash: Some("960188a94300ab78687bc8b9e42824c86d2c11a8ac7518022d868a96dd8c92a7".to_string()),
+                chain_hash: gen_tron_testnet_conf().hash(),
+                ..Default::default()
+            },
+            evm: None,
+            scilla: None,
+            btc: None,
+            tron: Some(tron_tx_json.to_string()),
+            signed_message: None,
+            timestamp: 1773553056000,
+        };
+
+        let result = provider
+            .evm_update_transactions_receipt(&mut [&mut tx])
+            .await;
+
+        assert!(result.is_ok());
+        assert_eq!(tx.status, TransactionStatus::Success);
     }
 }

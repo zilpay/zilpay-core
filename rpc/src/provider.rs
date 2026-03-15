@@ -49,9 +49,9 @@ where
 
             let rpc_url = if is_tron {
                 let base = url.trim_end_matches('/');
-                &format!("{}/jsonrpc", base)
+                format!("{}/jsonrpc", base)
             } else {
-                &url
+                url.clone()
             };
 
             let res = client

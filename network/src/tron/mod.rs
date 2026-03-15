@@ -8,8 +8,6 @@ use async_trait::async_trait;
 use errors::crypto::SignatureError;
 use errors::network::NetworkErrors;
 use errors::tx::TransactionErrors;
-use history::status::TransactionStatus;
-use history::transaction::HistoricalTransaction;
 use prost::Message;
 use proto::address::Address;
 use proto::tron_generated::protocol;
@@ -156,16 +154,6 @@ impl TronHttpClient {
         self.post("/wallet/broadcasttransaction", tx_json).await
     }
 
-    async fn get_transaction_info_by_id(
-        &self,
-        tx_id: &str,
-    ) -> std::result::Result<TransactionInfoResponse, NetworkErrors> {
-        let body = json!({
-            "value": tx_id
-        });
-        self.post("/wallet/gettransactioninfobyid", &body).await
-    }
-
     async fn get_account_net(
         &self,
         address: &Address,
@@ -215,10 +203,6 @@ pub trait TronOperations {
         &self,
         txns: Vec<TransactionReceipt>,
     ) -> Result<Vec<TransactionReceipt>>;
-    async fn tron_update_transactions_receipt(
-        &self,
-        txns: &mut [&mut HistoricalTransaction],
-    ) -> Result<()>;
     async fn tron_fill_block_ref(&self, tx: &mut TronTransaction) -> Result<()>;
 }
 
@@ -439,80 +423,6 @@ impl TronOperations for NetworkProvider {
             }
 
             Ok(txns.clone())
-        })
-    }
-
-    async fn tron_update_transactions_receipt(
-        &self,
-        txns: &mut [&mut HistoricalTransaction],
-    ) -> Result<()> {
-        tron_retry!(self, "update_tx_receipt", |client| {
-            for tx in txns.iter_mut() {
-                let tx_id = match tx
-                    .get_tron()
-                    .and_then(|t| t.get("txID").and_then(|id| id.as_str()).map(String::from))
-                    .or_else(|| tx.metadata.hash.clone())
-                {
-                    Some(id) => id,
-                    None => continue,
-                };
-
-                let info = client.get_transaction_info_by_id(&tx_id).await?;
-
-                if info.id.is_empty() {
-                    continue;
-                }
-
-                let mut tron_data = tx.get_tron().unwrap_or_else(|| json!({}));
-
-                if let Some(obj) = tron_data.as_object_mut() {
-                    obj.insert("txID".to_string(), json!(tx_id));
-                    obj.insert("blockNumber".to_string(), json!(info.block_number));
-                    obj.insert("fee".to_string(), json!(info.fee));
-
-                    if let Some(receipt) = &info.receipt {
-                        let contract_result =
-                            protocol::transaction::result::ContractResult::try_from(receipt.result)
-                                .ok();
-                        obj.insert(
-                            "receipt".to_string(),
-                            json!({ "result": contract_result.map(|r| r.as_str_name().to_string()) }),
-                        );
-                    }
-
-                    obj.insert("result".to_string(), json!(info.result));
-
-                    if !info.contract_result.is_empty() {
-                        let hex_results: Vec<String> = info
-                            .contract_result
-                            .iter()
-                            .map(alloy::hex::encode)
-                            .collect();
-                        obj.insert("contractResult".to_string(), json!(hex_results));
-                    }
-                }
-
-                tx.set_tron(tron_data);
-
-                if info.block_number > 0 {
-                    let receipt_result = info.receipt.as_ref().and_then(|r| {
-                        protocol::transaction::result::ContractResult::try_from(r.result).ok()
-                    });
-
-                    tx.status = match receipt_result {
-                        Some(protocol::transaction::result::ContractResult::Revert)
-                        | Some(protocol::transaction::result::ContractResult::OutOfEnergy) => {
-                            TransactionStatus::Failed
-                        }
-                        _ if info.result == protocol::transaction_info::Code::Failed as i32 => {
-                            TransactionStatus::Failed
-                        }
-                        _ => TransactionStatus::Success,
-                    };
-                }
-            }
-
-            Ok(())
         })
     }
 

@@ -45,6 +45,11 @@ pub fn build_payload_tx_receipt(tx: &HistoricalTransaction) -> Value {
             })
             .unwrap_or_default();
         RpcProvider::<ChainConfig>::build_payload(json!([hash]), ZilMethods::GetTransactionStatus)
+    } else if tx.tron.is_some() {
+        RpcProvider::<ChainConfig>::build_payload(
+            json!([tx.metadata.hash.clone().unwrap_or_default()]),
+            EvmMethods::GetTransactionReceipt,
+        )
     } else {
         let hash = tx
             .get_evm()
