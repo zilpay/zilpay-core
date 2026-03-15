@@ -23,14 +23,13 @@ bitcoin.workspace = true
 bincode.workspace = true
 prost.workspace = true
 prost-types.workspace = true
-tonic.workspace = true
 
 crypto = { path = "../crypto" }
 config = { path = "../config" }
 errors = { path = "../errors" }
 
 [build-dependencies]
-tonic-build = "0.12"
+prost-build = "0.13"
 
 [dev-dependencies]
 mockito = "1.5.0"

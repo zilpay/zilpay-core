@@ -19,13 +19,16 @@ fn main() {
         "api/zksnark.proto",
     ];
 
-    let proto_paths: Vec<String> = protos.iter().map(|p| format!("{}/{}", proto_root, p)).collect();
+    let proto_paths: Vec<String> = protos
+        .iter()
+        .map(|p| format!("{}/{}", proto_root, p))
+        .collect();
     let proto_refs: Vec<&str> = proto_paths.iter().map(|s| s.as_str()).collect();
 
-    tonic_build::configure()
-        .build_server(false)
-        .build_client(true)
-        .out_dir("src/tron_generated")
+    let mut config = prost_build::Config::new();
+    config.out_dir("src/tron_generated");
+
+    config
         .compile_protos(&proto_refs, &[proto_root, "."])
         .expect("Failed to compile Tron protos");
 }
