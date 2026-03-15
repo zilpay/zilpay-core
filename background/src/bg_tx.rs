@@ -555,13 +555,25 @@ impl TransactionsManagement for Background {
 
                 key_pair.sign_message(&hash)?
             }
-            Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => {
+            Address::Secp256k1Keccak256(_) => {
                 let bytes = if message.starts_with("0x") || message.starts_with("0X") {
                     hex::decode(&message[2..]).unwrap_or_else(|_| message.as_bytes().to_vec())
                 } else {
                     message.as_bytes().to_vec()
                 };
                 key_pair.sign_message(&bytes)?
+            }
+            Address::Secp256k1Tron(_) => {
+                let bytes = if message.starts_with("0x") || message.starts_with("0X") {
+                    hex::decode(&message[2..]).unwrap_or_else(|_| message.as_bytes().to_vec())
+                } else {
+                    message.as_bytes().to_vec()
+                };
+                let prefix = format!("\x19TRON Signed Message:\n{}", bytes.len());
+                let mut full_msg = prefix.into_bytes();
+                full_msg.extend_from_slice(&bytes);
+                let hash = keccak256(&full_msg);
+                key_pair.sign_hash(&hash.0)?
             }
         };
         let pub_key = key_pair.get_pubkey()?;
@@ -1519,5 +1531,104 @@ mod tests_background_transactions {
         for tx in &txns {
             assert!(tx.metadata.hash.is_some());
         }
+    }
+
+    #[tokio::test]
+    async fn test_sign_message_tron() {
+        use test_data::{gen_tron_account, gen_tron_testnet_conf, gen_tron_token};
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_tron_testnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+        let accounts = [gen_tron_account(0, "Tron Acc 0")];
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: &password,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Tron wallet".to_string(),
+            biometric_type: Default::default(),
+            ftokens: vec![gen_tron_token()],
+        })
+        .await
+        .unwrap();
+
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
+
+        let message = "Hello, Tron!";
+        let (pubkey, signature) = bg
+            .sign_message(0, 0, &argon_seed, None, message, None, None)
+            .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let key_pair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        assert_eq!(pubkey.as_bytes(), *key_pair.get_pubkey_bytes());
+
+        let prefixed_msg = format!("\x19TRON Signed Message:\n{}", message.len());
+        let mut full_msg = prefixed_msg.into_bytes();
+        full_msg.extend_from_slice(message.as_bytes());
+        let hash = keccak256(&full_msg);
+
+        let is_valid = key_pair.verify_hash(&hash.0, &signature).unwrap();
+        assert!(is_valid, "Tron message signature verification failed");
+    }
+
+    #[tokio::test]
+    async fn test_sign_message_tron_hex() {
+        use test_data::{gen_tron_account, gen_tron_testnet_conf, gen_tron_token};
+
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_tron_testnet_conf();
+
+        bg.add_provider(net_config.clone()).unwrap();
+        let accounts = [gen_tron_account(0, "Tron Acc 0")];
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: &password,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Tron wallet".to_string(),
+            biometric_type: Default::default(),
+            ftokens: vec![gen_tron_token()],
+        })
+        .await
+        .unwrap();
+
+        let argon_seed = bg
+            .unlock_wallet_with_password(&password, None, 0)
+            .await
+            .unwrap();
+
+        let hex_message = "0x48656c6c6f2c2054726f6e21";
+        let (_pubkey, signature) = bg
+            .sign_message(0, 0, &argon_seed, None, hex_message, None, None)
+            .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let key_pair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
+
+        let decoded = hex::decode(&hex_message[2..]).unwrap();
+        let prefixed_msg = format!("\x19TRON Signed Message:\n{}", decoded.len());
+        let mut full_msg = prefixed_msg.into_bytes();
+        full_msg.extend_from_slice(&decoded);
+        let hash = keccak256(&full_msg);
+
+        let is_valid = key_pair.verify_hash(&hash.0, &signature).unwrap();
+        assert!(is_valid, "Tron hex message signature verification failed");
     }
 }

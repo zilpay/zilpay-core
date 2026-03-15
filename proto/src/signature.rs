@@ -1,3 +1,4 @@
+use alloy::primitives::B256;
 use alloy::signers::k256;
 use alloy::signers::Signature as EthersSignature;
 use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA512_SIZE};
@@ -48,6 +49,25 @@ impl Signature {
                 let signer_address = pk.get_addr().map_err(SignatureError::FailIntoPubKey)?;
                 let recovered_address = signature
                     .recover_address_from_msg(msg_bytes)
+                    .map_err(|e| SignatureError::FailParseRecover(e.to_string()))?;
+                let signer_address = signer_address.to_alloy_addr();
+
+                Ok(recovered_address == signer_address)
+            }
+        }
+    }
+
+    pub fn verify_hash(&self, hash: &[u8; 32], pk: &PubKey) -> Result<bool> {
+        match self {
+            Signature::SchnorrSecp256k1Sha256(_) => Err(SignatureError::FailParseSignature),
+            Signature::ECDSASecp256k1Keccak256(sig) => {
+                let parity = sig[64] % 2 != 1;
+                let signature = EthersSignature::from_bytes_and_parity(sig, parity);
+
+                let signer_address = pk.get_addr().map_err(SignatureError::FailIntoPubKey)?;
+                let hash = B256::from_slice(hash);
+                let recovered_address = signature
+                    .recover_address_from_prehash(&hash)
                     .map_err(|e| SignatureError::FailParseRecover(e.to_string()))?;
                 let signer_address = signer_address.to_alloy_addr();
 

@@ -319,6 +319,31 @@ impl KeyPair {
         }
     }
 
+    pub fn sign_hash(&self, hash: &[u8; 32]) -> Result<Signature> {
+        match self {
+            KeyPair::Secp256k1Keccak256((_, _)) => {
+                let signer = self.get_local_eth_siger()?;
+                let sig = signer
+                    .sign_hash_sync(&alloy::primitives::B256::from_slice(hash))
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?
+                    .try_into()
+                    .map_err(KeyPairError::InvalidSignature)?;
+                Ok(sig)
+            }
+            KeyPair::Secp256k1Sha256((_, _)) => Err(KeyPairError::InvalidSecp256k1Sha256),
+            KeyPair::Secp256k1Bitcoin((_, _, _, _)) => Err(KeyPairError::InvalidSecp256k1Bitcoin),
+            KeyPair::Secp256k1Tron((_, _)) => {
+                let signer = self.get_local_eth_siger()?;
+                let sig = signer
+                    .sign_hash_sync(&alloy::primitives::B256::from_slice(hash))
+                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?
+                    .try_into()
+                    .map_err(KeyPairError::InvalidSignature)?;
+                Ok(sig)
+            }
+        }
+    }
+
     pub async fn sign_typed_data_eip712(&self, data: TypedData) -> Result<Signature> {
         match self {
             KeyPair::Secp256k1Keccak256((_, _)) => {
@@ -346,6 +371,15 @@ impl KeyPair {
         let pk = self.get_pubkey()?;
         let is_verify = sig
             .verify(msg_bytes, &pk)
+            .map_err(KeyPairError::InvalidSignature)?;
+
+        Ok(is_verify)
+    }
+
+    pub fn verify_hash(&self, hash: &[u8; 32], sig: &Signature) -> Result<bool> {
+        let pk = self.get_pubkey()?;
+        let is_verify = sig
+            .verify_hash(hash, &pk)
             .map_err(KeyPairError::InvalidSignature)?;
 
         Ok(is_verify)
