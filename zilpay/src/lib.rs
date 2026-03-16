@@ -16,7 +16,9 @@ pub use token;
 pub use wallet;
 
 pub fn init() -> Result<(), String> {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .map_err(|_| "Failed to install crypto provider".to_string())?;
 
     Ok(())
 }

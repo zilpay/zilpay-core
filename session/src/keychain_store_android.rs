@@ -48,6 +48,7 @@ pub extern "system" fn JNI_OnLoad(
             context_global.as_obj().as_raw().cast(),
         );
     }
+
     std::mem::forget(context_global);
 
     jni::sys::JNI_VERSION_1_6
