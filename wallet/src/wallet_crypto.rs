@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::{wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet};
 use cipher::{argon2::Argon2Seed, keychain::KeyChain};
 use config::bip39::EN_WORDS;
+use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
 use network::{common::Provider, provider::NetworkProvider};
 use pqbip39::mnemonic::Mnemonic;
@@ -44,10 +45,7 @@ impl WalletCrypto for Wallet {
 
         match data.wallet_type {
             WalletTypes::SecretKey => {
-                let account = data
-                    .accounts
-                    .get(account_index)
-                    .ok_or(WalletErrors::FailToGetAccount(account_index))?;
+                let account = data.get_account(account_index)?;
                 let storage_key = usize::to_le_bytes(account.account_type.value());
                 let cipher_sk = self.storage.get(&storage_key)?;
                 let sk_bytes = keychain.decrypt(cipher_sk, &data.settings.cipher_orders)?;
@@ -61,40 +59,23 @@ impl WalletCrypto for Wallet {
                     return Err(WalletErrors::PassphraseIsNone);
                 }
 
-                let account = data
-                    .accounts
-                    .get(account_index)
-                    .ok_or(WalletErrors::FailToGetAccount(account_index))?;
+                let account = data.get_account(account_index)?;
                 let providers = NetworkProvider::load_network_configs(Arc::clone(&self.storage));
 
                 let provider = providers
                     .iter()
-                    .find(|&p| p.config.hash() == data.default_chain_hash)
-                    .ok_or(WalletErrors::ProviderNotExist(data.default_chain_hash))?;
+                    .find(|&p| p.config.hash() == data.chain_hash)
+                    .ok_or(WalletErrors::ProviderNotExist(data.chain_hash))?;
                 let m = self.reveal_mnemonic(seed_bytes)?;
                 let seed = m.to_seed(passphrase.unwrap_or(""))?;
                 let hd_index = account.account_type.value();
-
-                let (bip_purpose, network) = match &account.pub_key {
-                    proto::pubkey::PubKey::Secp256k1Bitcoin((_, net, addr_type)) => {
-                        let purpose = match addr_type {
-                            bitcoin::AddressType::P2pkh => {
-                                crypto::bip49::DerivationPath::BIP44_PURPOSE
-                            }
-                            bitcoin::AddressType::P2sh => {
-                                crypto::bip49::DerivationPath::BIP49_PURPOSE
-                            }
-                            bitcoin::AddressType::P2wpkh => {
-                                crypto::bip49::DerivationPath::BIP84_PURPOSE
-                            }
-                            bitcoin::AddressType::P2tr => {
-                                crypto::bip49::DerivationPath::BIP86_PURPOSE
-                            }
-                            _ => crypto::bip49::DerivationPath::BIP84_PURPOSE,
-                        };
-                        (purpose, Some(*net))
+                let (bip_purpose, network) = match &account.addr {
+                    Address::Secp256k1Bitcoin(_) => {
+                        let purpose = account.addr.get_bip_purpose()?;
+                        let net = account.addr.get_bitcoin_network()?;
+                        (purpose, Some(net))
                     }
-                    _ => (crypto::bip49::DerivationPath::BIP44_PURPOSE, None),
+                    _ => (DerivationPath::BIP44_PURPOSE, None),
                 };
 
                 let bip_path = crypto::bip49::DerivationPath::new(
@@ -115,15 +96,11 @@ impl WalletCrypto for Wallet {
                     Address::Secp256k1Tron(_) => {
                         keypair = keypair.to_tron();
                     }
-                    Address::Secp256k1Bitcoin(_) => match account.pub_key {
-                        proto::pubkey::PubKey::Secp256k1Bitcoin((_, net, addr_type)) => {
-                            keypair = keypair.to_bitcoin(net, addr_type);
-                        }
-                        _ => {
-                            keypair = keypair
-                                .to_bitcoin(bitcoin::Network::Bitcoin, bitcoin::AddressType::P2a);
-                        }
-                    },
+                    Address::Secp256k1Bitcoin(_) => {
+                        let addr_type = account.addr.get_bitcoin_address_type()?;
+                        let net = account.addr.get_bitcoin_network()?;
+                        keypair = keypair.to_bitcoin(net, addr_type);
+                    }
                 }
 
                 Ok(keypair)
@@ -287,7 +264,7 @@ mod tests {
 
         // Verify the address matches the account address
         let data = wallet.get_wallet_data().unwrap();
-        let account_addr = &data.accounts[0].addr;
+        let account_addr = &data.get_account(0).unwrap().addr;
         let keypair_addr = keypair.get_addr().unwrap();
 
         assert_eq!(account_addr, &keypair_addr);
@@ -304,7 +281,7 @@ mod tests {
         let result = wallet.reveal_keypair(999, &argon_seed, None);
 
         assert!(result.is_err());
-        assert!(matches!(result, Err(WalletErrors::FailToGetAccount(999))));
+        assert!(matches!(result, Err(WalletErrors::InvalidAccountIndex(999))));
     }
 
     #[test]
@@ -334,7 +311,7 @@ mod tests {
 
             // Verify the address matches
             let data = wallet.get_wallet_data().unwrap();
-            let account_addr = &data.accounts[i].addr;
+            let account_addr = &data.get_account(i).unwrap().addr;
             let keypair_addr = keypair.get_addr().unwrap();
 
             assert_eq!(account_addr, &keypair_addr);
@@ -371,7 +348,7 @@ mod tests {
 
             // Verify the address matches
             let data = wallet.get_wallet_data().unwrap();
-            let account_addr = &data.accounts[i].addr;
+            let account_addr = &data.get_account(i).unwrap().addr;
             let keypair_addr = keypair.get_addr().unwrap();
 
             assert_eq!(account_addr, &keypair_addr);
@@ -411,7 +388,7 @@ mod tests {
 
         // Verify the address matches
         let data = wallet.get_wallet_data().unwrap();
-        let account_addr = &data.accounts[0].addr;
+        let account_addr = &data.get_account(0).unwrap().addr;
         let keypair_addr = keypair.get_addr().unwrap();
 
         assert_eq!(account_addr, &keypair_addr);
@@ -454,7 +431,7 @@ mod tests {
 
         // Verify the address matches
         let data = wallet.get_wallet_data().unwrap();
-        let account_addr = &data.accounts[0].addr;
+        let account_addr = &data.get_account(0).unwrap().addr;
         let keypair_addr = keypair.get_addr().unwrap();
 
         assert_eq!(account_addr, &keypair_addr);
@@ -498,7 +475,7 @@ mod tests {
 
             // Verify the address matches
             let data = wallet.get_wallet_data().unwrap();
-            let account_addr = &data.accounts[i].addr;
+            let account_addr = &data.get_account(i).unwrap().addr;
             let keypair_addr = keypair.get_addr().unwrap();
 
             assert_eq!(account_addr, &keypair_addr);
@@ -542,7 +519,7 @@ mod tests {
 
         // Verify the address matches
         let data = wallet.get_wallet_data().unwrap();
-        let account_addr = &data.accounts[0].addr;
+        let account_addr = &data.get_account(0).unwrap().addr;
         let keypair_addr = keypair.get_addr().unwrap();
 
         assert_eq!(account_addr, &keypair_addr);
@@ -689,7 +666,7 @@ mod tests {
 
         // Verify the address matches
         let data = wallet.get_wallet_data().unwrap();
-        let account_addr = &data.accounts[0].addr;
+        let account_addr = &data.get_account(0).unwrap().addr;
         let keypair_addr = keypair.get_addr().unwrap();
 
         assert_eq!(account_addr, &keypair_addr);

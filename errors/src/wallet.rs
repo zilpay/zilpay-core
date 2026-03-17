@@ -1,5 +1,6 @@
 use crate::{
     account::AccountErrors,
+    address::AddressError,
     cipher::CipherErrors,
     keychain::KeyChainErrors,
     keypair::{KeyPairError, SecretKeyError},
@@ -104,6 +105,9 @@ pub enum WalletErrors {
 
     #[error("Bip39 error: {0}")]
     Bip39Error(Bip39Error),
+
+    #[error("address error: {0}")]
+    AddressError(AddressError),
 }
 
 impl From<LocalStorageError> for WalletErrors {
@@ -163,5 +167,11 @@ impl From<TransactionErrors> for WalletErrors {
 impl From<Bip39Error> for WalletErrors {
     fn from(error: Bip39Error) -> Self {
         WalletErrors::Bip39Error(error)
+    }
+}
+
+impl From<AddressError> for WalletErrors {
+    fn from(error: AddressError) -> Self {
+        WalletErrors::AddressError(error)
     }
 }

@@ -12,7 +12,7 @@ use proto::{
 };
 use serde_json::json;
 use token::ft::FToken;
-use wallet::{account::Account, wallet_storage::StorageOperations};
+use wallet::{account::AccountV2, wallet_storage::StorageOperations};
 
 #[async_trait]
 pub trait TokensManagement {
@@ -32,7 +32,7 @@ pub trait TokensManagement {
     async fn build_token_transfer(
         &self,
         token: &FToken,
-        from: &Account,
+        from: &AccountV2,
         to: Address,
         amount: U256,
     ) -> std::result::Result<TransactionRequest, Self::Error>;
@@ -45,17 +45,19 @@ impl TokensManagement for Background {
     async fn build_token_transfer(
         &self,
         token: &FToken,
-        sender: &Account,
+        sender: &AccountV2,
         to: Address,
         amount: U256,
     ) -> Result<TransactionRequest> {
+        let provider = self.get_provider(sender.chain_hash)?;
+        let evm_chain_id = provider.config.chain_id();
         let erc20_payment = || ETHTransactionRequest {
             to: Some(to.to_alloy_addr().into()),
             value: Some(amount),
             nonce: Some(0),
             gas: Some(21000),
             from: Some(sender.addr.to_alloy_addr()),
-            chain_id: Some(sender.chain_id),
+            chain_id: Some(evm_chain_id),
             ..Default::default()
         };
         let erc20_transfer = || -> Result<ETHTransactionRequest> {
@@ -66,7 +68,7 @@ impl TokensManagement for Background {
                 value: Some(U256::ZERO),
                 nonce: Some(0),
                 gas: Some(549755),
-                chain_id: Some(sender.chain_id),
+                chain_id: Some(evm_chain_id),
                 input: TransactionInput::new(transfer_data.into()),
                 ..Default::default()
             };
@@ -79,7 +81,7 @@ impl TokensManagement for Background {
             info: None,
             icon: None,
             title: None,
-            signer: Some(sender.pub_key.clone()),
+            signer: Some(sender.addr.clone()),
             token_info: Some((amount, token.decimals, token.symbol.clone())),
             btc_utxo_amounts: None,
             broadcast: true,
@@ -117,7 +119,7 @@ impl TokensManagement for Background {
                     info: None,
                     icon: None,
                     title: None,
-                    signer: Some(sender.pub_key.clone()),
+                    signer: Some(sender.addr.clone()),
                     token_info: Some((amount, token.decimals, token.symbol.clone())),
                     btc_utxo_amounts: Some(utxo_amounts),
                     broadcast: true,
@@ -142,7 +144,7 @@ impl TokensManagement for Background {
                 let transfer_request = if token.native {
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: sender.chain_id as u16,
+                        chain_id: provider.config.chain_ids[1] as u16,
                         gas_price: 2000000000,
                         gas_limit: 50,
                         to_addr: to,
@@ -162,7 +164,7 @@ impl TokensManagement for Background {
                     .to_string();
                     ZILTransactionRequest {
                         nonce: 0,
-                        chain_id: sender.chain_id as u16,
+                        chain_id: provider.config.chain_ids[1] as u16,
                         gas_price: 2000000000,
                         gas_limit: 5000,
                         to_addr: token.addr.clone(),
@@ -213,12 +215,15 @@ impl TokensManagement for Background {
     async fn fetch_ftoken_meta(&self, wallet_index: usize, contract: Address) -> Result<FToken> {
         let w = self.get_wallet_by_index(wallet_index)?;
         let data = w.get_wallet_data()?;
-        let accounts = data
-            .accounts
+        let current_accounts = data
+            .slip44_accounts
+            .get(&data.slip44)
+            .ok_or(WalletErrors::NoAccounts)?;
+        let accounts = current_accounts
             .iter()
             .map(|a| &a.addr)
             .collect::<Vec<&Address>>();
-        let selected = &data.accounts[data.selected_account];
+        let selected = data.get_selected_account()?;
         let provider = self.get_provider(selected.chain_hash)?;
         let mut token_meta = provider.ftoken_meta(contract, &accounts).await?;
 
@@ -246,11 +251,12 @@ impl TokensManagement for Background {
             return Ok(());
         }
 
-        let selected_account = data
-            .accounts
-            .get(data.selected_account)
-            .ok_or(WalletErrors::FailToGetAccount(data.selected_account))?;
-        let addresses: Vec<&Address> = data.accounts.iter().map(|a| &a.addr).collect();
+        let selected_account = data.get_selected_account()?;
+        let current_accounts = data
+            .slip44_accounts
+            .get(&data.slip44)
+            .ok_or(WalletErrors::NoAccounts)?;
+        let addresses: Vec<&Address> = current_accounts.iter().map(|a| &a.addr).collect();
         let provider = self.get_provider(selected_account.chain_hash)?;
 
         let matching_tokens: Vec<&mut FToken> = ftokens
@@ -378,16 +384,13 @@ mod tests_background_tokens {
 
         assert_eq!(bg.wallets.len(), 1);
         assert_eq!(providers.len(), 1);
-        assert_eq!(
-            bg.wallets
-                .first()
-                .unwrap()
-                .get_wallet_data()
-                .unwrap()
-                .accounts
-                .len(),
-            1
-        );
+        {
+            let d = bg.wallets.first().unwrap().get_wallet_data().unwrap();
+            assert_eq!(
+                d.slip44_accounts.get(&d.slip44).unwrap().len(),
+                1
+            );
+        }
 
         let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
         let meta = bg.fetch_ftoken_meta(0, token_addr).await.unwrap();
@@ -447,16 +450,13 @@ mod tests_background_tokens {
 
         assert_eq!(bg.wallets.len(), 1);
         assert_eq!(providers.len(), 1);
-        assert_eq!(
-            bg.wallets
-                .first()
-                .unwrap()
-                .get_wallet_data()
-                .unwrap()
-                .accounts
-                .len(),
-            7
-        );
+        {
+            let d = bg.wallets.first().unwrap().get_wallet_data().unwrap();
+            assert_eq!(
+                d.slip44_accounts.get(&d.slip44).unwrap().len(),
+                7
+            );
+        }
 
         let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
         let meta = bg.fetch_ftoken_meta(0, token_addr).await.unwrap();
@@ -510,10 +510,10 @@ mod tests_background_tokens {
         let amount = U256::from(1000000000000u64);
 
         let wallet = bg.wallets.first().unwrap();
-        let account = &wallet.get_wallet_data().unwrap().accounts[0];
+        let account = wallet.get_wallet_data().unwrap().get_account(0).unwrap().clone();
 
         let txn_req = bg
-            .build_token_transfer(&zlp_token, account, to_addr.clone(), amount)
+            .build_token_transfer(&zlp_token, &account, to_addr.clone(), amount)
             .await
             .unwrap();
 
@@ -588,10 +588,11 @@ mod tests_background_tokens {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        assert_eq!(data.accounts.len(), 2, "Should have 2 accounts");
+        let accs = data.slip44_accounts.get(&data.slip44).unwrap();
+        assert_eq!(accs.len(), 2, "Should have 2 accounts");
 
-        let account = &data.accounts[0];
-        let account_1 = &data.accounts[1];
+        let account = &accs[0];
+        let account_1 = &accs[1];
 
         let addr_str = account.addr.auto_format();
         let addr_str_1 = account_1.addr.auto_format();
@@ -815,8 +816,9 @@ mod tests_background_tokens {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        let account = data.accounts.first().unwrap();
-        let account_1 = data.accounts.last().unwrap();
+        let accs = data.slip44_accounts.get(&data.slip44).unwrap();
+        let account = accs.first().unwrap();
+        let account_1 = accs.last().unwrap();
 
         let addr_str = account.addr.auto_format();
         let addr_str_1 = account_1.addr.auto_format();
@@ -884,7 +886,7 @@ mod tests_background_tokens {
 
         match signed_tx {
             proto::tx::TransactionReceipt::Zilliqa((signed_zil_tx, _)) => {
-                assert_eq!(signed_zil_tx.pub_key, from_account.pub_key.as_bytes());
+                assert_eq!(signed_zil_tx.pub_key, from_account.pub_key.as_ref().unwrap().as_bytes());
                 assert_eq!(signed_zil_tx.version, 21823489);
 
                 let gas_price: u128 = params.gas_price.try_into().unwrap();
@@ -953,8 +955,9 @@ mod tests_background_tokens {
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let account_0 = &data.accounts[0];
-        let account_1 = &data.accounts[1];
+        let accs = data.slip44_accounts.get(&data.slip44).unwrap();
+        let account_0 = &accs[0];
+        let account_1 = &accs[1];
 
         assert_eq!(
             account_0.addr.to_string().to_lowercase(),
@@ -1080,7 +1083,7 @@ mod tests_background_tokens {
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        assert_eq!(data.accounts[0].addr.auto_format(), tron_addresses::ADDR_0);
+        assert_eq!(data.get_account(0).unwrap().addr.auto_format(), tron_addresses::ADDR_0);
 
         let btt_contract =
             Address::from_tron_address("TNuoKL1ni8aoshfFL1ASca1Gou9RXwAzfn").unwrap();

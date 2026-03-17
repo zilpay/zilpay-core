@@ -1,10 +1,9 @@
 use crate::{
-    account::{self, Account},
-    wallet_data::WalletData,
+    account::{self, AccountV2},
+    wallet_data::WalletDataV2,
     wallet_types::WalletTypes,
     Result, SecretKeyParams, Wallet, WalletAddrType,
 };
-use proto::pubkey::PubKey;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -72,36 +71,33 @@ impl WalletInit for Wallet {
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
         let chain_hash = params.chain_config.hash();
 
-        let accounts: Vec<Account> = params
+        let accounts: Vec<AccountV2> = params
             .pub_keys
             .into_iter()
             .zip(params.account_names.into_iter())
             .map(|((ledger_index, pub_key), account_name)| {
-                let chain_id = match &pub_key {
-                    PubKey::Secp256k1Sha256(_) => params.chain_config.chain_ids[1],
-                    _ => params.chain_config.chain_id(),
-                };
-
-                Account::from_ledger(
+                AccountV2::from_ledger(
                     pub_key,
                     account_name,
                     ledger_index as usize,
                     chain_hash,
-                    chain_id,
-                    params.chain_config.slip_44,
                 )
             })
-            .collect::<std::result::Result<Vec<account::Account>, AccountErrors>>()?;
+            .collect::<std::result::Result<Vec<account::AccountV2>, AccountErrors>>()?;
 
-        let data = WalletData {
+        let slip44_accounts =
+            std::collections::HashMap::from([(params.chain_config.slip_44, accounts)]);
+
+        let data = WalletDataV2 {
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
             proof_key,
             settings: config.settings,
-            accounts,
+            slip44_accounts,
+            slip44: params.chain_config.slip_44,
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
-            default_chain_hash: params.chain_config.hash(),
+            chain_hash: params.chain_config.hash(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -132,24 +128,27 @@ impl WalletInit for Wallet {
         let cipher_entropy_key = Self::safe_storage_save(&cipher_sk, Arc::clone(&config.storage))?;
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
         // SecretKey may stores only one account.
-        let account = Account::from_secret_key(
+        let account = AccountV2::from_secret_key(
             params.sk,
             params.wallet_name.to_owned(),
             cipher_entropy_key,
             params.chain_config.hash(),
-            params.chain_config.chain_id(),
             params.chain_config.slip_44,
         )?;
-        let accounts: Vec<account::Account> = vec![account];
-        let data = WalletData {
+        let slip44_accounts = std::collections::HashMap::from([(
+            params.chain_config.slip_44,
+            vec![account],
+        )]);
+        let data = WalletDataV2 {
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
             proof_key,
             settings: config.settings,
-            accounts,
+            slip44_accounts,
+            slip44: params.chain_config.slip_44,
             wallet_type: WalletTypes::SecretKey,
-            selected_account: 0, // for sk account we have only one account.
-            default_chain_hash: params.chain_config.hash(),
+            selected_account: 0,
+            chain_hash: params.chain_config.hash(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -180,34 +179,38 @@ impl WalletInit for Wallet {
         let cipher_entropy_key =
             Self::safe_storage_save(&cipher_entropy, Arc::clone(&config.storage))?;
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
-        let mut accounts: Vec<account::Account> = Vec::with_capacity(params.indexes.len());
+        let mut accounts: Vec<account::AccountV2> = Vec::with_capacity(params.indexes.len());
 
         for index in params.indexes {
             let (bip49, name) = index;
-            let hd_account = Account::from_hd(
+            let hd_account = AccountV2::from_hd(
                 &mnemonic_seed,
                 name.to_owned(),
                 bip49,
                 params.chain_config.hash(),
-                params.chain_config.chain_id(),
-                params.chain_config.slip_44,
             )?;
 
             accounts.push(hd_account);
         }
 
-        let data = WalletData {
+        let slip44_accounts = std::collections::HashMap::from([(
+            params.chain_config.slip_44,
+            accounts,
+        )]);
+
+        let data = WalletDataV2 {
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type.clone(),
             proof_key,
             settings: config.settings,
-            accounts,
+            slip44_accounts,
+            slip44: params.chain_config.slip_44,
             wallet_type: WalletTypes::SecretPhrase((
                 cipher_entropy_key,
                 !params.passphrase.is_empty(),
             )),
             selected_account: 0,
-            default_chain_hash: params.chain_config.hash(),
+            chain_hash: params.chain_config.hash(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -299,7 +302,10 @@ mod tests {
             _ => panic!("invalid type"),
         }
 
-        assert_eq!(data.accounts.len(), indexes.len());
+        assert_eq!(
+            data.slip44_accounts.get(&data.slip44).unwrap().len(),
+            indexes.len()
+        );
 
         let wallet_addr = wallet.wallet_address;
 
@@ -353,10 +359,10 @@ mod tests {
 
         let data = wallet.get_wallet_data().unwrap();
 
-        assert_eq!(data.accounts.len(), indexes.len());
+        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        assert_eq!(accounts.len(), indexes.len());
 
-        for account in &data.accounts {
-            assert_eq!(account.slip_44, slip44::BITCOIN);
+        for account in accounts {
             let addr_str = account.addr.auto_format();
             assert!(addr_str.starts_with("bc1"));
         }
@@ -394,7 +400,10 @@ mod tests {
         .unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        assert_eq!(data.accounts.len(), 1);
+        assert_eq!(
+            data.slip44_accounts.get(&data.slip44).unwrap().len(),
+            1
+        );
         assert_eq!(
             wallet.reveal_mnemonic(&argon_seed),
             Err(WalletErrors::InvalidAccountType)
@@ -453,9 +462,9 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        assert_eq!(data.accounts.len(), 10);
+        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        assert_eq!(accounts.len(), 10);
 
-        // Expected BIP44 (Legacy P2PKH) addresses
         let expected_addresses = [
             "1Ei9UmLQv4o4UJTy5r5mnGFeC9auM3W5P1",
             "14RBPsg6mBkLSJokkzeuoCkTtoeD3nK2Kz",
@@ -469,8 +478,7 @@ mod tests {
             "1MV7i4aBVbjm81nwkaYcgUTDFehX2dBz4z",
         ];
 
-        for (i, account) in data.accounts.iter().enumerate() {
-            assert_eq!(account.slip_44, slip44::BITCOIN);
+        for (i, account) in accounts.iter().enumerate() {
             let addr_str = account.addr.auto_format();
             assert_eq!(
                 addr_str, expected_addresses[i],
@@ -526,9 +534,9 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        assert_eq!(data.accounts.len(), 10);
+        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        assert_eq!(accounts.len(), 10);
 
-        // Expected BIP49 (Nested SegWit P2SH-P2WPKH) addresses
         let expected_addresses = [
             "39sr5B8UAdxeoXbnpdw4frfxXwWwEChwzp",
             "37EtUYWDGFUYhF65JqZMkkiUd4dDmwHv8J",
@@ -542,8 +550,7 @@ mod tests {
             "3KQtD5x8ah3P882NVS9Jd4bydbGKWWchkv",
         ];
 
-        for (i, account) in data.accounts.iter().enumerate() {
-            assert_eq!(account.slip_44, slip44::BITCOIN);
+        for (i, account) in accounts.iter().enumerate() {
             let addr_str = account.addr.auto_format();
             assert_eq!(
                 addr_str, expected_addresses[i],
@@ -599,9 +606,9 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        assert_eq!(data.accounts.len(), 10);
+        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        assert_eq!(accounts.len(), 10);
 
-        // Expected BIP84 (Native SegWit Bech32 P2WPKH) addresses
         let expected_addresses = [
             "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te",
             "bc1qp533522veg9uyhpx3sva9vqrnfzmt262n4lsuq",
@@ -615,8 +622,7 @@ mod tests {
             "bc1qp9dt7umyhmee7lm5raau62uq4m3dfpnsvz743g",
         ];
 
-        for (i, account) in data.accounts.iter().enumerate() {
-            assert_eq!(account.slip_44, slip44::BITCOIN);
+        for (i, account) in accounts.iter().enumerate() {
             let addr_str = account.addr.auto_format();
             assert_eq!(
                 addr_str, expected_addresses[i],
@@ -672,9 +678,9 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        assert_eq!(data.accounts.len(), 10);
+        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        assert_eq!(accounts.len(), 10);
 
-        // Expected BIP86 (Taproot Bech32m P2TR) addresses
         let expected_addresses = [
             "bc1pfzhx49qe6s5exppe5hqljg3n6587xk0w75xqr70pgdt7ygnfkssqxqjd9l",
             "bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v",
@@ -688,8 +694,7 @@ mod tests {
             "bc1p5384xp7jdxfqtskak98r2vf0th0jwuxwczsxu4ech5z2f7kaejmqpmgq9d",
         ];
 
-        for (i, account) in data.accounts.iter().enumerate() {
-            assert_eq!(account.slip_44, slip44::BITCOIN);
+        for (i, account) in accounts.iter().enumerate() {
             let addr_str = account.addr.auto_format();
             assert_eq!(
                 addr_str, expected_addresses[i],

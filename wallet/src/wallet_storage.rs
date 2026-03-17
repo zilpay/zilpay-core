@@ -1,4 +1,5 @@
-use crate::wallet_data::WalletData;
+use crate::wallet_data::WalletDataV1;
+use crate::wallet_data::WalletDataV2;
 use crate::wallet_token::TokenManagement;
 use crate::wallet_transaction::WalletTransaction;
 use crate::Result;
@@ -26,7 +27,7 @@ pub trait StorageOperations {
         cipher_entropy: &[u8],
         storage: Arc<LocalStorage>,
     ) -> std::result::Result<usize, Self::Error>;
-    fn save_wallet_data(&self, data: WalletData) -> std::result::Result<(), Self::Error>;
+    fn save_wallet_data(&self, data: WalletDataV2) -> std::result::Result<(), Self::Error>;
     fn save_ftokens(&self, ftokens: &[FToken]) -> std::result::Result<(), Self::Error>;
     fn add_history(
         &self,
@@ -36,7 +37,7 @@ pub trait StorageOperations {
         &self,
         history: &[HistoricalTransaction],
     ) -> std::result::Result<(), Self::Error>;
-    fn get_wallet_data(&self) -> std::result::Result<WalletData, Self::Error>;
+    fn get_wallet_data(&self) -> std::result::Result<WalletDataV2, Self::Error>;
     fn get_history(&self) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
     fn get_ftokens(&self) -> std::result::Result<Vec<FToken>, Self::Error>;
     fn clear_data(&self) -> std::result::Result<(), Self::Error>;
@@ -76,10 +77,22 @@ impl StorageOperations for Wallet {
         Ok(())
     }
 
-    fn get_wallet_data(&self) -> Result<WalletData> {
-        self.storage
-            .get_versioned(self.wallet_address.as_slice())
-            .map_err(WalletErrors::from)
+    fn get_wallet_data(&self) -> Result<WalletDataV2> {
+        match self
+            .storage
+            .get_versioned::<WalletDataV2>(self.wallet_address.as_slice())
+        {
+            Ok(data) => Ok(data),
+            Err(_) => {
+                let v1: WalletDataV1 = self
+                    .storage
+                    .get_versioned(self.wallet_address.as_slice())
+                    .map_err(WalletErrors::from)?;
+                let v2: WalletDataV2 = v1.into();
+                self.save_wallet_data(v2.clone())?;
+                Ok(v2)
+            }
+        }
     }
 
     fn get_ftokens(&self) -> Result<Vec<FToken>> {
@@ -122,9 +135,8 @@ impl StorageOperations for Wallet {
         Ok(cipher_entropy_key)
     }
 
-    fn save_wallet_data(&self, data: WalletData) -> Result<()> {
-        self.storage
-            .set_versioned(&self.wallet_address, &data)?;
+    fn save_wallet_data(&self, data: WalletDataV2) -> Result<()> {
+        self.storage.set_versioned(&self.wallet_address, &data)?;
         self.storage.flush()?;
 
         Ok(())
@@ -174,9 +186,10 @@ impl StorageOperations for Wallet {
 #[cfg(test)]
 mod tests_wallet_storage {
     use super::*;
-    use crate::{wallet_data::WalletData, wallet_types::WalletTypes};
+    use crate::{wallet_data::WalletDataV2, wallet_types::WalletTypes};
     use config::{session::AuthMethod, sha::SHA256_SIZE};
     use settings::wallet_settings::WalletSettings;
+    use std::collections::HashMap;
     use std::sync::Arc;
     use storage::LocalStorage;
     use token::ft::FToken;
@@ -220,15 +233,16 @@ mod tests_wallet_storage {
         let wallet = Wallet::init_wallet(wallet_address, storage).unwrap();
 
         // Create test wallet data
-        let test_data = WalletData {
+        let test_data = WalletDataV2 {
             proof_key: 0,
             wallet_type: WalletTypes::SecretKey,
             settings: WalletSettings::default(),
             wallet_name: String::new(),
-            accounts: Vec::new(),
+            slip44_accounts: HashMap::new(),
+            slip44: 0,
             selected_account: 0,
             biometric_type: AuthMethod::None,
-            default_chain_hash: 0,
+            chain_hash: 0,
         };
 
         // Test saving wallet data
@@ -255,5 +269,89 @@ mod tests_wallet_storage {
         let retrieved_tokens = wallet.get_ftokens();
         assert!(retrieved_tokens.is_ok());
         assert_eq!(retrieved_tokens.unwrap(), test_tokens);
+    }
+
+    #[test]
+    fn test_v1_to_v2_migration() {
+        use crate::account::AccountV1;
+        use crate::account_type::AccountType;
+        use crate::wallet_data::WalletDataV1;
+        use config::bip39::EN_WORDS;
+        use crypto::bip49::DerivationPath;
+        use crypto::slip44;
+        use pqbip39::mnemonic::Mnemonic;
+        use storage::data_warp::DataWarp;
+
+        let (wallet_address, storage) = setup();
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, test_data::ANVIL_MNEMONIC).unwrap();
+        let seed = mnemonic.to_seed("").unwrap();
+        let chain_hash: u64 = 777;
+        let chain_id: u64 = 1;
+
+        let bip84 = |index: usize| {
+            DerivationPath::new(
+                slip44::BITCOIN,
+                index,
+                DerivationPath::BIP84_PURPOSE,
+                Some(bitcoin::Network::Bitcoin),
+            )
+        };
+
+        let acc0 = AccountV1::from_hd(
+            &seed, "BTC 0".into(), &bip84(0), chain_hash, chain_id, slip44::BITCOIN,
+        ).unwrap();
+        let acc1 = AccountV1::from_hd(
+            &seed, "BTC 1".into(), &bip84(1), chain_hash, chain_id, slip44::BITCOIN,
+        ).unwrap();
+        let acc2 = AccountV1::from_hd(
+            &seed, "BTC 2".into(), &bip84(2), chain_hash, chain_id, slip44::BITCOIN,
+        ).unwrap();
+
+        let v1_data = WalletDataV1 {
+            proof_key: 42,
+            wallet_type: WalletTypes::SecretPhrase((0, false)),
+            settings: WalletSettings::default(),
+            wallet_name: "BTC Wallet".into(),
+            accounts: vec![acc0.clone(), acc1.clone(), acc2.clone()],
+            selected_account: 1,
+            biometric_type: AuthMethod::None,
+            default_chain_hash: chain_hash,
+        };
+
+        let bincode_bytes = bincode::serialize(&v1_data).unwrap();
+        let warp = DataWarp {
+            payload: bincode_bytes,
+            version: 0,
+        };
+        storage.set_raw(wallet_address.as_slice(), &warp.to_bytes()).unwrap();
+        storage.flush().unwrap();
+
+        let wallet = Wallet::init_wallet(wallet_address, storage.clone()).unwrap();
+        let v2 = wallet.get_wallet_data().unwrap();
+
+        assert_eq!(v2.slip44, slip44::BITCOIN);
+        assert_eq!(v2.chain_hash, chain_hash);
+        assert_eq!(v2.proof_key, 42);
+        assert_eq!(v2.wallet_type, WalletTypes::SecretPhrase((0, false)));
+        assert_eq!(v2.wallet_name, "BTC Wallet");
+        assert_eq!(v2.selected_account, 1);
+        assert_eq!(v2.biometric_type, AuthMethod::None);
+
+        let accounts = v2.slip44_accounts.get(&slip44::BITCOIN).unwrap();
+        assert_eq!(accounts.len(), 3);
+
+        for (i, (v2_acc, v1_acc)) in accounts.iter().zip([&acc0, &acc1, &acc2]).enumerate() {
+            assert_eq!(v2_acc.name, v1_acc.name);
+            assert_eq!(v2_acc.addr, v1_acc.addr);
+            assert_eq!(v2_acc.chain_hash, chain_hash);
+            assert_eq!(v2_acc.account_type, AccountType::Bip39HD(i));
+            assert_eq!(v2_acc.pub_key, None);
+        }
+
+        let v2_reload = wallet.get_wallet_data().unwrap();
+        assert_eq!(v2, v2_reload);
+
+        let direct: WalletDataV2 = storage.get_versioned(wallet_address.as_slice()).unwrap();
+        assert_eq!(direct, v2);
     }
 }

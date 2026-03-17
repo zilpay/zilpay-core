@@ -1,4 +1,4 @@
-use crate::wallet_data::WalletData;
+use crate::wallet_data::WalletDataV2;
 use crate::wallet_storage::StorageOperations;
 use crate::wallet_types::WalletTypes;
 use crate::Result;
@@ -70,7 +70,7 @@ impl Wallet {
         &self,
         new_seed_bytes: &Argon2Seed,
         new_keychain: &KeyChain,
-        data: &WalletData,
+        data: &WalletDataV2,
     ) -> Result<()> {
         let proof_storage_key = usize::to_le_bytes(data.proof_key);
         let argon2_config = data.settings.argon_params.into_config();
@@ -166,7 +166,13 @@ mod tests_security {
         .unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        assert_eq!(data.accounts.len(), 1);
+        assert_eq!(
+            data.slip44_accounts
+                .get(&data.slip44)
+                .map(|a| a.len())
+                .unwrap_or(0),
+            1
+        );
         assert_eq!(
             wallet.reveal_mnemonic(&argon_seed),
             Err(WalletErrors::InvalidAccountType)

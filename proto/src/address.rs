@@ -141,13 +141,32 @@ impl Address {
         ))
     }
 
-    pub fn get_bip_purpose(&self) -> Result<usize> {
+    pub fn get_bitcoin_network(&self) -> Result<bitcoin::Network> {
+        match self {
+            Address::Secp256k1Bitcoin(data) => {
+                let addr_str = String::from_utf8(data.clone())
+                    .map_err(|e| AddressError::BTCAddrError(e.to_string()))?;
+                if addr_str.starts_with("bc1") || addr_str.starts_with('1') || addr_str.starts_with('3') {
+                    Ok(bitcoin::Network::Bitcoin)
+                } else if addr_str.starts_with("tb1") || addr_str.starts_with('m') || addr_str.starts_with('n') || addr_str.starts_with('2') {
+                    Ok(bitcoin::Network::Testnet)
+                } else if addr_str.starts_with("bcrt1") {
+                    Ok(bitcoin::Network::Regtest)
+                } else {
+                    Err(AddressError::BTCAddrError("Unknown network prefix".to_string()))
+                }
+            }
+            _ => Err(AddressError::InvalidAddressType),
+        }
+    }
+
+    pub fn get_bip_purpose(&self) -> Result<u32> {
         use crypto::bip49::DerivationPath;
 
         let addr_type = self.get_bitcoin_address_type()?;
         let bip = DerivationPath::bip_from_address_type(addr_type);
 
-        Ok(bip as usize)
+        Ok(bip)
     }
 
     pub fn to_eth_checksummed(&self) -> Result<String> {

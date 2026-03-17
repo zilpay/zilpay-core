@@ -316,8 +316,7 @@ pub fn update_tx_from_params(
                 let dust_limit = metadata
                     .signer
                     .as_ref()
-                    .and_then(|pk| Address::from_pubkey(pk).ok())
-                    .map(|addr| get_dust_limit(&addr))
+                    .map(|addr| get_dust_limit(addr))
                     .unwrap_or(546);
 
                 let max_fee_affordable = total_input.saturating_sub(dust_limit);
@@ -359,8 +358,7 @@ pub fn update_tx_from_params(
                 let dust_limit = metadata
                     .signer
                     .as_ref()
-                    .and_then(|pk| Address::from_pubkey(pk).ok())
-                    .map(|addr| get_dust_limit(&addr))
+                    .map(|addr| get_dust_limit(addr))
                     .unwrap_or(546);
 
                 if new_change >= dust_limit {
@@ -453,9 +451,7 @@ impl TransactionsManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let wallet_data = wallet.get_wallet_data()?;
         let account = wallet_data
-            .accounts
-            .get(account_index)
-            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+            .get_account(account_index)?;
 
         match account.addr {
             Address::Secp256k1Bitcoin(_) => Err(BackgroundError::BincodeError(
@@ -505,9 +501,7 @@ impl TransactionsManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let account = data
-            .accounts
-            .get(account_index)
-            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+            .get_account(account_index)?;
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let typed_data: TypedData = serde_json::from_str(typed_data_json)
             .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
@@ -541,9 +535,7 @@ impl TransactionsManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let account = data
-            .accounts
-            .get(account_index)
-            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+            .get_account(account_index)?;
 
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let signature = match account.addr {
@@ -633,12 +625,7 @@ impl TransactionsManagement for Background {
     ) -> Result<Vec<HistoricalTransaction>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let selected_account =
-            data.accounts
-                .get(account_index)
-                .ok_or(BackgroundError::WalletError(
-                    errors::wallet::WalletErrors::NotExistsAccount(account_index),
-                ))?;
+        let selected_account = data.get_account(account_index)?;
         let provider = self.get_provider(selected_account.chain_hash)?;
         let txns = provider.broadcast_signed_transactions(txns).await?;
         let history = txns
@@ -663,9 +650,7 @@ impl TransactionsManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
         let account = data
-            .accounts
-            .get(account_index)
-            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+            .get_account(account_index)?;
 
         let provider = self.get_provider(account.chain_hash)?;
         let keypair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
@@ -775,7 +760,7 @@ mod tests_background_transactions {
 
         assert!(selected_account.addr.to_string().starts_with("0x"));
 
-        if let PubKey::Secp256k1Keccak256(_pub_key) = selected_account.pub_key {
+        if let Some(PubKey::Secp256k1Keccak256(_pub_key)) = selected_account.pub_key {
             // Valid Keccak256 public key
         } else {
             panic!("invalid pubkey");
@@ -823,7 +808,7 @@ mod tests_background_transactions {
         let ftokens = wallet.get_ftokens().unwrap();
         let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
 
-        let account = data.accounts.first().unwrap();
+        let account = data.get_account(0).unwrap();
         assert_eq!(
             account.addr.to_string().to_lowercase(),
             "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc"
@@ -907,7 +892,7 @@ mod tests_background_transactions {
         let data = wallet.get_wallet_data().unwrap();
         let ftokens = wallet.get_ftokens().unwrap();
         let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
-        let account = data.accounts.first().unwrap();
+        let account = data.get_account(0).unwrap();
 
         let recipient_0 = Address::from_eth_address(anvil_accounts::ACCOUNT_1).unwrap();
         let transfer_request_0 = ETHTransactionRequest {
@@ -1142,7 +1127,7 @@ mod tests_background_transactions {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         bg.sync_ftokens_balances(0).await.unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let account = data.accounts.first().unwrap();
+        let account = data.get_account(0).unwrap();
 
         let addr_str = account.addr.auto_format();
         assert!(addr_str.starts_with("bc1p"));
@@ -1211,8 +1196,8 @@ mod tests_background_transactions {
         let balance_0 = *ftokens.first().unwrap().balances.get(&0).unwrap();
         let balance_1 = *ftokens.first().unwrap().balances.get(&1).unwrap();
 
-        let account_0 = data.accounts.first().unwrap();
-        let account_1 = data.accounts.get(1).unwrap();
+        let account_0 = data.get_account(0).unwrap();
+        let account_1 = data.get_account(1).unwrap();
         assert_eq!(account_0.addr.auto_format(), tron_addresses::ADDR_0);
 
         let (sender_idx, sender, recipient, sender_balance) =

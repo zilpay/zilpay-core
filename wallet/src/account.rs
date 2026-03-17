@@ -12,7 +12,7 @@ use storage::codec::Codec;
 type Result<T> = std::result::Result<T, AccountErrors>;
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
-pub struct Account {
+pub struct AccountV1 {
     pub name: String,
     pub account_type: AccountType,
     pub addr: Address,
@@ -22,9 +22,113 @@ pub struct Account {
     pub slip_44: u32,
 }
 
-impl Codec for Account {}
+#[derive(Debug, PartialEq, Eq, Deserialize, Serialize, Clone)]
+pub struct AccountV2 {
+    pub name: String,
+    pub account_type: AccountType,
+    pub addr: Address,
+    pub pub_key: Option<PubKey>,
+    pub chain_hash: u64,
+}
 
-impl Account {
+impl Codec for AccountV1 {}
+impl Codec for AccountV2 {}
+
+impl From<AccountV1> for AccountV2 {
+    fn from(v1: AccountV1) -> Self {
+        let pub_key = match v1.account_type {
+            AccountType::Ledger(_) => Some(v1.pub_key),
+            _ if v1.slip_44 == crypto::slip44::ZILLIQA => Some(v1.pub_key),
+            _ => None,
+        };
+        Self {
+            pub_key,
+            name: v1.name,
+            account_type: v1.account_type,
+            addr: v1.addr,
+            chain_hash: v1.chain_hash,
+        }
+    }
+}
+
+impl AccountV2 {
+    pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
+        <Self as Codec>::from_bytes(encoded).map_err(|e| AccountErrors::BincodeError(e.to_string()))
+    }
+
+    pub fn from_ledger(
+        pub_key: PubKey,
+        name: String,
+        index: usize,
+        chain_hash: u64,
+    ) -> Result<Self> {
+        let addr = pub_key.get_addr()?;
+        let account_type = AccountType::Ledger(index);
+
+        Ok(Self {
+            chain_hash,
+            account_type,
+            addr,
+            name,
+            pub_key: Some(pub_key),
+        })
+    }
+
+    pub fn from_secret_key(
+        sk: SecretKey,
+        name: String,
+        storage_key: usize,
+        chain_hash: u64,
+        slip44: u32,
+    ) -> Result<Self> {
+        let keypair = KeyPair::from_secret_key(sk)?;
+        let addr = keypair.get_addr()?;
+        let pub_key = if slip44 == crypto::slip44::ZILLIQA {
+            Some(keypair.get_pubkey()?)
+        } else {
+            None
+        };
+        let account_type = AccountType::PrivateKey(storage_key);
+
+        Ok(Self {
+            chain_hash,
+            account_type,
+            addr,
+            pub_key,
+            name,
+        })
+    }
+
+    pub fn from_hd(
+        mnemonic_seed: &[u8; SHA512_SIZE],
+        name: String,
+        bip49: &DerivationPath,
+        chain_hash: u64,
+    ) -> Result<Self> {
+        let keypair = KeyPair::from_bip39_seed(mnemonic_seed, bip49)?;
+        let addr = keypair.get_addr()?;
+        let pub_key = if bip49.slip44 == crypto::slip44::ZILLIQA {
+            Some(keypair.get_pubkey()?)
+        } else {
+            None
+        };
+        let account_type = AccountType::Bip39HD(bip49.get_index());
+
+        Ok(Self {
+            chain_hash,
+            account_type,
+            addr,
+            pub_key,
+            name,
+        })
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        Codec::to_bytes(self).map_err(|e| AccountErrors::BincodeError(e.to_string()))
+    }
+}
+
+impl AccountV1 {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
         <Self as Codec>::from_bytes(encoded).map_err(|e| AccountErrors::BincodeError(e.to_string()))
     }
@@ -120,7 +224,8 @@ mod tests {
             .parse()
             .unwrap();
         let name = "Account 0";
-        let acc = Account::from_secret_key(sk, name.to_string(), 0, 0, 1, slip44::ZILLIQA).unwrap();
+        let acc =
+            AccountV1::from_secret_key(sk, name.to_string(), 0, 0, 1, slip44::ZILLIQA).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
@@ -131,7 +236,7 @@ mod tests {
         }
 
         let buf = acc.to_bytes().unwrap();
-        let res = Account::from_bytes(&buf).unwrap();
+        let res = AccountV1::from_bytes(&buf).unwrap();
 
         assert_eq!(res.pub_key, acc.pub_key);
         assert_eq!(res.addr, acc.addr);
@@ -148,7 +253,8 @@ mod tests {
         let m = Mnemonic::parse_str(&EN_WORDS, mnemonic_str).unwrap();
         let bip49 = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None);
         let seed = m.to_seed("").unwrap();
-        let acc = Account::from_hd(&seed, name.to_owned(), &bip49, 0, 1, slip44::ZILLIQA).unwrap();
+        let acc =
+            AccountV1::from_hd(&seed, name.to_owned(), &bip49, 0, 1, slip44::ZILLIQA).unwrap();
 
         for _ in 0..100 {
             let mut nft_addr = [0u8; ADDR_LEN];
@@ -159,7 +265,7 @@ mod tests {
         }
 
         let buf = acc.to_bytes().unwrap();
-        let res = Account::from_bytes(&buf).unwrap();
+        let res = AccountV1::from_bytes(&buf).unwrap();
 
         assert_eq!(res.pub_key, acc.pub_key);
         assert_eq!(res.addr, acc.addr);
@@ -180,7 +286,7 @@ mod tests {
             bitcoin::AddressType::P2wpkh,
         ));
 
-        let acc_segwit = Account::from_secret_key(
+        let acc_segwit = AccountV1::from_secret_key(
             sk_segwit,
             "Bitcoin SegWit".to_string(),
             0,
@@ -199,7 +305,7 @@ mod tests {
             bitcoin::AddressType::P2pkh,
         ));
 
-        let acc_legacy = Account::from_secret_key(
+        let acc_legacy = AccountV1::from_secret_key(
             sk_legacy,
             "Bitcoin Legacy".to_string(),
             0,
@@ -218,7 +324,7 @@ mod tests {
             bitcoin::AddressType::P2tr,
         ));
 
-        let acc_taproot = Account::from_secret_key(
+        let acc_taproot = AccountV1::from_secret_key(
             sk_taproot,
             "Bitcoin Taproot".to_string(),
             0,
@@ -232,7 +338,7 @@ mod tests {
         assert!(addr_taproot_str.starts_with("bc1p"));
 
         let buf = acc_segwit.to_bytes().unwrap();
-        let res = Account::from_bytes(&buf).unwrap();
+        let res = AccountV1::from_bytes(&buf).unwrap();
 
         assert_eq!(res.pub_key, acc_segwit.pub_key);
         assert_eq!(res.addr, acc_segwit.addr);

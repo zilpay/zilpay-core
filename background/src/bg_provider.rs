@@ -97,13 +97,15 @@ impl ProvidersManagement for Background {
             for wallet in &self.wallets {
                 let data = wallet.get_wallet_data()?;
 
-                if data.default_chain_hash == hash {
+                if data.chain_hash == hash {
                     return Err(BackgroundError::ProviderDepends(data.wallet_name));
                 }
 
-                for account in data.accounts {
-                    if account.chain_hash == hash {
-                        return Err(BackgroundError::ProviderDepends(account.name));
+                for accounts in data.slip44_accounts.values() {
+                    for account in accounts {
+                        if account.chain_hash == hash {
+                            return Err(BackgroundError::ProviderDepends(account.name.clone()));
+                        }
                     }
                 }
             }
@@ -122,7 +124,7 @@ impl ProvidersManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let mut data = wallet.get_wallet_data()?;
         let mut ftokens = wallet.get_ftokens()?;
-        let default_provider = self.get_provider(data.default_chain_hash)?;
+        let default_provider = self.get_provider(data.chain_hash)?;
 
         if let WalletTypes::Ledger(_) = data.wallet_type {
             if default_provider.config.slip_44 == ZILLIQA {
@@ -143,56 +145,44 @@ impl ProvidersManagement for Background {
             }
         }
 
-        data.accounts.iter_mut().for_each(|a| {
-            if provider.config.slip_44 == ZILLIQA {
-                match a.pub_key {
-                    PubKey::Secp256k1Sha256(_pub_key) => {
-                        if let Some(chain_id) = provider.config.chain_ids.last() {
-                            a.chain_id = *chain_id;
+        if let Some(accounts) = data.slip44_accounts.get_mut(&data.slip44) {
+            for a in accounts.iter_mut() {
+                if provider.config.slip_44 == ETHEREUM {
+                    if let Some(ref pk) = a.pub_key {
+                        match pk {
+                            PubKey::Secp256k1Sha256(bytes) => {
+                                a.pub_key = Some(PubKey::Secp256k1Keccak256(*bytes));
+                            }
+                            PubKey::Secp256k1Bitcoin((bytes, _, _)) => {
+                                a.pub_key = Some(PubKey::Secp256k1Keccak256(*bytes));
+                            }
+                            PubKey::Ed25519Solana(bytes) => {
+                                a.pub_key = Some(PubKey::Secp256k1Keccak256(*bytes));
+                            }
+                            _ => {}
                         }
                     }
-                    PubKey::Secp256k1Keccak256(_pub_key) => {
-                        if let Some(chain_id) = provider.config.chain_ids.first() {
-                            a.chain_id = *chain_id;
+                } else if provider.config.slip_44 == BITCOIN {
+                    if let Some(network) = provider.config.bitcoin_network() {
+                        if let Some(PubKey::Secp256k1Bitcoin((pk, _, addr_type))) = a.pub_key {
+                            a.pub_key =
+                                Some(PubKey::Secp256k1Bitcoin((pk, network, addr_type)));
                         }
                     }
-                    _ => {}
                 }
-            } else if provider.config.slip_44 == ETHEREUM {
-                match a.pub_key {
-                    PubKey::Secp256k1Sha256(pk) => {
-                        a.pub_key = PubKey::Secp256k1Keccak256(pk);
-                    }
-                    PubKey::Secp256k1Bitcoin((pk, _, _)) => {
-                        a.pub_key = PubKey::Secp256k1Keccak256(pk);
-                    }
-                    PubKey::Ed25519Solana(pk) => {
-                        a.pub_key = PubKey::Secp256k1Keccak256(pk);
-                    }
-                    _ => {}
-                }
-                a.chain_id = provider.config.chain_id();
-            } else if provider.config.slip_44 == BITCOIN {
-                if let Some(network) = provider.config.bitcoin_network() {
-                if let PubKey::Secp256k1Bitcoin((pk, _, addr_type)) = a.pub_key {
-                    a.pub_key = PubKey::Secp256k1Bitcoin((pk, network, addr_type));
 
-                    if let Ok(addr) = a.pub_key.get_addr() {
+                if let Some(ref pk) = a.pub_key {
+                    if let Ok(addr) = pk.get_addr() {
                         a.addr = addr;
                     }
                 }
-                }
-            } else {
-                a.chain_id = provider.config.chain_id();
-            }
 
-            if let Ok(addr) = a.pub_key.get_addr() {
-                a.addr = addr;
+                a.chain_hash = chain_hash;
             }
+        }
 
-            a.chain_hash = chain_hash;
-            a.slip_44 = provider.config.slip_44;
-        });
+        data.slip44 = provider.config.slip_44;
+        data.chain_hash = chain_hash;
 
         wallet.save_wallet_data(data)?;
         wallet.save_ftokens(&ftokens)?;

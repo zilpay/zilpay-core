@@ -44,12 +44,12 @@ impl WorkerManager for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?.clone();
         let arc_chain = {
             let data = wallet.get_wallet_data()?;
-            let mut chain = self.get_provider(data.default_chain_hash)?;
+            let mut chain = self.get_provider(data.chain_hash)?;
             let account = data.get_selected_account()?;
             if chain.config.diff_block_time == 0 {
-                self.update_block_diff_time(data.default_chain_hash, &account.addr)
+                self.update_block_diff_time(data.chain_hash, &account.addr)
                     .await?;
-                chain = self.get_provider(data.default_chain_hash)?;
+                chain = self.get_provider(data.chain_hash)?;
             }
 
             Arc::new(chain)
@@ -119,12 +119,12 @@ impl WorkerManager for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let chain_arc = {
             let data = wallet.get_wallet_data()?;
-            let mut chain = self.get_provider(data.default_chain_hash)?;
+            let mut chain = self.get_provider(data.chain_hash)?;
             let account = data.get_selected_account()?;
             if chain.config.diff_block_time == 0 {
-                self.update_block_diff_time(data.default_chain_hash, &account.addr)
+                self.update_block_diff_time(data.chain_hash, &account.addr)
                     .await?;
-                chain = self.get_provider(data.default_chain_hash)?;
+                chain = self.get_provider(data.chain_hash)?;
             }
             Arc::new(chain)
         };

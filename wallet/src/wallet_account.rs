@@ -1,5 +1,5 @@
 use crate::{
-    account::Account, account_type::AccountType, wallet_crypto::WalletCrypto,
+    account::AccountV2, account_type::AccountType, wallet_crypto::WalletCrypto,
     wallet_storage::StorageOperations, Result, Wallet,
 };
 use cipher::argon2::Argon2Seed;
@@ -33,13 +33,17 @@ impl AccountManagement for Wallet {
 
     fn delete_account(&self, account_index: usize) -> Result<()> {
         let mut data = self.get_wallet_data()?;
+        let accounts = data
+            .slip44_accounts
+            .get_mut(&data.slip44)
+            .ok_or(WalletErrors::NoAccounts)?;
 
-        if account_index == 0 || data.accounts.get(account_index).is_none() {
+        if account_index == 0 || accounts.get(account_index).is_none() {
             return Err(WalletErrors::InvalidAccountIndex(account_index));
         }
 
-        data.accounts.remove(account_index);
-        data.selected_account = data.accounts.len() - 1;
+        accounts.remove(account_index);
+        data.selected_account = accounts.len() - 1;
         self.save_wallet_data(data)?;
 
         Ok(())
@@ -56,26 +60,21 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::InvalidAccountType);
         }
 
-        data.accounts = Vec::with_capacity(accounts.len());
-
         let chain_hash = chain.hash();
+        let mut new_accounts = Vec::with_capacity(accounts.len());
 
         for (ledger_index, pub_key, name) in accounts.into_iter() {
-            let chain_id = match &pub_key {
-                PubKey::Secp256k1Sha256(_) => chain.chain_ids[1],
-                _ => chain.chain_id(),
-            };
-            let ledger_account = Account::from_ledger(
+            let ledger_account = AccountV2::from_ledger(
                 pub_key,
                 name,
                 ledger_index as usize,
                 chain_hash,
-                chain_id,
-                chain.slip_44,
             )?;
 
-            data.accounts.push(ledger_account);
+            new_accounts.push(ledger_account);
         }
+
+        data.slip44_accounts.insert(chain.slip_44, new_accounts);
 
         self.save_wallet_data(data)?;
 
@@ -94,24 +93,30 @@ impl AccountManagement for Wallet {
         let m = self.reveal_mnemonic(seed_bytes)?;
         let mnemonic_seed = m.to_seed(passphrase)?;
         let has_account = data
-            .accounts
-            .iter()
-            .any(|account| account.account_type.value() == bip49.get_index());
+            .slip44_accounts
+            .get(&data.slip44)
+            .map(|accounts| {
+                accounts
+                    .iter()
+                    .any(|account| account.account_type.value() == bip49.get_index())
+            })
+            .unwrap_or(false);
 
         if has_account {
             return Err(WalletErrors::ExistsAccount(bip49.get_index()));
         }
 
-        let hd_account = Account::from_hd(
+        let hd_account = AccountV2::from_hd(
             &mnemonic_seed,
             name,
             bip49,
             chain.hash(),
-            chain.chain_id(),
-            chain.slip_44,
         )?;
 
-        data.accounts.push(hd_account);
+        data.slip44_accounts
+            .entry(data.slip44)
+            .or_default()
+            .push(hd_account);
         self.save_wallet_data(data)?;
 
         Ok(())
@@ -119,12 +124,16 @@ impl AccountManagement for Wallet {
 
     fn select_account(&self, account_index: usize) -> Result<()> {
         let mut data = self.get_wallet_data()?;
+        let accounts = data
+            .slip44_accounts
+            .get(&data.slip44)
+            .ok_or(WalletErrors::NoAccounts)?;
 
-        if data.accounts.is_empty() {
+        if accounts.is_empty() {
             return Err(WalletErrors::NoAccounts);
         }
 
-        if account_index >= data.accounts.len() {
+        if account_index >= accounts.len() {
             return Err(WalletErrors::InvalidAccountIndex(account_index));
         }
 

@@ -7,7 +7,6 @@ use cipher::{
     keychain::KeyChain,
     options::CipherOrders,
 };
-use storage::codec;
 use config::{
     bip39::EN_WORDS,
     cipher::{PROOF_SALT, PROOF_SIZE},
@@ -22,10 +21,11 @@ use secrecy::{ExposeSecret, SecretSlice, SecretString};
 use serde::{Deserialize, Serialize};
 use session::management::{SessionManagement, SessionManager};
 use settings::common_settings::CommonSettings;
+use storage::codec;
 use storage::LocalStorage;
 use token::ft::FToken;
 use wallet::{
-    account_type::AccountType, wallet_crypto::WalletCrypto, wallet_data::WalletData,
+    account_type::AccountType, wallet_crypto::WalletCrypto, wallet_data::WalletDataV2,
     wallet_init::WalletInit, wallet_storage::StorageOperations, wallet_types::WalletTypes, Wallet,
     WalletAddrType,
 };
@@ -36,7 +36,7 @@ pub const SIGNATURE: &[u8] = b"ZILPAY_BACKUP";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct KeyStore {
-    pub wallet_data: WalletData,
+    pub wallet_data: WalletDataV2,
     pub wallet_address: WalletAddrType,
     pub chain_config: ChainConfig,
     pub ftokens: Vec<FToken>,
@@ -94,8 +94,7 @@ impl KeyStore {
                 Ok(keystore)
             }
             1 => {
-                let warp =
-                    storage::data_warp::DataWarp::from_bytes(decrypted_data.into())?;
+                let warp = storage::data_warp::DataWarp::from_bytes(decrypted_data.into())?;
                 let keystore: KeyStore = codec::deserialize(&warp)?;
                 Ok(keystore)
             }
@@ -194,8 +193,14 @@ impl StorageManagement for Background {
 
                 keystore.wallet_data.proof_key = proof_key;
 
-                if let Some(acc) = keystore.wallet_data.accounts.first_mut() {
-                    acc.account_type = AccountType::PrivateKey(cipher_entropy_key)
+                if let Some(accounts) = keystore
+                    .wallet_data
+                    .slip44_accounts
+                    .get_mut(&keystore.wallet_data.slip44)
+                {
+                    if let Some(acc) = accounts.first_mut() {
+                        acc.account_type = AccountType::PrivateKey(cipher_entropy_key);
+                    }
                 }
             }
             WalletTypes::SecretPhrase((storage_key, _)) => {
@@ -249,7 +254,7 @@ impl StorageManagement for Background {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let wallet_data = wallet.get_wallet_data()?;
         let ftokens = wallet.get_ftokens()?;
-        let chain_config = self.get_provider(wallet_data.default_chain_hash)?.config;
+        let chain_config = self.get_provider(wallet_data.chain_hash)?.config;
         let cipher_orders = wallet_data.settings.cipher_orders.clone();
         let keys = match wallet_data.wallet_type {
             WalletTypes::Ledger(_) => Vec::with_capacity(0),
@@ -635,8 +640,8 @@ mod tests_background {
             restored_wallet_data1.settings
         );
         assert_eq!(
-            restored_wallet_data0.accounts,
-            restored_wallet_data1.accounts
+            restored_wallet_data0.slip44_accounts,
+            restored_wallet_data1.slip44_accounts
         );
         assert_eq!(
             restored_wallet_data0.wallet_name,
@@ -649,8 +654,8 @@ mod tests_background {
         assert_eq!(restored_wallet_data0.biometric_type, AuthMethod::None);
         assert_eq!(restored_wallet_data1.biometric_type, AuthMethod::None);
         assert_eq!(
-            restored_wallet_data0.default_chain_hash,
-            restored_wallet_data1.default_chain_hash
+            restored_wallet_data0.chain_hash,
+            restored_wallet_data1.chain_hash
         );
 
         let seed_bytes0 = bg
@@ -714,34 +719,14 @@ mod tests_background {
             restored_wallet_data0.settings,
             restored_wallet_data1.settings
         );
-        assert_ne!(
-            restored_wallet_data0.accounts.first().unwrap().account_type,
-            restored_wallet_data1.accounts.first().unwrap().account_type,
-        );
-        assert_eq!(
-            restored_wallet_data0.accounts.first().unwrap().name,
-            restored_wallet_data1.accounts.first().unwrap().name,
-        );
-        assert_eq!(
-            restored_wallet_data0.accounts.first().unwrap().addr,
-            restored_wallet_data1.accounts.first().unwrap().addr,
-        );
-        assert_eq!(
-            restored_wallet_data0.accounts.first().unwrap().chain_hash,
-            restored_wallet_data1.accounts.first().unwrap().chain_hash,
-        );
-        assert_eq!(
-            restored_wallet_data0.accounts.first().unwrap().chain_id,
-            restored_wallet_data1.accounts.first().unwrap().chain_id,
-        );
-        assert_eq!(
-            restored_wallet_data0.accounts.first().unwrap().slip_44,
-            restored_wallet_data1.accounts.first().unwrap().slip_44,
-        );
-        assert_eq!(
-            restored_wallet_data0.accounts.first().unwrap().pub_key,
-            restored_wallet_data1.accounts.first().unwrap().pub_key,
-        );
+        let acc0 = restored_wallet_data0.get_account(0).unwrap();
+        let acc1 = restored_wallet_data1.get_account(0).unwrap();
+
+        assert_ne!(acc0.account_type, acc1.account_type);
+        assert_eq!(acc0.name, acc1.name);
+        assert_eq!(acc0.addr, acc1.addr);
+        assert_eq!(acc0.chain_hash, acc1.chain_hash);
+        assert_eq!(acc0.pub_key, acc1.pub_key);
         assert_eq!(
             restored_wallet_data0.wallet_name,
             restored_wallet_data1.wallet_name
@@ -753,8 +738,8 @@ mod tests_background {
         assert_eq!(restored_wallet_data0.biometric_type, AuthMethod::FaceId);
         assert_eq!(restored_wallet_data1.biometric_type, AuthMethod::None);
         assert_eq!(
-            restored_wallet_data0.default_chain_hash,
-            restored_wallet_data1.default_chain_hash
+            restored_wallet_data0.chain_hash,
+            restored_wallet_data1.chain_hash
         );
 
         let seed_bytes0 = bg

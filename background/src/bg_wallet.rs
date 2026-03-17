@@ -203,31 +203,31 @@ impl WalletManagement for Background {
     fn swap_zilliqa_chain(&self, wallet_index: usize, account_index: usize) -> Result<()> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let mut data = wallet.get_wallet_data()?;
-        let account = data
-            .accounts
+        let accounts = data
+            .slip44_accounts
+            .get_mut(&data.slip44)
+            .ok_or(WalletErrors::NoAccounts)?;
+        let account = accounts
             .get_mut(account_index)
             .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
-        let provider = self.get_provider(account.chain_hash)?;
 
-        match account.pub_key {
-            PubKey::Secp256k1Sha256(pub_key) => {
-                account.pub_key = PubKey::Secp256k1Keccak256(pub_key);
-                if let Some(chain_id) = provider.config.chain_ids.first() {
-                    account.chain_id = *chain_id;
-                }
+        match &account.pub_key {
+            Some(PubKey::Secp256k1Sha256(pub_key)) => {
+                account.pub_key = Some(PubKey::Secp256k1Keccak256(*pub_key));
             }
-            PubKey::Secp256k1Keccak256(pub_key) => {
-                account.pub_key = PubKey::Secp256k1Sha256(pub_key);
-                if let Some(chain_id) = provider.config.chain_ids.last() {
-                    account.chain_id = *chain_id;
-                }
+            Some(PubKey::Secp256k1Keccak256(pub_key)) => {
+                account.pub_key = Some(PubKey::Secp256k1Sha256(*pub_key));
             }
             _ => {
                 return Err(AccountErrors::InvalidPubKeyType)?;
             }
         }
 
-        account.addr = account.pub_key.get_addr()?;
+        let pk = account
+            .pub_key
+            .as_ref()
+            .ok_or(AccountErrors::InvalidPubKeyType)?;
+        account.addr = pk.get_addr()?;
         wallet.save_wallet_data(data)?;
 
         Ok(())
@@ -670,20 +670,22 @@ mod tests_background {
 
         let data = wallet.get_wallet_data().unwrap();
 
-        for acc in &data.accounts {
+        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        for acc in accounts {
             assert!(
                 matches!(acc.addr, Address::Secp256k1Sha256(_)),
                 "address should be in legacy mode"
             );
         }
 
-        for (i, _) in data.accounts.iter().enumerate() {
+        for i in 0..accounts.len() {
             bg.swap_zilliqa_chain(0, i).unwrap();
         }
 
         let data = wallet.get_wallet_data().unwrap();
+        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
 
-        for acc in &data.accounts {
+        for acc in accounts {
             assert!(
                 matches!(acc.addr, Address::Secp256k1Keccak256(_)),
                 "address should be in evm mode"
@@ -720,7 +722,10 @@ mod tests_background {
         let data = wallet.get_wallet_data().unwrap();
 
         assert_eq!(data.wallet_name, "Bitcoin Wallet");
-        assert_eq!(data.accounts.len(), 1);
+        assert_eq!(
+            data.slip44_accounts.get(&data.slip44).unwrap().len(),
+            1
+        );
         assert!(matches!(
             data.get_selected_account().unwrap().addr,
             Address::Secp256k1Bitcoin(_)

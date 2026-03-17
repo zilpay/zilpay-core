@@ -36,7 +36,7 @@ pub struct TransactionMetadata {
     pub info: Option<String>,
     pub icon: Option<String>,
     pub title: Option<String>,
-    pub signer: Option<PubKey>,
+    pub signer: Option<Address>,
     pub token_info: Option<(U256, u8, String)>,
     pub btc_utxo_amounts: Option<Vec<u64>>,
     pub broadcast: bool,
@@ -73,15 +73,13 @@ impl TransactionReceipt {
             }
 
             Self::Ethereum((tx, metadata)) => {
-                let pub_key = metadata
+                let addr = metadata
                     .signer
                     .as_ref()
                     .ok_or(KeyPairError::InvalidPublicKey)?;
 
                 if let Ok(signer) = tx.recover_signer() {
-                    let addr = pub_key.get_addr()?.to_alloy_addr();
-
-                    Ok(addr == signer)
+                    Ok(addr.to_alloy_addr() == signer)
                 } else {
                     Ok(false)
                 }
@@ -229,16 +227,14 @@ impl TransactionRequest {
                     .await
                     .map_err(|e| KeyPairError::FailToSignTx(e.to_string()))?;
 
-                let pub_key_bytes = keypair.get_pubkey_bytes();
-
-                metadata.signer = Some(PubKey::Secp256k1Keccak256(*pub_key_bytes));
+                metadata.signer = Some(keypair.get_addr()?);
 
                 Ok(TransactionReceipt::Ethereum((tx_envelope, metadata)))
             }
             TransactionRequest::Tron((tx, mut metadata)) => {
                 let tx_id_hex = hex::encode(tx.tx_id());
                 metadata.hash = Some(tx_id_hex);
-                metadata.signer = Some(keypair.get_pubkey()?);
+                metadata.signer = Some(keypair.get_addr()?);
 
                 let receipt = tx.sign(keypair)?;
 
@@ -341,7 +337,7 @@ impl TransactionRequest {
                     }
                 }
 
-                metadata.signer = Some(keypair.get_pubkey()?);
+                metadata.signer = Some(keypair.get_addr()?);
 
                 Ok(TransactionReceipt::Bitcoin((tx, metadata)))
             }
@@ -427,7 +423,7 @@ impl TransactionRequest {
                     TypedTransaction::Eip7702(tx) => TxEnvelope::Eip7702(tx.into_signed(sig)),
                 };
 
-                metadata.signer = Some(pub_key.clone());
+                metadata.signer = Some(pub_key.get_addr()?);
 
                 Ok(TransactionReceipt::Ethereum((signed_tx, metadata)))
             }
@@ -466,7 +462,7 @@ impl TransactionRequest {
             TransactionRequest::Bitcoin((tx, mut metadata)) => {
                 let txid = tx.compute_txid().to_string();
                 metadata.hash = Some(txid);
-                metadata.signer = Some(pub_key.clone());
+                metadata.signer = Some(pub_key.get_addr()?);
 
                 Ok(TransactionReceipt::Bitcoin((tx, metadata)))
             }
@@ -482,7 +478,7 @@ impl TransactionRequest {
                 let owner_address = tx.owner_address()?;
 
                 metadata.hash = Some(hex::encode(tx_id));
-                metadata.signer = Some(pub_key.clone());
+                metadata.signer = Some(pub_key.get_addr()?);
 
                 let receipt = TronTransactionReceipt {
                     raw_data_bytes,
@@ -511,12 +507,11 @@ impl TransactionRequest {
             }
             TransactionRequest::Bitcoin((tx, metadata)) => {
                 if let Some(first_output) = tx.output.first() {
-                    let network =
-                        if let Some(PubKey::Secp256k1Bitcoin((_, net, _))) = &metadata.signer {
-                            *net
-                        } else {
-                            bitcoin::Network::Bitcoin
-                        };
+                    let network = metadata
+                        .signer
+                        .as_ref()
+                        .and_then(|addr| addr.get_bitcoin_network().ok())
+                        .unwrap_or(bitcoin::Network::Bitcoin);
 
                     if let Ok(addr) =
                         bitcoin::Address::from_script(&first_output.script_pubkey, network)
