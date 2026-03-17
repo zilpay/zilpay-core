@@ -12,6 +12,7 @@ pub enum TokenQuotesAPIOptions {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[serde(default)]
 pub struct WalletSettings {
     pub cipher_orders: Vec<CipherOrders>,
 
@@ -29,6 +30,7 @@ pub struct WalletSettings {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
+#[serde(default)]
 pub struct WalletFeatures {
     pub currency_convert: String,
     pub ens_enabled: bool,
@@ -36,6 +38,7 @@ pub struct WalletFeatures {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
+#[serde(default)]
 pub struct NetworkSettings {
     pub tokens_list_fetcher: bool,
     pub node_ranking_enabled: bool,

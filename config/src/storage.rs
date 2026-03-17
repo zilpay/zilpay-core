@@ -1,4 +1,4 @@
-pub const STORAGE_VERSION: u16 = 0;
+pub const STORAGE_VERSION: u16 = 1;
 pub const INDICATORS_DB_KEY_V1: &[u8] = b"address_indicators_v1";
 pub const FTOKENS_DB_KEY_V1: &[u8] = b"f_tokens_v1";
 pub const HISTORY_TXNS_DB_KEY_V1: &[u8] = b"history_transactions_v1";

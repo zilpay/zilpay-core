@@ -1,6 +1,7 @@
 use errors::account::AccountErrors;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use storage::codec::Codec;
 
 type Result<T> = std::result::Result<T, AccountErrors>;
 
@@ -11,9 +12,12 @@ pub enum AccountType {
     PrivateKey(usize), // A storage key for cipher secret key
 }
 
+impl Codec for AccountType {}
+
 impl AccountType {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        bincode::deserialize(bytes).map_err(|e| AccountErrors::AccountTypeSerdeError(e.to_string()))
+        <Self as Codec>::from_bytes(bytes)
+            .map_err(|e| AccountErrors::AccountTypeSerdeError(e.to_string()))
     }
 
     pub fn code(&self) -> u8 {
@@ -33,7 +37,7 @@ impl AccountType {
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        bincode::serialize(&self).map_err(|e| AccountErrors::AccountTypeSerdeError(e.to_string()))
+        Codec::to_bytes(self).map_err(|e| AccountErrors::AccountTypeSerdeError(e.to_string()))
     }
 }
 

@@ -57,6 +57,7 @@ impl std::fmt::Display for Appearances {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct Theme {
     pub appearances: Appearances,
     pub compact_numbers: bool,

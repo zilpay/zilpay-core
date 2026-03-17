@@ -7,6 +7,18 @@ type Result<T> = std::result::Result<T, LocalStorageError>;
 pub const FORMAT_VERSION_BINCODE: u16 = 0;
 pub const FORMAT_VERSION_MSGPACK: u16 = 1;
 
+pub trait Codec: Serialize + DeserializeOwned {
+    fn to_bytes(&self) -> Result<Vec<u8>> {
+        let warp = serialize(self)?;
+        Ok(warp.to_bytes())
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let warp = DataWarp::from_bytes(bytes.into())?;
+        deserialize(&warp)
+    }
+}
+
 pub fn serialize<T: Serialize>(value: &T) -> Result<DataWarp> {
     let payload = rmp_serde::to_vec_named(value)
         .map_err(|e| LocalStorageError::SerializeError(e.to_string()))?;
@@ -255,7 +267,11 @@ mod tests {
 
         let v1 = sample_v1();
         let bincode_bytes = bincode::serialize(&v1).unwrap();
-        storage.set(key, &bincode_bytes).unwrap();
+        let legacy_warp = DataWarp {
+            payload: bincode_bytes,
+            version: FORMAT_VERSION_BINCODE,
+        };
+        storage.set_raw(key, &legacy_warp.to_bytes()).unwrap();
 
         let restored: ChainConfigV1 = storage.get_versioned(key).unwrap();
         assert_eq!(restored, v1);
@@ -264,6 +280,74 @@ mod tests {
 
         let final_restored: ChainConfigV1 = storage.get_versioned(key).unwrap();
         assert_eq!(final_restored, v1);
+    }
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    struct CodecTestStruct {
+        name: String,
+        value: u64,
+    }
+
+    impl Codec for CodecTestStruct {}
+
+    #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
+    #[serde(default)]
+    struct CodecTestStructV2 {
+        name: String,
+        value: u64,
+        extra: bool,
+    }
+
+    impl Default for CodecTestStructV2 {
+        fn default() -> Self {
+            Self {
+                name: String::new(),
+                value: 0,
+                extra: true,
+            }
+        }
+    }
+
+    impl Codec for CodecTestStructV2 {}
+
+    #[test]
+    fn test_codec_trait_roundtrip() {
+        let original = CodecTestStruct {
+            name: "test".to_string(),
+            value: 42,
+        };
+        let bytes = original.to_bytes().unwrap();
+        let restored = CodecTestStruct::from_bytes(&bytes).unwrap();
+        assert_eq!(original, restored);
+    }
+
+    #[test]
+    fn test_codec_trait_forward_compat() {
+        let v1 = CodecTestStruct {
+            name: "hello".to_string(),
+            value: 99,
+        };
+        let bytes = v1.to_bytes().unwrap();
+        let v2 = CodecTestStructV2::from_bytes(&bytes).unwrap();
+        assert_eq!(v2.name, "hello");
+        assert_eq!(v2.value, 99);
+        assert!(v2.extra);
+    }
+
+    #[test]
+    fn test_codec_trait_bincode_legacy() {
+        let v1 = CodecTestStruct {
+            name: "legacy".to_string(),
+            value: 7,
+        };
+        let bincode_bytes = bincode::serialize(&v1).unwrap();
+        let warp = DataWarp {
+            payload: bincode_bytes,
+            version: FORMAT_VERSION_BINCODE,
+        };
+        let warp_bytes = warp.to_bytes();
+        let restored = CodecTestStruct::from_bytes(&warp_bytes).unwrap();
+        assert_eq!(restored, v1);
     }
 
     fn rand_num() -> u64 {

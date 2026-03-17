@@ -24,23 +24,17 @@ impl AddressBookManagement for Background {
 
         book.retain(|entry| entry.addr != *address);
 
-        let bytes =
-            bincode::serialize(&book).or(Err(BackgroundError::FailToSerializeAddressBook))?;
-
-        self.storage.set(ADDRESS_BOOK_DB_KEY_V1, &bytes)?;
+        self.storage
+            .set_versioned(ADDRESS_BOOK_DB_KEY_V1, &book)?;
         self.storage.flush()?;
 
         Ok(())
     }
 
     fn get_address_book(&self) -> Vec<AddressBookEntry> {
-        let bytes = self.storage.get(ADDRESS_BOOK_DB_KEY_V1).unwrap_or_default();
-
-        if bytes.is_empty() {
-            return Vec::with_capacity(1);
-        }
-
-        bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1))
+        self.storage
+            .get_versioned::<Vec<AddressBookEntry>>(ADDRESS_BOOK_DB_KEY_V1)
+            .unwrap_or_else(|_| Vec::with_capacity(1))
     }
 
     fn add_to_address_book(&self, address: AddressBookEntry) -> Result<()> {
@@ -54,10 +48,8 @@ impl AddressBookManagement for Background {
 
         book.push(address);
 
-        let bytes =
-            bincode::serialize(&book).or(Err(BackgroundError::FailToSerializeAddressBook))?;
-
-        self.storage.set(ADDRESS_BOOK_DB_KEY_V1, &bytes)?;
+        self.storage
+            .set_versioned(ADDRESS_BOOK_DB_KEY_V1, &book)?;
         self.storage.flush()?;
 
         Ok(())

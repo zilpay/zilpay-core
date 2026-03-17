@@ -77,32 +77,28 @@ impl StorageOperations for Wallet {
     }
 
     fn get_wallet_data(&self) -> Result<WalletData> {
-        let bytes = self.storage.get(self.wallet_address.as_slice())?;
-        let data = bincode::deserialize(&bytes)?;
-
-        Ok(data)
+        self.storage
+            .get_versioned(self.wallet_address.as_slice())
+            .map_err(WalletErrors::from)
     }
 
     fn get_ftokens(&self) -> Result<Vec<FToken>> {
         let ftokens_key = Wallet::get_token_db_key(&self.wallet_address);
-        let bytes = match self.storage.get(&ftokens_key) {
-            Ok(b) => b,
-            Err(_) => return Ok(Vec::with_capacity(0)),
-        };
-        let ftokens: Vec<FToken> = bincode::deserialize(&bytes)?;
-
-        Ok(ftokens)
+        match self.storage.get_versioned::<Vec<FToken>>(&ftokens_key) {
+            Ok(tokens) => Ok(tokens),
+            Err(_) => Ok(Vec::with_capacity(0)),
+        }
     }
 
     fn get_history(&self) -> Result<Vec<HistoricalTransaction>> {
         let history_db_key = Wallet::get_db_history_key(&self.wallet_address);
-        let bytes = match self.storage.get(&history_db_key) {
-            Ok(b) => b,
-            Err(_) => return Ok(Vec::with_capacity(0)),
-        };
-        let history: Vec<HistoricalTransaction> = bincode::deserialize(&bytes)?;
-
-        Ok(history)
+        match self
+            .storage
+            .get_versioned::<Vec<HistoricalTransaction>>(&history_db_key)
+        {
+            Ok(history) => Ok(history),
+            Err(_) => Ok(Vec::with_capacity(0)),
+        }
     }
 
     fn safe_storage_save(cipher_entropy: &[u8], storage: Arc<LocalStorage>) -> Result<usize> {
@@ -127,19 +123,17 @@ impl StorageOperations for Wallet {
     }
 
     fn save_wallet_data(&self, data: WalletData) -> Result<()> {
-        let bytes = bincode::serialize(&data)?;
-
-        self.storage.set(&self.wallet_address, &bytes)?;
+        self.storage
+            .set_versioned(&self.wallet_address, &data)?;
         self.storage.flush()?;
 
         Ok(())
     }
 
     fn save_ftokens(&self, ftokens: &[FToken]) -> std::result::Result<(), Self::Error> {
-        let ft_bytes = bincode::serialize(ftokens)?;
         let token_key = Wallet::get_token_db_key(&self.wallet_address);
 
-        self.storage.set(&token_key, &ft_bytes)?;
+        self.storage.set_versioned(&token_key, &ftokens)?;
         self.storage.flush()?;
 
         Ok(())
@@ -149,10 +143,9 @@ impl StorageOperations for Wallet {
         &self,
         history: &[HistoricalTransaction],
     ) -> std::result::Result<(), Self::Error> {
-        let new_history = bincode::serialize(&history)?;
         let history_db_key = Wallet::get_db_history_key(&self.wallet_address);
 
-        self.storage.set(&history_db_key, &new_history)?;
+        self.storage.set_versioned(&history_db_key, &history)?;
         self.storage.flush()?;
 
         Ok(())

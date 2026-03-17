@@ -7,6 +7,7 @@ edition = "2021"
 ntrulp.workspace = true
 thiserror.workspace = true
 bincode.workspace = true
+rmp-serde.workspace = true
 rust-argon2.workspace = true
 pqbip39.workspace = true
 

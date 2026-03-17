@@ -7,6 +7,7 @@ use cipher::{
     keychain::KeyChain,
     options::CipherOrders,
 };
+use storage::codec;
 use config::{
     bip39::EN_WORDS,
     cipher::{PROOF_SALT, PROOF_SIZE},
@@ -54,9 +55,6 @@ impl KeyStore {
         }
 
         let version = cipher_backup[SIGNATURE.len()];
-        if version != 0 {
-            return Err(BackgroundError::UnsupportedBackupVersion(version));
-        }
 
         if cipher_backup.len() <= SIGNATURE.len() + 2 {
             return Err(BackgroundError::InvalidBackupFormat);
@@ -90,9 +88,19 @@ impl KeyStore {
         let keychain = KeyChain::from_seed(argon_seed)?;
         let decrypted_data = keychain.decrypt(encrypted_data, &cipher_orders)?;
 
-        let keystore: KeyStore = bincode::deserialize(&decrypted_data)?;
-
-        Ok(keystore)
+        match version {
+            0 => {
+                let keystore: KeyStore = bincode::deserialize(&decrypted_data)?;
+                Ok(keystore)
+            }
+            1 => {
+                let warp =
+                    storage::data_warp::DataWarp::from_bytes(decrypted_data.into())?;
+                let keystore: KeyStore = codec::deserialize(&warp)?;
+                Ok(keystore)
+            }
+            _ => Err(BackgroundError::UnsupportedBackupVersion(version)),
+        }
     }
 }
 
@@ -268,8 +276,8 @@ impl StorageManagement for Background {
             &ARGON2_DEFAULT_CONFIG,
         )?;
 
-        let keystore_bytes = bincode::serialize(&keystore)?;
-        let keystore_version: u8 = 0;
+        let keystore_bytes = codec::serialize(&keystore)?.to_bytes();
+        let keystore_version: u8 = 1;
         let keychain = KeyChain::from_seed(&new_argon_seed)?;
         let cipher_bytes = keychain.encrypt(keystore_bytes, &cipher_orders)?;
         let cipher_orders_bytes = cipher_orders.iter().map(|c| c.code()).collect::<Vec<u8>>();
@@ -286,13 +294,9 @@ impl StorageManagement for Background {
     }
 
     fn load_global_settings(storage: Arc<LocalStorage>) -> CommonSettings {
-        let bytes = storage.get(GLOBAL_SETTINGS_DB_KEY_V1).unwrap_or_default();
-
-        if bytes.is_empty() {
-            return CommonSettings::default();
-        }
-
-        bincode::deserialize(&bytes).unwrap_or(CommonSettings::default())
+        storage
+            .get_versioned::<CommonSettings>(GLOBAL_SETTINGS_DB_KEY_V1)
+            .unwrap_or_default()
     }
 
     fn get_indicators(storage: Arc<LocalStorage>) -> Vec<[u8; SHA256_SIZE]> {
@@ -324,10 +328,8 @@ impl StorageManagement for Background {
     }
 
     fn save_settings(&self, settings: CommonSettings) -> Result<()> {
-        let bytes =
-            bincode::serialize(&settings).or(Err(BackgroundError::FailToSerializeNetworks))?;
-
-        self.storage.set(GLOBAL_SETTINGS_DB_KEY_V1, &bytes)?;
+        self.storage
+            .set_versioned(GLOBAL_SETTINGS_DB_KEY_V1, &settings)?;
         self.storage.flush()?;
 
         Ok(())

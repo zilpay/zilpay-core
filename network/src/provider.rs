@@ -28,29 +28,19 @@ pub struct NetworkProvider {
 
 impl Provider for NetworkProvider {
     fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
-        let bytes = storage.get(NETWORK_DB_KEY_V1).unwrap_or_default();
-
-        if bytes.is_empty() {
-            return Vec::with_capacity(1);
+        match storage.get_versioned::<Vec<ChainConfig>>(NETWORK_DB_KEY_V1) {
+            Ok(configs) => configs
+                .into_iter()
+                .map(NetworkProvider::new)
+                .collect(),
+            Err(_) => Vec::with_capacity(1),
         }
-
-        let configs: Vec<ChainConfig> =
-            bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1));
-        let mut providers = Vec::with_capacity(configs.len());
-
-        for config in configs.iter() {
-            providers.push(NetworkProvider::new(config.to_owned()));
-        }
-
-        providers
     }
 
     fn save_network_configs(providers: &[Self], storage: Arc<LocalStorage>) -> Result<()> {
         let as_vec: Vec<_> = providers.iter().map(|v| &v.config).collect();
-        let bytes =
-            bincode::serialize(&as_vec).map_err(|e| NetworkErrors::RPCError(e.to_string()))?;
 
-        storage.set(NETWORK_DB_KEY_V1, &bytes)?;
+        storage.set_versioned(NETWORK_DB_KEY_V1, &as_vec)?;
         storage.flush()?;
 
         Ok(())

@@ -142,6 +142,18 @@ impl From<Box<ErrorKind>> for WalletErrors {
     }
 }
 
+impl From<rmp_serde::encode::Error> for WalletErrors {
+    fn from(error: rmp_serde::encode::Error) -> Self {
+        WalletErrors::BincodeError(error.to_string())
+    }
+}
+
+impl From<rmp_serde::decode::Error> for WalletErrors {
+    fn from(error: rmp_serde::decode::Error) -> Self {
+        WalletErrors::BincodeError(error.to_string())
+    }
+}
+
 impl From<TransactionErrors> for WalletErrors {
     fn from(error: TransactionErrors) -> Self {
         WalletErrors::TransactionErrors(error)

@@ -57,6 +57,18 @@ impl From<Box<ErrorKind>> for AccountErrors {
     }
 }
 
+impl From<rmp_serde::encode::Error> for AccountErrors {
+    fn from(error: rmp_serde::encode::Error) -> Self {
+        AccountErrors::BincodeError(error.to_string())
+    }
+}
+
+impl From<rmp_serde::decode::Error> for AccountErrors {
+    fn from(error: rmp_serde::decode::Error) -> Self {
+        AccountErrors::BincodeError(error.to_string())
+    }
+}
+
 impl From<PubKeyError> for AccountErrors {
     fn from(value: PubKeyError) -> Self {
         AccountErrors::PubKeyError(value)

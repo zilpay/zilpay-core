@@ -93,6 +93,16 @@ impl LocalStorage {
         Ok(())
     }
 
+    pub fn set_raw(&self, key: &[u8], raw_bytes: &[u8]) -> Result<()> {
+        let vec = IVec::from(raw_bytes);
+
+        self.tree
+            .insert(key, vec)
+            .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;
+
+        Ok(())
+    }
+
     pub fn remove(&self, key: &[u8]) -> Result<()> {
         self.tree
             .remove(key)

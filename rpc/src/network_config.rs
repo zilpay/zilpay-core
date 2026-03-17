@@ -3,11 +3,13 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use errors::rpc::RpcError;
 use proto::{address::Address, btc_utils::ByteCodec};
 use serde::{Deserialize, Serialize};
+use storage::codec::Codec;
 use token::ft::FToken;
 
 use crate::common::{NetworkConfigTrait, Result};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct Explorer {
     pub name: String,
     pub url: String,
@@ -16,6 +18,7 @@ pub struct Explorer {
 }
 
 #[derive(Debug, Default, PartialEq, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ChainConfig {
     pub name: String,
     pub chain: String,
@@ -33,17 +36,9 @@ pub struct ChainConfig {
     pub ftokens: Vec<FToken>,
 }
 
+impl Codec for ChainConfig {}
+
 impl ChainConfig {
-    pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
-        let decoded: Self = bincode::deserialize(encoded)?;
-        Ok(decoded)
-    }
-
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let encoded: Vec<u8> = bincode::serialize(&self)?;
-        Ok(encoded)
-    }
-
     pub fn network_name(&self) -> &str {
         &self.name
     }

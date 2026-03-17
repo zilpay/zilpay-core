@@ -1,6 +1,7 @@
 use errors::wallet::WalletErrors;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use storage::codec::Codec;
 
 #[derive(Debug, PartialEq, Eq, Clone, Deserialize, Serialize)]
 pub enum WalletTypes {
@@ -9,6 +10,8 @@ pub enum WalletTypes {
     SecretPhrase((usize, bool)),
     SecretKey,
 }
+
+impl Codec for WalletTypes {}
 
 impl WalletTypes {
     pub fn code(&self) -> u8 {
@@ -28,17 +31,12 @@ impl WalletTypes {
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, WalletErrors> {
-        let encoded: Vec<u8> = bincode::serialize(&self)
-            .map_err(|e| WalletErrors::WalletTypeSerialize(e.to_string()))?;
-
-        Ok(encoded)
+        Codec::to_bytes(self).map_err(|e| WalletErrors::WalletTypeSerialize(e.to_string()))
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, WalletErrors> {
-        let decoded: Self = bincode::deserialize(bytes)
-            .map_err(|e| WalletErrors::WalletTypeDeserialize(e.to_string()))?;
-
-        Ok(decoded)
+        <Self as Codec>::from_bytes(bytes)
+            .map_err(|e| WalletErrors::WalletTypeDeserialize(e.to_string()))
     }
 }
 

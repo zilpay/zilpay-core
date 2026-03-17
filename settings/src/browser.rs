@@ -9,6 +9,7 @@ pub enum ContentBlockingLevel {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(default)]
 pub struct BrowserSettings {
     pub search_engine_index: u8,
 

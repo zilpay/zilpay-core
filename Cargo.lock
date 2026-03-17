@@ -1320,6 +1320,7 @@ dependencies = [
  "proto",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rmp-serde",
  "rpc",
  "secrecy",
  "serde",
@@ -2367,6 +2368,7 @@ dependencies = [
  "bincode",
  "ntrulp",
  "pqbip39",
+ "rmp-serde",
  "rust-argon2",
  "thiserror 2.0.18",
 ]
@@ -3771,7 +3773,6 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "async-trait",
- "bincode",
  "bitcoin",
  "config",
  "crypto",
@@ -3783,6 +3784,7 @@ dependencies = [
  "proto",
  "rand 0.8.5",
  "reqwest",
+ "rmp-serde",
  "rpc",
  "serde",
  "serde_json",
@@ -5082,7 +5084,6 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "async-trait",
- "bincode",
  "bitcoin",
  "config",
  "crypto",
@@ -5092,8 +5093,10 @@ dependencies = [
  "mockito",
  "proto",
  "reqwest",
+ "rmp-serde",
  "serde",
  "serde_json",
+ "storage",
  "token",
  "tokio",
 ]
@@ -6049,12 +6052,13 @@ name = "token"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "bincode",
  "config",
  "errors",
  "proto",
+ "rmp-serde",
  "serde",
  "serde_json",
+ "storage",
 ]
 
 [[package]]
@@ -6567,7 +6571,6 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "async-trait",
- "bincode",
  "bitcoin",
  "cipher 0.1.0",
  "config",
@@ -6581,6 +6584,7 @@ dependencies = [
  "proto",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "rmp-serde",
  "rpc",
  "serde",
  "settings",

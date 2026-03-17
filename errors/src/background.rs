@@ -202,6 +202,18 @@ impl From<Box<ErrorKind>> for BackgroundError {
     }
 }
 
+impl From<rmp_serde::encode::Error> for BackgroundError {
+    fn from(error: rmp_serde::encode::Error) -> Self {
+        BackgroundError::BincodeError(error.to_string())
+    }
+}
+
+impl From<rmp_serde::decode::Error> for BackgroundError {
+    fn from(error: rmp_serde::decode::Error) -> Self {
+        BackgroundError::BincodeError(error.to_string())
+    }
+}
+
 impl From<Bip39Error> for BackgroundError {
     fn from(error: Bip39Error) -> Self {
         BackgroundError::Bip39Error(error)

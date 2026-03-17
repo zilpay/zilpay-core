@@ -7,6 +7,7 @@ use proto::keypair::KeyPair;
 use proto::pubkey::PubKey;
 use proto::secret_key::SecretKey;
 use serde::{Deserialize, Serialize};
+use storage::codec::Codec;
 
 type Result<T> = std::result::Result<T, AccountErrors>;
 
@@ -21,11 +22,11 @@ pub struct Account {
     pub slip_44: u32,
 }
 
+impl Codec for Account {}
+
 impl Account {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self> {
-        let decoded: Self = bincode::deserialize(encoded)?;
-
-        Ok(decoded)
+        <Self as Codec>::from_bytes(encoded).map_err(|e| AccountErrors::BincodeError(e.to_string()))
     }
 
     pub fn from_ledger(
@@ -99,9 +100,7 @@ impl Account {
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        let encoded: Vec<u8> = bincode::serialize(&self)?;
-
-        Ok(encoded)
+        Codec::to_bytes(self).map_err(|e| AccountErrors::BincodeError(e.to_string()))
     }
 }
 

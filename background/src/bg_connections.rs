@@ -50,10 +50,8 @@ impl ConnectionManagement for Background {
 
     fn save_connection(&self, wallet_index: usize, connections: Vec<Connection>) -> Result<()> {
         let key = self.get_db_key(wallet_index)?;
-        let bytes = bincode::serialize(&connections)
-            .map_err(|e| BackgroundError::FailToSerializeConnections(e.to_string()))?;
 
-        self.storage.set(&key, &bytes)?;
+        self.storage.set_versioned(&key, &connections)?;
         self.storage.flush()?;
 
         Ok(())
@@ -61,13 +59,9 @@ impl ConnectionManagement for Background {
 
     fn get_connections(&self, wallet_index: usize) -> Vec<Connection> {
         if let Ok(key) = self.get_db_key(wallet_index) {
-            let bytes = self.storage.get(&key).unwrap_or_default();
-
-            if bytes.is_empty() {
-                return Vec::with_capacity(1);
-            }
-
-            bincode::deserialize(&bytes).unwrap_or(Vec::with_capacity(1))
+            self.storage
+                .get_versioned::<Vec<Connection>>(&key)
+                .unwrap_or_else(|_| Vec::with_capacity(1))
         } else {
             Vec::with_capacity(1)
         }

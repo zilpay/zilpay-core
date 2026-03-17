@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DAppColors {
     pub primary: Option<String>,
     pub secondary: Option<String>,
@@ -10,6 +11,7 @@ pub struct DAppColors {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Connection {
     // Base fields
     pub domain: String,
@@ -25,11 +27,38 @@ pub struct Connection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ConnectionPermissions {
     pub can_read_accounts: bool,
     pub can_request_signatures: bool,
     pub can_suggest_tokens: bool,
     pub can_suggest_transactions: bool,
+}
+
+impl Default for DAppColors {
+    fn default() -> Self {
+        Self {
+            primary: None,
+            secondary: None,
+            background: None,
+            text: None,
+        }
+    }
+}
+
+impl Default for Connection {
+    fn default() -> Self {
+        Self {
+            domain: String::new(),
+            account_indexes: HashSet::new(),
+            favicon: None,
+            title: String::new(),
+            description: None,
+            colors: None,
+            last_connected: 0,
+            permissions: ConnectionPermissions::default(),
+        }
+    }
 }
 
 impl Connection {

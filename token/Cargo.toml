@@ -7,8 +7,9 @@ edition = "2021"
 alloy.workspace = true
 serde_json.workspace = true
 serde.workspace = true
-bincode.workspace = true
+rmp-serde.workspace = true
 
 proto = { path = "../proto" }
 config = { path = "../config" }
 errors = { path = "../errors" }
+storage = { path = "../storage" }

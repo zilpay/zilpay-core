@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct HistoricalTransaction {
     pub status: TransactionStatus,
     pub metadata: TransactionMetadata,

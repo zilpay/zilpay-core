@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct NotificationState {
     pub transactions: bool,
     pub price: bool,
@@ -10,6 +11,7 @@ pub struct NotificationState {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
 pub struct Notifications {
     /// HashMap mapping wallet index to notification states
     pub wallet_states: HashMap<usize, NotificationState>,

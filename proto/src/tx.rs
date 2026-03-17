@@ -29,6 +29,7 @@ pub type ETHTransactionRequest = alloy::rpc::types::eth::request::TransactionReq
 pub type BTCTransactionRequest = BitcoinTransaction;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TransactionMetadata {
     pub chain_hash: u64,
     pub hash: Option<String>,

@@ -4,6 +4,7 @@ use errors::wallet::WalletErrors;
 use proto::address::Address;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use storage::codec::Codec;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FToken {
@@ -19,17 +20,16 @@ pub struct FToken {
     pub rate: f64,
 }
 
+impl Codec for FToken {}
+
 impl FToken {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self, WalletErrors> {
-        let decoded: Self = bincode::deserialize(encoded)?;
-
-        Ok(decoded)
+        <Self as Codec>::from_bytes(encoded)
+            .map_err(|e| WalletErrors::BincodeError(e.to_string()))
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, WalletErrors> {
-        let encoded: Vec<u8> = bincode::serialize(&self)?;
-
-        Ok(encoded)
+        Codec::to_bytes(self).map_err(|e| WalletErrors::BincodeError(e.to_string()))
     }
 
     pub fn zil(chain_hash: u64) -> Self {

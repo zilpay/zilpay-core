@@ -30,3 +30,15 @@ impl From<Box<ErrorKind>> for RpcError {
         RpcError::BincodeError(value.to_string())
     }
 }
+
+impl From<rmp_serde::encode::Error> for RpcError {
+    fn from(error: rmp_serde::encode::Error) -> Self {
+        RpcError::BincodeError(error.to_string())
+    }
+}
+
+impl From<rmp_serde::decode::Error> for RpcError {
+    fn from(error: rmp_serde::decode::Error) -> Self {
+        RpcError::BincodeError(error.to_string())
+    }
+}
