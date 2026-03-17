@@ -1,9 +1,11 @@
+pub mod codec;
 pub mod data_warp;
 
 use config::storage::STORAGE_VERSION;
 use data_warp::DataWarp;
 use directories::ProjectDirs;
 use errors::storage::LocalStorageError;
+use serde::{de::DeserializeOwned, Serialize};
 use sled::{Db, IVec};
 
 type Result<T> = std::result::Result<T, LocalStorageError>;
@@ -102,6 +104,30 @@ impl LocalStorage {
     pub fn flush(&self) -> Result<()> {
         self.tree
             .flush()
+            .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn get_versioned<T: DeserializeOwned>(&self, key: &[u8]) -> Result<T> {
+        let some_value = self
+            .tree
+            .get(key)
+            .map_err(|e| LocalStorageError::StorageAccessError(e.to_string()))?;
+        let value = some_value
+            .ok_or(LocalStorageError::StorageDataNotFound)?
+            .to_vec();
+        let data = DataWarp::from_bytes(value.into())?;
+
+        codec::deserialize(&data)
+    }
+
+    pub fn set_versioned<T: Serialize>(&self, key: &[u8], value: &T) -> Result<()> {
+        let data = codec::serialize(value)?;
+        let vec = IVec::from(data.to_bytes());
+
+        self.tree
+            .insert(key, vec)
             .map_err(|e| LocalStorageError::StorageWriteError(e.to_string()))?;
 
         Ok(())

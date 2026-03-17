@@ -40,4 +40,13 @@ pub enum LocalStorageError {
 
     #[error("Invalid bytes size overflow")]
     InvalidBytesSizeOverflow,
+
+    #[error("Serialize error: {0}")]
+    SerializeError(String),
+
+    #[error("Deserialize error: {0}")]
+    DeserializeError(String),
+
+    #[error("Unsupported storage version: {0}")]
+    UnsupportedVersion(u16),
 }
