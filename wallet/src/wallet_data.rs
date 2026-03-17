@@ -68,4 +68,11 @@ impl WalletDataV2 {
             .and_then(|accounts| accounts.get(index))
             .ok_or(WalletErrors::InvalidAccountIndex(index))
     }
+
+    pub fn get_accounts(&self) -> Result<&[AccountV2], WalletErrors> {
+        self.slip44_accounts
+            .get(&self.slip44)
+            .map(|v| v.as_slice())
+            .ok_or(WalletErrors::InvalidSlip44Index(self.slip44))
+    }
 }

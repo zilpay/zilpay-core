@@ -19,6 +19,9 @@ pub enum WalletErrors {
     #[error("Invalid account index: {0}. Selected index not found")]
     InvalidAccountIndex(usize),
 
+    #[error("Invalid slip44 index: {0}")]
+    InvalidSlip44Index(u32),
+
     #[error("Account with index ({0}) already exists")]
     ExistsAccount(usize),
 
