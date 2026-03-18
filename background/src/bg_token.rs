@@ -2,7 +2,7 @@ use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Backg
 use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
 use crypto::slip44::TRON;
-use errors::{background::BackgroundError, wallet::WalletErrors};
+use errors::background::BackgroundError;
 use network::evm::generate_erc20_transfer_data;
 use proto::{
     address::Address,
@@ -49,7 +49,7 @@ impl TokensManagement for Background {
         to: Address,
         amount: U256,
     ) -> Result<TransactionRequest> {
-        let provider = self.get_provider(sender.chain_hash)?;
+        let provider = self.get_provider(token.chain_hash)?;
         let evm_chain_id = provider.config.chain_id();
         let erc20_payment = || ETHTransactionRequest {
             to: Some(to.to_alloy_addr().into()),
@@ -76,7 +76,7 @@ impl TokensManagement for Background {
             Ok(token_transfer_request)
         };
         let metadata = TransactionMetadata {
-            chain_hash: sender.chain_hash,
+            chain_hash: token.chain_hash,
             hash: None,
             info: None,
             icon: None,
@@ -103,7 +103,7 @@ impl TokensManagement for Background {
                 }
 
                 let amount_sat = amount.to::<u64>();
-                let provider = self.get_provider(sender.chain_hash)?;
+                let provider = self.get_provider(token.chain_hash)?;
 
                 let (tx, utxo_amounts) = crate::bg_tx::build_unsigned_btc_transaction(
                     &provider,
@@ -114,7 +114,7 @@ impl TokensManagement for Background {
                 .await?;
 
                 let metadata = TransactionMetadata {
-                    chain_hash: sender.chain_hash,
+                    chain_hash: token.chain_hash,
                     hash: None,
                     info: None,
                     icon: None,
@@ -215,16 +215,12 @@ impl TokensManagement for Background {
     async fn fetch_ftoken_meta(&self, wallet_index: usize, contract: Address) -> Result<FToken> {
         let w = self.get_wallet_by_index(wallet_index)?;
         let data = w.get_wallet_data()?;
-        let current_accounts = data
-            .slip44_accounts
-            .get(&data.slip44)
-            .ok_or(WalletErrors::NoAccounts)?;
+        let current_accounts = data.get_accounts()?;
         let accounts = current_accounts
             .iter()
             .map(|a| &a.addr)
             .collect::<Vec<&Address>>();
-        let selected = data.get_selected_account()?;
-        let provider = self.get_provider(selected.chain_hash)?;
+        let provider = self.get_provider(data.chain_hash)?;
         let mut token_meta = provider.ftoken_meta(contract, &accounts).await?;
 
         if provider.config.slip_44 == TRON {
@@ -251,17 +247,12 @@ impl TokensManagement for Background {
             return Ok(());
         }
 
-        let selected_account = data.get_selected_account()?;
-        let current_accounts = data
-            .slip44_accounts
-            .get(&data.slip44)
-            .ok_or(WalletErrors::NoAccounts)?;
+        let current_accounts = data.get_accounts()?;
         let addresses: Vec<&Address> = current_accounts.iter().map(|a| &a.addr).collect();
-        let provider = self.get_provider(selected_account.chain_hash)?;
-
+        let provider = self.get_provider(data.chain_hash)?;
         let matching_tokens: Vec<&mut FToken> = ftokens
             .iter_mut()
-            .filter(|token| token.chain_hash == selected_account.chain_hash)
+            .filter(|token| token.chain_hash == data.chain_hash)
             .collect();
 
         provider
@@ -377,6 +368,7 @@ mod tests_background_tokens {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -386,10 +378,7 @@ mod tests_background_tokens {
         assert_eq!(providers.len(), 1);
         {
             let d = bg.wallets.first().unwrap().get_wallet_data().unwrap();
-            assert_eq!(
-                d.slip44_accounts.get(&d.slip44).unwrap().len(),
-                1
-            );
+            assert_eq!(d.get_accounts().unwrap().len(), 1);
         }
 
         let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
@@ -443,6 +432,7 @@ mod tests_background_tokens {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -452,10 +442,7 @@ mod tests_background_tokens {
         assert_eq!(providers.len(), 1);
         {
             let d = bg.wallets.first().unwrap().get_wallet_data().unwrap();
-            assert_eq!(
-                d.slip44_accounts.get(&d.slip44).unwrap().len(),
-                7
-            );
+            assert_eq!(d.get_accounts().unwrap().len(), 7);
         }
 
         let token_addr = Address::from_eth_address(USDT_TOKEN).unwrap();
@@ -501,6 +488,7 @@ mod tests_background_tokens {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![zlp_token.clone()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -510,7 +498,12 @@ mod tests_background_tokens {
         let amount = U256::from(1000000000000u64);
 
         let wallet = bg.wallets.first().unwrap();
-        let account = wallet.get_wallet_data().unwrap().get_account(0).unwrap().clone();
+        let account = wallet
+            .get_wallet_data()
+            .unwrap()
+            .get_account(0)
+            .unwrap()
+            .clone();
 
         let txn_req = bg
             .build_token_transfer(&zlp_token, &account, to_addr.clone(), amount)
@@ -581,6 +574,7 @@ mod tests_background_tokens {
             wallet_name: "BTC Max wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![test_data::gen_btc_token()],
+            bip: DerivationPath::BIP84_PURPOSE,
         })
         .await
         .unwrap();
@@ -588,7 +582,7 @@ mod tests_background_tokens {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        let accs = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accs = data.get_accounts().unwrap();
         assert_eq!(accs.len(), 2, "Should have 2 accounts");
 
         let account = &accs[0];
@@ -763,7 +757,7 @@ mod tests_background_tokens {
 
         let txns = vec![signed_tx];
         let broadcasted_txns = bg
-            .broadcast_signed_transactions(0, from_index, txns)
+            .broadcast_signed_transactions(0, txns)
             .await
             .unwrap();
 
@@ -806,6 +800,7 @@ mod tests_background_tokens {
             wallet_name: "Scilla".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![test_data::gen_zil_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -816,9 +811,9 @@ mod tests_background_tokens {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        let accs = data.slip44_accounts.get(&data.slip44).unwrap();
-        let account = accs.first().unwrap();
-        let account_1 = accs.last().unwrap();
+        let accs = data.get_accounts().unwrap();
+        let account = &accs[0];
+        let account_1 = &accs[1];
 
         let addr_str = account.addr.auto_format();
         let addr_str_1 = account_1.addr.auto_format();
@@ -886,7 +881,10 @@ mod tests_background_tokens {
 
         match signed_tx {
             proto::tx::TransactionReceipt::Zilliqa((signed_zil_tx, _)) => {
-                assert_eq!(signed_zil_tx.pub_key, from_account.pub_key.as_ref().unwrap().as_bytes());
+                assert_eq!(
+                    signed_zil_tx.pub_key,
+                    from_account.pub_key.as_ref().unwrap().as_bytes()
+                );
                 assert_eq!(signed_zil_tx.version, 21823489);
 
                 let gas_price: u128 = params.gas_price.try_into().unwrap();
@@ -947,6 +945,7 @@ mod tests_background_tokens {
             wallet_name: "Anvil Max Transfer".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_anvil_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -955,7 +954,7 @@ mod tests_background_tokens {
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let accs = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accs = data.get_accounts().unwrap();
         let account_0 = &accs[0];
         let account_1 = &accs[1];
 
@@ -1006,7 +1005,7 @@ mod tests_background_tokens {
         assert!(signed_tx.verify().unwrap());
 
         match bg
-            .broadcast_signed_transactions(0, from_index, vec![signed_tx])
+            .broadcast_signed_transactions(0, vec![signed_tx])
             .await
         {
             Ok(broadcasted_txns) => {
@@ -1077,13 +1076,17 @@ mod tests_background_tokens {
             wallet_name: "Tron wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_tron_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        assert_eq!(data.get_account(0).unwrap().addr.auto_format(), tron_addresses::ADDR_0);
+        assert_eq!(
+            data.get_account(0).unwrap().addr.auto_format(),
+            tron_addresses::ADDR_0
+        );
 
         let btt_contract =
             Address::from_tron_address("TNuoKL1ni8aoshfFL1ASca1Gou9RXwAzfn").unwrap();

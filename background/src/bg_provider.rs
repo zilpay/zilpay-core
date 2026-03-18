@@ -1,9 +1,9 @@
 use crate::{bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
-use crypto::slip44::{BITCOIN, ETHEREUM, ZILLIQA};
+use crypto::{bip49::DerivationPath, slip44::ZILLIQA};
 use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::{common::Provider, provider::NetworkProvider};
-use proto::{address::Address, pubkey::PubKey};
+use proto::address::Address;
 use rpc::network_config::ChainConfig;
 use std::sync::Arc;
 use wallet::{wallet_storage::StorageOperations, wallet_types::WalletTypes};
@@ -25,7 +25,7 @@ pub trait ProvidersManagement {
         chain_hash: u64,
     ) -> std::result::Result<(), Self::Error>;
     fn add_provider(&self, config: ChainConfig) -> std::result::Result<u64, Self::Error>;
-    fn remvoe_provider(&self, index: usize) -> std::result::Result<(), Self::Error>;
+    fn remvoe_provider(&self, chain_hash: u64) -> std::result::Result<(), Self::Error>;
     fn update_providers(
         &self,
         providers: Vec<NetworkProvider>,
@@ -88,33 +88,22 @@ impl ProvidersManagement for Background {
         Ok(hash)
     }
 
-    fn remvoe_provider(&self, index: usize) -> Result<()> {
+    fn remvoe_provider(&self, chain_hash: u64) -> Result<()> {
         let mut providers = self.get_providers();
+        let index = providers
+            .iter()
+            .position(|p| p.config.hash() == chain_hash)
+            .ok_or(BackgroundError::ProviderNotExists(chain_hash))?;
 
-        if let Some(provider) = providers.get(index) {
-            let hash = provider.config.hash();
-
-            for wallet in &self.wallets {
-                let data = wallet.get_wallet_data()?;
-
-                if data.chain_hash == hash {
-                    return Err(BackgroundError::ProviderDepends(data.wallet_name));
-                }
-
-                for accounts in data.slip44_accounts.values() {
-                    for account in accounts {
-                        if account.chain_hash == hash {
-                            return Err(BackgroundError::ProviderDepends(account.name.clone()));
-                        }
-                    }
-                }
+        for wallet in &self.wallets {
+            let data = wallet.get_wallet_data()?;
+            if data.chain_hash == chain_hash {
+                return Err(BackgroundError::ProviderDepends(data.wallet_name));
             }
-
-            providers.remove(index);
-            self.update_providers(providers)?;
-        } else {
-            return Err(BackgroundError::ProviderNotExists(index as u64));
         }
+
+        providers.remove(index);
+        self.update_providers(providers)?;
 
         Ok(())
     }
@@ -128,7 +117,6 @@ impl ProvidersManagement for Background {
 
         if let WalletTypes::Ledger(_) = data.wallet_type {
             if default_provider.config.slip_44 == ZILLIQA {
-                // old ledger doesn't support evm.
                 return Err(WalletErrors::InvalidAccountType)?;
             }
         }
@@ -140,48 +128,20 @@ impl ProvidersManagement for Background {
                 existing_ftoken.chain_hash = chain_hash;
                 existing_ftoken.balances = Default::default();
             } else {
-                let new_ftoken = provider_ftoken.clone();
-                ftokens.insert(0, new_ftoken);
+                ftokens.insert(0, provider_ftoken.clone());
             }
         }
 
-        if let Some(accounts) = data.slip44_accounts.get_mut(&data.slip44) {
-            for a in accounts.iter_mut() {
-                if provider.config.slip_44 == ETHEREUM {
-                    if let Some(ref pk) = a.pub_key {
-                        match pk {
-                            PubKey::Secp256k1Sha256(bytes) => {
-                                a.pub_key = Some(PubKey::Secp256k1Keccak256(*bytes));
-                            }
-                            PubKey::Secp256k1Bitcoin((bytes, _, _)) => {
-                                a.pub_key = Some(PubKey::Secp256k1Keccak256(*bytes));
-                            }
-                            PubKey::Ed25519Solana(bytes) => {
-                                a.pub_key = Some(PubKey::Secp256k1Keccak256(*bytes));
-                            }
-                            _ => {}
-                        }
-                    }
-                } else if provider.config.slip_44 == BITCOIN {
-                    if let Some(network) = provider.config.bitcoin_network() {
-                        if let Some(PubKey::Secp256k1Bitcoin((pk, _, addr_type))) = a.pub_key {
-                            a.pub_key =
-                                Some(PubKey::Secp256k1Bitcoin((pk, network, addr_type)));
-                        }
-                    }
-                }
+        let new_slip44 = provider.config.slip_44;
+        let supported = DerivationPath::supported_bips(new_slip44);
+        let new_bip = if supported.contains(&data.bip) {
+            data.bip
+        } else {
+            *supported.first().unwrap_or(&DerivationPath::BIP44_PURPOSE)
+        };
 
-                if let Some(ref pk) = a.pub_key {
-                    if let Ok(addr) = pk.get_addr() {
-                        a.addr = addr;
-                    }
-                }
-
-                a.chain_hash = chain_hash;
-            }
-        }
-
-        data.slip44 = provider.config.slip_44;
+        data.slip44 = new_slip44;
+        data.bip = new_bip;
         data.chain_hash = chain_hash;
 
         wallet.save_wallet_data(data)?;
@@ -265,8 +225,7 @@ mod tests_providers {
 
         assert_eq!(providers.len(), 2);
 
-        // Remove the second provider
-        bg.remvoe_provider(1).unwrap();
+        bg.remvoe_provider(config2.hash()).unwrap();
         let providers = bg.get_providers();
 
         assert_eq!(providers.len(), 1);

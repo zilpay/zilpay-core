@@ -28,7 +28,6 @@ pub struct AccountV2 {
     pub account_type: AccountType,
     pub addr: Address,
     pub pub_key: Option<PubKey>,
-    pub chain_hash: u64,
 }
 
 impl Codec for AccountV1 {}
@@ -46,7 +45,6 @@ impl From<AccountV1> for AccountV2 {
             name: v1.name,
             account_type: v1.account_type,
             addr: v1.addr,
-            chain_hash: v1.chain_hash,
         }
     }
 }
@@ -56,17 +54,11 @@ impl AccountV2 {
         <Self as Codec>::from_bytes(encoded).map_err(|e| AccountErrors::BincodeError(e.to_string()))
     }
 
-    pub fn from_ledger(
-        pub_key: PubKey,
-        name: String,
-        index: usize,
-        chain_hash: u64,
-    ) -> Result<Self> {
+    pub fn from_ledger(pub_key: PubKey, name: String, index: usize) -> Result<Self> {
         let addr = pub_key.get_addr()?;
         let account_type = AccountType::Ledger(index);
 
         Ok(Self {
-            chain_hash,
             account_type,
             addr,
             name,
@@ -78,7 +70,6 @@ impl AccountV2 {
         sk: SecretKey,
         name: String,
         storage_key: usize,
-        chain_hash: u64,
         slip44: u32,
     ) -> Result<Self> {
         let keypair = KeyPair::from_secret_key(sk)?;
@@ -91,7 +82,6 @@ impl AccountV2 {
         let account_type = AccountType::PrivateKey(storage_key);
 
         Ok(Self {
-            chain_hash,
             account_type,
             addr,
             pub_key,
@@ -103,7 +93,6 @@ impl AccountV2 {
         mnemonic_seed: &[u8; SHA512_SIZE],
         name: String,
         bip49: &DerivationPath,
-        chain_hash: u64,
     ) -> Result<Self> {
         let keypair = KeyPair::from_bip39_seed(mnemonic_seed, bip49)?;
         let addr = keypair.get_addr()?;
@@ -115,7 +104,6 @@ impl AccountV2 {
         let account_type = AccountType::Bip39HD(bip49.get_index());
 
         Ok(Self {
-            chain_hash,
             account_type,
             addr,
             pub_key,

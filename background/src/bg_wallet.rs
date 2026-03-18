@@ -12,7 +12,7 @@ use config::{
     cipher::{PROOF_SALT, PROOF_SIZE},
     session::AuthMethod,
 };
-use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
+use errors::{account::AccountErrors, background::BackgroundError};
 use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
 use secrecy::{ExposeSecret, SecretSlice, SecretString};
@@ -203,13 +203,7 @@ impl WalletManagement for Background {
     fn swap_zilliqa_chain(&self, wallet_index: usize, account_index: usize) -> Result<()> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let mut data = wallet.get_wallet_data()?;
-        let accounts = data
-            .slip44_accounts
-            .get_mut(&data.slip44)
-            .ok_or(WalletErrors::NoAccounts)?;
-        let account = accounts
-            .get_mut(account_index)
-            .ok_or(WalletErrors::InvalidAccountIndex(account_index))?;
+        let account = data.get_mut_account(account_index)?;
 
         match &account.pub_key {
             Some(PubKey::Secp256k1Sha256(pub_key)) => {
@@ -235,6 +229,7 @@ impl WalletManagement for Background {
 
     async fn add_bip39_wallet<'a>(&'a mut self, params: BackgroundBip39Params<'_>) -> Result<()> {
         let provider = self.get_provider(params.chain_hash)?;
+        let chains: Vec<_> = self.get_providers().into_iter().map(|p| p.config).collect();
         let device_salt = session::device::get_device_signature();
         let argon_seed = argon2::derive_key(
             params.password.expose_secret().as_bytes(),
@@ -267,8 +262,10 @@ impl WalletManagement for Background {
                 passphrase: params.passphrase,
                 indexes: params.accounts,
                 wallet_name: params.wallet_name,
+                bip: params.bip,
                 biometric_type: params.biometric_type,
                 chain_config: &provider.config,
+                chains: &chains,
             },
             wallet_config,
             ftokens,
@@ -332,6 +329,7 @@ impl WalletManagement for Background {
                 account_names: params.account_names,
                 wallet_name: params.wallet_name,
                 wallet_index: params.wallet_index,
+                bip: params.bip,
                 chain_config: &provider.config,
                 biometric_type: params.biometric_type,
             },
@@ -388,6 +386,7 @@ impl WalletManagement for Background {
                 sk: params.secret_key,
                 proof,
                 wallet_name: params.wallet_name,
+                bip: params.bip,
                 biometric_type: params.biometric_type,
                 chain_config: &provider.config,
             },
@@ -503,6 +502,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -536,6 +536,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -572,6 +573,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -584,6 +586,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -626,6 +629,7 @@ mod tests_background {
             wallet_name: "Test Wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -656,13 +660,7 @@ mod tests_background {
             let bip49 =
                 DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None);
             wallet
-                .add_next_bip39_account(
-                    format!("Zilliqa account {}", i),
-                    &bip49,
-                    "",
-                    &argon_seed,
-                    &net_conf,
-                )
+                .add_next_bip39_account(format!("Zilliqa account {}", i), &bip49, "", &argon_seed)
                 .unwrap();
 
             bg.swap_zilliqa_chain(0, i).unwrap();
@@ -670,7 +668,7 @@ mod tests_background {
 
         let data = wallet.get_wallet_data().unwrap();
 
-        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accounts = data.get_accounts().unwrap();
         for acc in accounts {
             assert!(
                 matches!(acc.addr, Address::Secp256k1Sha256(_)),
@@ -683,7 +681,7 @@ mod tests_background {
         }
 
         let data = wallet.get_wallet_data().unwrap();
-        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accounts = data.get_accounts().unwrap();
 
         for acc in accounts {
             assert!(
@@ -712,6 +710,7 @@ mod tests_background {
             wallet_name: "Bitcoin Wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP84_PURPOSE,
         })
         .await
         .unwrap();
@@ -722,7 +721,7 @@ mod tests_background {
         let data = wallet.get_wallet_data().unwrap();
 
         assert_eq!(data.wallet_name, "Bitcoin Wallet");
-        assert_eq!(data.slip44_accounts.get(&data.slip44).unwrap().len(), 1);
+        assert_eq!(data.get_accounts().unwrap().len(), 1);
         assert!(matches!(
             data.get_selected_account().unwrap().addr,
             Address::Secp256k1Bitcoin(_)

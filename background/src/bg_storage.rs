@@ -193,13 +193,15 @@ impl StorageManagement for Background {
 
                 keystore.wallet_data.proof_key = proof_key;
 
-                if let Some(accounts) = keystore
+                if let Some(bip_accounts) = keystore
                     .wallet_data
                     .slip44_accounts
                     .get_mut(&keystore.wallet_data.slip44)
                 {
-                    if let Some(acc) = accounts.first_mut() {
-                        acc.account_type = AccountType::PrivateKey(cipher_entropy_key);
+                    if let Some(acc_list) = bip_accounts.get_mut(&keystore.wallet_data.bip) {
+                        if let Some(acc) = acc_list.first_mut() {
+                            acc.account_type = AccountType::PrivateKey(cipher_entropy_key);
+                        }
                     }
                 }
             }
@@ -422,6 +424,7 @@ mod tests_background {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -462,6 +465,7 @@ mod tests_background {
             wallet_name: String::from("Wallet1"),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -485,6 +489,7 @@ mod tests_background {
             wallet_name: String::from("Wallet2"),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -518,6 +523,7 @@ mod tests_background {
             wallet_name: String::from("shit walelt"),
             biometric_type: Default::default(),
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -556,6 +562,7 @@ mod tests_background {
             wallet_settings: Default::default(),
             chain_hash: net_conf.hash(),
             ftokens: net_conf.ftokens.clone(),
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -611,6 +618,7 @@ mod tests_background {
             wallet_name: String::from("shit walelt"),
             biometric_type: AuthMethod::None,
             ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -691,6 +699,7 @@ mod tests_background {
             wallet_settings: Default::default(),
             chain_hash: net_conf.hash(),
             ftokens: net_conf.ftokens.clone(),
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -725,7 +734,6 @@ mod tests_background {
         assert_ne!(acc0.account_type, acc1.account_type);
         assert_eq!(acc0.name, acc1.name);
         assert_eq!(acc0.addr, acc1.addr);
-        assert_eq!(acc0.chain_hash, acc1.chain_hash);
         assert_eq!(acc0.pub_key, acc1.pub_key);
         assert_eq!(
             restored_wallet_data0.wallet_name,

@@ -9,7 +9,7 @@ use rand_chacha::ChaCha20Rng;
 
 use config::sha::SHA256_SIZE;
 use errors::{account::AccountErrors, wallet::WalletErrors};
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use token::ft::FToken;
 
 use crate::{wallet_storage::StorageOperations, Bip39Params, LedgerParams, WalletConfig};
@@ -69,19 +69,18 @@ impl WalletInit for Wallet {
         drop(cipher_proof);
 
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
-        let chain_hash = params.chain_config.hash();
-
         let accounts: Vec<AccountV2> = params
             .pub_keys
             .into_iter()
             .zip(params.account_names.into_iter())
             .map(|((ledger_index, pub_key), account_name)| {
-                AccountV2::from_ledger(pub_key, account_name, ledger_index as usize, chain_hash)
+                AccountV2::from_ledger(pub_key, account_name, ledger_index as usize)
             })
             .collect::<std::result::Result<Vec<account::AccountV2>, AccountErrors>>()?;
-
-        let slip44_accounts =
-            std::collections::HashMap::from([(params.chain_config.slip_44, accounts)]);
+        let slip44_accounts = HashMap::from([(
+            params.chain_config.slip_44,
+            HashMap::from([(params.bip, accounts)]),
+        )]);
 
         let data = WalletDataV2 {
             wallet_name: params.wallet_name,
@@ -93,6 +92,7 @@ impl WalletInit for Wallet {
             wallet_type: WalletTypes::Ledger(params.ledger_id),
             selected_account: 0,
             chain_hash: params.chain_config.hash(),
+            bip: params.bip,
         };
         let wallet = Self {
             storage: config.storage,
@@ -127,12 +127,15 @@ impl WalletInit for Wallet {
             params.sk,
             params.wallet_name.to_owned(),
             cipher_entropy_key,
-            params.chain_config.hash(),
             params.chain_config.slip_44,
         )?;
-        let slip44_accounts =
-            std::collections::HashMap::from([(params.chain_config.slip_44, vec![account])]);
+        let slip44_accounts = HashMap::from([(
+            params.chain_config.slip_44,
+            HashMap::from([(params.bip, vec![account])]),
+        )]);
+
         let data = WalletDataV2 {
+            bip: params.bip,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
             proof_key,
@@ -172,24 +175,55 @@ impl WalletInit for Wallet {
         let cipher_entropy_key =
             Self::safe_storage_save(&cipher_entropy, Arc::clone(&config.storage))?;
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
-        let mut accounts: Vec<account::AccountV2> = Vec::with_capacity(params.indexes.len());
 
-        for index in params.indexes {
-            let (bip49, name) = index;
-            let hd_account = AccountV2::from_hd(
-                &mnemonic_seed,
-                name.to_owned(),
-                bip49,
-                params.chain_config.hash(),
-            )?;
-
-            accounts.push(hd_account);
+        let supported = crypto::bip49::DerivationPath::supported_bips(params.chain_config.slip_44);
+        if !supported.contains(&params.bip) {
+            return Err(WalletErrors::InvalidBIPPath(
+                params.chain_config.slip_44,
+                params.bip,
+            ));
         }
 
-        let slip44_accounts =
-            std::collections::HashMap::from([(params.chain_config.slip_44, accounts)]);
+        let index_names: Vec<(usize, String)> = params
+            .indexes
+            .iter()
+            .map(|(dp, name)| (dp.index, name.clone()))
+            .collect();
+
+        let mut handles = Vec::new();
+        for chain in params.chains {
+            let slip44 = chain.slip_44;
+            let network = chain.bitcoin_network();
+            for &bip in crypto::bip49::DerivationPath::supported_bips(slip44) {
+                let seed = mnemonic_seed;
+                let idxs = index_names.clone();
+                handles.push(std::thread::spawn(
+                    move || -> std::result::Result<(u32, u32, Vec<AccountV2>), WalletErrors> {
+                        let mut accounts = Vec::with_capacity(idxs.len());
+                        for (idx, name) in idxs {
+                            let path =
+                                crypto::bip49::DerivationPath::new(slip44, idx, bip, network);
+                            let account = AccountV2::from_hd(&seed, name, &path)?;
+                            accounts.push(account);
+                        }
+                        Ok((slip44, bip, accounts))
+                    },
+                ));
+            }
+        }
+
+        let mut slip44_accounts: HashMap<u32, HashMap<u32, Vec<AccountV2>>> = HashMap::new();
+        for handle in handles {
+            let (slip44, bip, accounts) =
+                handle.join().map_err(|_| WalletErrors::ThreadPanic)??;
+            slip44_accounts
+                .entry(slip44)
+                .or_default()
+                .insert(bip, accounts);
+        }
 
         let data = WalletDataV2 {
+            bip: params.bip,
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type.clone(),
             proof_key,
@@ -268,7 +302,10 @@ mod tests {
             storage: Arc::clone(&storage),
             settings: Default::default(),
         };
-        let chain_config = ChainConfig::default();
+        let chain_config = ChainConfig {
+            slip_44: slip44::ZILLIQA,
+            ..Default::default()
+        };
         let wallet = Wallet::from_bip39_words(
             Bip39Params {
                 chain_config: &chain_config,
@@ -277,7 +314,9 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "Wllaet name".to_string(),
+                bip: DerivationPath::BIP44_PURPOSE,
                 biometric_type: AuthMethod::Biometric,
+                chains: &[chain_config.clone()],
             },
             wallet_config,
             vec![],
@@ -293,10 +332,7 @@ mod tests {
             _ => panic!("invalid type"),
         }
 
-        assert_eq!(
-            data.slip44_accounts.get(&data.slip44).unwrap().len(),
-            indexes.len()
-        );
+        assert_eq!(data.get_accounts().unwrap().len(), indexes.len());
 
         let wallet_addr = wallet.wallet_address;
 
@@ -341,7 +377,9 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "Bitcoin Wallet".to_string(),
+                bip: DerivationPath::BIP84_PURPOSE,
                 biometric_type: AuthMethod::Biometric,
+                chains: &[chain_config.clone()],
             },
             wallet_config,
             vec![],
@@ -350,7 +388,7 @@ mod tests {
 
         let data = wallet.get_wallet_data().unwrap();
 
-        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accounts = data.get_accounts().unwrap();
         assert_eq!(accounts.len(), indexes.len());
 
         for account in accounts {
@@ -382,6 +420,7 @@ mod tests {
                 sk,
                 proof,
                 wallet_name: name.to_string(),
+                bip: DerivationPath::BIP44_PURPOSE,
                 biometric_type: AuthMethod::None,
                 chain_config: &chain_config,
             },
@@ -391,7 +430,7 @@ mod tests {
         .unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        assert_eq!(data.slip44_accounts.get(&data.slip44).unwrap().len(), 1);
+        assert_eq!(data.get_accounts().unwrap().len(), 1);
         assert_eq!(
             wallet.reveal_mnemonic(&argon_seed),
             Err(WalletErrors::InvalidAccountType)
@@ -442,7 +481,9 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "BIP44 Legacy Wallet".to_string(),
+                bip: DerivationPath::BIP44_PURPOSE,
                 biometric_type: AuthMethod::Biometric,
+                chains: &[chain_config.clone()],
             },
             wallet_config,
             vec![],
@@ -450,7 +491,7 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accounts = data.get_accounts().unwrap();
         assert_eq!(accounts.len(), 10);
 
         let expected_addresses = [
@@ -514,7 +555,9 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "BIP49 Nested SegWit Wallet".to_string(),
+                bip: DerivationPath::BIP49_PURPOSE,
                 biometric_type: AuthMethod::Biometric,
+                chains: &[chain_config.clone()],
             },
             wallet_config,
             vec![],
@@ -522,7 +565,7 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accounts = data.get_accounts().unwrap();
         assert_eq!(accounts.len(), 10);
 
         let expected_addresses = [
@@ -586,7 +629,9 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "BIP84 Native SegWit Wallet".to_string(),
+                bip: DerivationPath::BIP84_PURPOSE,
                 biometric_type: AuthMethod::Biometric,
+                chains: &[chain_config.clone()],
             },
             wallet_config,
             vec![],
@@ -594,7 +639,7 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accounts = data.get_accounts().unwrap();
         assert_eq!(accounts.len(), 10);
 
         let expected_addresses = [
@@ -658,7 +703,9 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "BIP86 Taproot Wallet".to_string(),
+                bip: DerivationPath::BIP86_PURPOSE,
                 biometric_type: AuthMethod::Biometric,
+                chains: &[chain_config.clone()],
             },
             wallet_config,
             vec![],
@@ -666,7 +713,7 @@ mod tests {
         .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
-        let accounts = data.slip44_accounts.get(&data.slip44).unwrap();
+        let accounts = data.get_accounts().unwrap();
         assert_eq!(accounts.len(), 10);
 
         let expected_addresses = [

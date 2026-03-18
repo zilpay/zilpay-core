@@ -60,6 +60,7 @@ mod tests_wallet_tokens {
 
     use alloy::primitives::map::HashMap;
     use cipher::{argon2::derive_key, keychain::KeyChain};
+    use crypto::bip49::DerivationPath;
     use config::{
         address::ADDR_LEN,
         cipher::{PROOF_SALT, PROOF_SIZE},
@@ -140,6 +141,7 @@ mod tests_wallet_tokens {
                 sk,
                 proof,
                 wallet_name: "Test Token Account".to_string(),
+                bip: DerivationPath::BIP44_PURPOSE,
                 biometric_type: AuthMethod::None,
                 chain_config: &chain_config,
             },
@@ -275,6 +277,7 @@ mod tests_wallet_tokens {
                 sk,
                 proof,
                 wallet_name: "Test Token Account".to_string(),
+                bip: DerivationPath::BIP44_PURPOSE,
                 biometric_type: AuthMethod::None,
                 chain_config: &chain_config,
             },
@@ -353,6 +356,7 @@ mod tests_wallet_tokens {
                 sk,
                 proof,
                 wallet_name: "Test Token Account".to_string(),
+                bip: DerivationPath::BIP44_PURPOSE,
                 biometric_type: AuthMethod::None,
                 chain_config: &chain_config,
             },

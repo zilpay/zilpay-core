@@ -188,6 +188,7 @@ mod tests_wallet_storage {
     use super::*;
     use crate::{wallet_data::WalletDataV2, wallet_types::WalletTypes};
     use config::{session::AuthMethod, sha::SHA256_SIZE};
+    use crypto::bip49::DerivationPath;
     use settings::wallet_settings::WalletSettings;
     use std::collections::HashMap;
     use std::sync::Arc;
@@ -240,6 +241,7 @@ mod tests_wallet_storage {
             wallet_name: String::new(),
             slip44_accounts: HashMap::new(),
             slip44: 0,
+            bip: DerivationPath::BIP44_PURPOSE,
             selected_account: 0,
             biometric_type: AuthMethod::None,
             chain_hash: 0,
@@ -298,14 +300,32 @@ mod tests_wallet_storage {
         };
 
         let acc0 = AccountV1::from_hd(
-            &seed, "BTC 0".into(), &bip84(0), chain_hash, chain_id, slip44::BITCOIN,
-        ).unwrap();
+            &seed,
+            "BTC 0".into(),
+            &bip84(0),
+            chain_hash,
+            chain_id,
+            slip44::BITCOIN,
+        )
+        .unwrap();
         let acc1 = AccountV1::from_hd(
-            &seed, "BTC 1".into(), &bip84(1), chain_hash, chain_id, slip44::BITCOIN,
-        ).unwrap();
+            &seed,
+            "BTC 1".into(),
+            &bip84(1),
+            chain_hash,
+            chain_id,
+            slip44::BITCOIN,
+        )
+        .unwrap();
         let acc2 = AccountV1::from_hd(
-            &seed, "BTC 2".into(), &bip84(2), chain_hash, chain_id, slip44::BITCOIN,
-        ).unwrap();
+            &seed,
+            "BTC 2".into(),
+            &bip84(2),
+            chain_hash,
+            chain_id,
+            slip44::BITCOIN,
+        )
+        .unwrap();
 
         let v1_data = WalletDataV1 {
             proof_key: 42,
@@ -323,7 +343,9 @@ mod tests_wallet_storage {
             payload: bincode_bytes,
             version: 0,
         };
-        storage.set_raw(wallet_address.as_slice(), &warp.to_bytes()).unwrap();
+        storage
+            .set_raw(wallet_address.as_slice(), &warp.to_bytes())
+            .unwrap();
         storage.flush().unwrap();
 
         let wallet = Wallet::init_wallet(wallet_address, storage.clone()).unwrap();
@@ -337,13 +359,13 @@ mod tests_wallet_storage {
         assert_eq!(v2.selected_account, 1);
         assert_eq!(v2.biometric_type, AuthMethod::None);
 
-        let accounts = v2.slip44_accounts.get(&slip44::BITCOIN).unwrap();
+        let bip_accounts = v2.slip44_accounts.get(&slip44::BITCOIN).unwrap();
+        let accounts = bip_accounts.get(&DerivationPath::BIP84_PURPOSE).unwrap();
         assert_eq!(accounts.len(), 3);
 
         for (i, (v2_acc, v1_acc)) in accounts.iter().zip([&acc0, &acc1, &acc2]).enumerate() {
             assert_eq!(v2_acc.name, v1_acc.name);
             assert_eq!(v2_acc.addr, v1_acc.addr);
-            assert_eq!(v2_acc.chain_hash, chain_hash);
             assert_eq!(v2_acc.account_type, AccountType::Bip39HD(i));
             assert_eq!(v2_acc.pub_key, None);
         }

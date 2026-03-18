@@ -19,8 +19,11 @@ pub enum WalletErrors {
     #[error("Invalid account index: {0}. Selected index not found")]
     InvalidAccountIndex(usize),
 
-    #[error("Invalid slip44 index: {0}")]
-    InvalidSlip44Index(u32),
+    #[error("Invalid BIP Path slip44: {0}, bip: {0}")]
+    InvalidBIPPath(u32, u32),
+
+    #[error("Invalid BIP Path slip44: {0}, bip: {0}, index: {0}")]
+    InvalidBIPPathIndex(u32, u32, usize),
 
     #[error("Account with index ({0}) already exists")]
     ExistsAccount(usize),
@@ -111,6 +114,9 @@ pub enum WalletErrors {
 
     #[error("address error: {0}")]
     AddressError(AddressError),
+
+    #[error("Thread panicked during account generation")]
+    ThreadPanic,
 }
 
 impl From<LocalStorageError> for WalletErrors {

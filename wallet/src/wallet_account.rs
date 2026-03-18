@@ -22,7 +22,6 @@ pub trait AccountManagement {
         bip49: &DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
-        chain: &ChainConfig,
     ) -> std::result::Result<(), Self::Error>;
     fn select_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
     fn delete_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
@@ -33,16 +32,8 @@ impl AccountManagement for Wallet {
 
     fn delete_account(&self, account_index: usize) -> Result<()> {
         let mut data = self.get_wallet_data()?;
-        let accounts = data
-            .slip44_accounts
-            .get_mut(&data.slip44)
-            .ok_or(WalletErrors::NoAccounts)?;
-
-        if account_index == 0 || accounts.get(account_index).is_none() {
-            return Err(WalletErrors::InvalidAccountIndex(account_index));
-        }
-
-        accounts.remove(account_index);
+        data.remove_account(account_index);
+        let accounts = data.get_accounts()?;
         data.selected_account = accounts.len() - 1;
         self.save_wallet_data(data)?;
 
@@ -60,21 +51,18 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::InvalidAccountType);
         }
 
-        let chain_hash = chain.hash();
         let mut new_accounts = Vec::with_capacity(accounts.len());
 
         for (ledger_index, pub_key, name) in accounts.into_iter() {
-            let ledger_account = AccountV2::from_ledger(
-                pub_key,
-                name,
-                ledger_index as usize,
-                chain_hash,
-            )?;
+            let ledger_account = AccountV2::from_ledger(pub_key, name, ledger_index as usize)?;
 
             new_accounts.push(ledger_account);
         }
 
-        data.slip44_accounts.insert(chain.slip_44, new_accounts);
+        data.slip44_accounts
+            .entry(chain.slip_44)
+            .or_default()
+            .insert(data.bip, new_accounts);
 
         self.save_wallet_data(data)?;
 
@@ -87,7 +75,6 @@ impl AccountManagement for Wallet {
         bip49: &DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
-        chain: &ChainConfig,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
         let m = self.reveal_mnemonic(seed_bytes)?;
@@ -95,6 +82,7 @@ impl AccountManagement for Wallet {
         let has_account = data
             .slip44_accounts
             .get(&data.slip44)
+            .and_then(|bip_map| bip_map.get(&data.bip))
             .map(|accounts| {
                 accounts
                     .iter()
@@ -106,16 +94,12 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::ExistsAccount(bip49.get_index()));
         }
 
-        let hd_account = AccountV2::from_hd(
-            &mnemonic_seed,
-            name,
-            bip49,
-            chain.hash(),
-        )?;
+        let hd_account = AccountV2::from_hd(&mnemonic_seed, name, bip49)?;
 
         data.slip44_accounts
-            .entry(data.slip44)
-            .or_default()
+            .get_mut(&data.slip44)
+            .and_then(|bip_map| bip_map.get_mut(&data.bip))
+            .ok_or(WalletErrors::InvalidBIPPath(data.slip44, data.bip))?
             .push(hd_account);
         self.save_wallet_data(data)?;
 
@@ -124,10 +108,7 @@ impl AccountManagement for Wallet {
 
     fn select_account(&self, account_index: usize) -> Result<()> {
         let mut data = self.get_wallet_data()?;
-        let accounts = data
-            .slip44_accounts
-            .get(&data.slip44)
-            .ok_or(WalletErrors::NoAccounts)?;
+        let accounts = data.get_accounts()?;
 
         if accounts.is_empty() {
             return Err(WalletErrors::NoAccounts);
@@ -206,8 +187,10 @@ mod tests {
                 passphrase: PASSPHRASE,
                 indexes: &indexes,
                 wallet_name: "Select Account Test Wallet".to_string(),
+                bip: DerivationPath::BIP44_PURPOSE,
                 biometric_type: AuthMethod::None,
                 chain_config: &chain_config,
+                chains: &[chain_config.clone()],
             },
             wallet_config,
             vec![],

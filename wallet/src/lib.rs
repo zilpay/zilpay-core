@@ -32,6 +32,7 @@ pub struct LedgerParams<'a> {
     pub proof: [u8; KEY_SIZE],
     pub account_names: Vec<String>,
     pub wallet_index: usize,
+    pub bip: u32,
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub chain_config: &'a ChainConfig,
@@ -43,6 +44,7 @@ pub struct SecretKeyParams<'a> {
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub chain_config: &'a ChainConfig,
+    pub bip: u32,
 }
 
 pub struct Bip39Params<'a> {
@@ -51,8 +53,10 @@ pub struct Bip39Params<'a> {
     pub passphrase: &'a str,
     pub indexes: &'a [(DerivationPath, String)],
     pub wallet_name: String,
+    pub bip: u32,
     pub biometric_type: AuthMethod,
     pub chain_config: &'a ChainConfig,
+    pub chains: &'a [ChainConfig],
 }
 
 pub struct Wallet {

@@ -384,7 +384,6 @@ pub trait TransactionsManagement {
     async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
-        account_index: usize,
         txns: Vec<TransactionReceipt>,
     ) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
 
@@ -450,8 +449,7 @@ impl TransactionsManagement for Background {
     ) -> Result<[u8; SHA256_SIZE]> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let wallet_data = wallet.get_wallet_data()?;
-        let account = wallet_data
-            .get_account(account_index)?;
+        let account = wallet_data.get_account(account_index)?;
 
         match account.addr {
             Address::Secp256k1Bitcoin(_) => Err(BackgroundError::BincodeError(
@@ -500,8 +498,7 @@ impl TransactionsManagement for Background {
     ) -> Result<(PubKey, Signature)> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let account = data
-            .get_account(account_index)?;
+        let account = data.get_account(account_index)?;
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let typed_data: TypedData = serde_json::from_str(typed_data_json)
             .map_err(|e| BackgroundError::FailDeserializeTypedData(e.to_string()))?;
@@ -515,7 +512,7 @@ impl TransactionsManagement for Background {
             &account.addr.auto_format(),
             title,
             icon,
-            account.chain_hash,
+            data.chain_hash,
         );
         wallet.add_history(&[history_entry])?;
 
@@ -534,8 +531,7 @@ impl TransactionsManagement for Background {
     ) -> Result<(PubKey, Signature)> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let account = data
-            .get_account(account_index)?;
+        let account = data.get_account(account_index)?;
 
         let key_pair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
         let signature = match account.addr {
@@ -581,7 +577,7 @@ impl TransactionsManagement for Background {
             &account.addr.auto_format(),
             title,
             icon,
-            account.chain_hash,
+            data.chain_hash,
         );
         wallet.add_history(&[history_entry])?;
 
@@ -591,15 +587,13 @@ impl TransactionsManagement for Background {
     async fn check_pending_txns(&self, wallet_index: usize) -> Result<Vec<HistoricalTransaction>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let account = data.get_selected_account()?;
-        let chain = self.get_provider(account.chain_hash)?;
+        let chain = self.get_provider(data.chain_hash)?;
         let mut history = wallet.get_history()?;
 
         let mut matching_transactions = Vec::with_capacity(history.len());
 
         for tx in history.iter_mut() {
-            if tx.metadata.chain_hash == account.chain_hash
-                && tx.status == TransactionStatus::Pending
+            if tx.metadata.chain_hash == data.chain_hash && tx.status == TransactionStatus::Pending
             {
                 matching_transactions.push(tx);
             }
@@ -620,13 +614,11 @@ impl TransactionsManagement for Background {
     async fn broadcast_signed_transactions<'a>(
         &self,
         wallet_index: usize,
-        account_index: usize,
         txns: Vec<TransactionReceipt>,
     ) -> Result<Vec<HistoricalTransaction>> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let selected_account = data.get_account(account_index)?;
-        let provider = self.get_provider(selected_account.chain_hash)?;
+        let provider = self.get_provider(data.chain_hash)?;
         let txns = provider.broadcast_signed_transactions(txns).await?;
         let history = txns
             .into_iter()
@@ -649,10 +641,8 @@ impl TransactionsManagement for Background {
     ) -> Result<TransactionReceipt> {
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let data = wallet.get_wallet_data()?;
-        let account = data
-            .get_account(account_index)?;
-
-        let provider = self.get_provider(account.chain_hash)?;
+        let account = data.get_account(account_index)?;
+        let provider = self.get_provider(data.chain_hash)?;
         let keypair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
         let (tx, utxo_amounts) = build_unsigned_btc_transaction(
@@ -664,7 +654,7 @@ impl TransactionsManagement for Background {
         .await?;
 
         let metadata = proto::tx::TransactionMetadata {
-            chain_hash: account.chain_hash,
+            chain_hash: data.chain_hash,
             btc_utxo_amounts: Some(utxo_amounts),
             ..Default::default()
         };
@@ -681,6 +671,7 @@ mod tests_background_transactions {
     use super::*;
     use crate::{bg_storage::StorageManagement, bg_token::TokensManagement, BackgroundBip39Params};
     use alloy::{primitives::U256, rpc::types::TransactionRequest as ETHTransactionRequest};
+    use crypto::bip49::DerivationPath;
 
     use proto::{address::Address, tx::TransactionRequest};
     use rand::Rng;
@@ -723,6 +714,7 @@ mod tests_background_transactions {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![FToken::zil(zil_config.hash())],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -794,6 +786,7 @@ mod tests_background_transactions {
             wallet_name: "Anvil wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_anvil_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -845,7 +838,7 @@ mod tests_background_transactions {
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn = txn.sign(&keypair).await.unwrap();
         let txns = vec![txn];
-        let txns = bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+        let txns = bg.broadcast_signed_transactions(0, txns).await.unwrap();
 
         assert_eq!(txns.len(), 1);
 
@@ -879,6 +872,7 @@ mod tests_background_transactions {
             wallet_name: "Anvil wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_anvil_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -925,10 +919,7 @@ mod tests_background_transactions {
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn_0 = txn_0.sign(&keypair).await.unwrap();
         let txns_0 = vec![txn_0];
-        let txns_0 = bg
-            .broadcast_signed_transactions(0, 0, txns_0)
-            .await
-            .unwrap();
+        let txns_0 = bg.broadcast_signed_transactions(0, txns_0).await.unwrap();
 
         assert_eq!(txns_0.len(), 1);
         let tx_hash_0 = txns_0[0].metadata.hash.clone().unwrap();
@@ -957,17 +948,13 @@ mod tests_background_transactions {
             .await
             .unwrap();
 
-        // Use update_tx_from_params to set gas fields based on network capabilities
         super::update_tx_from_params(&mut tx_request_1, params_1, balance).unwrap();
         let txn_1 = tx_request_1;
 
         let keypair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
         let txn_1 = txn_1.sign(&keypair).await.unwrap();
         let txns_1 = vec![txn_1];
-        let txns_1 = bg
-            .broadcast_signed_transactions(0, 0, txns_1)
-            .await
-            .unwrap();
+        let txns_1 = bg.broadcast_signed_transactions(0, txns_1).await.unwrap();
 
         assert_eq!(txns_1.len(), 1);
         let tx_hash_1 = txns_1[0].metadata.hash.clone().unwrap();
@@ -1012,6 +999,7 @@ mod tests_background_transactions {
             wallet_name: "ZIL wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![FToken::zil(net_config.hash())],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -1063,6 +1051,7 @@ mod tests_background_transactions {
             wallet_name: "Zilliqa legacy wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_zil_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -1120,6 +1109,7 @@ mod tests_background_transactions {
             wallet_name: "BTC Taproot wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![test_data::gen_btc_token()],
+            bip: DerivationPath::BIP86_PURPOSE,
         })
         .await
         .unwrap();
@@ -1156,7 +1146,7 @@ mod tests_background_transactions {
         }
 
         let txns = vec![signed_tx];
-        bg.broadcast_signed_transactions(0, 0, txns).await.unwrap();
+        bg.broadcast_signed_transactions(0, txns).await.unwrap();
     }
 
     #[tokio::test]
@@ -1184,6 +1174,7 @@ mod tests_background_transactions {
             wallet_name: "Tron wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_tron_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -1273,10 +1264,7 @@ mod tests_background_transactions {
         assert!(signed.verify().unwrap());
 
         let txns = vec![signed];
-        let txns = bg
-            .broadcast_signed_transactions(0, sender_idx, txns)
-            .await
-            .unwrap();
+        let txns = bg.broadcast_signed_transactions(0, txns).await.unwrap();
 
         assert_eq!(txns.len(), 1);
         for tx in &txns {
@@ -1306,6 +1294,7 @@ mod tests_background_transactions {
             wallet_name: "Tron wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_tron_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -1356,6 +1345,7 @@ mod tests_background_transactions {
             wallet_name: "Tron wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_tron_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();

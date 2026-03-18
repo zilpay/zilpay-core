@@ -76,7 +76,11 @@ impl WalletDataV2 {
             .get(&self.slip44)
             .and_then(|m| m.get(&self.bip))
             .and_then(|accounts| accounts.get(index))
-            .ok_or(WalletErrors::InvalidAccountIndex(index))
+            .ok_or(WalletErrors::InvalidBIPPathIndex(
+                self.slip44,
+                self.bip,
+                index,
+            ))
     }
 
     pub fn get_mut_account(&mut self, index: usize) -> Result<&mut AccountV2, WalletErrors> {
@@ -84,7 +88,11 @@ impl WalletDataV2 {
             .get_mut(&self.slip44)
             .and_then(|m| m.get_mut(&self.bip))
             .and_then(|accounts| accounts.get_mut(index))
-            .ok_or(WalletErrors::InvalidAccountIndex(index))
+            .ok_or(WalletErrors::InvalidBIPPathIndex(
+                self.slip44,
+                self.bip,
+                index,
+            ))
     }
 
     pub fn get_accounts(&self) -> Result<&[AccountV2], WalletErrors> {
@@ -92,6 +100,14 @@ impl WalletDataV2 {
             .get(&self.slip44)
             .and_then(|m| m.get(&self.bip))
             .map(|v| v.as_slice())
-            .ok_or(WalletErrors::InvalidSlip44Index(self.slip44))
+            .ok_or(WalletErrors::InvalidBIPPath(self.slip44, self.bip))
+    }
+
+    pub fn remove_account(&mut self, index: usize) {
+        for bip_map in self.slip44_accounts.values_mut() {
+            for accounts in bip_map.values_mut() {
+                accounts.remove(index);
+            }
+        }
     }
 }

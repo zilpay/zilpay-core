@@ -259,6 +259,7 @@ mod tests_background_worker {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -306,6 +307,7 @@ mod tests_background_worker {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
@@ -441,6 +443,7 @@ mod tests_background_worker {
             wallet_name: String::new(),
             biometric_type: Default::default(),
             ftokens: vec![gen_zilliqa_mainnet_token(net_config.hash())],
+            bip: DerivationPath::BIP44_PURPOSE,
         })
         .await
         .unwrap();
