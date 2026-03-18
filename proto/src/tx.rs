@@ -344,10 +344,11 @@ impl TransactionRequest {
         }
     }
 
-    pub fn to_rlp_encode(&self, pub_key: &PubKey) -> Result<Vec<u8>, TransactionErrors> {
+    pub fn to_rlp_encode(self, pub_key: Option<&PubKey>) -> Result<Vec<u8>, TransactionErrors> {
         match self {
             TransactionRequest::Zilliqa((tx, _metadata)) => {
-                let proto_buf = create_proto_tx(tx, pub_key).encode_proto_bytes();
+                let pk = pub_key.ok_or(TransactionErrors::InvalidPublicKey)?;
+                let proto_buf = create_proto_tx(&tx, pk).encode_proto_bytes();
 
                 Ok(proto_buf)
             }
@@ -386,14 +387,13 @@ impl TransactionRequest {
 
                 let mut rlp_bytes = Vec::with_capacity(capacity);
 
-                tx.clone()
-                    .build_consensus_tx()
+                tx.build_consensus_tx()
                     .map_err(|_| TransactionErrors::EncodeTxRlpError)?
                     .encode_for_signing(&mut rlp_bytes);
 
                 Ok(rlp_bytes)
             }
-            TransactionRequest::Bitcoin((tx, _)) => Ok(bitcoin::consensus::encode::serialize(tx)),
+            TransactionRequest::Bitcoin((tx, _)) => Ok(bitcoin::consensus::encode::serialize(&tx)),
             TransactionRequest::Tron((tx, _)) => Ok(tx.encode()),
         }
     }
@@ -401,7 +401,7 @@ impl TransactionRequest {
     pub fn with_signature(
         self,
         signature_bytes: Vec<u8>,
-        pub_key: &PubKey,
+        pub_key: Option<&PubKey>,
     ) -> Result<TransactionReceipt, TransactionErrors> {
         match self {
             TransactionRequest::Ethereum((tx, mut metadata)) => {
@@ -423,15 +423,16 @@ impl TransactionRequest {
                     TypedTransaction::Eip7702(tx) => TxEnvelope::Eip7702(tx.into_signed(sig)),
                 };
 
-                metadata.signer = Some(pub_key.get_addr()?);
+                metadata.signer = pub_key.and_then(|pk| pk.get_addr().ok());
 
                 Ok(TransactionReceipt::Ethereum((signed_tx, metadata)))
             }
             TransactionRequest::Zilliqa((tx, metadata)) => {
+                let pk = pub_key.ok_or(TransactionErrors::InvalidPublicKey)?;
                 let signature: [u8; SHA512_SIZE] = signature_bytes
                     .try_into()
                     .map_err(|_| SignatureError::InvalidLength)?;
-                let pub_key: [u8; PUB_KEY_SIZE] = pub_key
+                let pub_key: [u8; PUB_KEY_SIZE] = pk
                     .as_bytes()
                     .to_vec()
                     .try_into()
@@ -462,7 +463,6 @@ impl TransactionRequest {
             TransactionRequest::Bitcoin((tx, mut metadata)) => {
                 let txid = tx.compute_txid().to_string();
                 metadata.hash = Some(txid);
-                metadata.signer = Some(pub_key.get_addr()?);
 
                 Ok(TransactionReceipt::Bitcoin((tx, metadata)))
             }
@@ -478,7 +478,6 @@ impl TransactionRequest {
                 let owner_address = tx.owner_address()?;
 
                 metadata.hash = Some(hex::encode(tx_id));
-                metadata.signer = Some(pub_key.get_addr()?);
 
                 let receipt = TronTransactionReceipt {
                     raw_data_bytes,
@@ -847,7 +846,7 @@ mod tests_tx {
             .unwrap();
 
         let tx_req = TransactionRequest::Tron((tron_tx, Default::default()));
-        let raw_bytes = tx_req.to_rlp_encode(&pub_key).unwrap();
+        let raw_bytes = tx_req.clone().to_rlp_encode(Some(&pub_key)).unwrap();
 
         let tx_id: [u8; 32] = Sha256::digest(&raw_bytes).into();
         let sk_bytes = keypair.get_sk_bytes();
@@ -856,7 +855,7 @@ mod tests_tx {
         let mut signature = sig.to_bytes().to_vec();
         signature.push(recovery_id.to_byte());
 
-        let tx_res = tx_req.with_signature(signature, &pub_key).unwrap();
+        let tx_res = tx_req.with_signature(signature, Some(&pub_key)).unwrap();
         let verify = tx_res.verify();
 
         assert!(verify.is_ok());

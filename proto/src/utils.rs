@@ -75,7 +75,7 @@ mod tests {
     ) -> Result<Vec<u8>, TransactionErrors> {
         let req = TransactionRequest::Ethereum((tx_request, Default::default()));
         let dummy_pk = crate::pubkey::PubKey::Secp256k1Keccak256([0; 33]);
-        req.to_rlp_encode(&dummy_pk)
+        req.to_rlp_encode(Some(&dummy_pk))
     }
 
     #[test]
