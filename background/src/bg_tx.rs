@@ -721,7 +721,7 @@ mod tests_background_transactions {
 
         bg.swap_zilliqa_chain(0, 0).unwrap();
         let wallet = bg.get_wallet_by_index(0).unwrap();
-
+        let data = wallet.get_wallet_data().unwrap();
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
@@ -737,6 +737,7 @@ mod tests_background_transactions {
         };
         let metadata = proto::tx::TransactionMetadata {
             chain_hash: anvil_config.hash(),
+            signer: data.get_selected_account().map(|acc| acc.addr.clone()).ok(),
             ..Default::default()
         };
         let zilpay_trasnfer_req = TransactionRequest::Ethereum((token_transfer_request, metadata));
@@ -751,12 +752,6 @@ mod tests_background_transactions {
         let selected_account = data.get_selected_account().unwrap();
 
         assert!(selected_account.addr.to_string().starts_with("0x"));
-
-        if let Some(PubKey::Secp256k1Keccak256(_pub_key)) = selected_account.pub_key {
-            // Valid Keccak256 public key
-        } else {
-            panic!("invalid pubkey");
-        }
 
         let tx = wallet
             .sign_transaction(zilpay_trasnfer_req, 0, &argon_seed, None)
