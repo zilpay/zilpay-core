@@ -5,6 +5,7 @@ use crate::{
     wallet_types::WalletTypes,
 };
 use config::session::AuthMethod;
+use crypto::bip49::DerivationPath;
 use crypto::slip44::ETHEREUM;
 use errors::wallet::WalletErrors;
 use serde::{Deserialize, Serialize};
@@ -29,23 +30,31 @@ pub struct WalletDataV2 {
     pub settings: WalletSettings,
     pub wallet_name: String,
     #[serde(default)]
-    pub slip44_accounts: HashMap<u32, Vec<AccountV2>>,
+    pub slip44_accounts: HashMap<u32, HashMap<u32, Vec<AccountV2>>>,
     pub selected_account: usize,
     pub biometric_type: AuthMethod,
     pub chain_hash: u64,
     pub slip44: u32,
+    pub bip: u32,
 }
 
 impl From<WalletDataV1> for WalletDataV2 {
     fn from(v1: WalletDataV1) -> Self {
         let slip44 = v1.accounts.first().map(|a| a.slip_44).unwrap_or(ETHEREUM);
-        let mut slip44_accounts: HashMap<u32, Vec<AccountV2>> = HashMap::new();
-
-        slip44_accounts.insert(slip44, v1.accounts.into_iter().map(Into::into).collect());
+        let bip = v1
+            .accounts
+            .first()
+            .map(|acc| acc.addr.get_bip_purpose())
+            .unwrap_or(DerivationPath::BIP44_PURPOSE);
+        let slip44_accounts: HashMap<u32, HashMap<u32, Vec<AccountV2>>> = HashMap::from([(
+            slip44,
+            HashMap::from([(bip, v1.accounts.into_iter().map(Into::into).collect())]),
+        )]);
 
         Self {
             slip44_accounts,
             slip44,
+            bip,
             proof_key: v1.proof_key,
             wallet_type: v1.wallet_type,
             settings: v1.settings,
@@ -65,13 +74,23 @@ impl WalletDataV2 {
     pub fn get_account(&self, index: usize) -> Result<&AccountV2, WalletErrors> {
         self.slip44_accounts
             .get(&self.slip44)
+            .and_then(|m| m.get(&self.bip))
             .and_then(|accounts| accounts.get(index))
+            .ok_or(WalletErrors::InvalidAccountIndex(index))
+    }
+
+    pub fn get_mut_account(&mut self, index: usize) -> Result<&mut AccountV2, WalletErrors> {
+        self.slip44_accounts
+            .get_mut(&self.slip44)
+            .and_then(|m| m.get_mut(&self.bip))
+            .and_then(|accounts| accounts.get_mut(index))
             .ok_or(WalletErrors::InvalidAccountIndex(index))
     }
 
     pub fn get_accounts(&self) -> Result<&[AccountV2], WalletErrors> {
         self.slip44_accounts
             .get(&self.slip44)
+            .and_then(|m| m.get(&self.bip))
             .map(|v| v.as_slice())
             .ok_or(WalletErrors::InvalidSlip44Index(self.slip44))
     }

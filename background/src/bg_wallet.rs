@@ -722,10 +722,7 @@ mod tests_background {
         let data = wallet.get_wallet_data().unwrap();
 
         assert_eq!(data.wallet_name, "Bitcoin Wallet");
-        assert_eq!(
-            data.slip44_accounts.get(&data.slip44).unwrap().len(),
-            1
-        );
+        assert_eq!(data.slip44_accounts.get(&data.slip44).unwrap().len(), 1);
         assert!(matches!(
             data.get_selected_account().unwrap().addr,
             Address::Secp256k1Bitcoin(_)

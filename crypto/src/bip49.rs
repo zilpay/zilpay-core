@@ -55,6 +55,18 @@ impl DerivationPath {
     pub const BIP84_PURPOSE: u32 = 84;
     pub const BIP86_PURPOSE: u32 = 86;
 
+    pub fn supported_bips<'a>(slip44: u32) -> &'a [u32] {
+        match slip44 {
+            super::slip44::BITCOIN => &[
+                DerivationPath::BIP44_PURPOSE,
+                DerivationPath::BIP49_PURPOSE,
+                DerivationPath::BIP84_PURPOSE,
+                DerivationPath::BIP86_PURPOSE,
+            ],
+            _ => &[44],
+        }
+    }
+
     pub fn new(slip44: u32, index: usize, bip: u32, network: Option<bitcoin::Network>) -> Self {
         Self {
             slip44,
@@ -95,7 +107,7 @@ impl DerivationPath {
             bitcoin::AddressType::P2sh => Self::BIP49_PURPOSE,
             bitcoin::AddressType::P2wpkh => Self::BIP84_PURPOSE,
             bitcoin::AddressType::P2tr => Self::BIP86_PURPOSE,
-            _ => Self::BIP84_PURPOSE,
+            _ => Self::BIP44_PURPOSE,
         }
     }
 }

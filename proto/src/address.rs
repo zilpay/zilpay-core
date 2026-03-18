@@ -146,27 +146,41 @@ impl Address {
             Address::Secp256k1Bitcoin(data) => {
                 let addr_str = String::from_utf8(data.clone())
                     .map_err(|e| AddressError::BTCAddrError(e.to_string()))?;
-                if addr_str.starts_with("bc1") || addr_str.starts_with('1') || addr_str.starts_with('3') {
+                if addr_str.starts_with("bc1")
+                    || addr_str.starts_with('1')
+                    || addr_str.starts_with('3')
+                {
                     Ok(bitcoin::Network::Bitcoin)
-                } else if addr_str.starts_with("tb1") || addr_str.starts_with('m') || addr_str.starts_with('n') || addr_str.starts_with('2') {
+                } else if addr_str.starts_with("tb1")
+                    || addr_str.starts_with('m')
+                    || addr_str.starts_with('n')
+                    || addr_str.starts_with('2')
+                {
                     Ok(bitcoin::Network::Testnet)
                 } else if addr_str.starts_with("bcrt1") {
                     Ok(bitcoin::Network::Regtest)
                 } else {
-                    Err(AddressError::BTCAddrError("Unknown network prefix".to_string()))
+                    Err(AddressError::BTCAddrError(
+                        "Unknown network prefix".to_string(),
+                    ))
                 }
             }
             _ => Err(AddressError::InvalidAddressType),
         }
     }
 
-    pub fn get_bip_purpose(&self) -> Result<u32> {
+    pub fn get_bip_purpose(&self) -> u32 {
         use crypto::bip49::DerivationPath;
 
-        let addr_type = self.get_bitcoin_address_type()?;
-        let bip = DerivationPath::bip_from_address_type(addr_type);
-
-        Ok(bip)
+        match self {
+            Address::Secp256k1Sha256(_) => DerivationPath::BIP44_PURPOSE,
+            Address::Secp256k1Keccak256(_) => DerivationPath::BIP44_PURPOSE,
+            Address::Secp256k1Tron(_) => DerivationPath::BIP44_PURPOSE,
+            Address::Secp256k1Bitcoin(_) => self
+                .get_bitcoin_address_type()
+                .map(DerivationPath::bip_from_address_type)
+                .unwrap_or(DerivationPath::BIP86_PURPOSE),
+        }
     }
 
     pub fn to_eth_checksummed(&self) -> Result<String> {
@@ -667,7 +681,7 @@ mod tests {
             addr.get_bitcoin_address_type().unwrap(),
             bitcoin::AddressType::P2pkh
         );
-        assert_eq!(addr.get_bip_purpose().unwrap(), 44);
+        assert_eq!(addr.get_bip_purpose(), 44);
     }
 
     #[test]
@@ -680,7 +694,7 @@ mod tests {
             addr.get_bitcoin_address_type().unwrap(),
             bitcoin::AddressType::P2sh
         );
-        assert_eq!(addr.get_bip_purpose().unwrap(), 49);
+        assert_eq!(addr.get_bip_purpose(), 49);
     }
 
     #[test]
@@ -693,7 +707,7 @@ mod tests {
             addr.get_bitcoin_address_type().unwrap(),
             bitcoin::AddressType::P2wpkh
         );
-        assert_eq!(addr.get_bip_purpose().unwrap(), 84);
+        assert_eq!(addr.get_bip_purpose(), 84);
     }
 
     #[test]
@@ -706,7 +720,7 @@ mod tests {
             addr.get_bitcoin_address_type().unwrap(),
             bitcoin::AddressType::P2tr
         );
-        assert_eq!(addr.get_bip_purpose().unwrap(), 86);
+        assert_eq!(addr.get_bip_purpose(), 86);
     }
 
     #[test]
@@ -731,7 +745,7 @@ mod tests {
             addr.get_bitcoin_address_type().unwrap(),
             bitcoin::AddressType::P2pkh
         );
-        assert_eq!(addr.get_bip_purpose().unwrap(), 44);
+        assert_eq!(addr.get_bip_purpose(), 44);
     }
 
     #[test]
@@ -744,7 +758,7 @@ mod tests {
             addr.get_bitcoin_address_type().unwrap(),
             bitcoin::AddressType::P2sh
         );
-        assert_eq!(addr.get_bip_purpose().unwrap(), 49);
+        assert_eq!(addr.get_bip_purpose(), 49);
     }
 
     #[test]
@@ -769,7 +783,7 @@ mod tests {
             addr.get_bitcoin_address_type().unwrap(),
             bitcoin::AddressType::P2wpkh
         );
-        assert_eq!(addr.get_bip_purpose().unwrap(), 84);
+        assert_eq!(addr.get_bip_purpose(), 84);
     }
 
     #[test]
@@ -844,7 +858,7 @@ mod tests {
         for (addr_str, expected_type, expected_bip) in test_cases {
             let addr = Address::from_bitcoin_address(addr_str).unwrap();
             assert_eq!(addr.get_bitcoin_address_type().unwrap(), expected_type);
-            assert_eq!(addr.get_bip_purpose().unwrap(), expected_bip);
+            assert_eq!(addr.get_bip_purpose(), expected_bip);
         }
     }
 

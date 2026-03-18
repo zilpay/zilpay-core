@@ -76,12 +76,7 @@ impl WalletInit for Wallet {
             .into_iter()
             .zip(params.account_names.into_iter())
             .map(|((ledger_index, pub_key), account_name)| {
-                AccountV2::from_ledger(
-                    pub_key,
-                    account_name,
-                    ledger_index as usize,
-                    chain_hash,
-                )
+                AccountV2::from_ledger(pub_key, account_name, ledger_index as usize, chain_hash)
             })
             .collect::<std::result::Result<Vec<account::AccountV2>, AccountErrors>>()?;
 
@@ -135,10 +130,8 @@ impl WalletInit for Wallet {
             params.chain_config.hash(),
             params.chain_config.slip_44,
         )?;
-        let slip44_accounts = std::collections::HashMap::from([(
-            params.chain_config.slip_44,
-            vec![account],
-        )]);
+        let slip44_accounts =
+            std::collections::HashMap::from([(params.chain_config.slip_44, vec![account])]);
         let data = WalletDataV2 {
             wallet_name: params.wallet_name,
             biometric_type: params.biometric_type,
@@ -193,10 +186,8 @@ impl WalletInit for Wallet {
             accounts.push(hd_account);
         }
 
-        let slip44_accounts = std::collections::HashMap::from([(
-            params.chain_config.slip_44,
-            accounts,
-        )]);
+        let slip44_accounts =
+            std::collections::HashMap::from([(params.chain_config.slip_44, accounts)]);
 
         let data = WalletDataV2 {
             wallet_name: params.wallet_name,
@@ -400,10 +391,7 @@ mod tests {
         .unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        assert_eq!(
-            data.slip44_accounts.get(&data.slip44).unwrap().len(),
-            1
-        );
+        assert_eq!(data.slip44_accounts.get(&data.slip44).unwrap().len(), 1);
         assert_eq!(
             wallet.reveal_mnemonic(&argon_seed),
             Err(WalletErrors::InvalidAccountType)
