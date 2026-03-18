@@ -103,6 +103,14 @@ impl WalletDataV2 {
             .ok_or(WalletErrors::InvalidBIPPath(self.slip44, self.bip))
     }
 
+    pub fn get_mut_accounts(&mut self) -> Result<&mut [AccountV2], WalletErrors> {
+        self.slip44_accounts
+            .get_mut(&self.slip44)
+            .and_then(|m| m.get_mut(&self.bip))
+            .map(|v| v.as_mut_slice())
+            .ok_or(WalletErrors::InvalidBIPPath(self.slip44, self.bip))
+    }
+
     pub fn remove_account(&mut self, index: usize) {
         for bip_map in self.slip44_accounts.values_mut() {
             for accounts in bip_map.values_mut() {
