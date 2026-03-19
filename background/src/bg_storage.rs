@@ -362,8 +362,11 @@ mod tests_background_storage {
         bg_crypto::CryptoOperations, bg_provider::ProvidersManagement, bg_wallet::WalletManagement,
         BackgroundBip39Params, BackgroundSKParams,
     };
-    use crypto::{bip49::DerivationPath, slip44::BITCOIN};
-    use proto::{keypair::KeyPair, pubkey::PubKey};
+    use crypto::{
+        bip49::DerivationPath,
+        slip44::{BITCOIN, ETHEREUM, ZILLIQA},
+    };
+    use proto::keypair::KeyPair;
     use rand::Rng;
     use wallet::account_type::AccountType;
 
@@ -848,10 +851,10 @@ mod tests_background_storage {
         assert!(bip86_btc[0].pub_key.is_none());
         assert!(bip86_btc[1].pub_key.is_none());
 
-        let eth = &data.slip44_accounts[&60];
+        let eth = &data.slip44_accounts[&ETHEREUM];
         assert_eq!(eth.len(), 1);
-        assert!(eth.contains_key(&44));
-        let bip44_eth = &eth[&44];
+        assert!(eth.contains_key(&DerivationPath::BIP44_PURPOSE));
+        let bip44_eth = &eth[&DerivationPath::BIP44_PURPOSE];
         assert_eq!(bip44_eth.len(), 2);
         check_account(
             &bip44_eth[0],
@@ -868,10 +871,10 @@ mod tests_background_storage {
         assert!(bip44_eth[0].pub_key.is_none());
         assert!(bip44_eth[1].pub_key.is_none());
 
-        let zil = &data.slip44_accounts[&313];
+        let zil = &data.slip44_accounts[&ZILLIQA];
         assert_eq!(zil.len(), 1);
-        assert!(zil.contains_key(&44));
-        let bip44_zil = &zil[&44];
+        assert!(zil.contains_key(&DerivationPath::BIP44_PURPOSE));
+        let bip44_zil = &zil[&DerivationPath::BIP44_PURPOSE];
         assert_eq!(bip44_zil.len(), 2);
         check_account(
             &bip44_zil[0],
@@ -893,5 +896,65 @@ mod tests_background_storage {
             bip44_zil[1].pub_key.clone().unwrap().to_string(),
             "01036f38095333ea8c152dd909aea1fd2c381e3bd4628bc2a391ad82d0c238d9bddd"
         );
+
+        let selected = data.get_selected_account().unwrap();
+        assert_eq!(selected.name, "acc 0");
+        assert_eq!(
+            selected.addr.to_string(),
+            "bc1pfzhx49qe6s5exppe5hqljg3n6587xk0w75xqr70pgdt7ygnfkssqxqjd9l"
+        );
+
+        let acc1 = data.get_account(1).unwrap();
+        assert_eq!(acc1.name, "acc 1");
+        assert_eq!(
+            acc1.addr.to_string(),
+            "bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v"
+        );
+        assert!(data.get_account(99).is_err());
+
+        let accounts = data.get_accounts().unwrap();
+        assert_eq!(accounts.len(), 2);
+        assert_eq!(accounts[0].name, "acc 0");
+        assert_eq!(accounts[1].name, "acc 1");
+
+        let mut data = wallet.get_wallet_data().unwrap();
+
+        data.slip44 = ETHEREUM;
+        data.bip = DerivationPath::BIP44_PURPOSE;
+        let eth_selected = data.get_selected_account().unwrap();
+        assert_eq!(
+            eth_selected.addr.to_string(),
+            "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+        );
+        let eth_accounts = data.get_accounts().unwrap();
+        assert_eq!(eth_accounts.len(), 2);
+
+        data.slip44 = ZILLIQA;
+        let zil_acc = data.get_account(0).unwrap();
+        assert_eq!(
+            zil_acc.addr.to_string(),
+            "0xBE9390B088c7651Af28751CEb84e233Be3B8162D"
+        );
+
+        data.slip44 = 9999;
+        assert!(data.get_selected_account().is_err());
+        assert!(data.get_accounts().is_err());
+
+        data.slip44 = 0;
+        data.bip = DerivationPath::BIP86_PURPOSE;
+        data.remove_account(1);
+        for bip_map in data.slip44_accounts.values() {
+            for accounts in bip_map.values() {
+                assert_eq!(accounts.len(), 1);
+                assert_eq!(accounts[0].name, "acc 0");
+            }
+        }
+
+        data.remove_account(0);
+        for bip_map in data.slip44_accounts.values() {
+            for accounts in bip_map.values() {
+                assert!(accounts.is_empty());
+            }
+        }
     }
 }
