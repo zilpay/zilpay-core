@@ -511,10 +511,7 @@ mod tests_background {
         let mut bg = Background::from_storage_path(&dir).unwrap();
         let words = Background::gen_bip39(24).unwrap();
 
-        let accounts = [
-            (1, "Eth Wallet".to_string()),
-            (2, "account 1".to_string()),
-        ];
+        let accounts = [(1, "Eth Wallet".to_string()), (2, "account 1".to_string())];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: &password,

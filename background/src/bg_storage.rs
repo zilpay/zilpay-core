@@ -362,9 +362,10 @@ mod tests_background_storage {
         bg_crypto::CryptoOperations, bg_provider::ProvidersManagement, bg_wallet::WalletManagement,
         BackgroundBip39Params, BackgroundSKParams,
     };
-    use crypto::bip49::DerivationPath;
-    use proto::keypair::KeyPair;
+    use crypto::{bip49::DerivationPath, slip44::BITCOIN};
+    use proto::{keypair::KeyPair, pubkey::PubKey};
     use rand::Rng;
+    use wallet::account_type::AccountType;
 
     use test_data::{
         gen_anvil_net_conf, gen_btc_testnet_conf, gen_zil_mainnet_conf, ANVIL_MNEMONIC,
@@ -738,10 +739,7 @@ mod tests_background_storage {
         bg.add_provider(btc.clone()).unwrap();
         bg.add_provider(zil.clone()).unwrap();
 
-        let accounts = [
-            (0, "acc 0".to_string()),
-            (1, "acc 1".to_string()),
-        ];
+        let accounts = [(0, "acc 0".to_string()), (1, "acc 1".to_string())];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: &password,
@@ -753,7 +751,7 @@ mod tests_background_storage {
             passphrase: "",
             wallet_name: String::new(),
             biometric_type: Default::default(),
-            ftokens: vec![],
+            ftokens: btc.ftokens.clone(),
             bip: DerivationPath::BIP86_PURPOSE,
         })
         .await
@@ -762,6 +760,138 @@ mod tests_background_storage {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        dbg!(data);
+        assert_eq!(data.slip44, BITCOIN);
+        assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
+        assert_eq!(data.selected_account, 0);
+        assert_eq!(data.chain_hash, btc.hash());
+        assert_eq!(data.slip44_accounts.len(), 3);
+
+        let check_account =
+            |acc: &wallet::account::AccountV2, name: &str, index: usize, addr: &str| {
+                assert_eq!(acc.name, name);
+                assert_eq!(acc.account_type, AccountType::Bip39HD(index));
+                assert_eq!(acc.addr.to_string(), addr);
+            };
+
+        let btc = &data.slip44_accounts[&0];
+        assert_eq!(btc.len(), 4);
+        assert!(btc.contains_key(&44));
+        assert!(btc.contains_key(&49));
+        assert!(btc.contains_key(&84));
+        assert!(btc.contains_key(&86));
+
+        let bip44_btc = &btc[&44];
+        assert_eq!(bip44_btc.len(), 2);
+        check_account(
+            &bip44_btc[0],
+            "acc 0",
+            0,
+            "1Ei9UmLQv4o4UJTy5r5mnGFeC9auM3W5P1",
+        );
+        check_account(
+            &bip44_btc[1],
+            "acc 1",
+            1,
+            "14RBPsg6mBkLSJokkzeuoCkTtoeD3nK2Kz",
+        );
+        assert!(bip44_btc[0].pub_key.is_none());
+        assert!(bip44_btc[1].pub_key.is_none());
+
+        let bip49_btc = &btc[&49];
+        assert_eq!(bip49_btc.len(), 2);
+        check_account(
+            &bip49_btc[0],
+            "acc 0",
+            0,
+            "39sr5B8UAdxeoXbnpdw4frfxXwWwEChwzp",
+        );
+        check_account(
+            &bip49_btc[1],
+            "acc 1",
+            1,
+            "37EtUYWDGFUYhF65JqZMkkiUd4dDmwHv8J",
+        );
+        assert!(bip49_btc[0].pub_key.is_none());
+        assert!(bip49_btc[1].pub_key.is_none());
+
+        let bip84_btc = &btc[&84];
+        assert_eq!(bip84_btc.len(), 2);
+        check_account(
+            &bip84_btc[0],
+            "acc 0",
+            0,
+            "bc1q4qw42stdzjqs59xvlrlxr8526e3nunw7mp73te",
+        );
+        check_account(
+            &bip84_btc[1],
+            "acc 1",
+            1,
+            "bc1qp533522veg9uyhpx3sva9vqrnfzmt262n4lsuq",
+        );
+        assert!(bip84_btc[0].pub_key.is_none());
+        assert!(bip84_btc[1].pub_key.is_none());
+
+        let bip86_btc = &btc[&86];
+        assert_eq!(bip86_btc.len(), 2);
+        check_account(
+            &bip86_btc[0],
+            "acc 0",
+            0,
+            "bc1pfzhx49qe6s5exppe5hqljg3n6587xk0w75xqr70pgdt7ygnfkssqxqjd9l",
+        );
+        check_account(
+            &bip86_btc[1],
+            "acc 1",
+            1,
+            "bc1p0lks35d0spqsvz2t3t0kqus38wrlpmcjtvvupkfkwdrzfh6zjyps9rvd6v",
+        );
+        assert!(bip86_btc[0].pub_key.is_none());
+        assert!(bip86_btc[1].pub_key.is_none());
+
+        let eth = &data.slip44_accounts[&60];
+        assert_eq!(eth.len(), 1);
+        assert!(eth.contains_key(&44));
+        let bip44_eth = &eth[&44];
+        assert_eq!(bip44_eth.len(), 2);
+        check_account(
+            &bip44_eth[0],
+            "acc 0",
+            0,
+            "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+        );
+        check_account(
+            &bip44_eth[1],
+            "acc 1",
+            1,
+            "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+        );
+        assert!(bip44_eth[0].pub_key.is_none());
+        assert!(bip44_eth[1].pub_key.is_none());
+
+        let zil = &data.slip44_accounts[&313];
+        assert_eq!(zil.len(), 1);
+        assert!(zil.contains_key(&44));
+        let bip44_zil = &zil[&44];
+        assert_eq!(bip44_zil.len(), 2);
+        check_account(
+            &bip44_zil[0],
+            "acc 0",
+            0,
+            "0xBE9390B088c7651Af28751CEb84e233Be3B8162D",
+        );
+        check_account(
+            &bip44_zil[1],
+            "acc 1",
+            1,
+            "0x9E546758fBDcdCd3926d946ad628d0ED7A419106",
+        );
+        assert_eq!(
+            bip44_zil[0].pub_key.clone().unwrap().to_string(),
+            "0102d8855750cd4a1b807e1f88069781d8197b7743b51c00e57e72f66258fa6c2333"
+        );
+        assert_eq!(
+            bip44_zil[1].pub_key.clone().unwrap().to_string(),
+            "01036f38095333ea8c152dd909aea1fd2c381e3bd4628bc2a391ad82d0c238d9bddd"
+        );
     }
 }
