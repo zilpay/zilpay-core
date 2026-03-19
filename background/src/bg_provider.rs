@@ -1,12 +1,17 @@
 use crate::{bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
+use config::session::AuthMethod;
 use crypto::{bip49::DerivationPath, slip44::ZILLIQA};
 use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::{common::Provider, provider::NetworkProvider};
 use proto::address::Address;
 use rpc::network_config::ChainConfig;
+use secrecy::SecretString;
 use std::sync::Arc;
-use wallet::{wallet_storage::StorageOperations, wallet_types::WalletTypes};
+use wallet::{
+    wallet_account::AccountManagement, wallet_storage::StorageOperations,
+    wallet_types::WalletTypes,
+};
 
 #[async_trait]
 pub trait ProvidersManagement {
@@ -19,10 +24,11 @@ pub trait ProvidersManagement {
     ) -> std::result::Result<(), Self::Error>;
     fn get_provider(&self, chain_hash: u64) -> std::result::Result<NetworkProvider, Self::Error>;
     fn get_providers(&self) -> Vec<NetworkProvider>;
-    fn select_accounts_chain(
+    async fn select_accounts_chain(
         &self,
         wallet_index: usize,
         chain_hash: u64,
+        password: Option<&SecretString>,
     ) -> std::result::Result<(), Self::Error>;
     fn add_provider(&self, config: ChainConfig) -> std::result::Result<u64, Self::Error>;
     fn remvoe_provider(&self, chain_hash: u64) -> std::result::Result<(), Self::Error>;
@@ -108,7 +114,12 @@ impl ProvidersManagement for Background {
         Ok(())
     }
 
-    fn select_accounts_chain(&self, wallet_index: usize, chain_hash: u64) -> Result<()> {
+    async fn select_accounts_chain(
+        &self,
+        wallet_index: usize,
+        chain_hash: u64,
+        password: Option<&SecretString>,
+    ) -> Result<()> {
         let provider = self.get_provider(chain_hash)?;
         let wallet = self.get_wallet_by_index(wallet_index)?;
         let mut data = wallet.get_wallet_data()?;
@@ -121,15 +132,10 @@ impl ProvidersManagement for Background {
             }
         }
 
+        ftokens.retain(|t| !t.native);
+
         for provider_ftoken in &provider.config.ftokens {
-            if let Some(existing_ftoken) = ftokens.iter_mut().find(|t| {
-                t.symbol == provider_ftoken.symbol && t.decimals == provider_ftoken.decimals
-            }) {
-                existing_ftoken.chain_hash = chain_hash;
-                existing_ftoken.balances = Default::default();
-            } else {
-                ftokens.insert(0, provider_ftoken.clone());
-            }
+            ftokens.insert(0, provider_ftoken.clone());
         }
 
         let new_slip44 = provider.config.slip_44;
@@ -139,6 +145,39 @@ impl ProvidersManagement for Background {
         } else {
             *supported.first().unwrap_or(&DerivationPath::BIP44_PURPOSE)
         };
+
+        let has_accounts = data
+            .slip44_accounts
+            .get(&new_slip44)
+            .and_then(|bip_map| bip_map.get(&new_bip))
+            .is_some_and(|accounts| !accounts.is_empty());
+
+        if !has_accounts {
+            match &data.wallet_type {
+                WalletTypes::SecretKey | WalletTypes::Ledger(_) => {
+                    return Err(WalletErrors::InvalidAccountType.into());
+                }
+                WalletTypes::SecretPhrase(_) => {
+                    let seed = if data.biometric_type != AuthMethod::None {
+                        self.unlock_wallet_with_session(wallet_index).await?
+                    } else if let Some(pass) = password {
+                        self.unlock_wallet_with_password(pass, None, wallet_index)
+                            .await?
+                    } else {
+                        return Err(BackgroundError::AuthenticationRequired);
+                    };
+
+                    wallet.ensure_chain_accounts(
+                        new_slip44,
+                        provider.config.bitcoin_network(),
+                        &seed,
+                        "",
+                    )?;
+
+                    data = wallet.get_wallet_data()?;
+                }
+            }
+        }
 
         data.slip44 = new_slip44;
         data.bip = new_bip;
@@ -154,9 +193,14 @@ impl ProvidersManagement for Background {
 #[cfg(test)]
 mod tests_providers {
     use super::*;
-    use crate::bg_storage::StorageManagement;
+    use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
     use rand::Rng;
     use rpc::network_config::Explorer;
+    use secrecy::SecretString;
+    use test_data::{
+        gen_anvil_net_conf, gen_btc_testnet_conf, gen_tron_testnet_conf,
+        ANVIL_MNEMONIC, TEST_PASSWORD,
+    };
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
@@ -327,5 +371,107 @@ mod tests_providers {
 
         assert_eq!(providers[0].config.features.len(), 1);
         assert!(providers[0].config.features.contains(&155));
+    }
+
+    #[tokio::test]
+    async fn test_select_chain_derive_missing() {
+        let (mut bg, _) = setup_test_background();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+        let btc = gen_btc_testnet_conf();
+        let trx = gen_tron_testnet_conf();
+
+        bg.add_provider(btc.clone()).unwrap();
+
+        let accounts = [(0, "acc 0".to_string()), (1, "acc 1".to_string())];
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: &password,
+            chain_hash: btc.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            mnemonic_check: true,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            ftokens: btc.ftokens.clone(),
+            bip: DerivationPath::BIP86_PURPOSE,
+        })
+        .await
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        assert!(data.slip44_accounts.contains_key(&btc.slip_44));
+        assert!(!data.slip44_accounts.contains_key(&trx.slip_44));
+
+        bg.add_provider(trx.clone()).unwrap();
+
+        bg.select_accounts_chain(0, trx.hash(), Some(&password))
+            .await
+            .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+
+        assert_eq!(data.slip44, trx.slip_44);
+        assert_eq!(data.chain_hash, trx.hash());
+        assert!(data.slip44_accounts.contains_key(&trx.slip_44));
+
+        let tron_accounts = data.get_accounts().unwrap();
+        assert_eq!(tron_accounts.len(), 2);
+        assert_eq!(tron_accounts[0].name, "acc 0");
+        assert_eq!(tron_accounts[1].name, "acc 1");
+
+        assert!(data.slip44_accounts.contains_key(&btc.slip_44));
+
+        bg.select_accounts_chain(0, btc.hash(), None)
+            .await
+            .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+        assert_eq!(data.slip44, btc.slip_44);
+        assert_eq!(data.chain_hash, btc.hash());
+
+        let btc_accounts = data.get_accounts().unwrap();
+        assert_eq!(btc_accounts.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_select_chain_no_password_returns_auth_required() {
+        let (mut bg, _) = setup_test_background();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+        let btc = gen_btc_testnet_conf();
+        let eth = gen_anvil_net_conf();
+
+        bg.add_provider(btc.clone()).unwrap();
+
+        let accounts = [(0, "acc 0".to_string())];
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: &password,
+            chain_hash: btc.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            mnemonic_check: true,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            ftokens: btc.ftokens.clone(),
+            bip: DerivationPath::BIP86_PURPOSE,
+        })
+        .await
+        .unwrap();
+
+        bg.add_provider(eth.clone()).unwrap();
+
+        let result = bg
+            .select_accounts_chain(0, eth.hash(), None)
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(BackgroundError::AuthenticationRequired)
+        ));
     }
 }

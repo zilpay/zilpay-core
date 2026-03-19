@@ -746,7 +746,9 @@ mod tests_background_transactions {
             .await
             .unwrap();
 
-        bg.select_accounts_chain(0, anvil_config.hash()).unwrap();
+        bg.select_accounts_chain(0, anvil_config.hash(), None)
+            .await
+            .unwrap();
 
         let data = wallet.get_wallet_data().unwrap();
         let selected_account = data.get_selected_account().unwrap();

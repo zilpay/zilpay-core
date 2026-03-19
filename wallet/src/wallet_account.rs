@@ -1,6 +1,6 @@
 use crate::{
     account::AccountV2, account_type::AccountType, wallet_crypto::WalletCrypto,
-    wallet_storage::StorageOperations, Result, Wallet,
+    wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet,
 };
 use cipher::argon2::Argon2Seed;
 use crypto::bip49::DerivationPath;
@@ -22,6 +22,13 @@ pub trait AccountManagement {
         bip49: &DerivationPath,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
+    ) -> std::result::Result<(), Self::Error>;
+    fn ensure_chain_accounts(
+        &self,
+        slip44: u32,
+        network: Option<bitcoin::Network>,
+        seed_bytes: &Argon2Seed,
+        passphrase: &str,
     ) -> std::result::Result<(), Self::Error>;
     fn select_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
     fn delete_account(&self, account_index: usize) -> std::result::Result<(), Self::Error>;
@@ -63,6 +70,72 @@ impl AccountManagement for Wallet {
             .entry(chain.slip_44)
             .or_default()
             .insert(data.bip, new_accounts);
+
+        self.save_wallet_data(data)?;
+
+        Ok(())
+    }
+
+    fn ensure_chain_accounts(
+        &self,
+        slip44: u32,
+        network: Option<bitcoin::Network>,
+        seed_bytes: &Argon2Seed,
+        passphrase: &str,
+    ) -> Result<()> {
+        let mut data = self.get_wallet_data()?;
+
+        if data.slip44_accounts.contains_key(&slip44) {
+            return Ok(());
+        }
+
+        if !matches!(data.wallet_type, WalletTypes::SecretPhrase(_)) {
+            return Err(WalletErrors::InvalidAccountType);
+        }
+
+        let m = self.reveal_mnemonic(seed_bytes)?;
+        let mnemonic_seed = m.to_seed(passphrase)?;
+
+        let (indexes, names): (Vec<usize>, Vec<String>) = data
+            .slip44_accounts
+            .values()
+            .next()
+            .and_then(|bip_map| bip_map.values().next())
+            .map(|accounts| {
+                accounts
+                    .iter()
+                    .map(|a| (a.account_type.value(), a.name.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| vec![(0, String::new())])
+            .into_iter()
+            .unzip();
+
+        let idxs: Vec<(usize, String)> = indexes.into_iter().zip(names).collect();
+
+        let mut handles = Vec::new();
+        for &bip in DerivationPath::supported_bips(slip44) {
+            let seed = mnemonic_seed;
+            let idx_clone = idxs.clone();
+            let net = network;
+            handles.push(std::thread::spawn(
+                move || -> std::result::Result<(u32, Vec<AccountV2>), WalletErrors> {
+                    let mut accounts = Vec::with_capacity(idx_clone.len());
+                    for (idx, name) in idx_clone {
+                        let path = DerivationPath::new(slip44, idx, bip, net);
+                        let account = AccountV2::from_hd(&seed, name, &path)?;
+                        accounts.push(account);
+                    }
+                    Ok((bip, accounts))
+                },
+            ));
+        }
+
+        let bip_map = data.slip44_accounts.entry(slip44).or_default();
+        for handle in handles {
+            let (bip, accounts) = handle.join().map_err(|_| WalletErrors::ThreadPanic)??;
+            bip_map.insert(bip, accounts);
+        }
 
         self.save_wallet_data(data)?;
 

@@ -122,6 +122,9 @@ pub enum BackgroundError {
 
     #[error("address error: {0}")]
     AddressError(AddressError),
+
+    #[error("Authentication required to derive accounts for new chain")]
+    AuthenticationRequired,
 }
 
 impl From<AddressError> for BackgroundError {

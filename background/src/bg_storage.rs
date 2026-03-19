@@ -731,7 +731,7 @@ mod tests_background_storage {
     }
 
     #[tokio::test]
-    async fn test_swich_network_bip39() {
+    async fn test_data_bip39() {
         let (mut bg, _) = setup_test_background();
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
         let eth = gen_anvil_net_conf();
