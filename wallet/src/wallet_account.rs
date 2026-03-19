@@ -136,7 +136,7 @@ mod tests {
         keychain::KeyChain,
     };
     use config::{bip39::EN_WORDS, cipher::PROOF_SIZE, session::AuthMethod};
-    use crypto::{bip49::DerivationPath, slip44};
+    use crypto::bip49::DerivationPath;
     use errors::wallet::WalletErrors;
     use pqbip39::mnemonic::Mnemonic;
     use rand::Rng;
@@ -165,12 +165,7 @@ mod tests {
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
 
         // Create wallet with 3 accounts
-        let indexes = [0, 1, 2].map(|i| {
-            (
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
-                format!("account {i}"),
-            )
-        });
+        let indexes = [0, 1, 2].map(|i| (i, format!("account {i}")));
 
         let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {

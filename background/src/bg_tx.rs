@@ -1074,7 +1074,6 @@ mod tests_background_transactions {
 
     #[tokio::test]
     async fn test_sign_and_send_btc_taproot_tx() {
-        use crypto::{bip49::DerivationPath, slip44};
         use test_data::gen_btc_testnet_conf;
 
         let (mut bg, _dir) = setup_test_background();
@@ -1082,15 +1081,7 @@ mod tests_background_transactions {
 
         bg.add_provider(net_config.clone()).unwrap();
 
-        let accounts = [(
-            DerivationPath::new(
-                slip44::BITCOIN,
-                0,
-                DerivationPath::BIP86_PURPOSE,
-                Some(bitcoin::Network::Bitcoin),
-            ),
-            "BTC Taproot Acc 0".to_string(),
-        )];
+        let accounts = [(0, "BTC Taproot Acc 0".to_string())];
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {

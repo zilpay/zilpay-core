@@ -8,7 +8,6 @@ use proto::pubkey::PubKey;
 
 use cipher::keychain::KeyChain;
 use config::sha::SHA256_SIZE;
-use crypto::bip49::DerivationPath;
 use errors::wallet::WalletErrors;
 use pqbip39::mnemonic::Mnemonic;
 use proto::secret_key::SecretKey;
@@ -51,7 +50,7 @@ pub struct Bip39Params<'a> {
     pub proof: [u8; KEY_SIZE],
     pub mnemonic: &'a Mnemonic<'a>,
     pub passphrase: &'a str,
-    pub indexes: &'a [(DerivationPath, String)],
+    pub indexes: &'a [(usize, String)],
     pub wallet_name: String,
     pub bip: u32,
     pub biometric_type: AuthMethod,

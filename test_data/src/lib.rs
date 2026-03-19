@@ -1,12 +1,11 @@
 use config::address::ADDR_LEN;
-use crypto::{bip49::DerivationPath, slip44};
+use crypto::slip44;
 use proto::address::Address;
 use rpc::network_config::{ChainConfig, Explorer};
 use std::collections::HashMap;
 use token::ft::FToken;
 
 pub const TEST_PASSWORD: &str = "TEst password";
-
 pub const ANVIL_MNEMONIC: &str = "test test test test test test test test test test test junk";
 
 pub fn gen_anvil_net_conf() -> ChainConfig {
@@ -77,40 +76,16 @@ pub fn gen_zil_token() -> FToken {
     }
 }
 
-pub fn gen_eth_account(index: u32, name: &str) -> (DerivationPath, String) {
-    (
-        DerivationPath::new(
-            slip44::ETHEREUM,
-            index as usize,
-            DerivationPath::BIP44_PURPOSE,
-            None,
-        ),
-        name.to_string(),
-    )
+pub fn gen_eth_account(index: u32, name: &str) -> (usize, String) {
+    (index as usize, name.to_string())
 }
 
-pub fn gen_zil_account(index: u32, name: &str) -> (DerivationPath, String) {
-    (
-        DerivationPath::new(
-            slip44::ZILLIQA,
-            index as usize,
-            DerivationPath::BIP44_PURPOSE,
-            None,
-        ),
-        name.to_string(),
-    )
+pub fn gen_zil_account(index: u32, name: &str) -> (usize, String) {
+    (index as usize, name.to_string())
 }
 
-pub fn gen_tron_account(index: u32, name: &str) -> (DerivationPath, String) {
-    (
-        DerivationPath::new(
-            slip44::TRON,
-            index as usize,
-            DerivationPath::BIP44_PURPOSE,
-            None,
-        ),
-        name.to_string(),
-    )
+pub fn gen_tron_account(index: u32, name: &str) -> (usize, String) {
+    (index as usize, name.to_string())
 }
 
 pub fn gen_device_indicators(device_name: &str) -> [String; 2] {

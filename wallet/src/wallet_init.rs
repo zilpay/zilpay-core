@@ -184,19 +184,17 @@ impl WalletInit for Wallet {
             ));
         }
 
-        let index_names: Vec<(usize, String)> = params
-            .indexes
-            .iter()
-            .map(|(dp, name)| (dp.index, name.clone()))
-            .collect();
-
         let mut handles = Vec::new();
         for chain in params.chains {
             let slip44 = chain.slip_44;
             let network = chain.bitcoin_network();
             for &bip in crypto::bip49::DerivationPath::supported_bips(slip44) {
                 let seed = mnemonic_seed;
-                let idxs = index_names.clone();
+                let idxs: Vec<(usize, String)> = params
+                    .indexes
+                    .iter()
+                    .map(|(i, name)| (*i, name.clone()))
+                    .collect();
                 handles.push(std::thread::spawn(
                     move || -> std::result::Result<(u32, u32, Vec<AccountV2>), WalletErrors> {
                         let mut accounts = Vec::with_capacity(idxs.len());
@@ -290,12 +288,7 @@ mod tests {
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
-        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| {
-            (
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
-                format!("account {i}"),
-            )
-        });
+        let indexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(|i| (i, format!("account {i}")));
         let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,
@@ -351,17 +344,7 @@ mod tests {
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
-        let indexes = [0, 1, 2].map(|i| {
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    i,
-                    DerivationPath::BIP84_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                format!("Bitcoin Account {i}"),
-            )
-        });
+        let indexes = [0, 1, 2].map(|i| (i, format!("Bitcoin Account {i}")));
         let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
         let wallet_config = WalletConfig {
             keychain,
@@ -453,17 +436,7 @@ mod tests {
 
         // Create 10 BIP44 accounts (Legacy P2PKH)
         let indexes = (0..10)
-            .map(|i| {
-                (
-                    DerivationPath::new(
-                        slip44::BITCOIN,
-                        i,
-                        DerivationPath::BIP44_PURPOSE,
-                        Some(bitcoin::Network::Bitcoin),
-                    ),
-                    format!("BIP44 Account {i}"),
-                )
-            })
+            .map(|i| (i, format!("BIP44 Account {i}")))
             .collect::<Vec<_>>();
 
         let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
@@ -527,17 +500,7 @@ mod tests {
 
         // Create 10 BIP49 accounts (Nested SegWit P2SH-P2WPKH)
         let indexes = (0..10)
-            .map(|i| {
-                (
-                    DerivationPath::new(
-                        slip44::BITCOIN,
-                        i,
-                        DerivationPath::BIP49_PURPOSE,
-                        Some(bitcoin::Network::Bitcoin),
-                    ),
-                    format!("BIP49 Account {i}"),
-                )
-            })
+            .map(|i| (i, format!("BIP49 Account {i}")))
             .collect::<Vec<_>>();
 
         let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
@@ -601,17 +564,7 @@ mod tests {
 
         // Create 10 BIP84 accounts (Native SegWit Bech32 P2WPKH)
         let indexes = (0..10)
-            .map(|i| {
-                (
-                    DerivationPath::new(
-                        slip44::BITCOIN,
-                        i,
-                        DerivationPath::BIP84_PURPOSE,
-                        Some(bitcoin::Network::Bitcoin),
-                    ),
-                    format!("BIP84 Account {i}"),
-                )
-            })
+            .map(|i| (i, format!("BIP84 Account {i}")))
             .collect::<Vec<_>>();
 
         let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();
@@ -675,17 +628,7 @@ mod tests {
 
         // Create 10 BIP86 accounts (Taproot Bech32m P2TR)
         let indexes = (0..10)
-            .map(|i| {
-                (
-                    DerivationPath::new(
-                        slip44::BITCOIN,
-                        i,
-                        DerivationPath::BIP86_PURPOSE,
-                        Some(bitcoin::Network::Bitcoin),
-                    ),
-                    format!("BIP86 Account {i}"),
-                )
-            })
+            .map(|i| (i, format!("BIP86 Account {i}")))
             .collect::<Vec<_>>();
 
         let proof = derive_key(&argon_seed[..PROOF_SIZE], b"", &ARGON2_DEFAULT_CONFIG).unwrap();

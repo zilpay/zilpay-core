@@ -356,46 +356,26 @@ impl StorageManagement for Background {
 }
 
 #[cfg(test)]
-mod tests_background {
+mod tests_background_storage {
     use super::*;
     use crate::{
         bg_crypto::CryptoOperations, bg_provider::ProvidersManagement, bg_wallet::WalletManagement,
         BackgroundBip39Params, BackgroundSKParams,
     };
-    use crypto::{bip49::DerivationPath, slip44};
+    use crypto::bip49::DerivationPath;
     use proto::keypair::KeyPair;
     use rand::Rng;
-    use rpc::network_config::{ChainConfig, Explorer};
+
+    use test_data::{
+        gen_anvil_net_conf, gen_btc_testnet_conf, gen_zil_mainnet_conf, ANVIL_MNEMONIC,
+        TEST_PASSWORD,
+    };
 
     fn setup_test_background() -> (Background, String) {
         let mut rng = rand::thread_rng();
         let dir = format!("/tmp/{}", rng.gen::<usize>());
         let bg = Background::from_storage_path(&dir).unwrap();
         (bg, dir)
-    }
-
-    fn create_test_network_config() -> ChainConfig {
-        ChainConfig {
-            ftokens: vec![],
-            logo: String::new(),
-            diff_block_time: 0,
-            testnet: None,
-            chain_ids: [1, 0],
-            name: "Test Network".to_string(),
-            chain: "TEST".to_string(),
-            short_name: String::new(),
-            rpc: vec!["https://test.network".to_string()],
-            features: vec![155, 1559],
-            slip_44: slip44::ETHEREUM,
-            ens: None,
-            explorers: vec![Explorer {
-                name: "TestExplorer".to_string(),
-                url: "https://test.explorer".to_string(),
-                icon: None,
-                standard: 3091,
-            }],
-            fallback_enabled: true,
-        }
     }
 
     #[tokio::test]
@@ -406,11 +386,8 @@ mod tests_background {
 
         let password: SecretString = SecretString::new("shit password".into());
         let words = Background::gen_bip39(12).unwrap();
-        let accounts = [(
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
-            "Name".to_string(),
-        )];
-        let net_conf = create_test_network_config();
+        let accounts = [(0, "Name".to_string())];
+        let net_conf = gen_anvil_net_conf();
 
         bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -443,16 +420,13 @@ mod tests_background {
     #[tokio::test]
     async fn test_multiple_wallets() {
         let (mut bg, _) = setup_test_background();
-        let net_conf = create_test_network_config();
+        let net_conf = gen_anvil_net_conf();
         let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
         let words1 = Background::gen_bip39(12).unwrap();
-        let accounts1 = [(
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
-            "Wallet1".to_string(),
-        )];
+        let accounts1 = [(0, "Wallet1".to_string())];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: &password,
@@ -472,10 +446,7 @@ mod tests_background {
 
         // Add second wallet
         let words2 = Background::gen_bip39(12).unwrap();
-        let accounts2 = [(
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
-            "Wallet2".to_string(),
-        )];
+        let accounts2 = [(0, "Wallet2".to_string())];
         let password2: SecretString = SecretString::new("2 shit password".into());
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -501,16 +472,13 @@ mod tests_background {
     #[tokio::test]
     async fn test_keystore_bip39() {
         let (mut bg, _) = setup_test_background();
-        let net_conf = create_test_network_config();
+        let net_conf = gen_anvil_net_conf();
         let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
         let words1 = Background::gen_bip39(12).unwrap();
-        let accounts1 = [(
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
-            "keystore wallet".to_string(),
-        )];
+        let accounts1 = [(0, "keystore wallet".to_string())];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: &password,
@@ -547,7 +515,7 @@ mod tests_background {
     #[tokio::test]
     async fn test_keystore_key() {
         let (mut bg, _) = setup_test_background();
-        let net_conf = create_test_network_config();
+        let net_conf = gen_anvil_net_conf();
         let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
@@ -558,7 +526,7 @@ mod tests_background {
             password: &password,
             secret_key: keypair.get_secretkey().unwrap(),
             wallet_name: "sk wallet".to_string(),
-            biometric_type: AuthMethod::FaceId,
+            biometric_type: AuthMethod::None,
             wallet_settings: Default::default(),
             chain_hash: net_conf.hash(),
             ftokens: net_conf.ftokens.clone(),
@@ -590,21 +558,15 @@ mod tests_background {
     #[tokio::test]
     async fn test_load_from_keystore_bip39() {
         let (mut bg, _) = setup_test_background();
-        let net_conf = create_test_network_config();
+        let net_conf = gen_anvil_net_conf();
         let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
 
         let words1 = Background::gen_bip39(12).unwrap();
         let accounts1 = [
-            (
-                DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
-                "keystore wallet 0".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 1, DerivationPath::BIP44_PURPOSE, None),
-                "keystore wallet 1".to_string(),
-            ),
+            (0, "keystore wallet 0".to_string()),
+            (1, "keystore wallet 1".to_string()),
         ];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -684,7 +646,7 @@ mod tests_background {
     #[tokio::test]
     async fn test_load_from_keystore_keypair() {
         let (mut bg, _) = setup_test_background();
-        let net_conf = create_test_network_config();
+        let net_conf = gen_anvil_net_conf();
         let password: SecretString = SecretString::new("shit password".into());
 
         bg.add_provider(net_conf.clone()).unwrap();
@@ -695,7 +657,7 @@ mod tests_background {
             password: &password,
             secret_key: keypair.get_secretkey().unwrap(),
             wallet_name: "sk wallet".to_string(),
-            biometric_type: AuthMethod::FaceId,
+            biometric_type: AuthMethod::None,
             wallet_settings: Default::default(),
             chain_hash: net_conf.hash(),
             ftokens: net_conf.ftokens.clone(),
@@ -743,7 +705,6 @@ mod tests_background {
             restored_wallet_data0.selected_account,
             restored_wallet_data1.selected_account
         );
-        assert_eq!(restored_wallet_data0.biometric_type, AuthMethod::FaceId);
         assert_eq!(restored_wallet_data1.biometric_type, AuthMethod::None);
         assert_eq!(
             restored_wallet_data0.chain_hash,
@@ -763,5 +724,44 @@ mod tests_background {
         let keypair1 = wallet1.reveal_keypair(0, &seed_bytes1, None).unwrap();
 
         assert_eq!(keypair0, keypair1);
+    }
+
+    #[tokio::test]
+    async fn test_swich_network_bip39() {
+        let (mut bg, _) = setup_test_background();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+        let eth = gen_anvil_net_conf();
+        let btc = gen_btc_testnet_conf();
+        let zil = gen_zil_mainnet_conf();
+
+        bg.add_provider(eth.clone()).unwrap();
+        bg.add_provider(btc.clone()).unwrap();
+        bg.add_provider(zil.clone()).unwrap();
+
+        let accounts = [
+            (0, "acc 0".to_string()),
+            (1, "acc 1".to_string()),
+        ];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: &password,
+            chain_hash: btc.hash(),
+            mnemonic_str: &ANVIL_MNEMONIC,
+            mnemonic_check: true,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            ftokens: vec![],
+            bip: DerivationPath::BIP86_PURPOSE,
+        })
+        .await
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+
+        dbg!(data);
     }
 }

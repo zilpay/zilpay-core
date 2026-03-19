@@ -214,7 +214,7 @@ mod tests {
     fn create_test_wallet_from_mnemonic(
         storage: Arc<LocalStorage>,
         argon_seed: &Argon2Seed,
-        indexes: &[(DerivationPath, String)],
+        indexes: &[(usize, String)],
         chain_config: &ChainConfig,
         bip: u32,
     ) -> Wallet {
@@ -295,12 +295,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0, 1, 2].map(|i| {
-            (
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
-                format!("Zilliqa Account {i}"),
-            )
-        });
+        let indexes = [0, 1, 2].map(|i| (i, format!("Zilliqa Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
@@ -332,12 +327,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0, 1].map(|i| {
-            (
-                DerivationPath::new(slip44::ETHEREUM, i, DerivationPath::BIP44_PURPOSE, None),
-                format!("Ethereum Account {i}"),
-            )
-        });
+        let indexes = [0, 1].map(|i| (i, format!("Ethereum Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ETHEREUM;
@@ -369,17 +359,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0].map(|i| {
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    i,
-                    DerivationPath::BIP44_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                format!("Bitcoin BIP44 Account {i}"),
-            )
-        });
+        let indexes = [0].map(|i| (i, format!("Bitcoin BIP44 Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
@@ -411,17 +391,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0].map(|i| {
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    i,
-                    DerivationPath::BIP49_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                format!("Bitcoin BIP49 Account {i}"),
-            )
-        });
+        let indexes = [0].map(|i| (i, format!("Bitcoin BIP49 Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
@@ -453,17 +423,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0, 1].map(|i| {
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    i,
-                    DerivationPath::BIP84_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                format!("Bitcoin BIP84 Account {i}"),
-            )
-        });
+        let indexes = [0, 1].map(|i| (i, format!("Bitcoin BIP84 Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
@@ -499,17 +459,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0].map(|i| {
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    i,
-                    DerivationPath::BIP86_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                format!("Bitcoin BIP86 Account {i}"),
-            )
-        });
+        let indexes = [0].map(|i| (i, format!("Bitcoin BIP86 Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;
@@ -541,12 +491,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0].map(|i| {
-            (
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
-                format!("Account {i}"),
-            )
-        });
+        let indexes = [0].map(|i| (i, format!("Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
@@ -569,12 +514,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0].map(|i| {
-            (
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
-                format!("Account {i}"),
-            )
-        });
+        let indexes = [0].map(|i| (i, format!("Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
@@ -613,12 +553,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0].map(|i| {
-            (
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None),
-                format!("Account {i}"),
-            )
-        });
+        let indexes = [0].map(|i| (i, format!("Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::ZILLIQA;
@@ -645,17 +580,7 @@ mod tests {
         let (storage, _dir) = setup_test_storage();
         let argon_seed = derive_key(TEST_PASSWORD.as_bytes(), b"", &ARGON2_DEFAULT_CONFIG).unwrap();
 
-        let indexes = [0].map(|i| {
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    i,
-                    DerivationPath::BIP84_PURPOSE,
-                    Some(bitcoin::Network::Testnet),
-                ),
-                format!("Bitcoin Testnet Account {i}"),
-            )
-        });
+        let indexes = [0].map(|i| (i, format!("Bitcoin Testnet Account {i}")));
 
         let mut chain_config = ChainConfig::default();
         chain_config.slip_44 = slip44::BITCOIN;

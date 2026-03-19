@@ -544,24 +544,8 @@ mod tests_background_tokens {
         bg.add_provider(net_config.clone()).unwrap();
 
         let accounts = [
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    2,
-                    DerivationPath::BIP84_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                "BTC SegWit Acc 2".to_string(),
-            ),
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    3,
-                    DerivationPath::BIP84_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                "BTC SegWit Acc 3".to_string(),
-            ),
+            (2, "BTC SegWit Acc 2".to_string()),
+            (3, "BTC SegWit Acc 3".to_string()),
         ];
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
@@ -779,14 +763,8 @@ mod tests_background_tokens {
         bg.add_provider(net_config.clone()).unwrap();
 
         let accounts = [
-            (
-                DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None),
-                "scilla Acc 2".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ZILLIQA, 1, DerivationPath::BIP44_PURPOSE, None),
-                "scilla Acc 3".to_string(),
-            ),
+            (0, "scilla Acc 2".to_string()),
+            (1, "scilla Acc 3".to_string()),
         ];
 
         bg.add_bip39_wallet(BackgroundBip39Params {

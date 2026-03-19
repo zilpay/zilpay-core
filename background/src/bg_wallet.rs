@@ -485,10 +485,7 @@ mod tests_background {
         let password: SecretString = SecretString::new("shit password".into());
         let words = Background::gen_bip39(24).unwrap();
         let net_conf = create_test_net_conf();
-        let accounts = [(
-            DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None),
-            "Zilliqa wallet".to_string(),
-        )];
+        let accounts = [(0, "Zilliqa wallet".to_string())];
 
         bg.add_provider(net_conf.clone()).unwrap();
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -515,14 +512,8 @@ mod tests_background {
         let words = Background::gen_bip39(24).unwrap();
 
         let accounts = [
-            (
-                DerivationPath::new(slip44::ETHEREUM, 1, DerivationPath::BIP44_PURPOSE, None),
-                "Eth Wallet".to_string(),
-            ),
-            (
-                DerivationPath::new(slip44::ETHEREUM, 2, DerivationPath::BIP44_PURPOSE, None),
-                "account 1".to_string(),
-            ),
+            (1, "Eth Wallet".to_string()),
+            (2, "account 1".to_string()),
         ];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
@@ -555,10 +546,7 @@ mod tests_background {
         let password: SecretString = SecretString::new("shit password".into());
         let words = Background::gen_bip39(24).unwrap();
         let net_conf = create_test_net_conf();
-        let accounts = [(
-            DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None),
-            "Zilliqa wallet".to_string(),
-        )];
+        let accounts = [(0, "Zilliqa wallet".to_string())];
         let keypair = KeyPair::gen_sha256().unwrap();
 
         bg.add_provider(net_conf.clone()).unwrap();
@@ -613,10 +601,7 @@ mod tests_background {
 
         bg.add_provider(net_conf.clone()).unwrap();
 
-        let accounts = [(
-            DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None),
-            "Zilliqa wallet".to_string(),
-        )];
+        let accounts = [(0, "Zilliqa wallet".to_string())];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             password: &password,

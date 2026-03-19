@@ -1,7 +1,6 @@
 pub use pqbip39::mnemonic::Mnemonic;
 
 use config::session::AuthMethod;
-use crypto::bip49::DerivationPath;
 use errors::background::BackgroundError;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
 use secrecy::SecretString;
@@ -22,7 +21,7 @@ pub struct BackgroundBip39Params<'a> {
     pub bip: u32,
     pub biometric_type: AuthMethod,
     pub wallet_settings: WalletSettings,
-    pub accounts: &'a [(DerivationPath, String)],
+    pub accounts: &'a [(usize, String)],
     pub chain_hash: u64,
     pub ftokens: Vec<FToken>,
 }

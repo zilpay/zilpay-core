@@ -288,10 +288,7 @@ mod tests_background_worker {
         let (mut bg, _dir) = setup_test_background();
 
         let words = Background::gen_bip39(24).unwrap();
-        let accounts = [(
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None),
-            "Bsc account 1".to_string(),
-        )];
+        let accounts = [(0, "Bsc account 1".to_string())];
         let net_config = gen_bsc_mainnet_conf();
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 

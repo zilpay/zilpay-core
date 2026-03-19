@@ -89,7 +89,7 @@ mod tests_security {
     use cipher::{argon2::derive_key, keychain::KeyChain, options::CipherOrders};
     use config::{bip39::EN_WORDS, cipher::PROOF_SIZE, session::AuthMethod};
 
-    use crypto::{bip49::DerivationPath, slip44};
+    use crypto::bip49::DerivationPath;
     use errors::wallet::WalletErrors;
     use pqbip39::mnemonic::Mnemonic;
     use proto::keypair::KeyPair;
@@ -209,17 +209,7 @@ mod tests_security {
         .unwrap();
         let keychain = KeyChain::from_seed(&argon_seed).unwrap();
         let mnemonic = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
-        let indexes = [0, 1, 2].map(|i| {
-            (
-                DerivationPath::new(
-                    slip44::BITCOIN,
-                    i,
-                    DerivationPath::BIP84_PURPOSE,
-                    Some(bitcoin::Network::Bitcoin),
-                ),
-                format!("Bitcoin Account {i}"),
-            )
-        });
+        let indexes = [0, 1, 2].map(|i| (i, format!("Bitcoin Account {i}")));
         let proof = derive_key(
             &argon_seed[..PROOF_SIZE],
             b"",
