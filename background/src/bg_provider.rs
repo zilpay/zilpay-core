@@ -31,6 +31,10 @@ pub trait ProvidersManagement {
         password: Option<&SecretString>,
     ) -> std::result::Result<(), Self::Error>;
     fn add_provider(&self, config: ChainConfig) -> std::result::Result<u64, Self::Error>;
+    fn add_batch_providers(
+        &self,
+        configs: Vec<ChainConfig>,
+    ) -> std::result::Result<Vec<u64>, Self::Error>;
     fn remvoe_provider(&self, chain_hash: u64) -> std::result::Result<(), Self::Error>;
     fn update_providers(
         &self,
@@ -92,6 +96,31 @@ impl ProvidersManagement for Background {
         self.update_providers(providers)?;
 
         Ok(hash)
+    }
+
+    fn add_batch_providers(&self, configs: Vec<ChainConfig>) -> Result<Vec<u64>> {
+        let mut providers = self.get_providers();
+        let mut existing: std::collections::HashSet<u64> =
+            providers.iter().map(|p| p.config.hash()).collect();
+        let mut added = Vec::new();
+
+        for mut config in configs {
+            let hash = config.hash();
+            if !existing.insert(hash) {
+                continue;
+            }
+            config.ftokens.iter_mut().for_each(|t| {
+                t.chain_hash = hash;
+            });
+            providers.push(NetworkProvider::new(config));
+            added.push(hash);
+        }
+
+        if !added.is_empty() {
+            self.update_providers(providers)?;
+        }
+
+        Ok(added)
     }
 
     fn remvoe_provider(&self, chain_hash: u64) -> Result<()> {
@@ -371,6 +400,33 @@ mod tests_providers {
 
         assert_eq!(providers[0].config.features.len(), 1);
         assert!(providers[0].config.features.contains(&155));
+    }
+
+    #[test]
+    fn test_add_batch_providers() {
+        let (bg, dir) = setup_test_background();
+
+        let c1 = create_test_network_config("Net 1", 100);
+        let c2 = create_test_network_config("Net 2", 200);
+        let c3 = create_test_network_config("Net 3", 300);
+
+        let added = bg
+            .add_batch_providers(vec![c1.clone(), c2.clone(), c3.clone()])
+            .unwrap();
+        assert_eq!(added.len(), 3);
+        assert_eq!(bg.get_providers().len(), 3);
+
+        let c4 = create_test_network_config("Net 4", 400);
+        let added = bg
+            .add_batch_providers(vec![c1.clone(), c3.clone(), c4.clone()])
+            .unwrap();
+        assert_eq!(added.len(), 1);
+        assert_eq!(added[0], c4.hash());
+        assert_eq!(bg.get_providers().len(), 4);
+
+        drop(bg);
+        let bg2 = Background::from_storage_path(&dir).unwrap();
+        assert_eq!(bg2.get_providers().len(), 4);
     }
 
     #[tokio::test]
