@@ -16,15 +16,14 @@ use crypto::{bip49::DerivationPath, slip44};
 use errors::{account::AccountErrors, background::BackgroundError, wallet::WalletErrors};
 use pqbip39::mnemonic::Mnemonic;
 use proto::pubkey::PubKey;
-use proto::secret_key::SecretKey;
 use secrecy::{ExposeSecret, SecretSlice, SecretString};
 use session::management::{SessionManagement, SessionManager};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
-    account::AccountV2, wallet_account::AccountManagement, wallet_crypto::WalletCrypto,
-    wallet_init::WalletInit, wallet_security::WalletSecurity, wallet_storage::StorageOperations,
-    wallet_types::WalletTypes, Bip39Params, LedgerParams, SecretKeyParams, Wallet, WalletConfig,
+    wallet_account::AccountManagement, wallet_init::WalletInit,
+    wallet_security::WalletSecurity, wallet_storage::StorageOperations, Bip39Params, LedgerParams,
+    SecretKeyParams, Wallet, WalletConfig,
 };
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
@@ -477,52 +476,14 @@ impl WalletManagement for Background {
                 return Err(BackgroundError::AuthenticationRequired);
             };
 
-            match &data.wallet_type {
-                WalletTypes::Ledger(_) => {
-                    return Err(WalletErrors::InvalidAccountType.into());
-                }
-                WalletTypes::SecretKey => {
-                    let keypair = wallet.reveal_keypair(0, &seed, None)?;
-                    let sk = keypair.get_secretkey()?;
-                    let raw_key: [u8; 32] = sk.as_ref().try_into().map_err(|_| {
-                        WalletErrors::FailToGetSKBytes(
-                            errors::keypair::SecretKeyError::SecretKeySliceError,
-                        )
-                    })?;
-                    let addr_type =
-                        DerivationPath::new(slip44::BITCOIN, 0, new_bip, None).get_address_type();
-                    let provider = self.get_provider(data.chain_hash)?;
-                    let network = provider
-                        .config
-                        .bitcoin_network()
-                        .unwrap_or(bitcoin::Network::Bitcoin);
-                    let new_sk = SecretKey::Secp256k1Bitcoin((raw_key, network, addr_type));
-                    let account = data.get_account(0)?;
-                    let new_account = AccountV2::from_secret_key(
-                        new_sk,
-                        account.name.clone(),
-                        account.account_type.value(),
-                        slip44::BITCOIN,
-                    )?;
-                    data.slip44_accounts
-                        .entry(slip44::BITCOIN)
-                        .or_default()
-                        .entry(new_bip)
-                        .or_default()
-                        .push(new_account);
-                    wallet.save_wallet_data(data.clone())?;
-                }
-                WalletTypes::SecretPhrase(_) => {
-                    let provider = self.get_provider(data.chain_hash)?;
-                    wallet.ensure_chain_accounts(
-                        slip44::BITCOIN,
-                        provider.config.bitcoin_network(),
-                        &seed,
-                        "",
-                    )?;
-                    data = wallet.get_wallet_data()?;
-                }
-            }
+            let provider = self.get_provider(data.chain_hash)?;
+            wallet.ensure_chain_accounts(
+                &mut data,
+                slip44::BITCOIN,
+                provider.config.bitcoin_network(),
+                &seed,
+                "",
+            )?;
         }
 
         data.bip = new_bip;

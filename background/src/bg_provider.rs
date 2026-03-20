@@ -1,7 +1,7 @@
 use crate::{bg_wallet::WalletManagement, Background, Result};
 use async_trait::async_trait;
 use config::session::AuthMethod;
-use crypto::{bip49::DerivationPath, slip44::ZILLIQA};
+use crypto::{bip49::DerivationPath, slip44};
 use errors::{background::BackgroundError, wallet::WalletErrors};
 use network::{common::Provider, provider::NetworkProvider};
 use proto::address::Address;
@@ -156,7 +156,7 @@ impl ProvidersManagement for Background {
         let default_provider = self.get_provider(data.chain_hash)?;
 
         if let WalletTypes::Ledger(_) = data.wallet_type {
-            if default_provider.config.slip_44 == ZILLIQA {
+            if default_provider.config.slip_44 == slip44::ZILLIQA {
                 return Err(WalletErrors::InvalidAccountType)?;
             }
         }
@@ -179,7 +179,6 @@ impl ProvidersManagement for Background {
         data.slip44 = new_slip44;
         data.bip = new_bip;
         data.chain_hash = chain_hash;
-        wallet.save_wallet_data(data.clone())?;
 
         let has_accounts = data
             .slip44_accounts
@@ -188,29 +187,25 @@ impl ProvidersManagement for Background {
             .is_some_and(|accounts| !accounts.is_empty());
 
         if !has_accounts {
-            match &data.wallet_type {
-                WalletTypes::SecretKey | WalletTypes::Ledger(_) => {
-                    return Err(WalletErrors::InvalidAccountType.into());
-                }
-                WalletTypes::SecretPhrase(_) => {
-                    let seed = if data.biometric_type != AuthMethod::None {
-                        self.unlock_wallet_with_session(wallet_index).await?
-                    } else if let Some(pass) = password {
-                        self.unlock_wallet_with_password(pass, None, wallet_index)
-                            .await?
-                    } else {
-                        return Err(BackgroundError::AuthenticationRequired);
-                    };
+            let seed = if data.biometric_type != AuthMethod::None {
+                self.unlock_wallet_with_session(wallet_index).await?
+            } else if let Some(pass) = password {
+                self.unlock_wallet_with_password(pass, None, wallet_index)
+                    .await?
+            } else {
+                return Err(BackgroundError::AuthenticationRequired);
+            };
 
-                    wallet.ensure_chain_accounts(
-                        new_slip44,
-                        provider.config.bitcoin_network(),
-                        &seed,
-                        "",
-                    )?;
-                }
-            }
+            wallet.ensure_chain_accounts(
+                &mut data,
+                new_slip44,
+                provider.config.bitcoin_network(),
+                &seed,
+                "",
+            )?;
         }
+
+        wallet.save_wallet_data(data)?;
         wallet.save_ftokens(&ftokens)?;
 
         Ok(())
@@ -220,12 +215,14 @@ impl ProvidersManagement for Background {
 #[cfg(test)]
 mod tests_providers {
     use super::*;
-    use crate::{bg_storage::StorageManagement, BackgroundBip39Params};
+    use crate::{bg_storage::StorageManagement, BackgroundBip39Params, BackgroundSKParams};
+    use crypto::slip44;
+    use proto::keypair::KeyPair;
     use rand::Rng;
     use rpc::network_config::Explorer;
     use secrecy::SecretString;
     use test_data::{
-        gen_anvil_net_conf, gen_btc_testnet_conf, gen_tron_testnet_conf,
+        gen_anvil_net_conf, gen_btc_testnet_conf, gen_tron_testnet_conf, gen_zil_testnet_conf,
         ANVIL_MNEMONIC, TEST_PASSWORD,
     };
 
@@ -622,5 +619,61 @@ mod tests_providers {
             result,
             Err(BackgroundError::AuthenticationRequired)
         ));
+    }
+
+    #[tokio::test]
+    async fn test_select_chain_sk_wallet() {
+        let (mut bg, _dir) = setup_test_background();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+        let zil = gen_zil_testnet_conf();
+        let btc = gen_btc_testnet_conf();
+
+        bg.add_provider(zil.clone()).unwrap();
+        bg.add_provider(btc.clone()).unwrap();
+
+        let keypair = KeyPair::gen_sha256().unwrap();
+        bg.add_sk_wallet(BackgroundSKParams {
+            secret_key: keypair.get_secretkey().unwrap(),
+            password: &password,
+            chain_hash: zil.hash(),
+            wallet_settings: Default::default(),
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
+        })
+        .await
+        .unwrap();
+
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.slip44, slip44::ZILLIQA);
+        assert_eq!(data.get_accounts().unwrap().len(), 1);
+
+        bg.select_accounts_chain(0, btc.hash(), Some(&password))
+            .await
+            .unwrap();
+
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.slip44, slip44::BITCOIN);
+        assert_eq!(data.chain_hash, btc.hash());
+        assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
+        assert!(data.slip44_accounts.contains_key(&slip44::BITCOIN));
+        assert_eq!(data.get_accounts().unwrap().len(), 1);
+        assert_eq!(
+            data.bip_preferences.get(&slip44::ZILLIQA),
+            Some(&DerivationPath::BIP44_PURPOSE)
+        );
+
+        bg.select_accounts_chain(0, zil.hash(), None)
+            .await
+            .unwrap();
+
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.slip44, slip44::ZILLIQA);
+        assert_eq!(data.get_accounts().unwrap().len(), 1);
+        assert_eq!(
+            data.bip_preferences.get(&slip44::BITCOIN),
+            Some(&DerivationPath::BIP86_PURPOSE)
+        );
     }
 }

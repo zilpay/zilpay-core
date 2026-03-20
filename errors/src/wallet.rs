@@ -19,10 +19,10 @@ pub enum WalletErrors {
     #[error("Invalid account index: {0}. Selected index not found")]
     InvalidAccountIndex(usize),
 
-    #[error("Invalid BIP Path slip44: {0}, bip: {0}")]
+    #[error("Invalid BIP Path slip44: {0}, bip: {1}")]
     InvalidBIPPath(u32, u32),
 
-    #[error("Invalid BIP Path slip44: {0}, bip: {0}, index: {0}")]
+    #[error("Invalid BIP Path slip44: {0}, bip: {1}, index: {2}")]
     InvalidBIPPathIndex(u32, u32, usize),
 
     #[error("Account with index ({0}) already exists")]

@@ -1,11 +1,12 @@
 use crate::{
     account::AccountV2, account_type::AccountType, wallet_crypto::WalletCrypto,
-    wallet_storage::StorageOperations, wallet_types::WalletTypes, Result, Wallet,
+    wallet_data::WalletDataV2, wallet_storage::StorageOperations, wallet_types::WalletTypes,
+    Result, Wallet,
 };
 use cipher::argon2::Argon2Seed;
-use crypto::bip49::DerivationPath;
+use crypto::{bip49::DerivationPath, slip44};
 use errors::wallet::WalletErrors;
-use proto::pubkey::PubKey;
+use proto::{pubkey::PubKey, secret_key::SecretKey};
 use rpc::network_config::ChainConfig;
 use std::collections::HashSet;
 
@@ -26,7 +27,8 @@ pub trait AccountManagement {
     ) -> std::result::Result<(), Self::Error>;
     fn ensure_chain_accounts(
         &self,
-        slip44: u32,
+        data: &mut WalletDataV2,
+        target_slip44: u32,
         network: Option<bitcoin::Network>,
         seed_bytes: &Argon2Seed,
         passphrase: &str,
@@ -79,17 +81,12 @@ impl AccountManagement for Wallet {
 
     fn ensure_chain_accounts(
         &self,
-        slip44: u32,
+        data: &mut WalletDataV2,
+        target_slip44: u32,
         network: Option<bitcoin::Network>,
         seed_bytes: &Argon2Seed,
         passphrase: &str,
     ) -> Result<()> {
-        let mut data = self.get_wallet_data()?;
-
-        if !matches!(data.wallet_type, WalletTypes::SecretPhrase(_)) {
-            return Err(WalletErrors::InvalidAccountType);
-        }
-
         let reference: Vec<(usize, String)> = data
             .slip44_accounts
             .values()
@@ -103,8 +100,8 @@ impl AccountManagement for Wallet {
             })
             .unwrap_or_else(|| vec![(0, String::new())]);
 
-        let supported_bips = DerivationPath::supported_bips(slip44);
-        let bip_map = data.slip44_accounts.entry(slip44).or_default();
+        let supported_bips = DerivationPath::supported_bips(target_slip44);
+        let bip_map = data.slip44_accounts.entry(target_slip44).or_default();
 
         let mut missing_per_bip: Vec<(u32, Vec<(usize, String)>)> = Vec::new();
         for &bip in supported_bips {
@@ -126,32 +123,76 @@ impl AccountManagement for Wallet {
             return Ok(());
         }
 
-        let m = self.reveal_mnemonic(seed_bytes)?;
-        let mnemonic_seed = m.to_seed(passphrase)?;
+        match &data.wallet_type {
+            WalletTypes::SecretKey => {
+                let keypair = self.reveal_keypair(0, seed_bytes, None)?;
+                let sk = keypair.get_secretkey()?;
+                let raw_key: [u8; 32] = sk.as_ref().try_into().map_err(|_| {
+                    WalletErrors::FailToGetSKBytes(
+                        errors::keypair::SecretKeyError::SecretKeySliceError,
+                    )
+                })?;
 
-        let mut handles = Vec::new();
-        for (bip, missing) in missing_per_bip {
-            let seed = mnemonic_seed;
-            let net = network;
-            handles.push(std::thread::spawn(
-                move || -> std::result::Result<(u32, Vec<AccountV2>), WalletErrors> {
-                    let mut accounts = Vec::with_capacity(missing.len());
-                    for (idx, name) in missing {
-                        let path = DerivationPath::new(slip44, idx, bip, net);
-                        let account = AccountV2::from_hd(&seed, name, &path)?;
-                        accounts.push(account);
+                for (bip, missing) in missing_per_bip {
+                    let accounts = bip_map.entry(bip).or_default();
+                    for (storage_key, name) in missing {
+                        let new_sk = match target_slip44 {
+                            slip44::TRON => SecretKey::Secp256k1Tron(raw_key),
+                            slip44::BITCOIN => {
+                                let addr_type = DerivationPath::new(
+                                    slip44::BITCOIN,
+                                    0,
+                                    bip,
+                                    None,
+                                )
+                                .get_address_type();
+                                SecretKey::Secp256k1Bitcoin((
+                                    raw_key,
+                                    network.unwrap_or(bitcoin::Network::Bitcoin),
+                                    addr_type,
+                                ))
+                            }
+                            _ => SecretKey::Secp256k1Keccak256Ethereum(raw_key),
+                        };
+                        accounts.push(AccountV2::from_secret_key(
+                            new_sk,
+                            name,
+                            storage_key,
+                            target_slip44,
+                        )?);
                     }
-                    Ok((bip, accounts))
-                },
-            ));
-        }
+                }
+            }
+            WalletTypes::SecretPhrase(_) => {
+                let m = self.reveal_mnemonic(seed_bytes)?;
+                let mnemonic_seed = m.to_seed(passphrase)?;
 
-        for handle in handles {
-            let (bip, new_accounts) = handle.join().map_err(|_| WalletErrors::ThreadPanic)??;
-            bip_map.entry(bip).or_default().extend(new_accounts);
-        }
+                let mut handles = Vec::new();
+                for (bip, missing) in missing_per_bip {
+                    let seed = mnemonic_seed;
+                    let net = network;
+                    handles.push(std::thread::spawn(
+                        move || -> std::result::Result<(u32, Vec<AccountV2>), WalletErrors> {
+                            let mut accounts = Vec::with_capacity(missing.len());
+                            for (idx, name) in missing {
+                                let path =
+                                    DerivationPath::new(target_slip44, idx, bip, net);
+                                let account = AccountV2::from_hd(&seed, name, &path)?;
+                                accounts.push(account);
+                            }
+                            Ok((bip, accounts))
+                        },
+                    ));
+                }
 
-        self.save_wallet_data(data)?;
+                for handle in handles {
+                    let (bip, new_accounts) =
+                        handle.join().map_err(|_| WalletErrors::ThreadPanic)??;
+                    bip_map.entry(bip).or_default().extend(new_accounts);
+                }
+            }
+            _ => return Err(WalletErrors::InvalidAccountType),
+        }
 
         Ok(())
     }
