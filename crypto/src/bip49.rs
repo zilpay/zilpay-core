@@ -101,6 +101,13 @@ impl DerivationPath {
         }
     }
 
+    pub fn default_bip(slip44: u32) -> u32 {
+        match slip44 {
+            super::slip44::BITCOIN => Self::BIP86_PURPOSE,
+            _ => Self::BIP44_PURPOSE,
+        }
+    }
+
     pub fn bip_from_address_type(address_type: bitcoin::AddressType) -> u32 {
         match address_type {
             bitcoin::AddressType::P2pkh => Self::BIP44_PURPOSE,

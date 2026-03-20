@@ -168,12 +168,18 @@ impl ProvidersManagement for Background {
         }
 
         let new_slip44 = provider.config.slip_44;
-        let supported = DerivationPath::supported_bips(new_slip44);
-        let new_bip = if supported.contains(&data.bip) {
-            data.bip
+        data.bip_preferences.insert(data.slip44, data.bip);
+
+        let new_bip = if let Some(&saved) = data.bip_preferences.get(&new_slip44) {
+            saved
         } else {
-            *supported.first().unwrap_or(&DerivationPath::BIP44_PURPOSE)
+            DerivationPath::default_bip(new_slip44)
         };
+
+        data.slip44 = new_slip44;
+        data.bip = new_bip;
+        data.chain_hash = chain_hash;
+        wallet.save_wallet_data(data.clone())?;
 
         let has_accounts = data
             .slip44_accounts
@@ -202,17 +208,9 @@ impl ProvidersManagement for Background {
                         &seed,
                         "",
                     )?;
-
-                    data = wallet.get_wallet_data()?;
                 }
             }
         }
-
-        data.slip44 = new_slip44;
-        data.bip = new_bip;
-        data.chain_hash = chain_hash;
-
-        wallet.save_wallet_data(data)?;
         wallet.save_ftokens(&ftokens)?;
 
         Ok(())
@@ -470,8 +468,13 @@ mod tests_providers {
         let data = wallet.get_wallet_data().unwrap();
 
         assert_eq!(data.slip44, trx.slip_44);
+        assert_eq!(data.bip, DerivationPath::BIP44_PURPOSE);
         assert_eq!(data.chain_hash, trx.hash());
         assert!(data.slip44_accounts.contains_key(&trx.slip_44));
+        assert_eq!(
+            data.bip_preferences.get(&btc.slip_44),
+            Some(&DerivationPath::BIP86_PURPOSE)
+        );
 
         let tron_accounts = data.get_accounts().unwrap();
         assert_eq!(tron_accounts.len(), 2);
@@ -488,9 +491,99 @@ mod tests_providers {
         let data = wallet.get_wallet_data().unwrap();
         assert_eq!(data.slip44, btc.slip_44);
         assert_eq!(data.chain_hash, btc.hash());
+        assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
 
         let btc_accounts = data.get_accounts().unwrap();
         assert_eq!(btc_accounts.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_bip_preference_persists_across_chain_switches() {
+        let (mut bg, _) = setup_test_background();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+        let btc = gen_btc_testnet_conf();
+        let trx = gen_tron_testnet_conf();
+        let eth = gen_anvil_net_conf();
+
+        bg.add_provider(btc.clone()).unwrap();
+        bg.add_provider(trx.clone()).unwrap();
+        bg.add_provider(eth.clone()).unwrap();
+
+        let accounts = [(0, "acc 0".to_string())];
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: &password,
+            chain_hash: btc.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            mnemonic_check: true,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            ftokens: vec![],
+            bip: DerivationPath::BIP86_PURPOSE,
+        })
+        .await
+        .unwrap();
+
+        bg.select_accounts_chain(0, trx.hash(), Some(&password))
+            .await
+            .unwrap();
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.bip, DerivationPath::BIP44_PURPOSE);
+
+        bg.select_accounts_chain(0, btc.hash(), None)
+            .await
+            .unwrap();
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
+
+        bg.select_accounts_chain(0, eth.hash(), Some(&password))
+            .await
+            .unwrap();
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.bip, DerivationPath::BIP44_PURPOSE);
+
+        bg.select_accounts_chain(0, btc.hash(), None)
+            .await
+            .unwrap();
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
+    }
+
+    #[tokio::test]
+    async fn test_default_bip_for_new_chain() {
+        let (mut bg, _) = setup_test_background();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+        let eth = gen_anvil_net_conf();
+        let btc = gen_btc_testnet_conf();
+
+        bg.add_provider(eth.clone()).unwrap();
+        bg.add_provider(btc.clone()).unwrap();
+
+        let accounts = [(0, "acc 0".to_string())];
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            password: &password,
+            chain_hash: eth.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            mnemonic_check: true,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: String::new(),
+            biometric_type: Default::default(),
+            ftokens: vec![],
+            bip: DerivationPath::BIP44_PURPOSE,
+        })
+        .await
+        .unwrap();
+
+        bg.select_accounts_chain(0, btc.hash(), Some(&password))
+            .await
+            .unwrap();
+
+        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
     }
 
     #[tokio::test]

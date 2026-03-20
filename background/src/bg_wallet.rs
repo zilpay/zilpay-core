@@ -526,6 +526,7 @@ impl WalletManagement for Background {
         }
 
         data.bip = new_bip;
+        data.bip_preferences.insert(data.slip44, new_bip);
         wallet.save_wallet_data(data)?;
 
         Ok(())
@@ -870,6 +871,10 @@ mod tests_background {
         let data = wallet.get_wallet_data().unwrap();
         assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
         assert_eq!(data.get_accounts().unwrap().len(), 1);
+        assert_eq!(
+            data.bip_preferences.get(&slip44::BITCOIN),
+            Some(&DerivationPath::BIP86_PURPOSE)
+        );
 
         bg.select_bitcoin_address_format(0, DerivationPath::BIP44_PURPOSE, Some(&password))
             .await
@@ -877,6 +882,10 @@ mod tests_background {
         let data = wallet.get_wallet_data().unwrap();
         assert_eq!(data.bip, DerivationPath::BIP44_PURPOSE);
         assert_eq!(data.get_accounts().unwrap().len(), 1);
+        assert_eq!(
+            data.bip_preferences.get(&slip44::BITCOIN),
+            Some(&DerivationPath::BIP44_PURPOSE)
+        );
 
         bg.select_bitcoin_address_format(0, DerivationPath::BIP49_PURPOSE, Some(&password))
             .await
@@ -884,6 +893,10 @@ mod tests_background {
         let data = wallet.get_wallet_data().unwrap();
         assert_eq!(data.bip, DerivationPath::BIP49_PURPOSE);
         assert_eq!(data.get_accounts().unwrap().len(), 1);
+        assert_eq!(
+            data.bip_preferences.get(&slip44::BITCOIN),
+            Some(&DerivationPath::BIP49_PURPOSE)
+        );
     }
 
     #[tokio::test]

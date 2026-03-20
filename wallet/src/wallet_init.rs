@@ -93,6 +93,7 @@ impl WalletInit for Wallet {
             selected_account: 0,
             chain_hash: params.chain_config.hash(),
             bip: params.bip,
+            bip_preferences: HashMap::new(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -145,6 +146,7 @@ impl WalletInit for Wallet {
             wallet_type: WalletTypes::SecretKey,
             selected_account: 0,
             chain_hash: params.chain_config.hash(),
+            bip_preferences: HashMap::new(),
         };
         let wallet = Self {
             storage: config.storage,
@@ -234,6 +236,7 @@ impl WalletInit for Wallet {
             )),
             selected_account: 0,
             chain_hash: params.chain_config.hash(),
+            bip_preferences: HashMap::new(),
         };
         let wallet = Self {
             storage: config.storage,

@@ -36,6 +36,8 @@ pub struct WalletDataV2 {
     pub chain_hash: u64,
     pub slip44: u32,
     pub bip: u32,
+    #[serde(default)]
+    pub bip_preferences: HashMap<u32, u32>,
 }
 
 impl From<WalletDataV1> for WalletDataV2 {
@@ -62,6 +64,7 @@ impl From<WalletDataV1> for WalletDataV2 {
             selected_account: v1.selected_account,
             biometric_type: v1.biometric_type,
             chain_hash: v1.default_chain_hash,
+            bip_preferences: HashMap::new(),
         }
     }
 }
