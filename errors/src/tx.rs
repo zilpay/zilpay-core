@@ -70,6 +70,18 @@ pub enum TransactionErrors {
 
     #[error("Missing UTXO amounts for Bitcoin transaction signing")]
     MissingUtxoAmounts,
+
+    #[error("Missing witness UTXOs for Bitcoin PSBT")]
+    MissingWitnessUtxos,
+
+    #[error("Failed to create PSBT")]
+    PsbtCreationFailed,
+
+    #[error("Failed to extract transaction from PSBT")]
+    PsbtExtractionFailed,
+
+    #[error("Failed to sign PSBT")]
+    PsbtSigningFailed,
 }
 
 impl From<PubKeyError> for TransactionErrors {

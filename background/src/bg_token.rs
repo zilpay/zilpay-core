@@ -83,7 +83,7 @@ impl TokensManagement for Background {
             title: None,
             signer: Some(sender.addr.clone()),
             token_info: Some((amount, token.decimals, token.symbol.clone())),
-            btc_utxo_amounts: None,
+            btc_witness_utxos: None,
             broadcast: true,
         };
         let addr = if token.native {
@@ -105,7 +105,7 @@ impl TokensManagement for Background {
                 let amount_sat = amount.to::<u64>();
                 let provider = self.get_provider(token.chain_hash)?;
 
-                let (tx, utxo_amounts) = crate::bg_tx::build_unsigned_btc_transaction(
+                let (tx, witness_utxos) = crate::bg_tx::build_unsigned_btc_transaction(
                     &provider,
                     &sender.addr,
                     vec![(to, amount_sat)],
@@ -121,7 +121,7 @@ impl TokensManagement for Background {
                     title: None,
                     signer: Some(sender.addr.clone()),
                     token_info: Some((amount, token.decimals, token.symbol.clone())),
-                    btc_utxo_amounts: Some(utxo_amounts),
+                    btc_witness_utxos: Some(witness_utxos),
                     broadcast: true,
                 };
 
@@ -653,14 +653,14 @@ mod tests_background_tokens {
                 assert!(tx.input.len() > 0, "Should have at least one input");
                 assert!(tx.output.len() > 0, "Should have at least one output");
                 assert_eq!(meta.chain_hash, net_config.hash());
-                assert!(meta.btc_utxo_amounts.is_some());
+                assert!(meta.btc_witness_utxos.is_some());
                 assert_eq!(
                     meta.token_info,
                     Some((max_balance, btc_token.decimals, btc_token.symbol.clone()))
                 );
 
                 let total_output: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
-                let total_input: u64 = meta.btc_utxo_amounts.as_ref().unwrap().iter().sum();
+                let total_input: u64 = meta.btc_witness_utxos.as_ref().unwrap().iter().map(|u| u.value.to_sat()).sum();
                 let fee = total_input.saturating_sub(total_output);
 
                 println!("Total input: {} satoshis", total_input);
@@ -693,7 +693,7 @@ mod tests_background_tokens {
         match &txn_req {
             TransactionRequest::Bitcoin((tx, meta)) => {
                 let total_output_after: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
-                let total_input: u64 = meta.btc_utxo_amounts.as_ref().unwrap().iter().sum();
+                let total_input: u64 = meta.btc_witness_utxos.as_ref().unwrap().iter().map(|u| u.value.to_sat()).sum();
                 let actual_fee = total_input.saturating_sub(total_output_after);
 
                 println!("After update_tx_from_params:");

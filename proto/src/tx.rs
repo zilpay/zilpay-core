@@ -1,4 +1,5 @@
 use crate::address::Address;
+use crate::btc_tx;
 use crate::keypair::KeyPair;
 use crate::pubkey::PubKey;
 use crate::signature::Signature;
@@ -11,6 +12,7 @@ use alloy::network::TransactionBuilder;
 use alloy::primitives::{TxKind, U256};
 use alloy::signers::Signature as EthersSignature;
 use bitcoin::ecdsa::Signature as BitcoinEcdsaSignature;
+use bitcoin::psbt::Psbt;
 use bitcoin::script::Instruction;
 use bitcoin::secp256k1::{Message, Secp256k1};
 use bitcoin::sighash::SighashCache;
@@ -38,7 +40,7 @@ pub struct TransactionMetadata {
     pub title: Option<String>,
     pub signer: Option<Address>,
     pub token_info: Option<(U256, u8, String)>,
-    pub btc_utxo_amounts: Option<Vec<u64>>,
+    pub btc_witness_utxos: Option<Vec<bitcoin::TxOut>>,
     pub broadcast: bool,
 }
 
@@ -240,106 +242,39 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Tron((receipt, metadata)))
             }
-            TransactionRequest::Bitcoin((mut tx, mut metadata)) => {
-                use bitcoin::hashes::Hash;
-                use bitcoin::key::TapTweak;
-                use bitcoin::sighash::{EcdsaSighashType, Prevouts, SighashCache, TapSighashType};
-                use bitcoin::{secp256k1, secp256k1::Message, secp256k1::Secp256k1};
-                use bitcoin::{Amount, ScriptBuf, WPubkeyHash, Witness};
-
-                let utxo_amounts = metadata
-                    .btc_utxo_amounts
+            TransactionRequest::Bitcoin((tx, mut metadata)) => {
+                let witness_utxos = metadata
+                    .btc_witness_utxos
                     .as_ref()
-                    .ok_or(TransactionErrors::MissingUtxoAmounts)?;
+                    .ok_or(TransactionErrors::MissingWitnessUtxos)?;
 
                 let pubkey = keypair.get_pubkey()?;
-                let pk_bytes = pubkey.as_bytes();
                 let sk_bytes = keypair.get_secretkey()?;
 
-                let secp = Secp256k1::new();
-                let secret_key = secp256k1::SecretKey::from_slice(sk_bytes.as_ref())
-                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
-                let public_key = secp256k1::PublicKey::from_slice(pk_bytes)
-                    .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+                let secret_key =
+                    bitcoin::secp256k1::SecretKey::from_slice(sk_bytes.as_ref())
+                        .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
+                let public_key =
+                    bitcoin::secp256k1::PublicKey::from_slice(pubkey.as_bytes())
+                        .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
 
-                let addr_type = if let KeyPair::Secp256k1Bitcoin((_, _, _, addr_type)) = keypair {
-                    *addr_type
-                } else {
-                    bitcoin::AddressType::P2wpkh
-                };
+                let (network, addr_type) =
+                    if let KeyPair::Secp256k1Bitcoin((_, _, net, at)) = keypair {
+                        (*net, *at)
+                    } else {
+                        (bitcoin::Network::Bitcoin, bitcoin::AddressType::P2wpkh)
+                    };
 
-                match addr_type {
-                    bitcoin::AddressType::P2tr => {
-                        let keypair_for_taproot =
-                            secp256k1::Keypair::from_secret_key(&secp, &secret_key);
-                        let (internal_key, _parity) = keypair_for_taproot.x_only_public_key();
-                        let sighash_type = TapSighashType::Default;
+                let mut psbt = btc_tx::build_psbt(tx, witness_utxos)?;
+                btc_tx::sign_psbt(&mut psbt, &secret_key, &public_key, network, addr_type)?;
+                btc_tx::finalize_psbt(&mut psbt, addr_type);
 
-                        let prevouts: Vec<bitcoin::TxOut> = utxo_amounts
-                            .iter()
-                            .map(|&amount| bitcoin::TxOut {
-                                value: Amount::from_sat(amount),
-                                script_pubkey: ScriptBuf::new_p2tr(&secp, internal_key, None),
-                            })
-                            .collect();
-
-                        for (index, _input_amount) in utxo_amounts.iter().enumerate() {
-                            let prevouts_all = Prevouts::All(&prevouts);
-                            let mut sighash_cache = SighashCache::new(&mut tx);
-
-                            let sighash = sighash_cache
-                                .taproot_key_spend_signature_hash(
-                                    index,
-                                    &prevouts_all,
-                                    sighash_type,
-                                )
-                                .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
-
-                            let tweaked = keypair_for_taproot.tap_tweak(&secp, None);
-                            let msg = Message::from(sighash);
-                            let sig = secp.sign_schnorr_no_aux_rand(&msg, tweaked.as_keypair());
-
-                            let signature = bitcoin::taproot::Signature {
-                                signature: sig,
-                                sighash_type,
-                            };
-
-                            tx.input[index].witness = Witness::p2tr_key_spend(&signature);
-                        }
-                    }
-                    _ => {
-                        let wpubkey_hash = WPubkeyHash::hash(&public_key.serialize());
-                        let prev_script = ScriptBuf::new_p2wpkh(&wpubkey_hash);
-                        let sighash_type = EcdsaSighashType::All;
-
-                        for (index, input_amount) in utxo_amounts.iter().enumerate() {
-                            let mut sighash_cache = SighashCache::new(&mut tx);
-                            let amount = Amount::from_sat(*input_amount);
-
-                            let sighash = sighash_cache
-                                .p2wpkh_signature_hash(index, &prev_script, amount, sighash_type)
-                                .map_err(|e| KeyPairError::EthersInvalidSign(e.to_string()))?;
-
-                            let message = Message::from_digest(*sighash.as_ref());
-                            let signature = secp.sign_ecdsa(&message, &secret_key);
-
-                            let bitcoin_sig = bitcoin::ecdsa::Signature {
-                                signature,
-                                sighash_type,
-                            };
-
-                            let mut witness = Witness::new();
-                            witness.push(bitcoin_sig.serialize());
-                            witness.push(public_key.serialize());
-
-                            tx.input[index].witness = witness;
-                        }
-                    }
-                }
+                let signed_tx = psbt
+                    .extract_tx_unchecked_fee_rate();
 
                 metadata.signer = Some(keypair.get_addr()?);
 
-                Ok(TransactionReceipt::Bitcoin((tx, metadata)))
+                Ok(TransactionReceipt::Bitcoin((signed_tx, metadata)))
             }
         }
     }
@@ -393,7 +328,15 @@ impl TransactionRequest {
 
                 Ok(rlp_bytes)
             }
-            TransactionRequest::Bitcoin((tx, _)) => Ok(bitcoin::consensus::encode::serialize(&tx)),
+            TransactionRequest::Bitcoin((tx, metadata)) => {
+                let witness_utxos = metadata
+                    .btc_witness_utxos
+                    .as_ref()
+                    .ok_or(TransactionErrors::MissingWitnessUtxos)?;
+
+                let psbt = btc_tx::build_psbt(tx, witness_utxos)?;
+                Ok(psbt.serialize())
+            }
             TransactionRequest::Tron((tx, _)) => Ok(tx.encode()),
         }
     }
@@ -458,11 +401,14 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Zilliqa((signed_tx, metadata)))
             }
-            TransactionRequest::Bitcoin((tx, mut metadata)) => {
-                let txid = tx.compute_txid().to_string();
-                metadata.hash = Some(txid);
+            TransactionRequest::Bitcoin((_tx, mut metadata)) => {
+                let psbt = Psbt::deserialize(&signature_bytes)
+                    .map_err(|_| TransactionErrors::PsbtExtractionFailed)?;
 
-                Ok(TransactionReceipt::Bitcoin((tx, metadata)))
+                let signed_tx = psbt.extract_tx_unchecked_fee_rate();
+                metadata.hash = Some(signed_tx.compute_txid().to_string());
+
+                Ok(TransactionReceipt::Bitcoin((signed_tx, metadata)))
             }
             TransactionRequest::Tron((tx, mut metadata)) => {
                 use sha2::{Digest, Sha256};
@@ -752,9 +698,12 @@ mod tests_tx {
             output: vec![output],
         };
 
-        let input_amount = 50_000_000u64;
+        let witness_utxo = bitcoin::TxOut {
+            value: Amount::from_sat(50_000_000),
+            script_pubkey: btc_addr.script_pubkey(),
+        };
         let metadata = TransactionMetadata {
-            btc_utxo_amounts: Some(vec![input_amount]),
+            btc_witness_utxos: Some(vec![witness_utxo]),
             ..Default::default()
         };
 

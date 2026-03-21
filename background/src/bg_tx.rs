@@ -31,7 +31,7 @@ pub(crate) async fn build_unsigned_btc_transaction(
     from_addr: &Address,
     destinations: Vec<(Address, u64)>,
     fee_rate_sat_per_vbyte: Option<u64>,
-) -> std::result::Result<(bitcoin::Transaction, Vec<u64>), BackgroundError> {
+) -> std::result::Result<(bitcoin::Transaction, Vec<bitcoin::TxOut>), BackgroundError> {
     use bitcoin::{
         absolute::LockTime, transaction::Version, Amount, OutPoint, ScriptBuf, Sequence,
         Transaction, TxIn, TxOut, Witness,
@@ -146,9 +146,20 @@ pub(crate) async fn build_unsigned_btc_transaction(
         output: outputs,
     };
 
-    let utxo_amounts: Vec<u64> = unspents.iter().map(|u| u.value).collect();
+    let from_script = from_addr
+        .to_bitcoin_addr()
+        .map_err(|e| BackgroundError::BincodeError(e.to_string()))?
+        .script_pubkey();
 
-    Ok((tx, utxo_amounts))
+    let witness_utxos: Vec<TxOut> = unspents
+        .iter()
+        .map(|u| TxOut {
+            value: Amount::from_sat(u.value),
+            script_pubkey: from_script.clone(),
+        })
+        .collect();
+
+    Ok((tx, witness_utxos))
 }
 
 pub fn update_tx_from_params(
@@ -294,12 +305,13 @@ pub fn update_tx_from_params(
                 .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
 
             let total_input: u64 = metadata
-                .btc_utxo_amounts
+                .btc_witness_utxos
                 .as_ref()
                 .ok_or(TransactionErrors::ConvertTxError(
-                    "Missing UTXO amounts".to_string(),
+                    "Missing witness UTXOs".to_string(),
                 ))?
                 .iter()
+                .map(|u| u.value.to_sat())
                 .sum();
 
             let output_count = btc_tx.output.len();
@@ -645,7 +657,7 @@ impl TransactionsManagement for Background {
         let provider = self.get_provider(data.chain_hash)?;
         let keypair = wallet.reveal_keypair(account_index, seed_bytes, passphrase)?;
 
-        let (tx, utxo_amounts) = build_unsigned_btc_transaction(
+        let (tx, witness_utxos) = build_unsigned_btc_transaction(
             &provider,
             &account.addr,
             destinations,
@@ -655,7 +667,7 @@ impl TransactionsManagement for Background {
 
         let metadata = proto::tx::TransactionMetadata {
             chain_hash: data.chain_hash,
-            btc_utxo_amounts: Some(utxo_amounts),
+            btc_witness_utxos: Some(witness_utxos),
             ..Default::default()
         };
 
