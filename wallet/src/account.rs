@@ -57,12 +57,16 @@ impl AccountV2 {
     pub fn from_ledger(pub_key: PubKey, name: String, index: usize) -> Result<Self> {
         let addr = pub_key.get_addr()?;
         let account_type = AccountType::Ledger(index);
+        let pub_key = match pub_key {
+            PubKey::Secp256k1Sha256(_) => Some(pub_key),
+            _ => None,
+        };
 
         Ok(Self {
             account_type,
             addr,
             name,
-            pub_key: Some(pub_key),
+            pub_key,
         })
     }
 

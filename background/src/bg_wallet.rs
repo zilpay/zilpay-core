@@ -21,9 +21,9 @@ use session::management::{SessionManagement, SessionManager};
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
 use wallet::{
-    wallet_account::AccountManagement, wallet_init::WalletInit,
-    wallet_security::WalletSecurity, wallet_storage::StorageOperations, Bip39Params, LedgerParams,
-    SecretKeyParams, Wallet, WalletConfig,
+    wallet_account::AccountManagement, wallet_init::WalletInit, wallet_security::WalletSecurity,
+    wallet_storage::StorageOperations, Bip39Params, LedgerParams, SecretKeyParams, Wallet,
+    WalletConfig,
 };
 
 use crate::{BackgroundBip39Params, BackgroundSKParams};
