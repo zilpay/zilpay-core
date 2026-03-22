@@ -322,8 +322,7 @@ pub fn update_tx_from_params(
                 ))?
             }
 
-            let balance_sat: u64 = balance.try_into().unwrap_or(0);
-            let is_max_transfer = balance_sat == total_input;
+            let is_max_transfer = output_count == 1;
 
             if is_max_transfer {
                 let dust_limit = metadata
