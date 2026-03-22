@@ -41,7 +41,7 @@ pub(crate) async fn build_unsigned_btc_transaction(
 
     if unspents.is_empty() {
         return Err(BackgroundError::BincodeError(
-            "No UTXOs available for this address".to_string(),
+            format!("No UTXOs available for address: {}", from_addr),
         ));
     }
 
