@@ -332,7 +332,7 @@ impl WalletManagement for Background {
         };
         let wallet = Wallet::from_ledger(
             LedgerParams {
-                pub_keys: params.pub_keys,
+                accounts: params.accounts,
                 ledger_id: params.ledger_id,
                 proof,
                 account_names: params.account_names,

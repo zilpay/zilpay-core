@@ -9,6 +9,7 @@ use rand_chacha::ChaCha20Rng;
 
 use config::sha::SHA256_SIZE;
 use errors::{account::AccountErrors, wallet::WalletErrors};
+use proto::pubkey::PubKey;
 use std::{collections::HashMap, sync::Arc};
 use token::ft::FToken;
 
@@ -70,11 +71,20 @@ impl WalletInit for Wallet {
 
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
         let accounts: Vec<AccountV2> = params
-            .pub_keys
+            .accounts
             .into_iter()
             .zip(params.account_names.into_iter())
-            .map(|((ledger_index, pub_key), account_name)| {
-                AccountV2::from_ledger(pub_key, account_name, ledger_index as usize)
+            .map(|((ledger_index, pub_key, addr), account_name)| {
+                let pub_key = match pub_key {
+                    Some(PubKey::Secp256k1Sha256(_)) => pub_key,
+                    _ => None,
+                };
+                Ok(AccountV2 {
+                    account_type: crate::account_type::AccountType::Ledger(ledger_index as usize),
+                    addr,
+                    name: account_name,
+                    pub_key,
+                })
             })
             .collect::<std::result::Result<Vec<account::AccountV2>, AccountErrors>>()?;
         let slip44_accounts = HashMap::from([(

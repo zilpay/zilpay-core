@@ -2,7 +2,7 @@ pub use pqbip39::mnemonic::Mnemonic;
 
 use config::session::AuthMethod;
 use errors::background::BackgroundError;
-use proto::{pubkey::PubKey, secret_key::SecretKey};
+use proto::{address::Address, pubkey::PubKey, secret_key::SecretKey};
 use secrecy::SecretString;
 use settings::wallet_settings::WalletSettings;
 use std::sync::Arc;
@@ -39,7 +39,7 @@ pub struct BackgroundSKParams<'a> {
 
 pub struct BackgroundLedgerParams {
     pub ledger_id: Vec<u8>,
-    pub pub_keys: Vec<(u8, PubKey)>,
+    pub accounts: Vec<(u8, Option<PubKey>, Address)>,
     pub wallet_name: String,
     pub account_names: Vec<String>,
     pub wallet_index: usize,

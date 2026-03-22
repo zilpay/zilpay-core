@@ -15,7 +15,7 @@ pub trait AccountManagement {
 
     fn update_ledger_accounts(
         &self,
-        accounts: Vec<(u8, PubKey, String)>,
+        accounts: Vec<(u8, Option<PubKey>, proto::address::Address, String)>,
         chain: &ChainConfig,
     ) -> std::result::Result<(), Self::Error>;
     fn add_next_bip39_account(
@@ -52,7 +52,7 @@ impl AccountManagement for Wallet {
 
     fn update_ledger_accounts(
         &self,
-        accounts: Vec<(u8, PubKey, String)>,
+        accounts: Vec<(u8, Option<PubKey>, proto::address::Address, String)>,
         chain: &ChainConfig,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
@@ -63,10 +63,17 @@ impl AccountManagement for Wallet {
 
         let mut new_accounts = Vec::with_capacity(accounts.len());
 
-        for (ledger_index, pub_key, name) in accounts.into_iter() {
-            let ledger_account = AccountV2::from_ledger(pub_key, name, ledger_index as usize)?;
-
-            new_accounts.push(ledger_account);
+        for (ledger_index, pub_key, addr, name) in accounts.into_iter() {
+            let pub_key = match pub_key {
+                Some(PubKey::Secp256k1Sha256(_)) => pub_key,
+                _ => None,
+            };
+            new_accounts.push(AccountV2 {
+                account_type: AccountType::Ledger(ledger_index as usize),
+                addr,
+                name,
+                pub_key,
+            });
         }
 
         data.slip44_accounts
