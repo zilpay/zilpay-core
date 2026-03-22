@@ -164,7 +164,7 @@ pub fn gen_eth_mainnet_conf() -> ChainConfig {
 
 pub fn gen_btc_testnet_conf() -> ChainConfig {
     ChainConfig {
-        ftokens: vec![],
+        ftokens: vec![gen_btc_token()],
         logo: String::new(),
         diff_block_time: 0,
         testnet: None,
@@ -181,18 +181,95 @@ pub fn gen_btc_testnet_conf() -> ChainConfig {
     }
 }
 
+pub fn gen_btc_mainnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![gen_btc_mainnet_token()],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [1, 0],
+        name: "Bitcoin".to_string(),
+        chain: "BTC".to_string(),
+        short_name: "btc".to_string(),
+        rpc: vec!["ssl://btc.zilpay.io:50002".to_string()],
+        features: vec![],
+        slip_44: slip44::BITCOIN,
+        ens: None,
+        explorers: vec![],
+        fallback_enabled: false,
+    }
+}
+
+pub fn gen_btc_regtest_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![gen_btc_regtest_token()],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [1, 0],
+        name: "Bitcoin(regtest)".to_string(),
+        chain: "BTC".to_string(),
+        short_name: "btc".to_string(),
+        rpc: vec!["ssl://127.0.0.1:60401".to_string()],
+        features: vec![],
+        slip_44: slip44::BITCOIN,
+        ens: None,
+        explorers: vec![],
+        fallback_enabled: false,
+    }
+}
+
 pub fn gen_btc_token() -> FToken {
+    FToken {
+        rate: 0f64,
+        name: "Bitcoin".to_string(),
+        symbol: "tBTC".to_string(),
+        decimals: 8,
+        addr: Address::from_str_hex(
+            "tb1pmfr3p9j00pfxjh0zmgp99y8zftmd3s5pmedqhyptwy6lm87hf5ssk79hv2",
+        )
+        .unwrap(),
+        logo: None,
+        balances: HashMap::new(),
+        default: true,
+        native: true,
+        chain_hash: 0,
+    }
+}
+
+pub fn gen_btc_mainnet_token() -> FToken {
     FToken {
         rate: 0f64,
         name: "Bitcoin".to_string(),
         symbol: "BTC".to_string(),
         decimals: 8,
-        addr: Address::Secp256k1Bitcoin(vec![]),
+        addr: Address::from_str_hex(
+            "bc1pmfr3p9j00pfxjh0zmgp99y8zftmd3s5pmedqhyptwy6lm87hf5sspknck9",
+        )
+        .unwrap(),
         logo: None,
         balances: HashMap::new(),
         default: true,
         native: true,
-        chain_hash: gen_btc_testnet_conf().hash(),
+        chain_hash: 0,
+    }
+}
+
+pub fn gen_btc_regtest_token() -> FToken {
+    FToken {
+        rate: 0f64,
+        name: "Bitcoin".to_string(),
+        symbol: "BTC".to_string(),
+        decimals: 8,
+        addr: Address::from_str_hex(
+            "bcrt1pmfr3p9j00pfxjh0zmgp99y8zftmd3s5pmedqhyptwy6lm87hf5ssm803es",
+        )
+        .unwrap(),
+        logo: None,
+        balances: HashMap::new(),
+        default: true,
+        native: true,
+        chain_hash: 0,
     }
 }
 

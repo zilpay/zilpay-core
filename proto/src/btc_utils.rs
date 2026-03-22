@@ -72,8 +72,6 @@ pub fn create_btc_address(
         bitcoin::AddressType::P2pkh => bitcoin::Address::p2pkh(compressed_pk, network),
         bitcoin::AddressType::P2wpkh => bitcoin::Address::p2wpkh(&compressed_pk, hrp),
         bitcoin::AddressType::P2sh => {
-            // BIP49: P2SH-P2WPKH (Nested SegWit)
-            // Create a P2WPKH address and wrap it in P2SH
             let wpkh = bitcoin::Address::p2wpkh(&compressed_pk, hrp);
             bitcoin::Address::p2sh(&wpkh.script_pubkey(), network)
                 .map_err(|_| PubKeyError::InvalidKeyType)?

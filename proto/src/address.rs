@@ -108,6 +108,19 @@ impl Address {
         }
     }
 
+    pub fn re_encode_btc_network(&self, new_network: bitcoin::Network) -> Result<Self> {
+        match self {
+            Address::Secp256k1Bitcoin(_) => {
+                let btc_addr = self.to_bitcoin_addr()?;
+                let script = btc_addr.script_pubkey();
+                let new_addr = bitcoin::Address::from_script(&script, new_network)
+                    .map_err(|e| AddressError::BTCAddrError(e.to_string()))?;
+                Ok(Self::Secp256k1Bitcoin(new_addr.to_string().into_bytes()))
+            }
+            _ => Err(AddressError::InvalidAddressType),
+        }
+    }
+
     pub fn is_bitcoin_address(addr: &str) -> bool {
         if addr.starts_with('1')
             || addr.starts_with('3')

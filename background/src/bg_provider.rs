@@ -205,6 +205,26 @@ impl ProvidersManagement for Background {
             )?;
         }
 
+        // For Ledger BTC wallets, re-encode addresses when switching networks
+        if matches!(data.wallet_type, WalletTypes::Ledger(_)) && new_slip44 == slip44::BITCOIN {
+            if let Some(new_network) = provider.config.bitcoin_network() {
+                if let Some(bip_map) = data.slip44_accounts.get_mut(&new_slip44) {
+                    for accounts in bip_map.values_mut() {
+                        for account in accounts.iter_mut() {
+                            if let Address::Secp256k1Bitcoin(_) = &account.addr {
+                                if let Ok(current_network) = account.addr.get_bitcoin_network() {
+                                    if current_network != new_network {
+                                        account.addr =
+                                            account.addr.re_encode_btc_network(new_network)?;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         wallet.save_wallet_data(data)?;
         wallet.save_ftokens(&ftokens)?;
 

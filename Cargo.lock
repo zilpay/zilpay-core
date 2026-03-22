@@ -5097,6 +5097,7 @@ dependencies = [
  "serde",
  "serde_json",
  "storage",
+ "test_data",
  "token",
  "tokio",
 ]
@@ -6052,6 +6053,7 @@ name = "token"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "bitcoin",
  "config",
  "errors",
  "proto",
@@ -6059,6 +6061,7 @@ dependencies = [
  "serde",
  "serde_json",
  "storage",
+ "test_data",
 ]
 
 [[package]]

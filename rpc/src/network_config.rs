@@ -52,10 +52,20 @@ impl ChainConfig {
         if self.slip_44 != BITCOIN {
             return None;
         }
+        if let Some(network) = self.bitcoin_network_from_native_token() {
+            return Some(network);
+        }
         match self.testnet {
             Some(true) => Some(bitcoin::Network::Testnet),
             _ => Some(bitcoin::Network::Bitcoin),
         }
+    }
+
+    pub fn bitcoin_network_from_native_token(&self) -> Option<bitcoin::Network> {
+        self.ftokens
+            .iter()
+            .find(|t| t.native)
+            .and_then(|t| t.bitcoin_network())
     }
 
     pub fn urls(&self) -> &[String] {
@@ -333,5 +343,64 @@ mod tests {
         assert_eq!(config.features, deserialized.features);
         assert_eq!(config.rpc, deserialized.rpc);
         assert_eq!(config.explorers.len(), deserialized.explorers.len());
+    }
+
+    #[test]
+    fn test_bitcoin_network_mainnet_from_token() {
+        let config = test_data::gen_btc_mainnet_conf();
+        assert_eq!(
+            config.bitcoin_network_from_native_token(),
+            Some(bitcoin::Network::Bitcoin)
+        );
+        assert_eq!(config.bitcoin_network(), Some(bitcoin::Network::Bitcoin));
+    }
+
+    #[test]
+    fn test_bitcoin_network_testnet_from_token() {
+        let config = test_data::gen_btc_testnet_conf();
+        assert_eq!(
+            config.bitcoin_network_from_native_token(),
+            Some(bitcoin::Network::Testnet)
+        );
+        assert_eq!(config.bitcoin_network(), Some(bitcoin::Network::Testnet));
+    }
+
+    #[test]
+    fn test_bitcoin_network_regtest_from_token() {
+        let config = test_data::gen_btc_regtest_conf();
+        assert_eq!(
+            config.bitcoin_network_from_native_token(),
+            Some(bitcoin::Network::Regtest)
+        );
+        assert_eq!(config.bitcoin_network(), Some(bitcoin::Network::Regtest));
+    }
+
+    #[test]
+    fn test_bitcoin_network_fallback_to_testnet_field() {
+        let mut config = test_data::gen_btc_mainnet_conf();
+        config.testnet = Some(true);
+        config.ftokens = vec![];
+        assert_eq!(config.bitcoin_network(), Some(bitcoin::Network::Testnet));
+    }
+
+    #[test]
+    fn test_bitcoin_network_fallback_to_mainnet() {
+        let mut config = test_data::gen_btc_mainnet_conf();
+        config.testnet = None;
+        config.ftokens = vec![];
+        assert_eq!(config.bitcoin_network(), Some(bitcoin::Network::Bitcoin));
+    }
+
+    #[test]
+    fn test_bitcoin_network_non_btc_chain() {
+        let config = test_data::gen_eth_mainnet_conf();
+        assert_eq!(config.bitcoin_network(), None);
+    }
+
+    #[test]
+    fn test_bitcoin_network_token_priority_over_testnet_field() {
+        let mut config = test_data::gen_btc_regtest_conf();
+        config.testnet = Some(true);
+        assert_eq!(config.bitcoin_network(), Some(bitcoin::Network::Regtest));
     }
 }

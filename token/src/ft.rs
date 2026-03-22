@@ -24,8 +24,7 @@ impl Codec for FToken {}
 
 impl FToken {
     pub fn from_bytes(encoded: &[u8]) -> Result<Self, WalletErrors> {
-        <Self as Codec>::from_bytes(encoded)
-            .map_err(|e| WalletErrors::BincodeError(e.to_string()))
+        <Self as Codec>::from_bytes(encoded).map_err(|e| WalletErrors::BincodeError(e.to_string()))
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, WalletErrors> {
@@ -75,5 +74,47 @@ impl FToken {
             rate: 0f64,
             native: true,
         }
+    }
+
+    pub fn bitcoin_network(&self) -> Option<bitcoin::Network> {
+        if !self.native {
+            return None;
+        }
+        self.addr.get_bitcoin_network().ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_bitcoin_network_mainnet() {
+        let token = test_data::gen_btc_mainnet_token();
+        assert_eq!(token.bitcoin_network(), Some(bitcoin::Network::Bitcoin));
+    }
+
+    #[test]
+    fn test_bitcoin_network_testnet() {
+        let token = test_data::gen_btc_token();
+        assert_eq!(token.bitcoin_network(), Some(bitcoin::Network::Testnet));
+    }
+
+    #[test]
+    fn test_bitcoin_network_regtest() {
+        let token = test_data::gen_btc_regtest_token();
+        assert_eq!(token.bitcoin_network(), Some(bitcoin::Network::Regtest));
+    }
+
+    #[test]
+    fn test_bitcoin_network_non_native() {
+        let token = test_data::gen_btc_mainnet_token();
+        let mut non_native = token;
+        non_native.native = false;
+        assert_eq!(non_native.bitcoin_network(), None);
+    }
+
+    #[test]
+    fn test_bitcoin_network_non_btc_address() {
+        let token = test_data::gen_zil_token();
+        assert_eq!(token.bitcoin_network(), None);
     }
 }
