@@ -371,8 +371,8 @@ mod tests_background_storage {
     use wallet::account_type::AccountType;
 
     use test_data::{
-        gen_anvil_net_conf, gen_btc_testnet_conf, gen_zil_mainnet_conf, ANVIL_MNEMONIC,
-        TEST_PASSWORD,
+        gen_anvil_net_conf, gen_btc_mainnet_conf, gen_btc_testnet_conf, gen_zil_mainnet_conf,
+        ANVIL_MNEMONIC, TEST_PASSWORD,
     };
 
     fn setup_test_background() -> (Background, String) {
@@ -735,7 +735,7 @@ mod tests_background_storage {
         let (mut bg, _) = setup_test_background();
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
         let eth = gen_anvil_net_conf();
-        let btc = gen_btc_testnet_conf();
+        let btc = gen_btc_mainnet_conf();
         let zil = gen_zil_mainnet_conf();
 
         bg.add_provider(eth.clone()).unwrap();

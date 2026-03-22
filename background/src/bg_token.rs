@@ -289,7 +289,8 @@ mod tests_background_tokens {
     use std::thread::sleep;
     use std::time::Duration;
     use test_data::{
-        anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_testnet_conf, ANVIL_MNEMONIC,
+        anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_regtest_conf,
+        gen_btc_testnet_conf, ANVIL_MNEMONIC,
     };
     use test_data::{
         gen_eth_account, gen_tron_account, gen_tron_testnet_conf, gen_tron_token, gen_zil_account,
@@ -538,14 +539,14 @@ mod tests_background_tokens {
     #[tokio::test]
     async fn test_build_token_transfer_btc_max_amount() {
         let (mut bg, _dir) = setup_test_background();
-        let net_config = gen_btc_testnet_conf();
+        let net_config = gen_btc_regtest_conf();
         let password: SecretString = SecretString::new(TEST_PASSWORD.into());
 
         bg.add_provider(net_config.clone()).unwrap();
 
         let accounts = [
-            (2, "BTC SegWit Acc 2".to_string()),
-            (3, "BTC SegWit Acc 3".to_string()),
+            (2, "BTC TapRoot Acc 2".to_string()),
+            (3, "BTC TapRoot Acc 3".to_string()),
         ];
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
@@ -576,16 +577,16 @@ mod tests_background_tokens {
         let addr_str_1 = account_1.addr.auto_format();
 
         assert!(
-            addr_str.starts_with("bc1q"),
+            addr_str.starts_with("bcrt1"),
             "Should be SegWit address starting with bc1q, got: {}",
             addr_str
         );
         assert_eq!(
-            addr_str, "bc1qt3az9lwpqfvr466mezsewuzdc4d379ldv83d4c",
+            addr_str, "bcrt1qt3az9lwpqfvr466mezsewuzdc4d379ldygnnez",
             "Account 2 should match expected SegWit address"
         );
         assert_eq!(
-            addr_str_1, "bc1qcqp7wgm6ke7zvwqnyy5a52ratfuhufw0zhpmxg",
+            addr_str_1, "bcrt1qcqp7wgm6ke7zvwqnyy5a52ratfuhufw02cr92j",
             "Account 3 should match expected SegWit address"
         );
 
@@ -660,7 +661,13 @@ mod tests_background_tokens {
                 );
 
                 let total_output: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
-                let total_input: u64 = meta.btc_witness_utxos.as_ref().unwrap().iter().map(|u| u.value.to_sat()).sum();
+                let total_input: u64 = meta
+                    .btc_witness_utxos
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|u| u.value.to_sat())
+                    .sum();
                 let fee = total_input.saturating_sub(total_output);
 
                 println!("Total input: {} satoshis", total_input);
@@ -693,7 +700,13 @@ mod tests_background_tokens {
         match &txn_req {
             TransactionRequest::Bitcoin((tx, meta)) => {
                 let total_output_after: u64 = tx.output.iter().map(|o| o.value.to_sat()).sum();
-                let total_input: u64 = meta.btc_witness_utxos.as_ref().unwrap().iter().map(|u| u.value.to_sat()).sum();
+                let total_input: u64 = meta
+                    .btc_witness_utxos
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .map(|u| u.value.to_sat())
+                    .sum();
                 let actual_fee = total_input.saturating_sub(total_output_after);
 
                 println!("After update_tx_from_params:");
@@ -740,10 +753,7 @@ mod tests_background_tokens {
         );
 
         let txns = vec![signed_tx];
-        let broadcasted_txns = bg
-            .broadcast_signed_transactions(0, txns)
-            .await
-            .unwrap();
+        let broadcasted_txns = bg.broadcast_signed_transactions(0, txns).await.unwrap();
 
         assert_eq!(broadcasted_txns.len(), 1);
         let tx_hash = broadcasted_txns[0].metadata.hash.clone().unwrap();
@@ -982,10 +992,7 @@ mod tests_background_tokens {
 
         assert!(signed_tx.verify().unwrap());
 
-        match bg
-            .broadcast_signed_transactions(0, vec![signed_tx])
-            .await
-        {
+        match bg.broadcast_signed_transactions(0, vec![signed_tx]).await {
             Ok(broadcasted_txns) => {
                 assert_eq!(broadcasted_txns.len(), 1);
                 assert!(broadcasted_txns[0].metadata.hash.is_some());

@@ -40,9 +40,10 @@ pub(crate) async fn build_unsigned_btc_transaction(
     let unspents = provider.btc_list_unspent(from_addr).await?;
 
     if unspents.is_empty() {
-        return Err(BackgroundError::BincodeError(
-            format!("No UTXOs available for address: {}", from_addr),
-        ));
+        return Err(BackgroundError::BincodeError(format!(
+            "No UTXOs available for address: {}",
+            from_addr
+        )));
     }
 
     const TX_OVERHEAD_VSIZE: usize = 10;
@@ -689,8 +690,8 @@ mod tests_background_transactions {
     use rand::Rng;
     use secrecy::SecretString;
     use test_data::{
-        gen_anvil_net_conf, gen_anvil_token, gen_eth_account, gen_zil_account,
-        gen_zil_testnet_conf, gen_zil_token, ANVIL_MNEMONIC, TEST_PASSWORD,
+        gen_anvil_net_conf, gen_anvil_token, gen_btc_regtest_conf, gen_eth_account,
+        gen_zil_account, gen_zil_testnet_conf, gen_zil_token, ANVIL_MNEMONIC, TEST_PASSWORD,
     };
     use token::ft::FToken;
     use tokio;
@@ -1088,10 +1089,8 @@ mod tests_background_transactions {
 
     #[tokio::test]
     async fn test_sign_and_send_btc_taproot_tx() {
-        use test_data::gen_btc_testnet_conf;
-
         let (mut bg, _dir) = setup_test_background();
-        let net_config = gen_btc_testnet_conf();
+        let net_config = gen_btc_regtest_conf();
 
         bg.add_provider(net_config.clone()).unwrap();
 
@@ -1120,7 +1119,10 @@ mod tests_background_transactions {
         let account = data.get_account(0).unwrap();
 
         let addr_str = account.addr.auto_format();
-        assert!(addr_str.starts_with("bc1p"));
+        assert_eq!(
+            addr_str,
+            "bcrt1pfzhx49qe6s5exppe5hqljg3n6587xk0w75xqr70pgdt7ygnfkssqu3wy22"
+        );
 
         let argon_seed = bg
             .unlock_wallet_with_password(&password, None, 0)

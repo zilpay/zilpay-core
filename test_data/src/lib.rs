@@ -210,7 +210,7 @@ pub fn gen_btc_regtest_conf() -> ChainConfig {
         name: "Bitcoin(regtest)".to_string(),
         chain: "BTC".to_string(),
         short_name: "btc".to_string(),
-        rpc: vec!["ssl://127.0.0.1:60401".to_string()],
+        rpc: vec!["ssl://btc-testnet.zilpay.io:60402".to_string()],
         features: vec![],
         slip_44: slip44::BITCOIN,
         ens: None,

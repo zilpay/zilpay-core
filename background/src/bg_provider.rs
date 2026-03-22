@@ -9,8 +9,7 @@ use rpc::network_config::ChainConfig;
 use secrecy::SecretString;
 use std::sync::Arc;
 use wallet::{
-    wallet_account::AccountManagement, wallet_storage::StorageOperations,
-    wallet_types::WalletTypes,
+    wallet_account::AccountManagement, wallet_storage::StorageOperations, wallet_types::WalletTypes,
 };
 
 #[async_trait]
@@ -205,8 +204,7 @@ impl ProvidersManagement for Background {
             )?;
         }
 
-        // For Ledger BTC wallets, re-encode addresses when switching networks
-        if matches!(data.wallet_type, WalletTypes::Ledger(_)) && new_slip44 == slip44::BITCOIN {
+        if new_slip44 == slip44::BITCOIN {
             if let Some(new_network) = provider.config.bitcoin_network() {
                 if let Some(bip_map) = data.slip44_accounts.get_mut(&new_slip44) {
                     for accounts in bip_map.values_mut() {
@@ -500,9 +498,7 @@ mod tests_providers {
 
         assert!(data.slip44_accounts.contains_key(&btc.slip_44));
 
-        bg.select_accounts_chain(0, btc.hash(), None)
-            .await
-            .unwrap();
+        bg.select_accounts_chain(0, btc.hash(), None).await.unwrap();
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
@@ -546,25 +542,37 @@ mod tests_providers {
         bg.select_accounts_chain(0, trx.hash(), Some(&password))
             .await
             .unwrap();
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
+            .unwrap();
         assert_eq!(data.bip, DerivationPath::BIP44_PURPOSE);
 
-        bg.select_accounts_chain(0, btc.hash(), None)
-            .await
+        bg.select_accounts_chain(0, btc.hash(), None).await.unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
             .unwrap();
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
         assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
 
         bg.select_accounts_chain(0, eth.hash(), Some(&password))
             .await
             .unwrap();
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
+            .unwrap();
         assert_eq!(data.bip, DerivationPath::BIP44_PURPOSE);
 
-        bg.select_accounts_chain(0, btc.hash(), None)
-            .await
+        bg.select_accounts_chain(0, btc.hash(), None).await.unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
             .unwrap();
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
         assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
     }
 
@@ -599,7 +607,11 @@ mod tests_providers {
             .await
             .unwrap();
 
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
+            .unwrap();
         assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
     }
 
@@ -631,9 +643,7 @@ mod tests_providers {
 
         bg.add_provider(eth.clone()).unwrap();
 
-        let result = bg
-            .select_accounts_chain(0, eth.hash(), None)
-            .await;
+        let result = bg.select_accounts_chain(0, eth.hash(), None).await;
 
         assert!(matches!(
             result,
@@ -665,7 +675,11 @@ mod tests_providers {
         .await
         .unwrap();
 
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
+            .unwrap();
         assert_eq!(data.slip44, slip44::ZILLIQA);
         assert_eq!(data.get_accounts().unwrap().len(), 1);
 
@@ -673,7 +687,11 @@ mod tests_providers {
             .await
             .unwrap();
 
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
+            .unwrap();
         assert_eq!(data.slip44, slip44::BITCOIN);
         assert_eq!(data.chain_hash, btc.hash());
         assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
@@ -684,11 +702,13 @@ mod tests_providers {
             Some(&DerivationPath::BIP44_PURPOSE)
         );
 
-        bg.select_accounts_chain(0, zil.hash(), None)
-            .await
-            .unwrap();
+        bg.select_accounts_chain(0, zil.hash(), None).await.unwrap();
 
-        let data = bg.get_wallet_by_index(0).unwrap().get_wallet_data().unwrap();
+        let data = bg
+            .get_wallet_by_index(0)
+            .unwrap()
+            .get_wallet_data()
+            .unwrap();
         assert_eq!(data.slip44, slip44::ZILLIQA);
         assert_eq!(data.get_accounts().unwrap().len(), 1);
         assert_eq!(
