@@ -70,6 +70,7 @@ impl WalletInit for Wallet {
         drop(cipher_proof);
 
         let wallet_address: [u8; SHA256_SIZE] = Self::wallet_key_gen();
+        let target_network = params.chain_config.bitcoin_network();
         let accounts: Vec<AccountV2> = params
             .accounts
             .into_iter()
@@ -78,6 +79,16 @@ impl WalletInit for Wallet {
                 let pub_key = match pub_key {
                     Some(PubKey::Secp256k1Sha256(_)) => pub_key,
                     _ => None,
+                };
+                let addr = if let Some(network) = target_network {
+                    match &addr {
+                        proto::address::Address::Secp256k1Bitcoin(_) => {
+                            addr.re_encode_btc_network(network)?
+                        }
+                        _ => addr,
+                    }
+                } else {
+                    addr
                 };
                 Ok(AccountV2 {
                     account_type: crate::account_type::AccountType::Ledger(ledger_index as usize),

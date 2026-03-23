@@ -63,12 +63,23 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::InvalidAccountType);
         }
 
+        let target_network = chain.bitcoin_network();
         let mut new_accounts = Vec::with_capacity(accounts.len());
 
         for (ledger_index, pub_key, addr, name) in accounts.into_iter() {
             let pub_key = match pub_key {
                 Some(PubKey::Secp256k1Sha256(_)) => pub_key,
                 _ => None,
+            };
+            let addr = if let Some(network) = target_network {
+                match &addr {
+                    proto::address::Address::Secp256k1Bitcoin(_) => {
+                        addr.re_encode_btc_network(network)?
+                    }
+                    _ => addr,
+                }
+            } else {
+                addr
             };
             new_accounts.push(AccountV2 {
                 account_type: AccountType::Ledger(ledger_index as usize),
