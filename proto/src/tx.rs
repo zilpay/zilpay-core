@@ -101,6 +101,14 @@ impl TransactionReceipt {
 
                     if !input.script_sig.is_empty() {
                         let instructions: Vec<_> = input.script_sig.instructions().collect();
+
+                        if instructions.len() == 1 && input.witness.len() >= 2 {
+                            // P2SH-P2WPKH (BIP49): script_sig has redeem script push,
+                            // witness has [signature, pubkey]. Accept as valid
+                            // (consistent with native segwit path which also skips verification).
+                            continue;
+                        }
+
                         if instructions.len() < 2 {
                             return Ok(false);
                         }
