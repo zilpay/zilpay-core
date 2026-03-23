@@ -371,8 +371,8 @@ mod tests_background_storage {
     use wallet::account_type::AccountType;
 
     use test_data::{
-        gen_anvil_net_conf, gen_btc_mainnet_conf, gen_btc_testnet_conf, gen_zil_mainnet_conf,
-        ANVIL_MNEMONIC, TEST_PASSWORD,
+        gen_anvil_net_conf, gen_btc_mainnet_conf, gen_zil_mainnet_conf, ANVIL_MNEMONIC,
+        TEST_PASSWORD,
     };
 
     fn setup_test_background() -> (Background, String) {
@@ -767,7 +767,7 @@ mod tests_background_storage {
         assert_eq!(data.bip, DerivationPath::BIP86_PURPOSE);
         assert_eq!(data.selected_account, 0);
         assert_eq!(data.chain_hash, btc.hash());
-        assert_eq!(data.slip44_accounts.len(), 3);
+        assert_eq!(data.get_accounts().unwrap().len(), 2);
 
         let check_account =
             |acc: &wallet::account::AccountV2, name: &str, index: usize, addr: &str| {
@@ -851,7 +851,7 @@ mod tests_background_storage {
         assert!(bip86_btc[0].pub_key.is_none());
         assert!(bip86_btc[1].pub_key.is_none());
 
-        let eth = &data.slip44_accounts[&ETHEREUM];
+        let eth = &data.slip44_accounts.get(&ETHEREUM).unwrap();
         assert_eq!(eth.len(), 1);
         assert!(eth.contains_key(&DerivationPath::BIP44_PURPOSE));
         let bip44_eth = &eth[&DerivationPath::BIP44_PURPOSE];

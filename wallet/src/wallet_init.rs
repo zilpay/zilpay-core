@@ -213,7 +213,7 @@ impl WalletInit for Wallet {
         for chain in params
             .chains
             .iter()
-            .filter(|c| c.bitcoin_network() == target_network)
+            .filter(|c| c.bitcoin_network().is_none() || c.bitcoin_network() == target_network)
         {
             let slip44 = chain.slip_44;
             let network = chain.bitcoin_network();

@@ -289,8 +289,7 @@ mod tests_background_tokens {
     use std::thread::sleep;
     use std::time::Duration;
     use test_data::{
-        anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_regtest_conf,
-        gen_btc_testnet_conf, ANVIL_MNEMONIC,
+        anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_regtest_conf, ANVIL_MNEMONIC,
     };
     use test_data::{
         gen_eth_account, gen_tron_account, gen_tron_testnet_conf, gen_tron_token, gen_zil_account,
