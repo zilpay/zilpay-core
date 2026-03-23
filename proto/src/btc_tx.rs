@@ -1,7 +1,11 @@
+use bitcoin::ecdsa::Signature as BitcoinEcdsaSignature;
 use bitcoin::psbt::Psbt;
-use bitcoin::secp256k1::Secp256k1;
+use bitcoin::script::Builder;
+use bitcoin::secp256k1::{Message, Secp256k1};
+use bitcoin::sighash::{EcdsaSighashType, SighashCache};
 use bitcoin::{
-    bip32, PrivateKey, PublicKey as BitcoinPublicKey, Transaction as BitcoinTransaction, Witness,
+    bip32, PrivateKey, PublicKey as BitcoinPublicKey, ScriptBuf, Transaction as BitcoinTransaction,
+    Witness,
 };
 use errors::tx::TransactionErrors;
 use std::collections::BTreeMap;
@@ -46,6 +50,30 @@ pub fn sign_psbt(
             psbt.sign(&key_map, &secp)
                 .map_err(|_| TransactionErrors::PsbtSigningFailed)?;
         }
+        bitcoin::AddressType::P2pkh => {
+            let btc_pubkey = BitcoinPublicKey::new(*public_key);
+            let prev_script = ScriptBuf::new_p2pkh(&btc_pubkey.pubkey_hash());
+            let sighash_type = EcdsaSighashType::All;
+            let tx = psbt.unsigned_tx.clone();
+            let cache = SighashCache::new(&tx);
+
+            for (index, input) in psbt.inputs.iter_mut().enumerate() {
+                let sighash = cache
+                    .legacy_signature_hash(index, &prev_script, sighash_type.to_u32())
+                    .map_err(|_| TransactionErrors::SighashComputationFailed)?;
+
+                let message = Message::from_digest(*sighash.as_ref());
+                let sig = secp.sign_ecdsa(&message, secret_key);
+
+                input.partial_sigs.insert(
+                    btc_pubkey,
+                    BitcoinEcdsaSignature {
+                        signature: sig,
+                        sighash_type,
+                    },
+                );
+            }
+        }
         _ => {
             let btc_pubkey = BitcoinPublicKey::new(*public_key);
 
@@ -64,13 +92,35 @@ pub fn sign_psbt(
     Ok(())
 }
 
-pub fn finalize_psbt(psbt: &mut Psbt, addr_type: bitcoin::AddressType) {
+pub fn finalize_psbt(
+    psbt: &mut Psbt,
+    addr_type: bitcoin::AddressType,
+) -> Result<(), TransactionErrors> {
     for input in &mut psbt.inputs {
         match addr_type {
             bitcoin::AddressType::P2tr => {
                 if let Some(sig) = input.tap_key_sig.take() {
                     input.final_script_witness = Some(Witness::p2tr_key_spend(&sig));
                 }
+            }
+            bitcoin::AddressType::P2pkh => {
+                if let Some((&pubkey, sig)) = input.partial_sigs.iter().next() {
+                    let sig_bytes = sig.serialize();
+                    let pk_bytes = pubkey.to_bytes();
+                    let sig_push = <&bitcoin::script::PushBytes>::try_from(
+                        sig_bytes.as_ref() as &[u8],
+                    )
+                    .map_err(|_| TransactionErrors::PsbtFinalizeFailed)?;
+                    let pk_push =
+                        <&bitcoin::script::PushBytes>::try_from(pk_bytes.as_slice())
+                            .map_err(|_| TransactionErrors::PsbtFinalizeFailed)?;
+                    let script_sig = Builder::new()
+                        .push_slice(sig_push)
+                        .push_slice(pk_push)
+                        .into_script();
+                    input.final_script_sig = Some(script_sig);
+                }
+                input.partial_sigs.clear();
             }
             _ => {
                 if let Some((&pubkey, sig)) = input.partial_sigs.iter().next() {
@@ -89,4 +139,6 @@ pub fn finalize_psbt(psbt: &mut Psbt, addr_type: bitcoin::AddressType) {
         input.tap_key_origins.clear();
         input.tap_internal_key = None;
     }
+
+    Ok(())
 }

@@ -82,6 +82,9 @@ pub enum TransactionErrors {
 
     #[error("Failed to sign PSBT")]
     PsbtSigningFailed,
+
+    #[error("Failed to finalize PSBT")]
+    PsbtFinalizeFailed,
 }
 
 impl From<PubKeyError> for TransactionErrors {

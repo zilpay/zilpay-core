@@ -275,7 +275,7 @@ impl TransactionRequest {
 
                 let mut psbt = btc_tx::build_psbt(tx, witness_utxos)?;
                 btc_tx::sign_psbt(&mut psbt, &secret_key, &public_key, network, addr_type)?;
-                btc_tx::finalize_psbt(&mut psbt, addr_type);
+                btc_tx::finalize_psbt(&mut psbt, addr_type)?;
 
                 let signed_tx = psbt
                     .extract_tx_unchecked_fee_rate();
@@ -719,6 +719,66 @@ mod tests_tx {
         let tx_res = tx_req.sign(&keypair).await.unwrap();
         let verify = tx_res.verify();
 
+        assert!(verify.is_ok());
+        assert!(verify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sign_verify_btc_p2pkh_tx() {
+        use bitcoin::{absolute::LockTime, transaction::Version, Amount, OutPoint, Sequence, Txid};
+        use std::str::FromStr;
+
+        let keypair =
+            KeyPair::gen_bitcoin(bitcoin::Network::Testnet, bitcoin::AddressType::P2pkh).unwrap();
+
+        let txid =
+            Txid::from_str("76464c2b9e2af4d63ef38a77964b3b77e629dddefc5cb9eb1a3645b1608b790f")
+                .unwrap();
+        let input = bitcoin::TxIn {
+            previous_output: OutPoint { txid, vout: 0 },
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+            witness: bitcoin::Witness::new(),
+        };
+
+        let output_addr = keypair.get_addr().unwrap();
+        let output_addr_str = output_addr.auto_format();
+        let btc_addr = bitcoin::Address::from_str(&output_addr_str)
+            .unwrap()
+            .assume_checked();
+
+        let output = bitcoin::TxOut {
+            value: Amount::from_sat(30_000_000),
+            script_pubkey: btc_addr.script_pubkey(),
+        };
+
+        let tx = BitcoinTransaction {
+            version: Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![input],
+            output: vec![output],
+        };
+
+        let witness_utxo = bitcoin::TxOut {
+            value: Amount::from_sat(50_000_000),
+            script_pubkey: btc_addr.script_pubkey(),
+        };
+        let metadata = TransactionMetadata {
+            btc_witness_utxos: Some(vec![witness_utxo]),
+            ..Default::default()
+        };
+
+        let tx_req = TransactionRequest::Bitcoin((tx, metadata));
+        let tx_res = tx_req.sign(&keypair).await.unwrap();
+
+        if let TransactionReceipt::Bitcoin((signed_tx, _)) = &tx_res {
+            assert!(!signed_tx.input[0].script_sig.is_empty());
+            assert!(signed_tx.input[0].witness.is_empty());
+        } else {
+            panic!("expected Bitcoin receipt");
+        }
+
+        let verify = tx_res.verify();
         assert!(verify.is_ok());
         assert!(verify.unwrap());
     }
