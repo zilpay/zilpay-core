@@ -207,8 +207,14 @@ impl WalletInit for Wallet {
             ));
         }
 
+        let target_network = params.chain_config.bitcoin_network();
+
         let mut handles = Vec::new();
-        for chain in params.chains {
+        for chain in params
+            .chains
+            .iter()
+            .filter(|c| c.bitcoin_network() == target_network)
+        {
             let slip44 = chain.slip_44;
             let network = chain.bitcoin_network();
             for &bip in crypto::bip49::DerivationPath::supported_bips(slip44) {
