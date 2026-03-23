@@ -17,6 +17,7 @@ pub trait AccountManagement {
         &self,
         accounts: Vec<(u8, Option<PubKey>, proto::address::Address, String)>,
         chain: &ChainConfig,
+        bip: u32,
     ) -> std::result::Result<(), Self::Error>;
     fn add_next_bip39_account(
         &self,
@@ -54,6 +55,7 @@ impl AccountManagement for Wallet {
         &self,
         accounts: Vec<(u8, Option<PubKey>, proto::address::Address, String)>,
         chain: &ChainConfig,
+        bip: u32,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
 
@@ -79,7 +81,10 @@ impl AccountManagement for Wallet {
         data.slip44_accounts
             .entry(chain.slip_44)
             .or_default()
-            .insert(data.bip, new_accounts);
+            .insert(bip, new_accounts);
+
+        data.bip = bip;
+        data.bip_preferences.insert(chain.slip_44, bip);
 
         self.save_wallet_data(data)?;
 
@@ -146,13 +151,8 @@ impl AccountManagement for Wallet {
                         let new_sk = match target_slip44 {
                             slip44::TRON => SecretKey::Secp256k1Tron(raw_key),
                             slip44::BITCOIN => {
-                                let addr_type = DerivationPath::new(
-                                    slip44::BITCOIN,
-                                    0,
-                                    bip,
-                                    None,
-                                )
-                                .get_address_type();
+                                let addr_type = DerivationPath::new(slip44::BITCOIN, 0, bip, None)
+                                    .get_address_type();
                                 SecretKey::Secp256k1Bitcoin((
                                     raw_key,
                                     network.unwrap_or(bitcoin::Network::Bitcoin),
@@ -182,8 +182,7 @@ impl AccountManagement for Wallet {
                         move || -> std::result::Result<(u32, Vec<AccountV2>), WalletErrors> {
                             let mut accounts = Vec::with_capacity(missing.len());
                             for (idx, name) in missing {
-                                let path =
-                                    DerivationPath::new(target_slip44, idx, bip, net);
+                                let path = DerivationPath::new(target_slip44, idx, bip, net);
                                 let account = AccountV2::from_hd(&seed, name, &path)?;
                                 accounts.push(account);
                             }
