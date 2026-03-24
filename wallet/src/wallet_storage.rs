@@ -38,6 +38,7 @@ pub trait StorageOperations {
         history: &[HistoricalTransaction],
     ) -> std::result::Result<(), Self::Error>;
     fn get_wallet_data(&self) -> std::result::Result<WalletDataV2, Self::Error>;
+    fn try_get_wallet_data(&self) -> Option<WalletDataV2>;
     fn get_history(&self) -> std::result::Result<Vec<HistoricalTransaction>, Self::Error>;
     fn get_ftokens(&self) -> std::result::Result<Vec<FToken>, Self::Error>;
     fn clear_data(&self) -> std::result::Result<(), Self::Error>;
@@ -91,6 +92,24 @@ impl StorageOperations for Wallet {
                 let v2: WalletDataV2 = v1.into();
                 self.save_wallet_data(v2.clone())?;
                 Ok(v2)
+            }
+        }
+    }
+
+    fn try_get_wallet_data(&self) -> Option<WalletDataV2> {
+        match self
+            .storage
+            .get_versioned::<WalletDataV2>(self.wallet_address.as_slice())
+        {
+            Ok(data) => Some(data),
+            Err(_) => {
+                let v1: WalletDataV1 = self
+                    .storage
+                    .get_versioned(self.wallet_address.as_slice())
+                    .ok()?;
+                let v2: WalletDataV2 = v1.into();
+                self.save_wallet_data(v2.clone()).ok()?;
+                Some(v2)
             }
         }
     }

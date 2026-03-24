@@ -324,11 +324,24 @@ impl StorageManagement for Background {
         let storage = Arc::new(storage);
         let indicators = Self::get_indicators(Arc::clone(&storage));
         let mut wallets = Vec::with_capacity(indicators.len());
+        let mut valid_indicators = Vec::with_capacity(indicators.len());
 
         for addr in &indicators {
             let w = Wallet::init_wallet(*addr, Arc::clone(&storage))?;
 
-            wallets.push(w);
+            if w.try_get_wallet_data().is_some() {
+                wallets.push(w);
+                valid_indicators.push(*addr);
+            }
+        }
+
+        if valid_indicators.len() != indicators.len() {
+            let bytes: Vec<u8> = valid_indicators
+                .iter()
+                .flat_map(|array| array.iter().cloned())
+                .collect();
+            storage.set(INDICATORS_DB_KEY_V1, &bytes)?;
+            storage.flush()?;
         }
 
         Ok(Self { storage, wallets })
