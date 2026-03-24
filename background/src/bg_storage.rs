@@ -25,7 +25,7 @@ use storage::codec;
 use storage::LocalStorage;
 use token::ft::FToken;
 use wallet::{
-    account_type::AccountType, wallet_crypto::WalletCrypto, wallet_data::WalletDataV2,
+    account_type::AccountType, wallet_crypto::WalletCrypto, wallet_data::{WalletDataV1, WalletDataV2},
     wallet_init::WalletInit, wallet_storage::StorageOperations, wallet_types::WalletTypes, Wallet,
     WalletAddrType,
 };
@@ -35,12 +35,33 @@ use crate::Background;
 pub const SIGNATURE: &[u8] = b"ZILPAY_BACKUP";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct KeyStoreV0 {
+    pub wallet_data: WalletDataV1,
+    pub wallet_address: WalletAddrType,
+    pub chain_config: ChainConfig,
+    pub ftokens: Vec<FToken>,
+    pub keys: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct KeyStore {
     pub wallet_data: WalletDataV2,
     pub wallet_address: WalletAddrType,
     pub chain_config: ChainConfig,
     pub ftokens: Vec<FToken>,
     pub keys: Vec<u8>,
+}
+
+impl From<KeyStoreV0> for KeyStore {
+    fn from(v0: KeyStoreV0) -> Self {
+        Self {
+            wallet_data: v0.wallet_data.into(),
+            wallet_address: v0.wallet_address,
+            chain_config: v0.chain_config,
+            ftokens: v0.ftokens,
+            keys: v0.keys,
+        }
+    }
 }
 
 impl KeyStore {
@@ -90,8 +111,8 @@ impl KeyStore {
 
         match version {
             0 => {
-                let keystore: KeyStore = bincode::deserialize(&decrypted_data)?;
-                Ok(keystore)
+                let keystore_v0: KeyStoreV0 = bincode::deserialize(&decrypted_data)?;
+                Ok(keystore_v0.into())
             }
             1 => {
                 let warp = storage::data_warp::DataWarp::from_bytes(decrypted_data.into())?;
@@ -381,7 +402,9 @@ mod tests_background_storage {
     };
     use proto::keypair::KeyPair;
     use rand::Rng;
+    use wallet::account::AccountV1;
     use wallet::account_type::AccountType;
+    use wallet::wallet_data::WalletDataV1;
 
     use test_data::{
         gen_anvil_net_conf, gen_btc_mainnet_conf, gen_zil_mainnet_conf, ANVIL_MNEMONIC,
@@ -969,5 +992,73 @@ mod tests_background_storage {
                 assert!(accounts.is_empty());
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_keystore_v0_import() {
+        let (bg, _) = setup_test_background();
+        let net_conf = gen_anvil_net_conf();
+        let password: SecretString = SecretString::new("test password v0".into());
+
+        bg.add_provider(net_conf.clone()).unwrap();
+
+        let words = Background::gen_bip39(12).unwrap();
+        let accounts_v1 = vec![AccountV1 {
+            name: "v0 account".to_string(),
+            account_type: AccountType::Bip39HD(0),
+            addr: proto::address::Address::from_str_hex("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap(),
+            pub_key: proto::pubkey::PubKey::Secp256k1Keccak256([0u8; 33]),
+            chain_hash: net_conf.hash(),
+            chain_id: 1,
+            slip_44: ETHEREUM,
+        }];
+
+        let wallet_data_v1 = WalletDataV1 {
+            proof_key: 0,
+            wallet_type: WalletTypes::SecretPhrase((0, Default::default())),
+            settings: Default::default(),
+            wallet_name: "v0 wallet".to_string(),
+            accounts: accounts_v1,
+            selected_account: 0,
+            biometric_type: AuthMethod::None,
+            default_chain_hash: net_conf.hash(),
+        };
+
+        let keystore_v0 = KeyStoreV0 {
+            wallet_data: wallet_data_v1,
+            wallet_address: [0u8; SHA256_SIZE],
+            chain_config: net_conf.clone(),
+            ftokens: vec![],
+            keys: words.to_string().into_bytes(),
+        };
+
+        let keystore_bytes = bincode::serialize(&keystore_v0).unwrap();
+
+        let argon_seed = argon2::derive_key(
+            password.expose_secret().as_bytes(),
+            b"",
+            &ARGON2_DEFAULT_CONFIG,
+        )
+        .unwrap();
+        let keychain = KeyChain::from_seed(&argon_seed).unwrap();
+        let cipher_orders = vec![CipherOrders::AESGCM256];
+        let cipher_bytes = keychain.encrypt(keystore_bytes, &cipher_orders).unwrap();
+        let cipher_orders_bytes: Vec<u8> = cipher_orders.iter().map(|c| c.code()).collect();
+
+        let mut backup_v0 = Vec::with_capacity(
+            SIGNATURE.len() + 1 + 1 + cipher_orders_bytes.len() + cipher_bytes.len(),
+        );
+        backup_v0.extend_from_slice(SIGNATURE);
+        backup_v0.push(0); // version 0
+        backup_v0.push(cipher_orders_bytes.len() as u8);
+        backup_v0.extend(cipher_orders_bytes);
+        backup_v0.extend(cipher_bytes);
+
+        let restored = KeyStore::from_backup(backup_v0, &argon_seed).unwrap();
+
+        assert_eq!(restored.keys, words.to_string().into_bytes());
+        assert_eq!(restored.chain_config, net_conf);
+        assert_eq!(restored.wallet_data.wallet_name, "v0 wallet");
+        assert_eq!(restored.wallet_data.slip44, ETHEREUM);
     }
 }
