@@ -118,6 +118,30 @@ impl AccountV2 {
     pub fn to_bytes(&self) -> Result<Vec<u8>> {
         Codec::to_bytes(self).map_err(|e| AccountErrors::BincodeError(e.to_string()))
     }
+
+    pub fn get_zilliqa_addr_pair(&self) -> Result<(Address, Address)> {
+        if let Some(pk) = &self.pub_key {
+            match pk {
+                PubKey::Secp256k1Sha256(bytes) => {
+                    let zil_addr = pk.get_addr()?;
+                    let eth_addr = PubKey::Secp256k1Keccak256(*bytes).get_addr()?;
+
+                    Ok((zil_addr, eth_addr))
+                }
+                PubKey::Secp256k1Keccak256(bytes) => {
+                    let eth_addr = pk.get_addr()?;
+                    let zil_addr = PubKey::Secp256k1Sha256(*bytes).get_addr()?;
+
+                    Ok((zil_addr, eth_addr))
+                }
+                _ => {
+                    return Err(AccountErrors::InvalidPubKeyType);
+                }
+            }
+        } else {
+            return Err(AccountErrors::InvalidPubKeyType);
+        }
+    }
 }
 
 impl AccountV1 {
