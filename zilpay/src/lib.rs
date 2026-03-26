@@ -12,6 +12,7 @@ pub use qrcodes;
 pub use rpc;
 pub use session;
 pub use settings;
+pub use storage;
 pub use token;
 pub use wallet;
 

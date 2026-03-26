@@ -21,3 +21,4 @@ network = { path = "../network" }
 session = { path = "../session" }
 cache = { path = "../cache" }
 qrcodes = { path = "../qrcodes" }
+storage = { path = "../storage" }

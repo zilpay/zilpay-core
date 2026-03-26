@@ -48,6 +48,7 @@ network = { path = "./network" }
 intl = { path = "./intl" }
 cache = { path = "./cache" }
 qrcodes = { path = "./qrcodes" }
+storage = { path = "./storage" }
 
 [workspace.dependencies]
 image = "0.25.10"
