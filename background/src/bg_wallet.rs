@@ -711,7 +711,7 @@ mod tests_background {
 
         for i in 1..20 {
             let bip49 =
-                DerivationPath::new(slip44::ZILLIQA, i, DerivationPath::BIP44_PURPOSE, None);
+                DerivationPath::new(slip44::ZILLIQA, crypto::bip49::DerivationType::AddressIndex(0, 0, i), DerivationPath::BIP44_PURPOSE, None);
             wallet
                 .add_next_bip39_account(format!("Zilliqa account {}", i), &bip49, "", &argon_seed)
                 .unwrap();
@@ -895,7 +895,7 @@ mod tests_background {
 
         let bip49 = DerivationPath::new(
             slip44::BITCOIN,
-            1,
+            crypto::bip49::DerivationType::AddressIndex(0, 0, 1),
             DerivationPath::BIP84_PURPOSE,
             Some(bitcoin::Network::Testnet),
         );

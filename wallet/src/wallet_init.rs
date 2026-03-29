@@ -228,8 +228,12 @@ impl WalletInit for Wallet {
                     move || -> std::result::Result<(u32, u32, Vec<AccountV2>), WalletErrors> {
                         let mut accounts = Vec::with_capacity(idxs.len());
                         for (idx, name) in idxs {
-                            let path =
-                                crypto::bip49::DerivationPath::new(slip44, idx, bip, network);
+                            let path = crypto::bip49::DerivationPath::new(
+                                slip44,
+                                crypto::bip49::DerivationType::AddressIndex(0, 0, idx),
+                                bip,
+                                network,
+                            );
                             let account = AccountV2::from_hd(&seed, name, &path)?;
                             accounts.push(account);
                         }

@@ -60,6 +60,9 @@ pub enum KeyPairError {
 
     #[error("eip712 error: {0}")]
     Eip712Error(String),
+
+    #[error("Solana keys do not support EIP712 or hash signing")]
+    InvalidEd25519Solana,
 }
 
 #[derive(Debug, Error, PartialEq)]

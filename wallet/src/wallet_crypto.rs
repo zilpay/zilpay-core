@@ -80,7 +80,7 @@ impl WalletCrypto for Wallet {
 
                 let bip_path = crypto::bip49::DerivationPath::new(
                     provider.config.slip_44,
-                    hd_index,
+                    crypto::bip49::DerivationType::AddressIndex(0, 0, hd_index),
                     bip_purpose,
                     network,
                 );
@@ -504,7 +504,6 @@ mod tests {
         );
 
         let revealed_mnemonic = wallet.reveal_mnemonic(&argon_seed).unwrap();
-
 
         assert_eq!(revealed_mnemonic.to_string(), ANVIL_MNEMONIC);
     }

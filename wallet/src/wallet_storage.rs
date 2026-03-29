@@ -313,7 +313,7 @@ mod tests_wallet_storage {
         let bip84 = |index: usize| {
             DerivationPath::new(
                 slip44::BITCOIN,
-                index,
+                crypto::bip49::DerivationType::AddressIndex(0, 0, index),
                 DerivationPath::BIP84_PURPOSE,
                 Some(bitcoin::Network::Bitcoin),
             )

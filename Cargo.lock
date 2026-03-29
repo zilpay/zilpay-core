@@ -7404,6 +7404,7 @@ dependencies = [
  "rustls",
  "session",
  "settings",
+ "storage",
  "token",
  "wallet",
 ]
@@ -7428,6 +7429,7 @@ dependencies = [
  "rustls",
  "session",
  "settings",
+ "storage",
  "token",
  "wallet",
  "zilpay",

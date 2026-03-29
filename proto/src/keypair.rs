@@ -588,7 +588,7 @@ mod tests_keypair {
 
         let btc_bip84_path = DerivationPath::new(
             slip44::BITCOIN,
-            0,
+            crypto::bip49::DerivationType::AddressIndex(0, 0, 0),
             DerivationPath::BIP84_PURPOSE,
             Some(bitcoin::Network::Bitcoin),
         );
@@ -603,7 +603,7 @@ mod tests_keypair {
 
         let btc_bip44_path = DerivationPath::new(
             slip44::BITCOIN,
-            0,
+            crypto::bip49::DerivationType::AddressIndex(0, 0, 0),
             DerivationPath::BIP44_PURPOSE,
             Some(bitcoin::Network::Bitcoin),
         );
@@ -630,9 +630,9 @@ mod tests_keypair {
             seed
         );
 
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, crypto::bip49::DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None);
         let eth_path =
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+            DerivationPath::new(slip44::ETHEREUM, crypto::bip49::DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None);
 
         let zil_key_pair = KeyPair::from_bip39_seed(&seed, &zil_path).unwrap();
         let eth_key_pair = KeyPair::from_bip39_seed(&seed, &eth_path).unwrap();
@@ -679,14 +679,11 @@ mod tests_keypair {
     #[test]
     fn test_derivation_path_generation() {
         let eth_path =
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 1, DerivationPath::BIP44_PURPOSE, None);
+            DerivationPath::new(slip44::ETHEREUM, crypto::bip49::DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None);
+        let zil_path = DerivationPath::new(slip44::ZILLIQA, crypto::bip49::DerivationType::AddressIndex(0, 0, 1), DerivationPath::BIP44_PURPOSE, None);
 
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");
         assert_eq!(zil_path.get_path(), "m/44'/313'/0'/0/1");
-
-        assert_eq!(eth_path.get_base_path(), "m/44'/60'/0'/0/");
-        assert_eq!(zil_path.get_base_path(), "m/44'/313'/0'/0/");
 
         assert_eq!(eth_path.get_index(), 0);
         assert_eq!(zil_path.get_index(), 1);
@@ -1236,7 +1233,7 @@ mod tests_keypair {
         let m = Mnemonic::parse_str(&EN_WORDS, ANVIL_MNEMONIC).unwrap();
         let seed = m.to_seed("").unwrap();
 
-        let tron_path = DerivationPath::new(slip44::TRON, 0, DerivationPath::BIP44_PURPOSE, None);
+        let tron_path = DerivationPath::new(slip44::TRON, crypto::bip49::DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None);
         let tron_key_pair = KeyPair::from_bip39_seed(&seed, &tron_path).unwrap();
         let tron_addr = tron_key_pair.get_addr().unwrap();
 
@@ -1250,10 +1247,9 @@ mod tests_keypair {
 
     #[test]
     fn test_tron_derivation_path() {
-        let tron_path = DerivationPath::new(slip44::TRON, 0, DerivationPath::BIP44_PURPOSE, None);
+        let tron_path = DerivationPath::new(slip44::TRON, crypto::bip49::DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None);
 
         assert_eq!(tron_path.get_path(), "m/44'/195'/0'/0/0");
-        assert_eq!(tron_path.get_base_path(), "m/44'/195'/0'/0/");
     }
 
     #[test]
@@ -1291,7 +1287,7 @@ mod tests_keypair {
 
         for (index, expected_addr) in expected_addresses.iter().enumerate() {
             let tron_path =
-                DerivationPath::new(slip44::TRON, index, DerivationPath::BIP44_PURPOSE, None);
+                DerivationPath::new(slip44::TRON, crypto::bip49::DerivationType::AddressIndex(0, 0, index), DerivationPath::BIP44_PURPOSE, None);
             let keypair = KeyPair::from_bip39_seed(&seed, &tron_path).unwrap();
             let addr = keypair.get_addr().unwrap();
             let derived_addr = addr.auto_format();

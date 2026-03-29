@@ -64,6 +64,9 @@ pub enum AddressError {
     #[error("Invalid Tron address: {0}")]
     InvalidTronAddress(String),
 
+    #[error("Invalid Solana address: {0}")]
+    InvalidSolanaAddress(String),
+
     #[error("Not implemented")]
     NotImpl,
 

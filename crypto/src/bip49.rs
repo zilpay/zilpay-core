@@ -2,11 +2,19 @@ use std::fmt;
 
 use errors::bip32::Bip329Errors;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DerivationType {
+    Root,
+    Account(usize),
+    AccountChange(usize, usize),
+    AddressIndex(usize, usize, usize),
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct DerivationPath {
     pub slip44: u32,
     pub bip: u32,
-    pub index: usize,
+    pub derivation: DerivationType,
     pub network: Option<bitcoin::Network>,
 }
 
@@ -67,28 +75,47 @@ impl DerivationPath {
         }
     }
 
-    pub fn new(slip44: u32, index: usize, bip: u32, network: Option<bitcoin::Network>) -> Self {
+    pub fn new(
+        slip44: u32,
+        derivation: DerivationType,
+        bip: u32,
+        network: Option<bitcoin::Network>,
+    ) -> Self {
         Self {
             slip44,
-            index,
             bip,
+            derivation,
             network,
         }
     }
 
     pub fn get_path(&self) -> String {
-        format!(
-            "m/{0}'/{1}'/{2}'/{3}/{4}",
-            self.bip, self.slip44, 0, 0, self.index
-        )
-    }
-
-    pub fn get_base_path(&self) -> String {
-        format!("m/{0}'/{1}'/{2}'/{3}/", self.bip, self.slip44, 0, 0)
+        match self.derivation {
+            DerivationType::Root => {
+                format!("m/{}'/{}'", self.bip, self.slip44)
+            }
+            DerivationType::Account(idx) => {
+                format!("m/{}'/{}'/{}'", self.bip, self.slip44, idx)
+            }
+            DerivationType::AccountChange(account, change) => {
+                format!("m/{}'/{}'/{}'/{}'", self.bip, self.slip44, account, change)
+            }
+            DerivationType::AddressIndex(account, change, index) => {
+                format!(
+                    "m/{}'/{}'/{}'/{}/{}",
+                    self.bip, self.slip44, account, change, index
+                )
+            }
+        }
     }
 
     pub fn get_index(&self) -> usize {
-        self.index
+        match self.derivation {
+            DerivationType::Root => 0,
+            DerivationType::Account(idx) => idx,
+            DerivationType::AccountChange(account, _) => account,
+            DerivationType::AddressIndex(_, _, index) => index,
+        }
     }
 
     pub fn get_address_type(&self) -> bitcoin::AddressType {
@@ -132,31 +159,46 @@ mod tests {
 
     #[test]
     fn test_ethereum_path() {
-        let eth_path =
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path = DerivationPath::new(
+            slip44::ETHEREUM,
+            DerivationType::AddressIndex(0, 0, 0),
+            DerivationPath::BIP44_PURPOSE,
+            None,
+        );
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/0");
-        assert_eq!(eth_path.get_base_path(), "m/44'/60'/0'/0/");
     }
 
     #[test]
     fn test_zilliqa_path() {
-        let zil_path = DerivationPath::new(slip44::ZILLIQA, 0, DerivationPath::BIP44_PURPOSE, None);
+        let zil_path = DerivationPath::new(
+            slip44::ZILLIQA,
+            DerivationType::AddressIndex(0, 0, 0),
+            DerivationPath::BIP44_PURPOSE,
+            None,
+        );
         assert_eq!(zil_path.get_path(), "m/44'/313'/0'/0/0");
-        assert_eq!(zil_path.get_base_path(), "m/44'/313'/0'/0/");
     }
 
     #[test]
     fn test_different_indexes() {
-        let eth_path =
-            DerivationPath::new(slip44::ETHEREUM, 5, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path = DerivationPath::new(
+            slip44::ETHEREUM,
+            DerivationType::AddressIndex(0, 0, 5),
+            DerivationPath::BIP44_PURPOSE,
+            None,
+        );
         assert_eq!(eth_path.get_path(), "m/44'/60'/0'/0/5");
         assert_eq!(eth_path.get_index(), 5);
     }
 
     #[test]
     fn test_display() {
-        let eth_path =
-            DerivationPath::new(slip44::ETHEREUM, 0, DerivationPath::BIP44_PURPOSE, None);
+        let eth_path = DerivationPath::new(
+            slip44::ETHEREUM,
+            DerivationType::AddressIndex(0, 0, 0),
+            DerivationPath::BIP44_PURPOSE,
+            None,
+        );
         assert_eq!(eth_path.to_string(), "m/44'/60'/0'/0/0");
     }
 
