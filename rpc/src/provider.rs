@@ -12,6 +12,7 @@ where
     N: NetworkConfigTrait,
 {
     pub network: &'a N,
+    client: reqwest::Client,
 }
 
 impl<'a, N> RpcProvider<'a, N>
@@ -19,7 +20,10 @@ where
     N: NetworkConfigTrait,
 {
     pub fn new(network: &'a N) -> Self {
-        Self { network }
+        Self {
+            network,
+            client: reqwest::Client::new(),
+        }
     }
 
     pub fn build_payload<M: RpcMethod>(params: Value, method: M) -> Value {
@@ -36,18 +40,20 @@ where
         SR: DeserializeOwned + Debug,
     {
         const TIME_OUT_SEC: u64 = 5;
-        let client = reqwest::Client::new();
         let mut last_error = None;
         let mut errors = String::with_capacity(200);
 
         let is_tron = self.network.get_slip44() == TRON;
         let is_batch = payloads.is_array();
         let prepared = if is_batch {
-            let mut arr = payloads.as_array().unwrap().clone();
-            for (i, item) in arr.iter_mut().enumerate() {
-                item["id"] = serde_json::json!((i as u64) + 1);
+            if let Value::Array(mut arr) = payloads {
+                for (i, item) in arr.iter_mut().enumerate() {
+                    item["id"] = serde_json::json!((i as u64) + 1);
+                }
+                Value::Array(arr)
+            } else {
+                unreachable!()
             }
-            serde_json::Value::Array(arr)
         } else {
             payloads
         };
@@ -64,7 +70,8 @@ where
                 url.clone()
             };
 
-            let res = client
+            let res = self
+                .client
                 .post(rpc_url)
                 .timeout(Duration::from_secs(TIME_OUT_SEC))
                 .json(&prepared)
@@ -74,15 +81,22 @@ where
             match res {
                 Ok(response) => match response.text().await {
                     Ok(text) => {
-                        let sorted = if is_batch {
-                            Self::sort_batch_text_by_id(&text)
-                        } else {
-                            text.clone()
-                        };
-                        match serde_json::from_str::<SR>(&sorted) {
-                            Ok(json) => {
-                                return Ok(json);
+                        let result = if is_batch {
+                            let parsed = serde_json::from_str::<Vec<Value>>(&text);
+                            match parsed {
+                                Ok(mut values) => {
+                                    values.sort_by_key(|v| {
+                                        v.get("id").and_then(|i| i.as_u64()).unwrap_or(0)
+                                    });
+                                    serde_json::from_value::<SR>(Value::Array(values))
+                                }
+                                Err(e) => Err(e),
                             }
+                        } else {
+                            serde_json::from_str::<SR>(&text)
+                        };
+                        match result {
+                            Ok(json) => return Ok(json),
                             Err(e) => {
                                 errors.push_str(&format!(
                                     "Failed to parse JSON: {}. Response: {}",
@@ -94,7 +108,6 @@ where
                     }
                     Err(e) => {
                         errors.push_str(&format!("Failed to get response text: {}", e));
-
                         last_error = Some(RpcError::BadRequest(errors.to_string()));
                     }
                 },
@@ -115,14 +128,6 @@ where
         Err(RpcError::NetworkDown)
     }
 
-    fn sort_batch_text_by_id(text: &str) -> String {
-        let mut values: Vec<Value> = match serde_json::from_str(text) {
-            Ok(Value::Array(arr)) => arr,
-            _ => return text.to_string(),
-        };
-        values.sort_by_key(|v| v.get("id").and_then(|i| i.as_u64()).unwrap_or(0));
-        serde_json::to_string(&values).unwrap_or_else(|_| text.to_string())
-    }
 }
 
 #[async_trait]
