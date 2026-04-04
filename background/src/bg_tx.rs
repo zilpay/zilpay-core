@@ -295,6 +295,7 @@ pub fn update_tx_from_params(
                 }
             }
         }
+        TransactionRequest::Solana(_) => {}
         TransactionRequest::Bitcoin((ref mut btc_tx, ref metadata)) => {
             if params.current == U256::ZERO {
                 return Ok(());
@@ -488,6 +489,9 @@ impl TransactionsManagement for Background {
 
                 Ok(hash.0)
             }
+            Address::Ed25519Solana(_) => Err(BackgroundError::BincodeError(
+                "Personal sign not supported for Solana".to_string(),
+            ))?,
         }
     }
 
@@ -578,6 +582,11 @@ impl TransactionsManagement for Background {
                 full_msg.extend_from_slice(&bytes);
                 let hash = keccak256(&full_msg);
                 key_pair.sign_hash(&hash.0)?
+            }
+            Address::Ed25519Solana(_) => {
+                return Err(BackgroundError::WalletError(
+                    WalletErrors::InvalidHexToWalletType,
+                ));
             }
         };
         let pub_key = key_pair.get_pubkey()?;

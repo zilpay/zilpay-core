@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::btc::BtcOperations;
 use crate::common::Provider;
 use crate::evm::{EvmOperations, RequiredTxParams};
+use crate::solana::SolanaOperations;
 use crate::tron::TronOperations;
 use crate::Result;
 use alloy::primitives::U256;
@@ -67,6 +68,7 @@ impl NetworkProvider {
             slip44::ETHEREUM | slip44::ZILLIQA => self.evm_get_current_block_number().await,
             slip44::BITCOIN => self.btc_get_current_block_number().await,
             slip44::TRON => self.tron_get_current_block_number().await,
+            slip44::SOLANA => self.solana_get_current_block_number().await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
@@ -79,6 +81,7 @@ impl NetworkProvider {
             slip44::ETHEREUM | slip44::ZILLIQA => self.evm_estimate_block_time(address).await,
             slip44::BITCOIN => self.btc_estimate_block_time().await,
             slip44::TRON => self.tron_estimate_block_time().await,
+            slip44::SOLANA => self.solana_estimate_block_time().await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
@@ -95,6 +98,7 @@ impl NetworkProvider {
                 self.evm_update_transactions_receipt(txns).await
             }
             slip44::BITCOIN => self.btc_update_transactions_receipt(txns).await,
+            slip44::SOLANA => self.solana_update_transactions_receipt(txns).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
@@ -116,6 +120,7 @@ impl NetworkProvider {
             }
             slip44::BITCOIN => self.btc_estimate_params_batch(tx).await,
             slip44::TRON => self.tron_estimate_params_batch(tx, sender).await,
+            slip44::SOLANA => self.solana_estimate_params_batch(tx, sender).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.slip_44
@@ -133,6 +138,7 @@ impl NetworkProvider {
             }
             slip44::BITCOIN => self.btc_broadcast_signed_transactions(txns).await,
             slip44::TRON => self.tron_broadcast_signed_transactions(txns).await,
+            slip44::SOLANA => self.solana_broadcast_signed_transactions(txns).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
@@ -150,6 +156,7 @@ impl NetworkProvider {
                 self.evm_update_balances(tokens, accounts).await
             }
             slip44::BITCOIN => self.btc_update_balances(tokens, accounts).await,
+            slip44::SOLANA => self.solana_update_balances(tokens, accounts).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
@@ -165,11 +172,18 @@ impl NetworkProvider {
             slip44::BITCOIN => Err(NetworkErrors::RPCError(
                 "Bitcoin does not support tokens".to_string(),
             )),
+            slip44::SOLANA => Err(NetworkErrors::RPCError(
+                "SPL tokens not yet supported".to_string(),
+            )),
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name
             ))),
         }
+    }
+
+    pub async fn solana_get_latest_blockhash(&self) -> Result<String> {
+        SolanaOperations::solana_get_latest_blockhash(self).await
     }
 
     pub async fn tron_fill_block_ref(&self, tx: &mut TronTransaction) -> Result<()> {

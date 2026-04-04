@@ -3865,7 +3865,9 @@ version = "0.1.0"
 dependencies = [
  "alloy",
  "async-trait",
+ "base64 0.22.1",
  "bitcoin",
+ "bs58",
  "config",
  "crypto",
  "electrum-client",

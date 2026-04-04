@@ -179,6 +179,32 @@ impl std::fmt::Display for EvmMethods {
     }
 }
 
+pub enum SolanaMethod {
+    GetBalance,
+    GetSlot,
+    GetLatestBlockhash,
+    SendTransaction,
+    GetTransaction,
+}
+
+impl RpcMethod for SolanaMethod {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::GetBalance => "getBalance",
+            Self::GetSlot => "getSlot",
+            Self::GetLatestBlockhash => "getLatestBlockhash",
+            Self::SendTransaction => "sendTransaction",
+            Self::GetTransaction => "getTransaction",
+        }
+    }
+}
+
+impl std::fmt::Display for SolanaMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -359,3 +359,43 @@ pub mod tron_addresses {
         ADDR_0, ADDR_1, ADDR_2, ADDR_3, ADDR_4, ADDR_5, ADDR_6, ADDR_7, ADDR_8, ADDR_9,
     ];
 }
+
+pub fn gen_sol_devnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: Some(true),
+        chain_ids: [501, 0],
+        name: "Solana(devnet)".to_string(),
+        chain: "SOL".to_string(),
+        short_name: "sol-devnet".to_string(),
+        rpc: vec!["https://api.devnet.solana.com".to_string()],
+        features: vec![],
+        slip_44: slip44::SOLANA,
+        ens: None,
+        explorers: vec![],
+        fallback_enabled: false,
+    }
+}
+
+pub fn gen_sol_token() -> FToken {
+    FToken {
+        rate: 0f64,
+        name: "Solana".to_string(),
+        symbol: "SOL".to_string(),
+        decimals: 9,
+        addr: Address::Ed25519Solana([0u8; 32]),
+        logo: None,
+        balances: HashMap::new(),
+        default: true,
+        native: true,
+        chain_hash: gen_sol_devnet_conf().hash(),
+    }
+}
+
+#[allow(dead_code)]
+pub mod solana_addresses {
+    pub const ADDR_0: &str = "vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg";
+    pub const ADDR_1: &str = "4fYNw3dojWmQ4dXtSGE9epjRGy9GHeo5UCCbg6NbyNjF";
+}

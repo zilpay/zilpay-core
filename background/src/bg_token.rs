@@ -209,6 +209,11 @@ impl TokensManagement for Background {
 
                 Ok(txn)
             }
+            Address::Ed25519Solana(_) => Err(BackgroundError::TokenError(
+                errors::token::TokenError::ABIError(
+                    "Solana transfers not yet supported".to_string(),
+                ),
+            )),
         }
     }
 

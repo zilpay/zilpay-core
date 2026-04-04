@@ -23,6 +23,7 @@ pub struct HistoricalTransaction {
     pub scilla: Option<String>,
     pub btc: Option<String>,
     pub tron: Option<String>,
+    pub solana: Option<String>,
     pub signed_message: Option<String>,
     pub timestamp: u64,
 }
@@ -62,6 +63,16 @@ impl HistoricalTransaction {
 
     pub fn set_tron(&mut self, value: Value) {
         self.tron = serde_json::to_string(&value).ok();
+    }
+
+    pub fn get_solana(&self) -> Option<Value> {
+        self.solana
+            .as_ref()
+            .and_then(|s| serde_json::from_str(s).ok())
+    }
+
+    pub fn set_solana(&mut self, value: Value) {
+        self.solana = serde_json::to_string(&value).ok();
     }
 
     pub fn get_signed_message(&self) -> Option<Value> {
@@ -108,6 +119,7 @@ impl HistoricalTransaction {
             scilla: None,
             btc: None,
             tron: None,
+            solana: None,
             signed_message: serde_json::to_string(&signed_msg).ok(),
             timestamp,
         }
@@ -149,6 +161,7 @@ impl HistoricalTransaction {
             scilla: None,
             btc: None,
             tron: None,
+            solana: None,
             signed_message: serde_json::to_string(&signed_msg).ok(),
             timestamp,
         }
@@ -197,6 +210,7 @@ impl HistoricalTransaction {
                     scilla: serde_json::to_string(&scilla).ok(),
                     btc: None,
                     tron: None,
+                    solana: None,
                     signed_message: None,
                     timestamp,
                 })
@@ -250,6 +264,7 @@ impl HistoricalTransaction {
                     scilla: None,
                     btc: None,
                     tron: None,
+                    solana: None,
                     signed_message: None,
                     timestamp,
                 })
@@ -273,6 +288,7 @@ impl HistoricalTransaction {
                     scilla: None,
                     btc: serde_json::to_string(&btc).ok(),
                     tron: None,
+                    solana: None,
                     signed_message: None,
                     timestamp,
                 })
@@ -287,10 +303,25 @@ impl HistoricalTransaction {
                     scilla: None,
                     btc: None,
                     tron: serde_json::to_string(&tron).ok(),
+                    solana: None,
                     signed_message: None,
                     timestamp,
                 })
             }
+            TransactionReceipt::Solana((solana_receipt, metadata)) => Ok(Self {
+                status: TransactionStatus::Pending,
+                metadata,
+                evm: None,
+                scilla: None,
+                btc: None,
+                tron: None,
+                solana: serde_json::to_string(&json!({
+                    "transactionHash": solana_receipt.tx_id(),
+                }))
+                .ok(),
+                signed_message: None,
+                timestamp,
+            }),
         }
     }
 

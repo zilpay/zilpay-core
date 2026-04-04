@@ -557,6 +557,7 @@ mod tests {
             scilla: None,
             btc: None,
             tron: Some(tron_tx_json.to_string()),
+            solana: None,
             signed_message: None,
             timestamp: 1773553056000,
         };
