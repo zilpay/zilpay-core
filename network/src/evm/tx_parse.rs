@@ -134,25 +134,13 @@ pub fn process_tx_send_response(
     response: &ResultRes<Value>,
     tx: &mut TransactionReceipt,
 ) -> Result<()> {
-    dbg!("[process_tx_send_response] response =", &response);
-    dbg!(
-        "[process_tx_send_response] tx variant hash before =",
-        tx.hash()
-    );
-
     if let Some(error) = &response.error {
-        dbg!("[process_tx_send_response] error =", error);
         return Err(NetworkErrors::RPCError(error.to_string()));
     }
 
     match tx {
         TransactionReceipt::Zilliqa((_zil, metadata)) => {
-            dbg!(
-                "[process_tx_send_response] matching Zilliqa variant",
-                &metadata.hash
-            );
             if let Some(result) = &response.result {
-                dbg!("[process_tx_send_response] Zilliqa result =", result);
                 let info = result
                     .get("Info")
                     .and_then(|v| v.as_str())
@@ -162,52 +150,27 @@ pub fn process_tx_send_response(
                     .and_then(|v| v.as_str())
                     .ok_or(TransactionErrors::InvalidTxHash)?;
 
-                dbg!(
-                    "[process_tx_send_response] Zilliqa TranID =",
-                    tx_id,
-                    "Info =",
-                    info
-                );
                 metadata.hash = Some(tx_id.to_string());
                 metadata.info = Some(info.to_string());
 
-                dbg!(
-                    "[process_tx_send_response] Zilliqa hash after =",
-                    &metadata.hash
-                );
                 Ok(())
             } else {
-                dbg!("[process_tx_send_response] Zilliqa no result in response");
                 Err(NetworkErrors::RPCError("Invalid response".to_string()))
             }
         }
         TransactionReceipt::Ethereum((_eth, metadata)) => {
-            dbg!(
-                "[process_tx_send_response] matching Ethereum variant",
-                &metadata.hash
-            );
             if let Some(result) = &response.result {
-                dbg!("[process_tx_send_response] Ethereum result =", result);
                 let hash = result.as_str().ok_or(TransactionErrors::InvalidTxHash)?;
 
-                dbg!("[process_tx_send_response] Ethereum parsed hash =", hash);
                 metadata.hash = Some(hash.to_string());
 
-                dbg!(
-                    "[process_tx_send_response] Ethereum hash after =",
-                    &metadata.hash
-                );
                 Ok(())
             } else {
-                dbg!("[process_tx_send_response] Ethereum no result in response");
                 Err(NetworkErrors::RPCError("Invalid response".to_string()))
             }
         }
-        _ => {
-            dbg!("[process_tx_send_response] unmatched variant");
-            Err(NetworkErrors::RPCError(
-                "transactions not supported in EVM operations".to_string(),
-            ))
-        }
+        _ => Err(NetworkErrors::RPCError(
+            "transactions not supported in EVM operations".to_string(),
+        )),
     }
 }
