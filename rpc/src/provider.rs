@@ -41,6 +41,16 @@ where
         let mut errors = String::with_capacity(200);
 
         let is_tron = self.network.get_slip44() == TRON;
+        let is_batch = payloads.is_array();
+        let prepared = if is_batch {
+            let mut arr = payloads.as_array().unwrap().clone();
+            for (i, item) in arr.iter_mut().enumerate() {
+                item["id"] = serde_json::json!((i as u64) + 1);
+            }
+            serde_json::Value::Array(arr)
+        } else {
+            payloads
+        };
 
         for url in self.network.nodes() {
             if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -57,24 +67,31 @@ where
             let res = client
                 .post(rpc_url)
                 .timeout(Duration::from_secs(TIME_OUT_SEC))
-                .json(&payloads)
+                .json(&prepared)
                 .send()
                 .await;
 
             match res {
                 Ok(response) => match response.text().await {
-                    Ok(text) => match serde_json::from_str::<SR>(&text) {
-                        Ok(json) => {
-                            return Ok(json);
+                    Ok(text) => {
+                        let sorted = if is_batch {
+                            Self::sort_batch_text_by_id(&text)
+                        } else {
+                            text.clone()
+                        };
+                        match serde_json::from_str::<SR>(&sorted) {
+                            Ok(json) => {
+                                return Ok(json);
+                            }
+                            Err(e) => {
+                                errors.push_str(&format!(
+                                    "Failed to parse JSON: {}. Response: {}",
+                                    e, text
+                                ));
+                                last_error = Some(RpcError::InvalidJson(errors.to_string()));
+                            }
                         }
-                        Err(e) => {
-                            errors.push_str(&format!(
-                                "Failed to parse JSON: {}. Response: {}",
-                                e, text
-                            ));
-                            last_error = Some(RpcError::InvalidJson(errors.to_string()));
-                        }
-                    },
+                    }
                     Err(e) => {
                         errors.push_str(&format!("Failed to get response text: {}", e));
 
@@ -96,6 +113,15 @@ where
         SR: DeserializeOwned + Debug,
     {
         Err(RpcError::NetworkDown)
+    }
+
+    fn sort_batch_text_by_id(text: &str) -> String {
+        let mut values: Vec<Value> = match serde_json::from_str(text) {
+            Ok(Value::Array(arr)) => arr,
+            _ => return text.to_string(),
+        };
+        values.sort_by_key(|v| v.get("id").and_then(|i| i.as_u64()).unwrap_or(0));
+        serde_json::to_string(&values).unwrap_or_else(|_| text.to_string())
     }
 }
 

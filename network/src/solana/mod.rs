@@ -17,7 +17,8 @@ use rpc::common::JsonRPC;
 use rpc::methods::SolanaMethod;
 use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
-use serde_json::json;
+use rpc::zil_interfaces::{ErrorRes, ResultRes};
+use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
 use token::ft::FToken;
@@ -61,7 +62,7 @@ impl SolanaOperations for NetworkProvider {
     async fn solana_get_current_block_number(&self) -> Result<u64> {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let payload = RpcProvider::<ChainConfig>::build_payload(json!([]), SolanaMethod::GetSlot);
-        let res: SolanaResultRes<u64> = provider
+        let res: ResultRes<u64> = provider
             .req(payload)
             .await
             .map_err(NetworkErrors::Request)?;
@@ -80,7 +81,7 @@ impl SolanaOperations for NetworkProvider {
             json!([{"commitment": "finalized"}]),
             SolanaMethod::GetLatestBlockhash,
         );
-        let res: SolanaResultRes<SolanaValueResponse<BlockhashValue>> = provider
+        let res: ResultRes<SolanaValueResponse<BlockhashValue>> = provider
             .req(payload)
             .await
             .map_err(NetworkErrors::Request)?;
@@ -117,28 +118,37 @@ impl SolanaOperations for NetworkProvider {
         &self,
         mut txns: Vec<TransactionReceipt>,
     ) -> Result<Vec<TransactionReceipt>> {
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let mut payloads: Vec<Value> = Vec::with_capacity(txns.len());
+        let mut valid_indices: Vec<usize> = Vec::with_capacity(txns.len());
 
-        for receipt in &mut txns {
-            let TransactionReceipt::Solana((ref solana_receipt, ref mut metadata)) = receipt else {
+        for (i, receipt) in txns.iter().enumerate() {
+            let TransactionReceipt::Solana((ref solana_receipt, _)) = receipt else {
                 continue;
             };
-
             let encoded = base64::engine::general_purpose::STANDARD.encode(solana_receipt.encode());
-            let payload = RpcProvider::<ChainConfig>::build_payload(
-                json!([encoded, {"encoding": "base64"}]),
-                SolanaMethod::SendTransaction,
-            );
+            payloads.push(build_send_transaction_req(&encoded));
+            valid_indices.push(i);
+        }
 
-            let res: SolanaResultRes<String> = provider
-                .req(payload)
-                .await
-                .map_err(NetworkErrors::Request)?;
+        if payloads.is_empty() {
+            return Ok(txns);
+        }
 
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses: Vec<ResultRes<String>> = provider
+            .req(json!(payloads))
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        for (offset, tx_idx) in valid_indices.iter().enumerate() {
+            let TransactionReceipt::Solana((_, ref mut metadata)) = txns[*tx_idx] else {
+                continue;
+            };
+            let res = &responses[offset];
             let signature = res
                 .result
+                .clone()
                 .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&res.error)))?;
-
             metadata.hash = Some(signature);
         }
 
@@ -149,14 +159,22 @@ impl SolanaOperations for NetworkProvider {
         &self,
         txns: &mut [&mut HistoricalTransaction],
     ) -> Result<()> {
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
 
-        for tx in txns.iter_mut() {
+        let mut payloads: Vec<Value> = Vec::with_capacity(txns.len());
+        let mut valid_indices: Vec<usize> = Vec::with_capacity(txns.len());
+
+        for (i, tx) in txns.iter_mut().enumerate() {
             if tx.status != TransactionStatus::Pending {
+                continue;
+            }
+
+            let pending_secs = now.saturating_sub(tx.timestamp / 1000);
+            if pending_secs > SOLANA_TX_PENDING_TIMEOUT_SECS {
+                tx.status = TransactionStatus::Failed;
                 continue;
             }
 
@@ -169,46 +187,45 @@ impl SolanaOperations for NetworkProvider {
                 None => continue,
             };
 
-            let pending_secs = now.saturating_sub(tx.timestamp / 1000);
-            if pending_secs > SOLANA_TX_PENDING_TIMEOUT_SECS {
-                tx.status = TransactionStatus::Failed;
-                continue;
-            }
+            payloads.push(build_get_transaction_req(&signature));
+            valid_indices.push(i);
+        }
 
-            let payload = RpcProvider::<ChainConfig>::build_payload(
-                json!([signature, {"encoding": "json", "maxSupportedTransactionVersion": 0}]),
-                SolanaMethod::GetTransaction,
-            );
+        if payloads.is_empty() {
+            return Ok(());
+        }
 
-            let res: SolanaResultRes<SolanaGetTransactionResult> = provider
-                .req(payload)
-                .await
-                .map_err(NetworkErrors::Request)?;
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses: Vec<ResultRes<SolanaGetTransactionResult>> = provider
+            .req(json!(payloads))
+            .await
+            .map_err(NetworkErrors::Request)?;
 
-            match res.result {
-                None => {}
-                Some(result) => {
-                    let success = result
-                        .meta
-                        .as_ref()
-                        .map(|m| m.err.is_none())
-                        .unwrap_or(false);
+        for (offset, tx_idx) in valid_indices.iter().enumerate() {
+            let tx = &mut txns[*tx_idx];
+            let res = &responses[offset];
 
-                    tx.status = if success {
-                        TransactionStatus::Success
-                    } else {
-                        TransactionStatus::Failed
-                    };
+            if let Some(result) = &res.result {
+                let success = result
+                    .meta
+                    .as_ref()
+                    .map(|m| m.err.is_none())
+                    .unwrap_or(false);
 
-                    if let Some(mut solana_data) = tx.get_solana() {
-                        if let Some(fee) = result.meta.and_then(|m| m.fee) {
-                            solana_data["fee"] = json!(fee.to_string());
-                        }
-                        if let Some(slot) = result.slot {
-                            solana_data["slot"] = json!(slot.to_string());
-                        }
-                        tx.set_solana(solana_data);
+                tx.status = if success {
+                    TransactionStatus::Success
+                } else {
+                    TransactionStatus::Failed
+                };
+
+                if let Some(mut solana_data) = tx.get_solana() {
+                    if let Some(fee) = result.meta.as_ref().and_then(|m| m.fee) {
+                        solana_data["fee"] = json!(fee.to_string());
                     }
+                    if let Some(slot) = result.slot {
+                        solana_data["slot"] = json!(slot.to_string());
+                    }
+                    tx.set_solana(solana_data);
                 }
             }
         }
@@ -218,66 +235,47 @@ impl SolanaOperations for NetworkProvider {
 
     async fn solana_update_balances(
         &self,
-        tokens: Vec<&mut FToken>,
+        mut tokens: Vec<&mut FToken>,
         accounts: &[&Address],
     ) -> Result<()> {
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let capacity = tokens.len() * accounts.len();
+        let mut payloads: Vec<Value> = Vec::with_capacity(capacity);
+        let mut mapping: Vec<(usize, usize, bool)> = Vec::with_capacity(capacity);
 
-        for token in tokens {
-            for (index, account) in accounts.iter().enumerate() {
+        for (token_idx, token) in tokens.iter().enumerate() {
+            for (acc_idx, account) in accounts.iter().enumerate() {
                 let Address::Ed25519Solana(pubkey) = account else {
                     continue;
                 };
-
                 let address_b58 = pubkey.to_string();
 
                 if token.native {
-                    let payload = RpcProvider::<ChainConfig>::build_payload(
-                        json!([address_b58, {"commitment": "finalized"}]),
-                        SolanaMethod::GetBalance,
-                    );
-                    let res: SolanaResultRes<SolanaValueResponse<u64>> = provider
-                        .req(payload)
-                        .await
-                        .map_err(NetworkErrors::Request)?;
-                    let lamports = res
-                        .result
-                        .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&res.error)))?
-                        .value;
-                    token.balances.insert(index, U256::from(lamports));
-                } else {
-                    let Address::Ed25519Solana(mint) = &token.addr else {
-                        continue;
-                    };
-                    let mint_b58 = mint.to_string();
-                    let payload = RpcProvider::<ChainConfig>::build_payload(
-                        json!([
-                            address_b58,
-                            {"mint": mint_b58},
-                            {"encoding": "jsonParsed", "commitment": "finalized"}
-                        ]),
-                        SolanaMethod::GetTokenAccountsByOwner,
-                    );
-                    let res: SolanaResultRes<SolanaValueResponse<Vec<TokenAccountEntry>>> =
-                        provider.req(payload).await.map_err(NetworkErrors::Request)?;
-                    let amount = res
-                        .result
-                        .and_then(|r| r.value.into_iter().next())
-                        .and_then(|entry| {
-                            entry
-                                .account
-                                .data
-                                .parsed
-                                .info
-                                .token_amount
-                                .amount
-                                .parse::<u64>()
-                                .ok()
-                        })
-                        .unwrap_or(0);
-                    token.balances.insert(index, U256::from(amount));
+                    payloads.push(build_get_balance_req(&address_b58));
+                    mapping.push((token_idx, acc_idx, true));
+                } else if let Address::Ed25519Solana(mint) = &token.addr {
+                    payloads.push(build_get_token_accounts_req(&address_b58, &mint.to_string()));
+                    mapping.push((token_idx, acc_idx, false));
                 }
             }
+        }
+
+        if payloads.is_empty() {
+            return Ok(());
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses: Vec<ResultRes<Value>> = provider
+            .req(json!(payloads))
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        for (i, (token_idx, acc_idx, is_native)) in mapping.iter().enumerate() {
+            let balance = if *is_native {
+                parse_native_balance(&responses[i])
+            } else {
+                parse_spl_balance(&responses[i])
+            };
+            tokens[*token_idx].balances.insert(*acc_idx, balance);
         }
 
         Ok(())
@@ -288,7 +286,6 @@ impl SolanaOperations for NetworkProvider {
         contract: Address,
         accounts: &[&Address],
     ) -> Result<FToken> {
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
         let Address::Ed25519Solana(mint) = contract else {
             return Err(NetworkErrors::RPCError(
                 "Expected Ed25519Solana mint address".to_string(),
@@ -296,50 +293,37 @@ impl SolanaOperations for NetworkProvider {
         };
         let mint_b58 = mint.to_string();
 
-        let info_payload = RpcProvider::<ChainConfig>::build_payload(
-            json!([mint_b58, {"encoding": "jsonParsed"}]),
-            SolanaMethod::GetAccountInfo,
-        );
-        let info_res: SolanaResultRes<SolanaValueResponse<Option<AccountInfoValue>>> =
-            provider.req(info_payload).await.map_err(NetworkErrors::Request)?;
-        let decimals = info_res
+        let mut payloads: Vec<Value> = Vec::with_capacity(1 + accounts.len());
+        payloads.push(build_get_account_info_req(&mint_b58));
+
+        let mut valid_accounts: Vec<usize> = Vec::with_capacity(accounts.len());
+        for (i, account) in accounts.iter().enumerate() {
+            if let Address::Ed25519Solana(pubkey) = account {
+                payloads.push(build_get_token_accounts_req(&pubkey.to_string(), &mint_b58));
+                valid_accounts.push(i);
+            }
+        }
+
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let responses: Vec<ResultRes<Value>> = provider
+            .req(json!(payloads))
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let decimals = responses[0]
             .result
+            .as_ref()
+            .and_then(|v| {
+                serde_json::from_value::<SolanaValueResponse<Option<AccountInfoValue>>>(v.clone())
+                    .ok()
+            })
             .and_then(|r| r.value)
             .map(|v| v.data.parsed.info.decimals)
             .ok_or_else(|| NetworkErrors::RPCError("SPL mint account not found".to_string()))?;
 
         let mut balances = HashMap::new();
-        for (index, account) in accounts.iter().enumerate() {
-            let Address::Ed25519Solana(pubkey) = account else {
-                continue;
-            };
-            let address_b58 = pubkey.to_string();
-            let payload = RpcProvider::<ChainConfig>::build_payload(
-                json!([
-                    address_b58,
-                    {"mint": &mint_b58},
-                    {"encoding": "jsonParsed", "commitment": "finalized"}
-                ]),
-                SolanaMethod::GetTokenAccountsByOwner,
-            );
-            let res: SolanaResultRes<SolanaValueResponse<Vec<TokenAccountEntry>>> =
-                provider.req(payload).await.map_err(NetworkErrors::Request)?;
-            let amount = res
-                .result
-                .and_then(|r| r.value.into_iter().next())
-                .and_then(|entry| {
-                    entry
-                        .account
-                        .data
-                        .parsed
-                        .info
-                        .token_amount
-                        .amount
-                        .parse::<u64>()
-                        .ok()
-                })
-                .unwrap_or(0);
-            balances.insert(index, U256::from(amount));
+        for (offset, acc_idx) in valid_accounts.iter().enumerate() {
+            balances.insert(*acc_idx, parse_spl_balance(&responses[1 + offset]));
         }
 
         Ok(FToken {
@@ -357,9 +341,73 @@ impl SolanaOperations for NetworkProvider {
     }
 }
 
-fn solana_err_msg(err: &Option<SolanaErrorRes>) -> String {
+fn build_get_balance_req(address_b58: &str) -> Value {
+    RpcProvider::<ChainConfig>::build_payload(
+        json!([address_b58, {"commitment": "finalized"}]),
+        SolanaMethod::GetBalance,
+    )
+}
+
+fn build_get_token_accounts_req(address_b58: &str, mint_b58: &str) -> Value {
+    RpcProvider::<ChainConfig>::build_payload(
+        json!([address_b58, {"mint": mint_b58}, {"encoding": "jsonParsed", "commitment": "finalized"}]),
+        SolanaMethod::GetTokenAccountsByOwner,
+    )
+}
+
+fn build_get_account_info_req(mint_b58: &str) -> Value {
+    RpcProvider::<ChainConfig>::build_payload(
+        json!([mint_b58, {"encoding": "jsonParsed"}]),
+        SolanaMethod::GetAccountInfo,
+    )
+}
+
+fn build_get_transaction_req(sig: &str) -> Value {
+    RpcProvider::<ChainConfig>::build_payload(
+        json!([sig, {"encoding": "json", "maxSupportedTransactionVersion": 0}]),
+        SolanaMethod::GetTransaction,
+    )
+}
+
+fn build_send_transaction_req(encoded: &str) -> Value {
+    RpcProvider::<ChainConfig>::build_payload(
+        json!([encoded, {"encoding": "base64"}]),
+        SolanaMethod::SendTransaction,
+    )
+}
+
+fn parse_native_balance(raw: &ResultRes<Value>) -> U256 {
+    raw.result
+        .as_ref()
+        .and_then(|v| serde_json::from_value::<SolanaValueResponse<u64>>(v.clone()).ok())
+        .map(|r| U256::from(r.value))
+        .unwrap_or(U256::ZERO)
+}
+
+fn parse_spl_balance(raw: &ResultRes<Value>) -> U256 {
+    raw.result
+        .as_ref()
+        .and_then(|v| {
+            serde_json::from_value::<SolanaValueResponse<Vec<TokenAccountEntry>>>(v.clone()).ok()
+        })
+        .and_then(|r| r.value.into_iter().next())
+        .and_then(|e| {
+            e.account
+                .data
+                .parsed
+                .info
+                .token_amount
+                .amount
+                .parse::<u64>()
+                .ok()
+        })
+        .map(U256::from)
+        .unwrap_or(U256::ZERO)
+}
+
+fn solana_err_msg(err: &Option<ErrorRes>) -> String {
     err.as_ref()
-        .map(|e| format!("Solana RPC error {}: {}", e.code, e.message))
+        .map(|e| e.to_string())
         .unwrap_or_else(|| "Solana RPC: empty result".to_string())
 }
 
