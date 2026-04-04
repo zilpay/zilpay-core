@@ -394,6 +394,21 @@ pub fn gen_sol_token() -> FToken {
     }
 }
 
+pub fn gen_sol_spl_token(mint: [u8; 32], chain_hash: u64) -> FToken {
+    FToken {
+        rate: 0f64,
+        name: String::new(),
+        symbol: String::new(),
+        decimals: 0,
+        addr: Address::Ed25519Solana(mint),
+        logo: None,
+        balances: HashMap::new(),
+        default: false,
+        native: false,
+        chain_hash,
+    }
+}
+
 #[allow(dead_code)]
 pub mod solana_addresses {
     pub const ADDR_0: &str = "vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg";

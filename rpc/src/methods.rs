@@ -185,6 +185,8 @@ pub enum SolanaMethod {
     GetLatestBlockhash,
     SendTransaction,
     GetTransaction,
+    GetTokenAccountsByOwner,
+    GetAccountInfo,
 }
 
 impl RpcMethod for SolanaMethod {
@@ -195,6 +197,8 @@ impl RpcMethod for SolanaMethod {
             Self::GetLatestBlockhash => "getLatestBlockhash",
             Self::SendTransaction => "sendTransaction",
             Self::GetTransaction => "getTransaction",
+            Self::GetTokenAccountsByOwner => "getTokenAccountsByOwner",
+            Self::GetAccountInfo => "getAccountInfo",
         }
     }
 }

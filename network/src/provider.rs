@@ -172,9 +172,7 @@ impl NetworkProvider {
             slip44::BITCOIN => Err(NetworkErrors::RPCError(
                 "Bitcoin does not support tokens".to_string(),
             )),
-            slip44::SOLANA => Err(NetworkErrors::RPCError(
-                "SPL tokens not yet supported".to_string(),
-            )),
+            slip44::SOLANA => self.solana_ftoken_meta(contract, accounts).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name

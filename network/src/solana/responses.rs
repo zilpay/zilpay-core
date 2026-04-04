@@ -2,6 +2,53 @@ use serde::Deserialize;
 use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
+pub struct TokenAmount {
+    pub amount: String,
+    pub decimals: u8,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ParsedTokenAccountInfo {
+    #[serde(rename = "tokenAmount")]
+    pub token_amount: TokenAmount,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ParsedData<T> {
+    pub parsed: T,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TokenAccountValue {
+    pub data: ParsedData<ParsedTokenAccountData>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ParsedTokenAccountData {
+    pub info: ParsedTokenAccountInfo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TokenAccountEntry {
+    pub account: TokenAccountValue,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MintInfo {
+    pub decimals: u8,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ParsedMintData {
+    pub info: MintInfo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AccountInfoValue {
+    pub data: ParsedData<ParsedMintData>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct SolanaContext {
     pub slot: u64,
 }
