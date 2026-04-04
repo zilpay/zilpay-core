@@ -292,4 +292,43 @@ mod tests {
             "Single hardened path failed"
         );
     }
+
+    #[test]
+    fn test_solana_root_path() {
+        let path = DerivationPath::new(
+            slip44::SOLANA,
+            DerivationType::Root,
+            DerivationPath::BIP44_PURPOSE,
+            None,
+        );
+        assert_eq!(path.get_path(), "m/44'/501'");
+    }
+
+    #[test]
+    fn test_solana_account_paths() {
+        for i in 0..10 {
+            let path = DerivationPath::new(
+                slip44::SOLANA,
+                DerivationType::Account(i),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            );
+            assert_eq!(path.get_path(), format!("m/44'/501'/{}'", i));
+            assert_eq!(path.get_index(), i);
+        }
+    }
+
+    #[test]
+    fn test_solana_account_change_paths() {
+        for i in 0..10 {
+            let path = DerivationPath::new(
+                slip44::SOLANA,
+                DerivationType::AccountChange(i, 0),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            );
+            assert_eq!(path.get_path(), format!("m/44'/501'/{}'/0'", i));
+            assert_eq!(path.get_index(), i);
+        }
+    }
 }
