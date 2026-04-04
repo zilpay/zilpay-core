@@ -15,25 +15,13 @@ use serde_json::{json, Value};
 
 pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
     match tx {
-        TransactionReceipt::Zilliqa((zil, metadata)) => {
-            dbg!(
-                "[build_send_signed_tx_request] variant=Zilliqa",
-                &metadata.hash,
-                &metadata.chain_hash
-            );
+        TransactionReceipt::Zilliqa((zil, _metadata)) => {
             RpcProvider::<ChainConfig>::build_payload(json!([zil]), ZilMethods::CreateTransaction)
         }
-        TransactionReceipt::Ethereum((eth, metadata)) => {
+        TransactionReceipt::Ethereum((eth, _metadata)) => {
             let mut encoded = Vec::with_capacity(eth.eip2718_encoded_length());
             eth.encode_2718(&mut encoded);
             let hex_tx = alloy::hex::encode_prefixed(encoded);
-
-            dbg!(
-                "[build_send_signed_tx_request] variant=Ethereum",
-                &metadata.hash,
-                &metadata.chain_hash,
-                &hex_tx
-            );
 
             RpcProvider::<ChainConfig>::build_payload(
                 json!([hex_tx]),
@@ -41,7 +29,6 @@ pub fn build_send_signed_tx_request(tx: &TransactionReceipt) -> Value {
             )
         }
         _ => {
-            dbg!("[build_send_signed_tx_request] variant=unsupported");
             json!({"error": "transactions not supported in EVM operations"})
         }
     }
