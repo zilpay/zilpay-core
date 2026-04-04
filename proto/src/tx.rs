@@ -3,6 +3,7 @@ use crate::btc_tx;
 use crate::keypair::KeyPair;
 use crate::pubkey::PubKey;
 use crate::signature::Signature;
+use crate::solana_tx::{SolanaTransaction, SolanaTransactionReceipt};
 use crate::tron_tx::{TronTransaction, TronTransactionReceipt};
 use crate::zil_tx::{ZILTransactionReceipt, ZILTransactionRequest};
 use crate::zq1_proto::{create_proto_tx, version_from_chainid};
@@ -67,6 +68,7 @@ pub enum TransactionReceipt {
     Ethereum((TxEnvelope, TransactionMetadata)),
     Bitcoin((BitcoinTransaction, TransactionMetadata)),
     Tron((TronTransactionReceipt, TransactionMetadata)),
+    Solana((SolanaTransactionReceipt, TransactionMetadata)),
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -76,6 +78,7 @@ pub enum TransactionRequest {
     Ethereum((ETHTransactionRequest, TransactionMetadata)),
     Bitcoin((BTCTransactionRequest, TransactionMetadata)),
     Tron((TronTransaction, TransactionMetadata)),
+    Solana((SolanaTransaction, TransactionMetadata)),
 }
 
 impl TransactionReceipt {
@@ -173,6 +176,26 @@ impl TransactionReceipt {
             }
 
             Self::Tron((tx, _metadata)) => tx.verify(),
+
+            Self::Solana((receipt, metadata)) => {
+                let signer = metadata
+                    .signer
+                    .as_ref()
+                    .ok_or(KeyPairError::InvalidPublicKey)?;
+                let pk_bytes: [u8; 32] = signer
+                    .addr_bytes()
+                    .try_into()
+                    .map_err(|_| TransactionErrors::InvalidPublicKey)?;
+                let pk = PubKey::Ed25519Solana(pk_bytes);
+                let sig_bytes: [u8; 64] = receipt
+                    .signature
+                    .as_slice()
+                    .try_into()
+                    .map_err(|_| TransactionErrors::InvalidSignature)?;
+                let sig = Signature::Ed25519Solana(sig_bytes);
+                sig.verify(&receipt.message, &pk)
+                    .map_err(|_| TransactionErrors::InvalidSignature)
+            }
         }
     }
 
@@ -183,6 +206,7 @@ impl TransactionReceipt {
             Self::Ethereum((_tx, meta)) => meta.hash.as_deref(),
             Self::Bitcoin((_tx, metadata)) => metadata.hash.as_deref(),
             Self::Tron((_tx, metadata)) => metadata.hash.as_deref(),
+            Self::Solana((_tx, metadata)) => metadata.hash.as_deref(),
         }
     }
 
@@ -193,6 +217,7 @@ impl TransactionReceipt {
             Self::Ethereum((_tx, ref mut metadata)) => metadata,
             Self::Bitcoin((_tx, ref mut metadata)) => metadata,
             Self::Tron((_tx, ref mut metadata)) => metadata,
+            Self::Solana((_tx, ref mut metadata)) => metadata,
         }
     }
 
@@ -203,6 +228,7 @@ impl TransactionReceipt {
             Self::Ethereum((_tx, ref metadata)) => metadata,
             Self::Bitcoin((_tx, ref metadata)) => metadata,
             Self::Tron((_tx, ref metadata)) => metadata,
+            Self::Solana((_tx, ref metadata)) => metadata,
         }
     }
 }
@@ -300,6 +326,14 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Bitcoin((signed_tx, metadata)))
             }
+            TransactionRequest::Solana((tx, mut metadata)) => {
+                let receipt = tx
+                    .sign(keypair)
+                    .map_err(|e| TransactionErrors::ConvertTxError(e.to_string()))?;
+                metadata.hash = Some(receipt.tx_id());
+                metadata.signer = Some(keypair.get_addr()?);
+                Ok(TransactionReceipt::Solana((receipt, metadata)))
+            }
         }
     }
 
@@ -362,6 +396,7 @@ impl TransactionRequest {
                 Ok(psbt.serialize())
             }
             TransactionRequest::Tron((tx, _)) => Ok(tx.encode()),
+            TransactionRequest::Solana((tx, _)) => Ok(tx.message.clone()),
         }
     }
 
@@ -456,6 +491,17 @@ impl TransactionRequest {
 
                 Ok(TransactionReceipt::Tron((receipt, metadata)))
             }
+            TransactionRequest::Solana((tx, mut metadata)) => {
+                let sig_bytes: [u8; 64] = signature_bytes
+                    .try_into()
+                    .map_err(|_| TransactionErrors::InvalidSignature)?;
+                let receipt = SolanaTransactionReceipt {
+                    message: tx.message,
+                    signature: sig_bytes.to_vec(),
+                };
+                metadata.hash = Some(receipt.tx_id());
+                Ok(TransactionReceipt::Solana((receipt, metadata)))
+            }
         }
     }
 
@@ -494,6 +540,7 @@ impl TransactionRequest {
             TransactionRequest::Tron((tx, _)) => tx
                 .to_address()
                 .unwrap_or(Address::Secp256k1Tron(Address::ZERO)),
+            TransactionRequest::Solana((_, _)) => Address::Ed25519Solana([0u8; 32]),
         }
     }
 
@@ -509,6 +556,9 @@ impl TransactionRequest {
                 metadata.icon = Some(icon);
             }
             TransactionRequest::Tron((_, metadata)) => {
+                metadata.icon = Some(icon);
+            }
+            TransactionRequest::Solana((_, metadata)) => {
                 metadata.icon = Some(icon);
             }
         }
@@ -914,6 +964,44 @@ mod tests_tx {
         let tx_res = tx_req.sign(&keypair2).await.unwrap();
         let verify = tx_res.verify();
 
+        assert!(verify.is_ok());
+        assert!(!verify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_sign_verify_solana_tx() {
+        use crate::solana_tx::SolanaTransaction;
+
+        let keypair = KeyPair::gen_solana().unwrap();
+        let message = vec![0x01u8, 0x02, 0x03, 0x04, 0xde, 0xad, 0xbe, 0xef];
+        let sol_tx = SolanaTransaction { message: message.clone() };
+
+        let tx_req = TransactionRequest::Solana((sol_tx, Default::default()));
+        let tx_res = tx_req.sign(&keypair).await.unwrap();
+
+        assert!(matches!(tx_res, TransactionReceipt::Solana(_)));
+        assert!(tx_res.hash().is_some());
+
+        let verify = tx_res.verify();
+        assert!(verify.is_ok());
+        assert!(verify.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_solana_tx_wrong_keypair_fails() {
+        use crate::solana_tx::SolanaTransaction;
+
+        let keypair1 = KeyPair::gen_solana().unwrap();
+        let keypair2 = KeyPair::gen_solana().unwrap();
+        let message = b"hello solana transaction".to_vec();
+        let sol_tx = SolanaTransaction { message: message.clone() };
+
+        let tx_req = TransactionRequest::Solana((sol_tx, Default::default()));
+        let mut tx_res = tx_req.sign(&keypair1).await.unwrap();
+
+        tx_res.get_mut_metadata().signer = Some(keypair2.get_addr().unwrap());
+
+        let verify = tx_res.verify();
         assert!(verify.is_ok());
         assert!(!verify.unwrap());
     }

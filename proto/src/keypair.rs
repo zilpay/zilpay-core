@@ -4,14 +4,15 @@ use alloy::{
     network::EthereumWallet,
     signers::{local::PrivateKeySigner, SignerSync},
 };
-use config::key::{BIP39_SEED_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
+use config::key::{BIP39_SEED_SIZE, ED25519_PUB_KEY_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
 use crypto::{bip49::DerivationPath, schnorr, slip44};
+use ed25519_dalek::{Signer as Ed25519Signer, SigningKey};
 use k256::SecretKey as K256SecretKey;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::{
     address::Address,
-    bip32::derive_private_key,
+    bip32::{derive_ed25519_key, derive_private_key},
     btc_utils::ByteCodec,
     pubkey::PubKey,
     signature::Signature,
@@ -41,6 +42,7 @@ pub enum KeyPair {
         ),
     ),
     Secp256k1Tron(([u8; PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
+    Ed25519Solana(([u8; ED25519_PUB_KEY_SIZE], [u8; SECRET_KEY_SIZE])),
 }
 
 impl Zeroize for KeyPair {
@@ -59,6 +61,10 @@ impl Zeroize for KeyPair {
                 sk.zeroize();
             }
             KeyPair::Secp256k1Tron((pk, sk)) => {
+                pk.zeroize();
+                sk.zeroize();
+            }
+            KeyPair::Ed25519Solana((pk, sk)) => {
                 pk.zeroize();
                 sk.zeroize();
             }
@@ -95,19 +101,21 @@ impl KeyPair {
 
     pub fn to_sha256(self) -> Self {
         match self {
-            Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Sha256(vlaue),
+            Self::Secp256k1Sha256(value) => Self::Secp256k1Sha256(value),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Sha256(value),
             Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Sha256((pk, sk)),
             Self::Secp256k1Tron(value) => Self::Secp256k1Sha256(value),
+            Self::Ed25519Solana(value) => Self::Ed25519Solana(value),
         }
     }
 
     pub fn to_keccak256(self) -> Self {
         match self {
-            Self::Secp256k1Sha256(vlaue) => Self::Secp256k1Keccak256(vlaue),
+            Self::Secp256k1Sha256(value) => Self::Secp256k1Keccak256(value),
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Keccak256(value),
             Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Keccak256((pk, sk)),
             Self::Secp256k1Tron(value) => Self::Secp256k1Keccak256(value),
+            Self::Ed25519Solana(value) => Self::Ed25519Solana(value),
         }
     }
 
@@ -121,6 +129,7 @@ impl KeyPair {
                 Self::Secp256k1Bitcoin((pk, sk, network, addr_type))
             }
             Self::Secp256k1Tron((pk, sk)) => Self::Secp256k1Bitcoin((pk, sk, network, addr_type)),
+            Self::Ed25519Solana(value) => Self::Ed25519Solana(value),
         }
     }
 
@@ -130,6 +139,7 @@ impl KeyPair {
             Self::Secp256k1Keccak256(value) => Self::Secp256k1Tron(value),
             Self::Secp256k1Bitcoin((pk, sk, _, _)) => Self::Secp256k1Tron((pk, sk)),
             Self::Secp256k1Tron(value) => Self::Secp256k1Tron(value),
+            Self::Ed25519Solana(value) => Self::Ed25519Solana(value),
         }
     }
 
@@ -167,30 +177,52 @@ impl KeyPair {
         Ok((pub_key, secret_key))
     }
 
-    pub fn from_secret_key(sk: SecretKey) -> Result<Self> {
-        let secret_key: K256SecretKey =
-            K256SecretKey::from_slice(sk.as_ref()).or(Err(KeyPairError::InvalidSecretKey))?;
-        let pub_key: [u8; PUB_KEY_SIZE] = secret_key
-            .public_key()
-            .to_sec1_bytes()
-            .to_vec()
-            .try_into()
-            .or(Err(KeyPairError::InvalidSecretKey))?;
+    pub fn gen_solana() -> Result<Self> {
+        let mut rng = rand_chacha::ChaCha20Rng::from_entropy();
+        let mut sk_bytes = [0u8; SECRET_KEY_SIZE];
+        rng.fill_bytes(&mut sk_bytes);
+        let signing_key = SigningKey::from_bytes(&sk_bytes);
+        let pk: [u8; ED25519_PUB_KEY_SIZE] = signing_key.verifying_key().to_bytes();
+        Ok(Self::Ed25519Solana((pk, sk_bytes)))
+    }
 
+    pub fn from_secret_key(sk: SecretKey) -> Result<Self> {
         match sk {
+            SecretKey::Ed25519Solana(sk_bytes) => {
+                let signing_key = SigningKey::from_bytes(&sk_bytes);
+                let pk: [u8; ED25519_PUB_KEY_SIZE] = signing_key.verifying_key().to_bytes();
+                Ok(KeyPair::Ed25519Solana((pk, sk_bytes)))
+            }
             SecretKey::Secp256k1Keccak256Ethereum(sk) => {
+                let (pub_key, _) = Self::from_sk_bytes(sk)?;
                 Ok(KeyPair::Secp256k1Keccak256((pub_key, sk)))
             }
-            SecretKey::Secp256k1Sha256Zilliqa(sk) => Ok(KeyPair::Secp256k1Sha256((pub_key, sk))),
+            SecretKey::Secp256k1Sha256Zilliqa(sk) => {
+                let (pub_key, _) = Self::from_sk_bytes(sk)?;
+                Ok(KeyPair::Secp256k1Sha256((pub_key, sk)))
+            }
             SecretKey::Secp256k1Bitcoin((sk, network, addr_type)) => {
+                let (pub_key, _) = Self::from_sk_bytes(sk)?;
                 Ok(KeyPair::Secp256k1Bitcoin((pub_key, sk, network, addr_type)))
             }
-            SecretKey::Secp256k1Tron(sk) => Ok(KeyPair::Secp256k1Tron((pub_key, sk))),
+            SecretKey::Secp256k1Tron(sk) => {
+                let (pub_key, _) = Self::from_sk_bytes(sk)?;
+                Ok(KeyPair::Secp256k1Tron((pub_key, sk)))
+            }
         }
     }
 
     pub fn from_bip39_seed(seed: &[u8; BIP39_SEED_SIZE], bip49: &DerivationPath) -> Result<Self> {
         let path = bip49.get_path();
+
+        if bip49.slip44 == slip44::SOLANA {
+            let signing_key = derive_ed25519_key(seed, &path)
+                .map_err(KeyPairError::ExtendedPrivKeyDeriveError)?;
+            let sk: [u8; SECRET_KEY_SIZE] = signing_key.to_bytes();
+            let pk: [u8; ED25519_PUB_KEY_SIZE] = signing_key.verifying_key().to_bytes();
+            return Ok(Self::Ed25519Solana((pk, sk)));
+        }
+
         let secret_key =
             derive_private_key(seed, &path).map_err(KeyPairError::ExtendedPrivKeyDeriveError)?;
         let pub_key: [u8; PUB_KEY_SIZE] = secret_key
@@ -217,11 +249,9 @@ impl KeyPair {
                 )))
             }
             slip44::TRON => Ok(Self::Secp256k1Tron((pub_key, secret_key))),
-            _ => {
-                Err(KeyPairError::ExtendedPrivKeyDeriveError(
-                    Bip329Errors::InvalidSlip44(bip49.slip44),
-                ))
-            }
+            _ => Err(KeyPairError::ExtendedPrivKeyDeriveError(
+                Bip329Errors::InvalidSlip44(bip49.slip44),
+            )),
         }
     }
 
@@ -240,6 +270,7 @@ impl KeyPair {
                 Ok(SecretKey::Secp256k1Bitcoin((*sk, *network, *addr_type)))
             }
             KeyPair::Secp256k1Tron((_, sk)) => Ok(SecretKey::Secp256k1Tron(*sk)),
+            KeyPair::Ed25519Solana((_, sk)) => Ok(SecretKey::Ed25519Solana(*sk)),
         }
     }
 
@@ -251,15 +282,17 @@ impl KeyPair {
                 Ok(PubKey::Secp256k1Bitcoin((*pk, *network, *addr_type)))
             }
             KeyPair::Secp256k1Tron((pk, _)) => Ok(PubKey::Secp256k1Tron(*pk)),
+            KeyPair::Ed25519Solana((pk, _)) => Ok(PubKey::Ed25519Solana(*pk)),
         }
     }
 
-    pub fn get_pubkey_bytes(&self) -> &[u8; PUB_KEY_SIZE] {
+    pub fn get_pubkey_bytes(&self) -> &[u8] {
         match self {
             KeyPair::Secp256k1Sha256((pk, _)) => pk,
             KeyPair::Secp256k1Keccak256((pk, _)) => pk,
             KeyPair::Secp256k1Bitcoin((pk, _, _, _)) => pk,
             KeyPair::Secp256k1Tron((pk, _)) => pk,
+            KeyPair::Ed25519Solana((pk, _)) => pk,
         }
     }
 
@@ -269,6 +302,7 @@ impl KeyPair {
             KeyPair::Secp256k1Keccak256((_, sk)) => *sk,
             KeyPair::Secp256k1Bitcoin((_, sk, _, _)) => *sk,
             KeyPair::Secp256k1Tron((_, sk)) => *sk,
+            KeyPair::Ed25519Solana((_, sk)) => *sk,
         }
     }
 
@@ -316,6 +350,11 @@ impl KeyPair {
 
                 Ok(sig)
             }
+            KeyPair::Ed25519Solana((_, sk)) => {
+                let signing_key = SigningKey::from_bytes(sk);
+                let sig_bytes: [u8; 64] = signing_key.sign(msg).to_bytes();
+                Ok(Signature::Ed25519Solana(sig_bytes))
+            }
         }
     }
 
@@ -341,6 +380,7 @@ impl KeyPair {
                     .map_err(KeyPairError::InvalidSignature)?;
                 Ok(sig)
             }
+            KeyPair::Ed25519Solana((_, _)) => Err(KeyPairError::InvalidEd25519Solana),
         }
     }
 
@@ -364,6 +404,7 @@ impl KeyPair {
             KeyPair::Secp256k1Sha256((_, _)) => Err(KeyPairError::InvalidSecp256k1Sha256),
             KeyPair::Secp256k1Bitcoin((_, _, _, _)) => Err(KeyPairError::InvalidSecp256k1Bitcoin),
             KeyPair::Secp256k1Tron((_, _)) => Err(KeyPairError::InvalidSecp256k1Tron),
+            KeyPair::Ed25519Solana((_, _)) => Err(KeyPairError::InvalidEd25519Solana),
         }
     }
 
@@ -419,6 +460,12 @@ impl KeyPair {
                 result.extend_from_slice(sk);
                 Ok(result)
             }
+            KeyPair::Ed25519Solana((pk, sk)) => {
+                let mut result = vec![5u8];
+                result.extend_from_slice(pk);
+                result.extend_from_slice(sk);
+                Ok(result)
+            }
         }
     }
 
@@ -447,6 +494,18 @@ impl KeyPair {
                     3 => Ok(KeyPair::Secp256k1Tron((pk, sk))),
                     _ => unreachable!(),
                 }
+            }
+            5 => {
+                if bytes.len() != ED25519_PUB_KEY_SIZE + SECRET_KEY_SIZE + 1 {
+                    return Err(KeyPairError::InvalidLength);
+                }
+                let pk: [u8; ED25519_PUB_KEY_SIZE] = bytes[1..ED25519_PUB_KEY_SIZE + 1]
+                    .try_into()
+                    .map_err(|_| KeyPairError::InvalidPublicKey)?;
+                let sk: [u8; SECRET_KEY_SIZE] = bytes[ED25519_PUB_KEY_SIZE + 1..]
+                    .try_into()
+                    .map_err(|_| KeyPairError::InvalidSecretKey)?;
+                Ok(KeyPair::Ed25519Solana((pk, sk)))
             }
             2 => {
                 if bytes.len() != PUB_KEY_SIZE + SECRET_KEY_SIZE + 3 {
@@ -1298,5 +1357,92 @@ mod tests_keypair {
                 index, expected_addr, derived_addr
             );
         }
+    }
+
+    #[test]
+    fn test_solana_gen_keypair() {
+        let keypair = KeyPair::gen_solana().unwrap();
+        assert!(matches!(keypair, KeyPair::Ed25519Solana(_)));
+
+        let pubkey = keypair.get_pubkey().unwrap();
+        assert!(matches!(pubkey, crate::pubkey::PubKey::Ed25519Solana(_)));
+
+        let addr = keypair.get_addr().unwrap();
+        assert!(matches!(addr, crate::address::Address::Ed25519Solana(_)));
+
+        let addr_str = addr.auto_format();
+        assert!(!addr_str.is_empty());
+    }
+
+    #[test]
+    fn test_solana_keypair_from_bip39() {
+        let phrase = "test test test test test test test test test test test junk";
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
+        let seed = mnemonic.to_seed("").unwrap();
+
+        let vectors: &[(crypto::bip49::DerivationType, &str)] = &[
+            (crypto::bip49::DerivationType::Root, "9tKf8Q98FsGKJiM4oqMnTxmYH3fU2qJzSwzc76vgzyBT"),
+            (crypto::bip49::DerivationType::Account(0), "BtELVjZSaWhMat94P9HyasX3Gvpv6C7WHXJGqWdZbwSQ"),
+            (crypto::bip49::DerivationType::Account(1), "M9juqHHtP85PvRKX3d4FS9jkF1WHZwyX3dG7NcYswdH"),
+        ];
+
+        for (derivation, expected_addr) in vectors {
+            let path = DerivationPath::new(slip44::SOLANA, *derivation, DerivationPath::BIP44_PURPOSE, None);
+            let keypair = KeyPair::from_bip39_seed(&seed, &path).unwrap();
+            assert!(matches!(keypair, KeyPair::Ed25519Solana(_)));
+            let addr = keypair.get_addr().unwrap().auto_format();
+            assert_eq!(addr, *expected_addr);
+        }
+    }
+
+    #[test]
+    fn test_solana_keypair_sign_verify() {
+        let keypair = KeyPair::gen_solana().unwrap();
+        let message = b"hello solana";
+
+        let signature = keypair.sign_message(message).unwrap();
+        assert!(matches!(signature, crate::signature::Signature::Ed25519Solana(_)));
+
+        let is_valid = keypair.verify_sig(message, &signature).unwrap();
+        assert!(is_valid);
+
+        let wrong_msg = b"wrong message";
+        let is_valid_wrong = keypair.verify_sig(wrong_msg, &signature).unwrap();
+        assert!(!is_valid_wrong);
+    }
+
+    #[test]
+    fn test_solana_keypair_to_from_bytes() {
+        let keypair = KeyPair::gen_solana().unwrap();
+        let bytes = keypair.to_bytes().unwrap();
+
+        assert_eq!(bytes[0], 5u8);
+        assert_eq!(bytes.len(), ED25519_PUB_KEY_SIZE + SECRET_KEY_SIZE + 1);
+
+        let recovered = KeyPair::from_bytes(Cow::Borrowed(&bytes)).unwrap();
+        assert_eq!(keypair, recovered);
+        assert_eq!(
+            keypair.get_addr().unwrap().auto_format(),
+            recovered.get_addr().unwrap().auto_format()
+        );
+    }
+
+    #[test]
+    fn test_solana_from_secret_key() {
+        let phrase = "test test test test test test test test test test test junk";
+        let mnemonic = Mnemonic::parse_str(&EN_WORDS, phrase).unwrap();
+        let seed = mnemonic.to_seed("").unwrap();
+
+        let path = DerivationPath::new(slip44::SOLANA, crypto::bip49::DerivationType::Account(0), DerivationPath::BIP44_PURPOSE, None);
+        let keypair = KeyPair::from_bip39_seed(&seed, &path).unwrap();
+
+        let sk = keypair.get_secretkey().unwrap();
+        let keypair2 = KeyPair::from_secret_key(sk).unwrap();
+
+        assert_eq!(keypair.get_pubkey_bytes(), keypair2.get_pubkey_bytes());
+        assert_eq!(
+            keypair.get_addr().unwrap().auto_format(),
+            "BtELVjZSaWhMat94P9HyasX3Gvpv6C7WHXJGqWdZbwSQ"
+        );
     }
 }

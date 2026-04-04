@@ -1036,7 +1036,7 @@ mod tests_background_transactions {
             .reveal_keypair(0, &argon_seed, None)
             .unwrap();
 
-        assert_eq!(pubkey.as_bytes(), *key_pair.get_pubkey_bytes());
+        assert_eq!(pubkey.as_bytes(), key_pair.get_pubkey_bytes());
         let is_valid = key_pair.verify_sig(&hashed_message, &signature).unwrap();
 
         assert!(is_valid);
@@ -1318,7 +1318,7 @@ mod tests_background_transactions {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let key_pair = wallet.reveal_keypair(0, &argon_seed, None).unwrap();
 
-        assert_eq!(pubkey.as_bytes(), *key_pair.get_pubkey_bytes());
+        assert_eq!(pubkey.as_bytes(), key_pair.get_pubkey_bytes());
 
         let prefixed_msg = format!("\x19TRON Signed Message:\n{}", message.len());
         let mut full_msg = prefixed_msg.into_bytes();

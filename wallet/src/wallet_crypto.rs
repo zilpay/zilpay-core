@@ -101,6 +101,7 @@ impl WalletCrypto for Wallet {
                         let net = account.addr.get_bitcoin_network()?;
                         keypair = keypair.to_bitcoin(net, addr_type);
                     }
+                    Address::Ed25519Solana(_) => {}
                 }
 
                 Ok(keypair)

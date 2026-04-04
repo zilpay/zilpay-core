@@ -19,6 +19,7 @@ pub enum SecretKey {
         ),
     ),
     Secp256k1Tron([u8; SECRET_KEY_SIZE]),
+    Ed25519Solana([u8; SECRET_KEY_SIZE]),
 }
 
 impl Zeroize for SecretKey {
@@ -28,6 +29,7 @@ impl Zeroize for SecretKey {
             SecretKey::Secp256k1Keccak256Ethereum(key) => key.zeroize(),
             SecretKey::Secp256k1Bitcoin((key, _, _)) => key.zeroize(),
             SecretKey::Secp256k1Tron(key) => key.zeroize(),
+            SecretKey::Ed25519Solana(key) => key.zeroize(),
         }
     }
 }
@@ -95,6 +97,11 @@ impl SecretKey {
                 result.extend_from_slice(sk);
                 Ok(result)
             }
+            SecretKey::Ed25519Solana(sk) => {
+                let mut result = vec![4u8];
+                result.extend_from_slice(sk);
+                Ok(result)
+            }
         }
     }
 
@@ -106,7 +113,7 @@ impl SecretKey {
         let key_type = bytes[0];
 
         match key_type {
-            0 | 1 | 3 => {
+            0 | 1 | 3 | 4 => {
                 if bytes.len() != SECRET_KEY_SIZE + 1 {
                     return Err(SecretKeyError::InvalidLength);
                 }
@@ -118,6 +125,7 @@ impl SecretKey {
                     0 => Ok(SecretKey::Secp256k1Sha256Zilliqa(key_data)),
                     1 => Ok(SecretKey::Secp256k1Keccak256Ethereum(key_data)),
                     3 => Ok(SecretKey::Secp256k1Tron(key_data)),
+                    4 => Ok(SecretKey::Ed25519Solana(key_data)),
                     _ => unreachable!(),
                 }
             }
@@ -153,6 +161,7 @@ impl AsRef<[u8]> for SecretKey {
             SecretKey::Secp256k1Keccak256Ethereum(data) => data,
             SecretKey::Secp256k1Bitcoin((data, _, _)) => data,
             SecretKey::Secp256k1Tron(data) => data,
+            SecretKey::Ed25519Solana(data) => data,
         }
     }
 }
@@ -674,5 +683,30 @@ mod tests {
                 private_key_hex
             );
         }
+    }
+
+    #[test]
+    fn test_solana_secret_key_roundtrip() {
+        let sk_hex = "8ba10912374d1adbc6db8aae59ea0af7f1e6c8e47349ca958c26b99ee0229af6";
+        let sk_bytes: [u8; SECRET_KEY_SIZE] = hex::decode(sk_hex).unwrap().try_into().unwrap();
+        let sk = SecretKey::Ed25519Solana(sk_bytes);
+
+        let bytes = sk.to_bytes().unwrap();
+        assert_eq!(bytes[0], 4u8);
+        assert_eq!(bytes.len(), SECRET_KEY_SIZE + 1);
+
+        let recovered = SecretKey::from_bytes(std::borrow::Cow::Borrowed(&bytes)).unwrap();
+        assert!(matches!(recovered, SecretKey::Ed25519Solana(_)));
+        assert_eq!(sk, recovered);
+    }
+
+    #[test]
+    fn test_solana_secret_key_display_roundtrip() {
+        let sk_bytes = [0xabu8; SECRET_KEY_SIZE];
+        let sk = SecretKey::Ed25519Solana(sk_bytes);
+
+        let display = sk.to_string();
+        let parsed: SecretKey = display.parse().unwrap();
+        assert_eq!(sk, parsed);
     }
 }

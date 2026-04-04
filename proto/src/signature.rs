@@ -1,8 +1,10 @@
 use alloy::primitives::B256;
 use alloy::signers::k256;
 use alloy::signers::Signature as EthersSignature;
+use config::key::ED25519_PUB_KEY_SIZE;
 use config::sha::{ECDSAS_ECP256K1_KECCAK256_SIZE, SHA512_SIZE};
 use crypto::schnorr;
+use ed25519_dalek::{Signature as Ed25519Sig, Verifier, VerifyingKey};
 use errors::crypto::SignatureError;
 use k256::ecdsa::Signature as SchnorrSignature;
 use k256::PublicKey as K256PublicKey;
@@ -11,10 +13,13 @@ use crate::pubkey::PubKey;
 
 type Result<T> = std::result::Result<T, SignatureError>;
 
+pub const ED25519_SIG_SIZE: usize = 64;
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum Signature {
     SchnorrSecp256k1Sha256([u8; SHA512_SIZE]), // Zilliqa
     ECDSASecp256k1Keccak256([u8; ECDSAS_ECP256K1_KECCAK256_SIZE]), // Ethereum
+    Ed25519Solana([u8; ED25519_SIG_SIZE]),     // Solana
 }
 
 impl Signature {
@@ -25,10 +30,15 @@ impl Signature {
         bytes.as_slice().try_into()
     }
 
+    pub fn from_ed25519_bytes(bytes: [u8; ED25519_SIG_SIZE]) -> Self {
+        Self::Ed25519Solana(bytes)
+    }
+
     pub fn to_hex_prefixed(&self) -> String {
         match self {
             Self::SchnorrSecp256k1Sha256(bytes) => alloy::hex::encode_prefixed(bytes),
             Self::ECDSASecp256k1Keccak256(bytes) => alloy::hex::encode_prefixed(bytes),
+            Self::Ed25519Solana(bytes) => alloy::hex::encode_prefixed(bytes),
         }
     }
 
@@ -54,6 +64,16 @@ impl Signature {
 
                 Ok(recovered_address == signer_address)
             }
+            Signature::Ed25519Solana(sig_bytes) => {
+                let pk_bytes: [u8; ED25519_PUB_KEY_SIZE] = pk
+                    .as_ref()
+                    .try_into()
+                    .map_err(|_| SignatureError::FailIntoPubKey(errors::keypair::PubKeyError::InvalidLength))?;
+                let verifying_key = VerifyingKey::from_bytes(&pk_bytes)
+                    .map_err(|_| SignatureError::FailParseSignature)?;
+                let sig = Ed25519Sig::from_bytes(sig_bytes);
+                Ok(verifying_key.verify(msg_bytes, &sig).is_ok())
+            }
         }
     }
 
@@ -73,6 +93,7 @@ impl Signature {
 
                 Ok(recovered_address == signer_address)
             }
+            Signature::Ed25519Solana(_) => Err(SignatureError::FailParseSignature),
         }
     }
 }

@@ -1,4 +1,4 @@
-use config::key::PUB_KEY_SIZE;
+use config::key::{ED25519_PUB_KEY_SIZE, PUB_KEY_SIZE};
 use errors::keypair::PubKeyError;
 use k256::PublicKey as K256PublicKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -15,7 +15,7 @@ pub enum PubKey {
     Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
     Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)), // Bitcoin
     Secp256k1Tron([u8; PUB_KEY_SIZE]),      // Tron
-    Ed25519Solana([u8; PUB_KEY_SIZE]),      // Solana
+    Ed25519Solana([u8; ED25519_PUB_KEY_SIZE]), // Solana
 }
 
 impl PubKey {
@@ -84,7 +84,7 @@ impl PubKey {
             }
             PubKey::Ed25519Solana(pk) => {
                 let mut result = vec![3u8];
-                result.extend_from_slice(pk);
+                result.extend_from_slice(pk.as_slice());
                 Ok(result)
             }
             PubKey::Secp256k1Tron(pk) => {
@@ -168,8 +168,8 @@ impl TryFrom<&[u8]> for PubKey {
         let key_type = slice[0];
 
         match key_type {
-            0 | 1 | 3 | 4 => {
-                // Zilliqa, Ethereum, Solana, Tron: 1 + 33 bytes
+            0 | 1 | 4 => {
+                // Zilliqa, Ethereum, Tron: 1 + 33 bytes
                 if slice.len() != PUB_KEY_SIZE + 1 {
                     return Err(PubKeyError::InvalidLength);
                 }
@@ -180,10 +180,19 @@ impl TryFrom<&[u8]> for PubKey {
                 match key_type {
                     0 => Ok(PubKey::Secp256k1Sha256(key_data)),
                     1 => Ok(PubKey::Secp256k1Keccak256(key_data)),
-                    3 => Ok(PubKey::Ed25519Solana(key_data)),
                     4 => Ok(PubKey::Secp256k1Tron(key_data)),
                     _ => unreachable!(),
                 }
+            }
+            3 => {
+                // Solana: 1 + 32 bytes
+                if slice.len() != ED25519_PUB_KEY_SIZE + 1 {
+                    return Err(PubKeyError::InvalidLength);
+                }
+                let key_data: [u8; ED25519_PUB_KEY_SIZE] = slice[1..]
+                    .try_into()
+                    .map_err(|_| PubKeyError::InvalidLength)?;
+                Ok(PubKey::Ed25519Solana(key_data))
             }
             2 => {
                 // Bitcoin: 1 + 1 + 1 + 33 bytes
@@ -470,7 +479,8 @@ mod tests {
             bitcoin::Network::Bitcoin,
             bitcoin::AddressType::P2wpkh,
         ));
-        let sol = PubKey::Ed25519Solana(data);
+        let sol_data = [55u8; ED25519_PUB_KEY_SIZE];
+        let sol = PubKey::Ed25519Solana(sol_data);
 
         for key in [zil, eth, btc, sol] {
             let bytes = key.to_bytes().unwrap();

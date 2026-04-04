@@ -5,6 +5,7 @@ use crate::{
         from_zil_base16, from_zil_bech32_address, from_zil_pub_key, to_bech32, to_checksum_address,
     },
 };
+use config::key::ED25519_PUB_KEY_SIZE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
 use std::hash::{Hash, Hasher};
@@ -17,10 +18,11 @@ type Result<T> = std::result::Result<T, AddressError>;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Address {
-    Secp256k1Sha256([u8; ADDR_LEN]),    // ZILLIQA
-    Secp256k1Keccak256([u8; ADDR_LEN]), // Ethereum
-    Secp256k1Bitcoin(Vec<u8>),          // Bitcoin (UTF-8 encoded address string)
-    Secp256k1Tron([u8; ADDR_LEN]),      // Tron
+    Secp256k1Sha256([u8; ADDR_LEN]),           // ZILLIQA
+    Secp256k1Keccak256([u8; ADDR_LEN]),        // Ethereum
+    Secp256k1Bitcoin(Vec<u8>),                 // Bitcoin (UTF-8 encoded address string)
+    Secp256k1Tron([u8; ADDR_LEN]),             // Tron
+    Ed25519Solana([u8; ED25519_PUB_KEY_SIZE]), // Solana (raw 32-byte pubkey)
 }
 
 impl Address {
@@ -39,7 +41,28 @@ impl Address {
             Address::Secp256k1Keccak256(_) => self.to_eth_checksummed().unwrap_or_default(),
             Address::Secp256k1Bitcoin(data) => String::from_utf8(data.clone()).unwrap_or_default(),
             Address::Secp256k1Tron(bytes) => Self::tron_to_base58check(bytes),
+            Address::Ed25519Solana(bytes) => bs58::encode(bytes).into_string(),
         }
+    }
+
+    pub fn from_solana_address(addr: &str) -> Result<Self> {
+        let decoded = bs58::decode(addr)
+            .into_vec()
+            .map_err(|e| AddressError::InvalidSolanaAddress(e.to_string()))?;
+        let bytes: [u8; ED25519_PUB_KEY_SIZE] = decoded
+            .try_into()
+            .map_err(|_| AddressError::InvalidSolanaAddress("Invalid length".to_string()))?;
+        Ok(Self::Ed25519Solana(bytes))
+    }
+
+    pub fn is_solana_address(addr: &str) -> bool {
+        if addr.len() < 32 || addr.len() > 44 {
+            return false;
+        }
+        bs58::decode(addr)
+            .into_vec()
+            .map(|v| v.len() == ED25519_PUB_KEY_SIZE)
+            .unwrap_or(false)
     }
 
     pub fn from_str_hex(addr: &str) -> Result<Self> {
@@ -53,6 +76,10 @@ impl Address {
 
         if Self::is_tron_address(addr) {
             return Self::from_tron_address(addr);
+        }
+
+        if Self::is_solana_address(addr) {
+            return Self::from_solana_address(addr);
         }
 
         if Self::is_bitcoin_address(addr) {
@@ -189,6 +216,7 @@ impl Address {
             Address::Secp256k1Sha256(_) => DerivationPath::BIP44_PURPOSE,
             Address::Secp256k1Keccak256(_) => DerivationPath::BIP44_PURPOSE,
             Address::Secp256k1Tron(_) => DerivationPath::BIP44_PURPOSE,
+            Address::Ed25519Solana(_) => DerivationPath::BIP44_PURPOSE,
             Address::Secp256k1Bitcoin(_) => self
                 .get_bitcoin_address_type()
                 .map(DerivationPath::bip_from_address_type)
@@ -299,7 +327,7 @@ impl Address {
 
                 Ok(Self::Secp256k1Tron(addr.into()))
             }
-            PubKey::Ed25519Solana(_) => Err(AddressError::NotImpl),
+            PubKey::Ed25519Solana(pk) => Ok(Self::Ed25519Solana(*pk)),
         }
     }
 
@@ -308,6 +336,7 @@ impl Address {
             Address::Secp256k1Sha256(_) => 0,
             Address::Secp256k1Keccak256(_) => 1,
             Address::Secp256k1Bitcoin(_) => 2,
+            Address::Ed25519Solana(_) => 3,
             Address::Secp256k1Tron(_) => 4,
         }
     }
@@ -324,6 +353,7 @@ impl Address {
             Address::Secp256k1Keccak256(v) => v,
             Address::Secp256k1Bitcoin(v) => v,
             Address::Secp256k1Tron(v) => v,
+            Address::Ed25519Solana(v) => v,
         }
     }
 
@@ -335,35 +365,21 @@ impl Address {
 
     pub fn get_zil_base16(&self) -> Result<String> {
         match self {
-            Address::Secp256k1Sha256(v) => {
-                let addr = hex::encode(v);
-
-                Ok(addr)
-            }
-            Address::Secp256k1Keccak256(v) => {
-                let addr = hex::encode(v);
-
-                Ok(addr)
-            }
+            Address::Secp256k1Sha256(v) => Ok(hex::encode(v)),
+            Address::Secp256k1Keccak256(v) => Ok(hex::encode(v)),
             Address::Secp256k1Bitcoin(_) => Err(AddressError::InvalidAddressType),
             Address::Secp256k1Tron(_) => Err(AddressError::InvalidAddressType),
+            Address::Ed25519Solana(_) => Err(AddressError::InvalidAddressType),
         }
     }
 
     pub fn get_zil_check_sum_addr(&self) -> Result<String> {
         match self {
-            Address::Secp256k1Sha256(v) => {
-                let addr = hex::encode(v);
-
-                to_checksum_address(&addr)
-            }
-            Address::Secp256k1Keccak256(v) => {
-                let addr = hex::encode(v);
-
-                to_checksum_address(&addr)
-            }
+            Address::Secp256k1Sha256(v) => to_checksum_address(&hex::encode(v)),
+            Address::Secp256k1Keccak256(v) => to_checksum_address(&hex::encode(v)),
             Address::Secp256k1Bitcoin(_) => Err(AddressError::InvalidAddressType),
             Address::Secp256k1Tron(_) => Err(AddressError::InvalidAddressType),
+            Address::Ed25519Solana(_) => Err(AddressError::InvalidAddressType),
         }
     }
 }
@@ -371,19 +387,13 @@ impl Address {
 impl std::fmt::Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Secp256k1Sha256(bytes) => {
-                write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap())
-            }
+            Self::Secp256k1Sha256(bytes) => write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap()),
             Self::Secp256k1Keccak256(bytes) => {
-                let h = alloy::primitives::Address::from_slice(bytes);
-                write!(f, "{}", h.to_checksum(None))
+                write!(f, "{}", alloy::primitives::Address::from_slice(bytes).to_checksum(None))
             }
-            Self::Secp256k1Bitcoin(_) => {
-                write!(f, "{}", self.auto_format())
-            }
-            Self::Secp256k1Tron(bytes) => {
-                write!(f, "{}", Self::tron_to_base58check(bytes))
-            }
+            Self::Secp256k1Bitcoin(_) => write!(f, "{}", self.auto_format()),
+            Self::Secp256k1Tron(bytes) => write!(f, "{}", Self::tron_to_base58check(bytes)),
+            Self::Ed25519Solana(bytes) => write!(f, "{}", bs58::encode(bytes).into_string()),
         }
     }
 }
@@ -391,19 +401,13 @@ impl std::fmt::Display for Address {
 impl std::fmt::Debug for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Secp256k1Sha256(bytes) => {
-                write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap())
-            }
+            Self::Secp256k1Sha256(bytes) => write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap()),
             Self::Secp256k1Keccak256(bytes) => {
-                let h = alloy::primitives::Address::from_slice(bytes);
-                write!(f, "{}", h.to_checksum(None))
+                write!(f, "{}", alloy::primitives::Address::from_slice(bytes).to_checksum(None))
             }
-            Self::Secp256k1Bitcoin(_) => {
-                write!(f, "{}", self.auto_format())
-            }
-            Self::Secp256k1Tron(bytes) => {
-                write!(f, "{}", Self::tron_to_base58check(bytes))
-            }
+            Self::Secp256k1Bitcoin(_) => write!(f, "{}", self.auto_format()),
+            Self::Secp256k1Tron(bytes) => write!(f, "{}", Self::tron_to_base58check(bytes)),
+            Self::Ed25519Solana(bytes) => write!(f, "{}", bs58::encode(bytes).into_string()),
         }
     }
 }
@@ -414,6 +418,7 @@ impl Hash for Address {
             Address::Secp256k1Sha256(_) => 0u8.hash(state),
             Address::Secp256k1Keccak256(_) => 1u8.hash(state),
             Address::Secp256k1Bitcoin(_) => 2u8.hash(state),
+            Address::Ed25519Solana(_) => 3u8.hash(state),
             Address::Secp256k1Tron(_) => 4u8.hash(state),
         }
 
@@ -479,6 +484,15 @@ impl TryFrom<&[u8]> for Address {
                 let addr_bytes = slice[1..].to_vec();
                 Ok(Address::Secp256k1Bitcoin(addr_bytes))
             }
+            3 => {
+                if slice.len() != ED25519_PUB_KEY_SIZE + 1 {
+                    return Err(AddressError::InvalidLength);
+                }
+                let key_data: [u8; ED25519_PUB_KEY_SIZE] = slice[1..]
+                    .try_into()
+                    .map_err(|_| AddressError::InvalidLength)?;
+                Ok(Address::Ed25519Solana(key_data))
+            }
             4 => {
                 if slice.len() != ADDR_LEN + 1 {
                     return Err(AddressError::InvalidLength);
@@ -500,6 +514,7 @@ impl AsRef<[u8]> for Address {
             Address::Secp256k1Keccak256(data) => data,
             Address::Secp256k1Bitcoin(data) => data,
             Address::Secp256k1Tron(data) => data,
+            Address::Ed25519Solana(data) => data,
         }
     }
 }
@@ -573,7 +588,7 @@ mod tests {
         ));
 
         // Test invalid key type
-        let invalid_type_slice = vec![3u8; ADDR_LEN + 1];
+        let invalid_type_slice = vec![9u8; ADDR_LEN + 1];
         assert!(matches!(
             Address::try_from(invalid_type_slice.as_slice()),
             Err(AddressError::InvalidKeyType)
@@ -913,5 +928,52 @@ mod tests {
             assert_eq!(addr.to_string(), addr_str);
             assert_eq!(addr.auto_format(), addr_str);
         }
+    }
+
+    #[test]
+    fn test_solana_address_from_pubkey() {
+        let pk_hex = "8403366f00cce80bc3ae339d4bc5ec33a7b831c650993f95bf85fb8f62a227f6";
+        let pk_bytes: [u8; 32] = hex::decode(pk_hex).unwrap().try_into().unwrap();
+        let pk = PubKey::Ed25519Solana(pk_bytes);
+
+        let addr = Address::from_pubkey(&pk).unwrap();
+        assert!(matches!(addr, Address::Ed25519Solana(_)));
+        assert_eq!(addr.prefix_type(), 3);
+        assert_eq!(addr.auto_format(), "9tKf8Q98FsGKJiM4oqMnTxmYH3fU2qJzSwzc76vgzyBT");
+    }
+
+    #[test]
+    fn test_solana_address_roundtrip() {
+        let addr_str = "BtELVjZSaWhMat94P9HyasX3Gvpv6C7WHXJGqWdZbwSQ";
+        let addr = Address::from_solana_address(addr_str).unwrap();
+
+        assert!(matches!(addr, Address::Ed25519Solana(_)));
+        assert_eq!(addr.auto_format(), addr_str);
+        assert_eq!(addr.to_string(), addr_str);
+    }
+
+    #[test]
+    fn test_solana_address_to_from_bytes() {
+        let addr_str = "9tKf8Q98FsGKJiM4oqMnTxmYH3fU2qJzSwzc76vgzyBT";
+        let addr = Address::from_solana_address(addr_str).unwrap();
+
+        let bytes = addr.to_bytes();
+        assert_eq!(bytes[0], 3u8);
+        assert_eq!(bytes.len(), ED25519_PUB_KEY_SIZE + 1);
+
+        let recovered: Address = bytes.as_slice().try_into().unwrap();
+        assert_eq!(addr, recovered);
+        assert_eq!(recovered.auto_format(), addr_str);
+    }
+
+    #[test]
+    fn test_solana_address_serde() {
+        let addr_str = "M9juqHHtP85PvRKX3d4FS9jkF1WHZwyX3dG7NcYswdH";
+        let addr = Address::from_solana_address(addr_str).unwrap();
+
+        let json = serde_json::to_string(&addr).unwrap();
+        let recovered: Address = serde_json::from_str(&json).unwrap();
+        assert_eq!(addr, recovered);
+        assert_eq!(recovered.auto_format(), addr_str);
     }
 }
