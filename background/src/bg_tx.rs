@@ -752,6 +752,7 @@ mod tests_background_transactions {
             signer: data.get_selected_account().map(|acc| acc.addr.clone()).ok(),
             ..Default::default()
         };
+        assert!(metadata.broadcast);
         let zilpay_trasnfer_req = TransactionRequest::Ethereum((token_transfer_request, metadata));
         let argon_seed = bg
             .unlock_wallet_with_password(&password, None, 0)
@@ -830,6 +831,7 @@ mod tests_background_transactions {
             chain_hash: net_config.hash(),
             ..Default::default()
         };
+        assert!(metadata.broadcast);
         let mut tx_request = TransactionRequest::Ethereum((transfer_request.clone(), metadata));
 
         let params = provider
@@ -910,6 +912,7 @@ mod tests_background_transactions {
             chain_hash: net_hash,
             ..Default::default()
         };
+        assert!(metadata_0.broadcast);
         let mut tx_request_0 = TransactionRequest::Ethereum((transfer_request_0, metadata_0));
 
         let params_0 = provider
@@ -950,6 +953,7 @@ mod tests_background_transactions {
             chain_hash: net_hash,
             ..Default::default()
         };
+        assert!(metadata_1.broadcast);
         let mut tx_request_1 = TransactionRequest::Ethereum((transfer_request_1, metadata_1));
 
         let params_1 = provider
@@ -1212,6 +1216,7 @@ mod tests_background_transactions {
             chain_hash: net_config.hash(),
             ..Default::default()
         };
+        assert!(metadata.broadcast);
 
         let providers = bg.get_providers();
         let provider = providers.first().unwrap();

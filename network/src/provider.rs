@@ -643,6 +643,7 @@ mod tests_network {
             ),
             ..Default::default()
         };
+        assert!(tx_history.metadata.broadcast);
         let mut list_txns = vec![&mut tx_history];
 
         provider

@@ -572,6 +572,7 @@ mod tests {
             signed_message: None,
             timestamp: 1773553056000,
         };
+        assert!(tx.metadata.broadcast);
 
         let result = provider
             .evm_update_transactions_receipt(&mut [&mut tx])

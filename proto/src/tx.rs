@@ -730,6 +730,7 @@ mod tests_tx {
             btc_witness_utxos: Some(vec![witness_utxo]),
             ..Default::default()
         };
+        assert!(metadata.broadcast);
 
         let tx_req = TransactionRequest::Bitcoin((tx, metadata));
         let tx_res = tx_req.sign(&keypair).await.unwrap();
@@ -783,6 +784,7 @@ mod tests_tx {
             btc_witness_utxos: Some(vec![witness_utxo]),
             ..Default::default()
         };
+        assert!(metadata.broadcast);
 
         let tx_req = TransactionRequest::Bitcoin((tx, metadata));
         let tx_res = tx_req.sign(&keypair).await.unwrap();

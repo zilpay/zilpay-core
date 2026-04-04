@@ -500,7 +500,9 @@ mod tests {
                 script_pubkey: ScriptBuf::new(),
             }],
         };
-        let tx_request = TransactionRequest::Bitcoin((dummy_tx, TransactionMetadata::default()));
+        let tx_metadata = TransactionMetadata::default();
+        assert!(tx_metadata.broadcast);
+        let tx_request = TransactionRequest::Bitcoin((dummy_tx, tx_metadata));
 
         let params = provider
             .btc_estimate_params_batch(&tx_request)
@@ -542,6 +544,7 @@ mod tests {
             signed_message: None,
             timestamp: 0,
         };
+        assert!(test_tx.metadata.broadcast);
 
         let mut txns = vec![&mut test_tx];
 

@@ -361,6 +361,11 @@ mod tests_background_worker {
             ])
             .unwrap();
 
+        let history = wallet.get_history().unwrap();
+        for tx in &history {
+            assert!(tx.metadata.broadcast);
+        }
+
         let (tx, mut rx) = mpsc::channel(10);
         let handle = bg.start_txns_track_job(0, tx).await.unwrap();
 
@@ -484,6 +489,11 @@ mod tests_background_worker {
                 },
             ])
             .unwrap();
+
+        let history = wallet.get_history().unwrap();
+        for tx in &history {
+            assert!(tx.metadata.broadcast);
+        }
 
         let (tx, mut rx) = mpsc::channel(10);
         let handle = bg.start_txns_track_job(0, tx).await.unwrap();

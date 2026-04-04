@@ -438,6 +438,7 @@ mod tests_providers {
         assert_eq!(bg.get_providers().len(), 4);
 
         drop(bg);
+        std::thread::sleep(std::time::Duration::from_millis(100));
         let bg2 = Background::from_storage_path(&dir).unwrap();
         assert_eq!(bg2.get_providers().len(), 4);
     }
