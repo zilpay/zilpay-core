@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 pub type ETHTransactionRequest = alloy::rpc::types::eth::request::TransactionRequest;
 pub type BTCTransactionRequest = BitcoinTransaction;
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TransactionMetadata {
     pub chain_hash: u64,
@@ -42,6 +42,22 @@ pub struct TransactionMetadata {
     pub token_info: Option<(U256, u8, String)>,
     pub btc_witness_utxos: Option<Vec<bitcoin::TxOut>>,
     pub broadcast: bool,
+}
+
+impl Default for TransactionMetadata {
+    fn default() -> Self {
+        Self {
+            chain_hash: 0,
+            hash: None,
+            info: None,
+            icon: None,
+            title: None,
+            signer: None,
+            token_info: None,
+            btc_witness_utxos: None,
+            broadcast: true,
+        }
+    }
 }
 
 #[allow(clippy::large_enum_variant)]

@@ -92,6 +92,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
         };
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
@@ -119,6 +120,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
         };
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
@@ -158,6 +160,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
         };
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));
@@ -192,6 +195,7 @@ impl ZilliqaScillaStakeing for NetworkProvider {
         };
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Zilliqa((zil_tx, metdata));

@@ -29,10 +29,7 @@ pub struct NetworkProvider {
 impl Provider for NetworkProvider {
     fn load_network_configs(storage: Arc<LocalStorage>) -> Vec<Self> {
         match storage.get_versioned::<Vec<ChainConfig>>(NETWORK_DB_KEY_V1) {
-            Ok(configs) => configs
-                .into_iter()
-                .map(NetworkProvider::new)
-                .collect(),
+            Ok(configs) => configs.into_iter().map(NetworkProvider::new).collect(),
             Err(_) => Vec::with_capacity(1),
         }
     }
@@ -98,7 +95,6 @@ impl NetworkProvider {
                 self.evm_update_transactions_receipt(txns).await
             }
             slip44::BITCOIN => self.btc_update_transactions_receipt(txns).await,
-            // slip44::TRON => self.tron_update_transactions_receipt(txns).await,
             _ => Err(NetworkErrors::RPCError(format!(
                 "Unsupported network: {}",
                 self.config.name

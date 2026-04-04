@@ -269,7 +269,9 @@ impl EvmOperations for NetworkProvider {
         let total = txns.len();
         let mut all_requests = Vec::with_capacity(total);
 
-        for tx in &txns {
+        dbg!("[evm_broadcast_signed_transactions] total txns =", total);
+        for (i, tx) in txns.iter().enumerate() {
+            dbg!("[evm_broadcast_signed_transactions] tx index =", i, "hash =", tx.hash());
             if !tx.verify()? {
                 return Err(TransactionErrors::SignatureError(
                     SignatureError::InvalidLength,
@@ -284,8 +286,18 @@ impl EvmOperations for NetworkProvider {
             .req::<Vec<ResultRes<Value>>>(all_requests.into())
             .await?;
 
+        dbg!("[evm_broadcast_signed_transactions] responses count =", responses.len());
+        for (i, resp) in responses.iter().enumerate() {
+            dbg!("[evm_broadcast_signed_transactions] response index =", i, &resp);
+        }
+
         for (tx, response) in txns.iter_mut().zip(responses.iter()) {
             process_tx_send_response(response, tx)?;
+        }
+
+        dbg!("[evm_broadcast_signed_transactions] done, final hashes:"); 
+        for (i, tx) in txns.iter().enumerate() {
+            dbg!("[evm_broadcast_signed_transactions] tx index =", i, "final hash =", tx.hash());
         }
 
         Ok(txns)

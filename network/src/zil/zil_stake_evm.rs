@@ -149,6 +149,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
 
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Ethereum((tx, metdata));
@@ -178,6 +179,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
 
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Ethereum((tx, metdata));
@@ -203,6 +205,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
 
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Ethereum((tx, metdata));
@@ -228,6 +231,7 @@ impl ZilliqaEVMStakeing for NetworkProvider {
 
         let metdata = TransactionMetadata {
             chain_hash: self.config.hash(),
+            broadcast: true,
             ..Default::default()
         };
         let req_tx = TransactionRequest::Ethereum((tx, metdata));
