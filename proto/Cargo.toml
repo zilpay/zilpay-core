@@ -28,6 +28,7 @@ crypto = { path = "../crypto" }
 config = { path = "../config" }
 errors = { path = "../errors" }
 ed25519-dalek.workspace = true
+solana-pubkey.workspace = true
 
 [build-dependencies]
 prost-build = "0.13"

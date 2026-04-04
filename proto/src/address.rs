@@ -8,6 +8,7 @@ use crate::{
 use config::key::ED25519_PUB_KEY_SIZE;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
+use solana_pubkey::Pubkey;
 use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 
@@ -22,7 +23,7 @@ pub enum Address {
     Secp256k1Keccak256([u8; ADDR_LEN]),        // Ethereum
     Secp256k1Bitcoin(Vec<u8>),                 // Bitcoin (UTF-8 encoded address string)
     Secp256k1Tron([u8; ADDR_LEN]),             // Tron
-    Ed25519Solana([u8; ED25519_PUB_KEY_SIZE]), // Solana (raw 32-byte pubkey)
+    Ed25519Solana(Pubkey), // Solana
 }
 
 impl Address {
@@ -41,28 +42,18 @@ impl Address {
             Address::Secp256k1Keccak256(_) => self.to_eth_checksummed().unwrap_or_default(),
             Address::Secp256k1Bitcoin(data) => String::from_utf8(data.clone()).unwrap_or_default(),
             Address::Secp256k1Tron(bytes) => Self::tron_to_base58check(bytes),
-            Address::Ed25519Solana(bytes) => bs58::encode(bytes).into_string(),
+            Address::Ed25519Solana(pubkey) => pubkey.to_string(),
         }
     }
 
     pub fn from_solana_address(addr: &str) -> Result<Self> {
-        let decoded = bs58::decode(addr)
-            .into_vec()
+        let pubkey = Pubkey::from_str(addr)
             .map_err(|e| AddressError::InvalidSolanaAddress(e.to_string()))?;
-        let bytes: [u8; ED25519_PUB_KEY_SIZE] = decoded
-            .try_into()
-            .map_err(|_| AddressError::InvalidSolanaAddress("Invalid length".to_string()))?;
-        Ok(Self::Ed25519Solana(bytes))
+        Ok(Self::Ed25519Solana(pubkey))
     }
 
     pub fn is_solana_address(addr: &str) -> bool {
-        if addr.len() < 32 || addr.len() > 44 {
-            return false;
-        }
-        bs58::decode(addr)
-            .into_vec()
-            .map(|v| v.len() == ED25519_PUB_KEY_SIZE)
-            .unwrap_or(false)
+        Pubkey::from_str(addr).is_ok()
     }
 
     pub fn from_str_hex(addr: &str) -> Result<Self> {
@@ -353,7 +344,7 @@ impl Address {
             Address::Secp256k1Keccak256(v) => v,
             Address::Secp256k1Bitcoin(v) => v,
             Address::Secp256k1Tron(v) => v,
-            Address::Ed25519Solana(v) => v,
+            Address::Ed25519Solana(v) => v.as_ref(),
         }
     }
 
@@ -393,7 +384,7 @@ impl std::fmt::Display for Address {
             }
             Self::Secp256k1Bitcoin(_) => write!(f, "{}", self.auto_format()),
             Self::Secp256k1Tron(bytes) => write!(f, "{}", Self::tron_to_base58check(bytes)),
-            Self::Ed25519Solana(bytes) => write!(f, "{}", bs58::encode(bytes).into_string()),
+            Self::Ed25519Solana(pubkey) => write!(f, "{pubkey}"),
         }
     }
 }
@@ -407,7 +398,7 @@ impl std::fmt::Debug for Address {
             }
             Self::Secp256k1Bitcoin(_) => write!(f, "{}", self.auto_format()),
             Self::Secp256k1Tron(bytes) => write!(f, "{}", Self::tron_to_base58check(bytes)),
-            Self::Ed25519Solana(bytes) => write!(f, "{}", bs58::encode(bytes).into_string()),
+            Self::Ed25519Solana(pubkey) => write!(f, "{pubkey}"),
         }
     }
 }
@@ -491,7 +482,7 @@ impl TryFrom<&[u8]> for Address {
                 let key_data: [u8; ED25519_PUB_KEY_SIZE] = slice[1..]
                     .try_into()
                     .map_err(|_| AddressError::InvalidLength)?;
-                Ok(Address::Ed25519Solana(key_data))
+                Ok(Address::Ed25519Solana(Pubkey::from(key_data)))
             }
             4 => {
                 if slice.len() != ADDR_LEN + 1 {
@@ -514,7 +505,7 @@ impl AsRef<[u8]> for Address {
             Address::Secp256k1Keccak256(data) => data,
             Address::Secp256k1Bitcoin(data) => data,
             Address::Secp256k1Tron(data) => data,
-            Address::Ed25519Solana(data) => data,
+            Address::Ed25519Solana(data) => data.as_ref(),
         }
     }
 }
@@ -934,7 +925,7 @@ mod tests {
     fn test_solana_address_from_pubkey() {
         let pk_hex = "8403366f00cce80bc3ae339d4bc5ec33a7b831c650993f95bf85fb8f62a227f6";
         let pk_bytes: [u8; 32] = hex::decode(pk_hex).unwrap().try_into().unwrap();
-        let pk = PubKey::Ed25519Solana(pk_bytes);
+        let pk = PubKey::Ed25519Solana(pk_bytes.into());
 
         let addr = Address::from_pubkey(&pk).unwrap();
         assert!(matches!(addr, Address::Ed25519Solana(_)));

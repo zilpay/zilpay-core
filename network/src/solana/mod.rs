@@ -1,3 +1,4 @@
+pub mod tx_builder;
 mod responses;
 
 use crate::evm::{GasFeeHistory, RequiredTxParams};
@@ -224,11 +225,11 @@ impl SolanaOperations for NetworkProvider {
 
         for token in tokens {
             for (index, account) in accounts.iter().enumerate() {
-                let Address::Ed25519Solana(pubkey_bytes) = account else {
+                let Address::Ed25519Solana(pubkey) = account else {
                     continue;
                 };
 
-                let address_b58 = bs58::encode(pubkey_bytes).into_string();
+                let address_b58 = pubkey.to_string();
 
                 if token.native {
                     let payload = RpcProvider::<ChainConfig>::build_payload(
@@ -245,10 +246,10 @@ impl SolanaOperations for NetworkProvider {
                         .value;
                     token.balances.insert(index, U256::from(lamports));
                 } else {
-                    let Address::Ed25519Solana(mint_bytes) = &token.addr else {
+                    let Address::Ed25519Solana(mint) = &token.addr else {
                         continue;
                     };
-                    let mint_b58 = bs58::encode(mint_bytes).into_string();
+                    let mint_b58 = mint.to_string();
                     let payload = RpcProvider::<ChainConfig>::build_payload(
                         json!([
                             address_b58,
@@ -288,12 +289,12 @@ impl SolanaOperations for NetworkProvider {
         accounts: &[&Address],
     ) -> Result<FToken> {
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-        let Address::Ed25519Solana(mint_bytes) = contract else {
+        let Address::Ed25519Solana(mint) = contract else {
             return Err(NetworkErrors::RPCError(
                 "Expected Ed25519Solana mint address".to_string(),
             ));
         };
-        let mint_b58 = bs58::encode(mint_bytes).into_string();
+        let mint_b58 = mint.to_string();
 
         let info_payload = RpcProvider::<ChainConfig>::build_payload(
             json!([mint_b58, {"encoding": "jsonParsed"}]),
@@ -309,10 +310,10 @@ impl SolanaOperations for NetworkProvider {
 
         let mut balances = HashMap::new();
         for (index, account) in accounts.iter().enumerate() {
-            let Address::Ed25519Solana(pubkey_bytes) = account else {
+            let Address::Ed25519Solana(pubkey) = account else {
                 continue;
             };
-            let address_b58 = bs58::encode(pubkey_bytes).into_string();
+            let address_b58 = pubkey.to_string();
             let payload = RpcProvider::<ChainConfig>::build_payload(
                 json!([
                     address_b58,
@@ -345,7 +346,7 @@ impl SolanaOperations for NetworkProvider {
             name: String::new(),
             symbol: String::new(),
             decimals,
-            addr: Address::Ed25519Solana(mint_bytes),
+            addr: Address::Ed25519Solana(mint),
             logo: None,
             balances,
             default: false,
@@ -405,7 +406,7 @@ mod tests {
         let provider = NetworkProvider::new(gen_sol_devnet_conf());
         let tx =
             TransactionRequest::Solana((SolanaTransaction { message: vec![] }, Default::default()));
-        let sender = Address::Ed25519Solana([0u8; 32]);
+        let sender = Address::Ed25519Solana([0u8; 32].into());
         let params = provider
             .solana_estimate_params_batch(&tx, &sender)
             .await
@@ -423,7 +424,7 @@ mod tests {
     async fn test_solana_update_balances_zero_address() {
         let provider = NetworkProvider::new(gen_sol_devnet_conf());
         let mut token = gen_sol_token();
-        let zero_account = Address::Ed25519Solana([0u8; 32]);
+        let zero_account = Address::Ed25519Solana([0u8; 32].into());
 
         provider
             .solana_update_balances(vec![&mut token], &[&zero_account])
@@ -740,7 +741,7 @@ mod tests {
     async fn test_solana_ftoken_meta_usdc() {
         let conf = gen_sol_devnet_conf();
         let provider = NetworkProvider::new(conf.clone());
-        let mint = Address::Ed25519Solana(usdc_mint_bytes());
+        let mint = Address::Ed25519Solana(usdc_mint_bytes().into());
         let rich_account = Address::from_solana_address(DEVNET_USDC_RICH_ADDRESS).unwrap();
         let zero_account = Address::from_solana_address(DEVNET_ZERO_ADDRESS).unwrap();
         println!("Fetching SPL metadata for devnet USDC: {}", DEVNET_USDC_MINT);

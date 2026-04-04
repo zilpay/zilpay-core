@@ -5,6 +5,7 @@ use alloy::{
     signers::{local::PrivateKeySigner, SignerSync},
 };
 use config::key::{BIP39_SEED_SIZE, ED25519_PUB_KEY_SIZE, PUB_KEY_SIZE, SECRET_KEY_SIZE};
+use solana_pubkey::Pubkey;
 use crypto::{bip49::DerivationPath, schnorr, slip44};
 use ed25519_dalek::{Signer as Ed25519Signer, SigningKey};
 use k256::SecretKey as K256SecretKey;
@@ -282,7 +283,7 @@ impl KeyPair {
                 Ok(PubKey::Secp256k1Bitcoin((*pk, *network, *addr_type)))
             }
             KeyPair::Secp256k1Tron((pk, _)) => Ok(PubKey::Secp256k1Tron(*pk)),
-            KeyPair::Ed25519Solana((pk, _)) => Ok(PubKey::Ed25519Solana(*pk)),
+            KeyPair::Ed25519Solana((pk, _)) => Ok(PubKey::Ed25519Solana(Pubkey::from(*pk))),
         }
     }
 

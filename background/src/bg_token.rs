@@ -3,9 +3,13 @@ use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
 use crypto::slip44::TRON;
 use errors::background::BackgroundError;
-use network::evm::generate_erc20_transfer_data;
+use network::{
+    evm::generate_erc20_transfer_data,
+    solana::tx_builder::{build_sol_transfer_message, build_spl_transfer_message},
+};
 use proto::{
     address::Address,
+    solana_tx::SolanaTransaction,
     tron_tx::TronTransaction,
     tx::{ETHTransactionRequest, TransactionMetadata, TransactionRequest},
     zil_tx::ZILTransactionRequest,
@@ -209,11 +213,61 @@ impl TokensManagement for Background {
 
                 Ok(txn)
             }
-            Address::Ed25519Solana(_) => Err(BackgroundError::TokenError(
-                errors::token::TokenError::ABIError(
-                    "Solana transfers not yet supported".to_string(),
-                ),
-            )),
+            Address::Ed25519Solana(from_pk) => {
+                let Address::Ed25519Solana(to_pk) = to else {
+                    return Err(BackgroundError::TokenError(
+                        errors::token::TokenError::ABIError(
+                            "recipient must be a Solana address".to_string(),
+                        ),
+                    ));
+                };
+
+                let blockhash_str = provider
+                    .solana_get_latest_blockhash()
+                    .await
+                    .map_err(BackgroundError::NetworkErrors)?;
+
+                let blockhash: [u8; 32] = bs58::decode(&blockhash_str)
+                    .into_vec()
+                    .map_err(|e| {
+                        BackgroundError::TokenError(errors::token::TokenError::ABIError(
+                            e.to_string(),
+                        ))
+                    })?
+                    .try_into()
+                    .map_err(|_| {
+                        BackgroundError::TokenError(errors::token::TokenError::ABIError(
+                            "blockhash must be 32 bytes".to_string(),
+                        ))
+                    })?;
+
+                let message = if token.native {
+                    build_sol_transfer_message(from_pk, &to_pk, amount.to::<u64>(), &blockhash)
+                } else {
+                    let Address::Ed25519Solana(mint_pk) = &token.addr else {
+                        return Err(BackgroundError::TokenError(
+                            errors::token::TokenError::ABIError(
+                                "SPL token must have Solana mint address".to_string(),
+                            ),
+                        ));
+                    };
+                    build_spl_transfer_message(
+                        from_pk,
+                        mint_pk,
+                        &to_pk,
+                        amount.to::<u64>(),
+                        &blockhash,
+                    )
+                    .map_err(|e| {
+                        BackgroundError::TokenError(errors::token::TokenError::ABIError(e))
+                    })?
+                };
+
+                Ok(TransactionRequest::Solana((
+                    SolanaTransaction { message },
+                    metadata,
+                )))
+            }
         }
     }
 

@@ -1,4 +1,5 @@
 use config::key::{ED25519_PUB_KEY_SIZE, PUB_KEY_SIZE};
+use solana_pubkey::Pubkey;
 use errors::keypair::PubKeyError;
 use k256::PublicKey as K256PublicKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -15,7 +16,7 @@ pub enum PubKey {
     Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
     Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)), // Bitcoin
     Secp256k1Tron([u8; PUB_KEY_SIZE]),      // Tron
-    Ed25519Solana([u8; ED25519_PUB_KEY_SIZE]), // Solana
+    Ed25519Solana(Pubkey), // Solana
 }
 
 impl PubKey {
@@ -53,7 +54,7 @@ impl PubKey {
             PubKey::Secp256k1Sha256(v) => v,
             PubKey::Secp256k1Bitcoin((v, _, _)) => v,
             PubKey::Secp256k1Tron(v) => v,
-            PubKey::Ed25519Solana(v) => v,
+            PubKey::Ed25519Solana(v) => v.as_ref(),
         }
     }
 
@@ -84,7 +85,7 @@ impl PubKey {
             }
             PubKey::Ed25519Solana(pk) => {
                 let mut result = vec![3u8];
-                result.extend_from_slice(pk.as_slice());
+                result.extend_from_slice(pk.as_ref());
                 Ok(result)
             }
             PubKey::Secp256k1Tron(pk) => {
@@ -192,7 +193,7 @@ impl TryFrom<&[u8]> for PubKey {
                 let key_data: [u8; ED25519_PUB_KEY_SIZE] = slice[1..]
                     .try_into()
                     .map_err(|_| PubKeyError::InvalidLength)?;
-                Ok(PubKey::Ed25519Solana(key_data))
+                Ok(PubKey::Ed25519Solana(Pubkey::from(key_data)))
             }
             2 => {
                 // Bitcoin: 1 + 1 + 1 + 33 bytes
@@ -219,7 +220,7 @@ impl AsRef<[u8]> for PubKey {
             PubKey::Secp256k1Keccak256(data) => data,
             PubKey::Secp256k1Bitcoin((data, _, _)) => data,
             PubKey::Secp256k1Tron(data) => data,
-            PubKey::Ed25519Solana(data) => data,
+            PubKey::Ed25519Solana(data) => data.as_ref(),
         }
     }
 }
@@ -480,7 +481,7 @@ mod tests {
             bitcoin::AddressType::P2wpkh,
         ));
         let sol_data = [55u8; ED25519_PUB_KEY_SIZE];
-        let sol = PubKey::Ed25519Solana(sol_data);
+        let sol = PubKey::Ed25519Solana(sol_data.into());
 
         for key in [zil, eth, btc, sol] {
             let bytes = key.to_bytes().unwrap();

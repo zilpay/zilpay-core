@@ -1,4 +1,5 @@
 use crate::address::Address;
+use solana_pubkey::Pubkey;
 use crate::btc_tx;
 use crate::keypair::KeyPair;
 use crate::pubkey::PubKey;
@@ -186,7 +187,7 @@ impl TransactionReceipt {
                     .addr_bytes()
                     .try_into()
                     .map_err(|_| TransactionErrors::InvalidPublicKey)?;
-                let pk = PubKey::Ed25519Solana(pk_bytes);
+                let pk = PubKey::Ed25519Solana(Pubkey::from(pk_bytes));
                 let sig_bytes: [u8; 64] = receipt
                     .signature
                     .as_slice()
@@ -540,7 +541,7 @@ impl TransactionRequest {
             TransactionRequest::Tron((tx, _)) => tx
                 .to_address()
                 .unwrap_or(Address::Secp256k1Tron(Address::ZERO)),
-            TransactionRequest::Solana((_, _)) => Address::Ed25519Solana([0u8; 32]),
+            TransactionRequest::Solana((_, _)) => Address::Ed25519Solana(Pubkey::default()),
         }
     }
 
