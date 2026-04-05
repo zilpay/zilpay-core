@@ -58,6 +58,7 @@ pub fn components_to_derivation_path(components: &[u32]) -> Vec<u8> {
 }
 
 impl DerivationPath {
+    pub const HARDENED: u32 = 0x80000000;
     pub const BIP44_PURPOSE: u32 = 44;
     pub const BIP49_PURPOSE: u32 = 49;
     pub const BIP84_PURPOSE: u32 = 84;
@@ -143,6 +144,45 @@ impl DerivationPath {
             bitcoin::AddressType::P2tr => Self::BIP86_PURPOSE,
             _ => Self::BIP44_PURPOSE,
         }
+    }
+}
+
+impl TryFrom<&str> for DerivationPath {
+    type Error = Bip329Errors;
+
+    fn try_from(path: &str) -> Result<Self, Self::Error> {
+        let tail = path
+            .strip_prefix("m/")
+            .ok_or_else(|| Bip329Errors::InvalidPath(path.to_string()))?;
+        let components = split_path(tail)?;
+
+        if components.len() < 2 {
+            return Err(Bip329Errors::InvalidPath(path.to_string()));
+        }
+
+        let bip = components[0] & !Self::HARDENED;
+        let slip44 = components[1] & !Self::HARDENED;
+
+        let derivation = match &components[2..] {
+            [] => DerivationType::Root,
+            [a] => DerivationType::Account((a & !Self::HARDENED) as usize),
+            [a, c] => DerivationType::AccountChange(
+                (a & !Self::HARDENED) as usize,
+                (c & !Self::HARDENED) as usize,
+            ),
+            [a, c, i, ..] => DerivationType::AddressIndex(
+                (a & !Self::HARDENED) as usize,
+                (c & !Self::HARDENED) as usize,
+                (i & !Self::HARDENED) as usize,
+            ),
+        };
+
+        Ok(Self {
+            slip44,
+            bip,
+            derivation,
+            network: None,
+        })
     }
 }
 
@@ -330,5 +370,69 @@ mod tests {
             assert_eq!(path.get_path(), format!("m/44'/501'/{}'/0'", i));
             assert_eq!(path.get_index(), i);
         }
+    }
+
+    #[test]
+    fn test_try_from_round_trip() {
+        let cases = [
+            DerivationPath::new(slip44::SOLANA, DerivationType::Root, DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::SOLANA, DerivationType::Account(0), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::SOLANA, DerivationType::Account(5), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::SOLANA, DerivationType::AccountChange(0, 0), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::SOLANA, DerivationType::AccountChange(3, 1), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::ETHEREUM, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::ETHEREUM, DerivationType::AddressIndex(0, 0, 5), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::ETHEREUM, DerivationType::AddressIndex(1, 0, 10), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::ZILLIQA, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::TRON, DerivationType::AddressIndex(0, 0, 3), DerivationPath::BIP44_PURPOSE, None),
+            DerivationPath::new(slip44::BITCOIN, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP86_PURPOSE, None),
+            DerivationPath::new(slip44::BITCOIN, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP49_PURPOSE, None),
+            DerivationPath::new(slip44::BITCOIN, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP84_PURPOSE, None),
+        ];
+
+        for dp in &cases {
+            let parsed = DerivationPath::try_from(dp.get_path().as_str()).unwrap();
+            assert_eq!(parsed.bip, dp.bip);
+            assert_eq!(parsed.slip44, dp.slip44);
+            assert_eq!(parsed.derivation, dp.derivation);
+        }
+    }
+
+    #[test]
+    fn test_try_from_specific_paths() {
+        let dp = DerivationPath::try_from("m/44'/501'").unwrap();
+        assert_eq!(dp.bip, 44);
+        assert_eq!(dp.slip44, slip44::SOLANA);
+        assert_eq!(dp.derivation, DerivationType::Root);
+
+        let dp = DerivationPath::try_from("m/44'/501'/0'").unwrap();
+        assert_eq!(dp.derivation, DerivationType::Account(0));
+
+        let dp = DerivationPath::try_from("m/44'/501'/7'").unwrap();
+        assert_eq!(dp.derivation, DerivationType::Account(7));
+
+        let dp = DerivationPath::try_from("m/44'/501'/0'/0'").unwrap();
+        assert_eq!(dp.derivation, DerivationType::AccountChange(0, 0));
+
+        let dp = DerivationPath::try_from("m/44'/60'/0'/0/0").unwrap();
+        assert_eq!(dp.derivation, DerivationType::AddressIndex(0, 0, 0));
+
+        let dp = DerivationPath::try_from("m/44'/60'/0'/0/99").unwrap();
+        assert_eq!(dp.derivation, DerivationType::AddressIndex(0, 0, 99));
+
+        let dp = DerivationPath::try_from("m/86'/0'/0'/0/0").unwrap();
+        assert_eq!(dp.bip, 86);
+        assert_eq!(dp.slip44, slip44::BITCOIN);
+        assert_eq!(dp.derivation, DerivationType::AddressIndex(0, 0, 0));
+    }
+
+    #[test]
+    fn test_try_from_errors() {
+        assert!(DerivationPath::try_from("").is_err());
+        assert!(DerivationPath::try_from("bad").is_err());
+        assert!(DerivationPath::try_from("44'/60'/0'").is_err());
+        assert!(DerivationPath::try_from("m/44'").is_err());
+        assert!(DerivationPath::try_from("m/44'/abc/0'").is_err());
+        assert!(DerivationPath::try_from("m/44'/60'/0'/0/overflow99999999999").is_err());
     }
 }

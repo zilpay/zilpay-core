@@ -348,7 +348,8 @@ mod tests_background_tokens {
     use std::thread::sleep;
     use std::time::Duration;
     use test_data::{
-        anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_regtest_conf, ANVIL_MNEMONIC,
+        anvil_accounts, gen_anvil_net_conf, gen_anvil_token, gen_btc_regtest_conf,
+        gen_sol_devnet_conf, gen_sol_token, ANVIL_MNEMONIC,
     };
     use test_data::{
         gen_eth_account, gen_tron_account, gen_tron_testnet_conf, gen_tron_token, gen_zil_account,
@@ -1176,5 +1177,37 @@ mod tests_background_tokens {
         assert!(ftokens[0].default);
         assert!(!ftokens[1].native);
         assert!(!ftokens[2].native);
+    }
+
+    #[tokio::test]
+    async fn test_solana_tokens() {
+        let (mut bg, _dir) = setup_test_background();
+        let net_config = gen_sol_devnet_conf();
+        let password: SecretString = SecretString::new(TEST_PASSWORD.into());
+
+        bg.add_provider(net_config.clone()).unwrap();
+
+        let accounts = [gen_tron_account(0, "Tron Acc 0")];
+
+        bg.add_bip39_wallet(BackgroundBip39Params {
+            mnemonic_check: true,
+            password: &password,
+            chain_hash: net_config.hash(),
+            mnemonic_str: ANVIL_MNEMONIC,
+            accounts: &accounts,
+            wallet_settings: Default::default(),
+            passphrase: "",
+            wallet_name: "Tron wallet".to_string(),
+            biometric_type: Default::default(),
+            ftokens: vec![gen_sol_token()],
+            bip: DerivationPath::BIP44_PURPOSE,
+        })
+        .await
+        .unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let data = wallet.get_wallet_data().unwrap();
+
+        dbg!(&data);
     }
 }
