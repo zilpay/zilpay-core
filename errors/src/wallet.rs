@@ -117,6 +117,9 @@ pub enum WalletErrors {
 
     #[error("Thread panicked during account generation")]
     ThreadPanic,
+
+    #[error("Bip32/derivation error: {0}")]
+    Bip329Error(crate::bip32::Bip329Errors),
 }
 
 impl From<LocalStorageError> for WalletErrors {
@@ -182,5 +185,11 @@ impl From<Bip39Error> for WalletErrors {
 impl From<AddressError> for WalletErrors {
     fn from(error: AddressError) -> Self {
         WalletErrors::AddressError(error)
+    }
+}
+
+impl From<crate::bip32::Bip329Errors> for WalletErrors {
+    fn from(error: crate::bip32::Bip329Errors) -> Self {
+        WalletErrors::Bip329Error(error)
     }
 }

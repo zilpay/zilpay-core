@@ -231,6 +231,7 @@ mod tests_security {
                 indexes: &indexes,
                 wallet_name: "Bitcoin Wallet".to_string(),
                 bip: DerivationPath::BIP84_PURPOSE,
+                derivation_type: crypto::bip49::default_derivation_type(),
                 biometric_type: AuthMethod::None,
                 chains: &[chain_config.clone()],
             },

@@ -736,6 +736,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![FToken::zil(zil_config.hash())],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -806,6 +807,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![gen_anvil_token()],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -893,6 +895,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![gen_anvil_token()],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -1022,6 +1025,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![FToken::zil(net_config.hash())],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -1074,6 +1078,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![gen_zil_token()],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -1121,6 +1126,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![test_data::gen_btc_token()],
             bip: DerivationPath::BIP86_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -1189,6 +1195,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![gen_tron_token()],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -1310,6 +1317,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![gen_tron_token()],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -1361,6 +1369,7 @@ mod tests_background_transactions {
             biometric_type: Default::default(),
             ftokens: vec![gen_tron_token()],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();

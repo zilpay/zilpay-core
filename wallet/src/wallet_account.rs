@@ -338,6 +338,7 @@ mod tests {
                 indexes: &indexes,
                 wallet_name: "Select Account Test Wallet".to_string(),
                 bip: DerivationPath::BIP44_PURPOSE,
+                derivation_type: crypto::bip49::default_derivation_type(),
                 biometric_type: AuthMethod::None,
                 chain_config: &chain_config,
                 chains: &[chain_config.clone()],

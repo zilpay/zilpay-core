@@ -20,6 +20,9 @@ pub enum Bip329Errors {
     #[error("Invalid slip44 component: {0}")]
     InvalidComponent(String),
 
+    #[error("Invalid derivation type {0}")]
+    InvalidDerivationType(u8),
+
     #[error("Bitcoin network parameter is required for Bitcoin derivation paths")]
     MissingBitcoinNetwork,
 }

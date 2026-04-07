@@ -260,6 +260,7 @@ mod tests_background_worker {
             biometric_type: Default::default(),
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -305,6 +306,7 @@ mod tests_background_worker {
             biometric_type: Default::default(),
             ftokens: vec![gen_bsc_mainnet_token(net_config.hash())],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -446,6 +448,7 @@ mod tests_background_worker {
             biometric_type: Default::default(),
             ftokens: vec![gen_zilliqa_mainnet_token(net_config.hash())],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();

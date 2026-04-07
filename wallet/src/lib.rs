@@ -36,6 +36,7 @@ pub struct LedgerParams<'a> {
     pub wallet_name: String,
     pub biometric_type: AuthMethod,
     pub chain_config: &'a ChainConfig,
+    pub derivation_type: u8,
 }
 
 pub struct SecretKeyParams<'a> {
@@ -57,6 +58,7 @@ pub struct Bip39Params<'a> {
     pub biometric_type: AuthMethod,
     pub chain_config: &'a ChainConfig,
     pub chains: &'a [ChainConfig],
+    pub derivation_type: u8,
 }
 
 pub struct Wallet {

@@ -242,6 +242,7 @@ mod tests {
                 bip,
                 biometric_type: AuthMethod::Biometric,
                 chains: &[chain_config.clone()],
+                derivation_type: crypto::bip49::default_derivation_type(),
             },
             wallet_config,
             vec![],

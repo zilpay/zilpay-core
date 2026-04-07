@@ -265,6 +265,7 @@ mod tests_wallet_storage {
             biometric_type: AuthMethod::None,
             chain_hash: 0,
             bip_preferences: HashMap::new(),
+            derivation_type: crypto::bip49::default_derivation_type(),
         };
 
         // Test saving wallet data

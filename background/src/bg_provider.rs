@@ -465,6 +465,7 @@ mod tests_providers {
             biometric_type: Default::default(),
             ftokens: btc.ftokens.clone(),
             bip: DerivationPath::BIP86_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -536,6 +537,7 @@ mod tests_providers {
             biometric_type: Default::default(),
             ftokens: vec![],
             bip: DerivationPath::BIP86_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -600,6 +602,7 @@ mod tests_providers {
             biometric_type: Default::default(),
             ftokens: vec![],
             bip: DerivationPath::BIP44_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();
@@ -638,6 +641,7 @@ mod tests_providers {
             biometric_type: Default::default(),
             ftokens: btc.ftokens.clone(),
             bip: DerivationPath::BIP86_PURPOSE,
+            derivation_type: crypto::bip49::default_derivation_type(),
         })
         .await
         .unwrap();

@@ -24,6 +24,7 @@ pub struct BackgroundBip39Params<'a> {
     pub accounts: &'a [(usize, String)],
     pub chain_hash: u64,
     pub ftokens: Vec<FToken>,
+    pub derivation_type: u8,
 }
 
 pub struct BackgroundSKParams<'a> {
@@ -48,6 +49,7 @@ pub struct BackgroundLedgerParams {
     pub wallet_settings: WalletSettings,
     pub chain_hash: u64,
     pub ftokens: Vec<FToken>,
+    pub derivation_type: u8,
 }
 
 pub struct Background {
