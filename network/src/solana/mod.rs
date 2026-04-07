@@ -50,6 +50,7 @@ pub trait SolanaOperations {
         tokens: Vec<&mut FToken>,
         accounts: &[&Address],
     ) -> Result<()>;
+    async fn solana_get_fee_for_message(&self, message: &[u8]) -> Result<u64>;
     async fn solana_ftoken_meta(
         &self,
         contract: Address,
@@ -93,12 +94,37 @@ impl SolanaOperations for NetworkProvider {
         Ok(value.value.blockhash)
     }
 
+    async fn solana_get_fee_for_message(&self, message: &[u8]) -> Result<u64> {
+        let encoded = base64::engine::general_purpose::STANDARD.encode(message);
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let payload = RpcProvider::<ChainConfig>::build_payload(
+            json!([encoded, {"commitment": "confirmed"}]),
+            SolanaMethod::GetFeeForMessage,
+        );
+        let res: ResultRes<SolanaValueResponse<Option<u64>>> = provider
+            .req(payload)
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let value = res
+            .result
+            .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&res.error)))?;
+
+        value
+            .value
+            .ok_or_else(|| NetworkErrors::RPCError("blockhash expired".into()))
+    }
+
     async fn solana_estimate_params_batch(
         &self,
-        _tx: &TransactionRequest,
+        tx: &TransactionRequest,
         _sender: &Address,
     ) -> Result<RequiredTxParams> {
-        let fee = U256::from(SOLANA_BASE_FEE_LAMPORTS);
+        let fee = if let TransactionRequest::Solana((sol_tx, _)) = tx {
+            U256::from(self.solana_get_fee_for_message(&sol_tx.message).await?)
+        } else {
+            U256::from(SOLANA_BASE_FEE_LAMPORTS)
+        };
 
         Ok(RequiredTxParams {
             gas_price: fee,

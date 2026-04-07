@@ -187,6 +187,7 @@ pub enum SolanaMethod {
     GetTransaction,
     GetTokenAccountsByOwner,
     GetAccountInfo,
+    GetFeeForMessage,
 }
 
 impl RpcMethod for SolanaMethod {
@@ -199,6 +200,7 @@ impl RpcMethod for SolanaMethod {
             Self::GetTransaction => "getTransaction",
             Self::GetTokenAccountsByOwner => "getTokenAccountsByOwner",
             Self::GetAccountInfo => "getAccountInfo",
+            Self::GetFeeForMessage => "getFeeForMessage",
         }
     }
 }

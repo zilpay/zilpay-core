@@ -1217,11 +1217,21 @@ mod tests_background_tokens {
         .await
         .unwrap();
 
+        bg.sync_ftokens_balances(0).await.unwrap();
+
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+
+        dbg!(&ftokens);
 
         let accs = data.get_accounts().unwrap();
+        dbg!(accs.len());
         assert_eq!(accs.len(), 3, "Should have 3 accounts");
+
+        dbg!(accs[0].addr.auto_format());
+        dbg!(accs[1].addr.auto_format());
+        dbg!(accs[2].addr.auto_format());
 
         assert_eq!(
             accs[0].addr.auto_format(),
@@ -1241,6 +1251,11 @@ mod tests_background_tokens {
         assert!(sol_token.native);
         assert_eq!(sol_token.symbol, "SOL");
 
+        let balance_0 = sol_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
+        let balance_1 = sol_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
+        let balance_2 = sol_token.balances.get(&2).copied().unwrap_or(U256::ZERO);
+        dbg!(balance_0, balance_1, balance_2);
+
         let from_account = &accs[0];
         let to_account = &accs[1].addr.clone();
         let amount = U256::from(1_000_000_000u64);
@@ -1252,6 +1267,10 @@ mod tests_background_tokens {
 
         match &txn_req {
             TransactionRequest::Solana((sol_tx, meta)) => {
+                dbg!(sol_tx.message.len());
+                dbg!(&meta.chain_hash);
+                dbg!(&meta.token_info);
+                dbg!(&meta.signer);
                 assert!(!sol_tx.message.is_empty());
                 assert_eq!(meta.chain_hash, net_config.hash());
                 assert_eq!(
@@ -1273,6 +1292,80 @@ mod tests_background_tokens {
             .await
             .unwrap();
 
-        assert!(signed_tx.verify().unwrap(), "Signed Solana tx should verify");
+        dbg!(signed_tx.verify().unwrap());
+        assert!(
+            signed_tx.verify().unwrap(),
+            "Signed Solana tx should verify"
+        );
+
+        let (sender_index, receiver_addr) = if balance_1 > U256::ZERO {
+            (1usize, accs[2].addr.clone())
+        } else if balance_2 > U256::ZERO {
+            (2usize, accs[1].addr.clone())
+        } else if balance_0 > U256::ZERO {
+            (0usize, accs[1].addr.clone())
+        } else {
+            panic!("No funded Solana account for transfer");
+        };
+
+        let sender_balance = match sender_index {
+            0 => balance_0,
+            1 => balance_1,
+            _ => balance_2,
+        };
+        let sender_acc = &accs[sender_index];
+        dbg!(sender_index, sender_balance);
+
+        let probe_txn = bg
+            .build_token_transfer(sol_token, sender_acc, receiver_addr.clone(), sender_balance)
+            .await
+            .unwrap();
+
+        let chain = bg.get_provider(net_config.hash()).unwrap();
+        let fee_params = chain
+            .estimate_params_batch(&probe_txn, &sender_acc.addr, 0, None)
+            .await
+            .unwrap();
+        let fee_lamports = u64::try_from(fee_params.gas_price).unwrap();
+        dbg!(fee_lamports);
+
+        let max_amount = sender_balance - U256::from(fee_lamports);
+        dbg!(max_amount);
+
+        let txn_req = bg
+            .build_token_transfer(sol_token, sender_acc, receiver_addr, max_amount)
+            .await
+            .unwrap();
+
+        let signed_tx = wallet
+            .sign_transaction(txn_req, sender_index, &argon_seed, None)
+            .await
+            .unwrap();
+
+        dbg!(signed_tx.verify().unwrap());
+
+        let broadcasted = bg
+            .broadcast_signed_transactions(0, vec![signed_tx])
+            .await
+            .unwrap();
+
+        dbg!(broadcasted.len());
+        dbg!(&broadcasted[0].metadata.hash);
+        assert_eq!(broadcasted.len(), 1);
+        assert!(broadcasted[0].metadata.hash.is_some());
+
+        tokio::time::sleep(std::time::Duration::from_secs(20)).await;
+
+        bg.check_pending_txns(0).await.unwrap();
+
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        let history = wallet.get_history().unwrap();
+
+        dbg!(history.len());
+        dbg!(&history[0].status);
+        dbg!(&history[0].solana);
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].status, TransactionStatus::Success);
     }
 }
