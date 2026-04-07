@@ -189,6 +189,7 @@ impl AccountManagement for Wallet {
             WalletTypes::SecretPhrase(_) => {
                 let m = self.reveal_mnemonic(seed_bytes)?;
                 let mnemonic_seed = m.to_seed(passphrase)?;
+                let derivation_type = data.derivation_type;
 
                 let mut handles = Vec::new();
                 for (bip, missing) in missing_per_bip {
@@ -198,12 +199,11 @@ impl AccountManagement for Wallet {
                         move || -> std::result::Result<(u32, Vec<AccountV2>), WalletErrors> {
                             let mut accounts = Vec::with_capacity(missing.len());
                             for (idx, name) in missing {
-                                let path = DerivationPath::new(
-                                    target_slip44,
-                                    crypto::bip49::DerivationType::AddressIndex(0, 0, idx),
-                                    bip,
-                                    net,
-                                );
+                                let derivation = crypto::bip49::DerivationType::with_index(
+                                    derivation_type,
+                                    idx,
+                                )?;
+                                let path = DerivationPath::new(target_slip44, derivation, bip, net);
                                 let account = AccountV2::from_hd(&seed, name, &path)?;
                                 accounts.push(account);
                             }

@@ -1194,7 +1194,11 @@ mod tests_background_tokens {
 
         bg.add_provider(net_config.clone()).unwrap();
 
-        let accounts = [gen_tron_account(0, "Tron Acc 0")];
+        let accounts = [
+            (0, "sol 0".to_string()),
+            (1, "sol 1".to_string()),
+            (2, "sol 2".to_string()),
+        ];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
@@ -1204,7 +1208,7 @@ mod tests_background_tokens {
             accounts: &accounts,
             wallet_settings: Default::default(),
             passphrase: "",
-            wallet_name: "Tron wallet".to_string(),
+            wallet_name: "Sol wallet".to_string(),
             biometric_type: Default::default(),
             ftokens: vec![gen_sol_token()],
             bip: DerivationPath::BIP44_PURPOSE,
@@ -1216,6 +1220,59 @@ mod tests_background_tokens {
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
 
-        dbg!(&data);
+        let accs = data.get_accounts().unwrap();
+        assert_eq!(accs.len(), 3, "Should have 3 accounts");
+
+        assert_eq!(
+            accs[0].addr.auto_format(),
+            "oeYf6KAJkLYhBuR8CiGc6L4D4Xtfepr85fuDgA9kq96"
+        );
+        assert_eq!(
+            accs[1].addr.auto_format(),
+            "AqynRZwvVqUPRwRJXvm6odUb3t93fDjnWe3p6BeuUFxD"
+        );
+        assert_eq!(
+            accs[2].addr.auto_format(),
+            "CqMbRgMuEhQi9BUS8xP44Wk5nENm48FqJnfjEi4eNb1k"
+        );
+
+        let ftokens = wallet.get_ftokens().unwrap();
+        let sol_token = ftokens.first().unwrap();
+        assert!(sol_token.native);
+        assert_eq!(sol_token.symbol, "SOL");
+
+        let from_account = &accs[0];
+        let to_account = &accs[1].addr.clone();
+        let amount = U256::from(1_000_000_000u64);
+
+        let txn_req = bg
+            .build_token_transfer(sol_token, from_account, to_account.clone(), amount)
+            .await
+            .unwrap();
+
+        match &txn_req {
+            TransactionRequest::Solana((sol_tx, meta)) => {
+                assert!(!sol_tx.message.is_empty());
+                assert_eq!(meta.chain_hash, net_config.hash());
+                assert_eq!(
+                    meta.token_info,
+                    Some((amount, sol_token.decimals, sol_token.symbol.clone()))
+                );
+                assert_eq!(meta.signer, Some(from_account.addr.clone()));
+            }
+            _ => panic!("Expected Solana transaction request"),
+        }
+
+        let argon_seed = bg
+            .unlock_wallet_with_password(&SecretString::new(TEST_PASSWORD.into()), None, 0)
+            .await
+            .unwrap();
+
+        let signed_tx = wallet
+            .sign_transaction(txn_req, 0, &argon_seed, None)
+            .await
+            .unwrap();
+
+        assert!(signed_tx.verify().unwrap(), "Signed Solana tx should verify");
     }
 }

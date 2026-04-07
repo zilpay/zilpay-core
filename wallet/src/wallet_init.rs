@@ -4,7 +4,7 @@ use crate::{
     wallet_types::WalletTypes,
     Result, SecretKeyParams, Wallet, WalletAddrType,
 };
-use crypto::bip49::{default_derivation_type, DerivationType, DerivationTypeCodec};
+use crypto::bip49::{default_derivation_type, DerivationType};
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -232,21 +232,9 @@ impl WalletInit for Wallet {
                     move || -> std::result::Result<(u32, u32, Vec<AccountV2>), WalletErrors> {
                         let mut accounts = Vec::with_capacity(idxs.len());
                         for (idx, name) in idxs {
-                            let derivation = match DerivationType::from_u8(derivation_type)? {
-                                DerivationType::Root => DerivationType::Root,
-                                DerivationType::Account(_) => DerivationType::Account(idx),
-                                DerivationType::AccountChange(_, _) => {
-                                    DerivationType::AccountChange(idx, 0)
-                                }
-                                DerivationType::AddressIndex(_, _, _) => {
-                                    DerivationType::AddressIndex(0, 0, idx)
-                                }
-                            };
+                            let derivation = DerivationType::with_index(derivation_type, idx)?;
                             let path = crypto::bip49::DerivationPath::new(
-                                slip44,
-                                derivation,
-                                bip,
-                                network,
+                                slip44, derivation, bip, network,
                             );
                             let account = AccountV2::from_hd(&seed, name, &path)?;
                             accounts.push(account);
@@ -305,7 +293,10 @@ mod tests {
         keychain::KeyChain,
     };
     use config::{argon::KEY_SIZE, bip39::EN_WORDS, cipher::PROOF_SIZE, session::AuthMethod};
-    use crypto::{bip49::{default_derivation_type, DerivationPath}, slip44};
+    use crypto::{
+        bip49::{default_derivation_type, DerivationPath},
+        slip44,
+    };
     use errors::wallet::WalletErrors;
     use pqbip39::mnemonic::Mnemonic;
     use proto::keypair::KeyPair;

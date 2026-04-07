@@ -78,9 +78,11 @@ impl WalletCrypto for Wallet {
                     _ => (DerivationPath::BIP44_PURPOSE, None),
                 };
 
+                let derivation =
+                    crypto::bip49::DerivationType::with_index(data.derivation_type, hd_index)?;
                 let bip_path = crypto::bip49::DerivationPath::new(
                     provider.config.slip_44,
-                    crypto::bip49::DerivationType::AddressIndex(0, 0, hd_index),
+                    derivation,
                     bip_purpose,
                     network,
                 );

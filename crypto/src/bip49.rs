@@ -10,6 +10,17 @@ pub enum DerivationType {
     AddressIndex(usize, usize, usize),
 }
 
+impl DerivationType {
+    pub fn with_index(derivation_type: u8, index: usize) -> Result<Self, Bip329Errors> {
+        match Self::from_u8(derivation_type)? {
+            DerivationType::Root => Ok(DerivationType::Root),
+            DerivationType::Account(_) => Ok(DerivationType::Account(index)),
+            DerivationType::AccountChange(_, _) => Ok(DerivationType::AccountChange(index, 0)),
+            DerivationType::AddressIndex(_, _, _) => Ok(DerivationType::AddressIndex(0, 0, index)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct DerivationPath {
     pub slip44: u32,
@@ -55,6 +66,35 @@ pub fn components_to_derivation_path(components: &[u32]) -> Vec<u8> {
     }
 
     buffer
+}
+
+pub trait DerivationTypeCodec {
+    fn to_u8(&self) -> u8;
+    fn from_u8(val: u8) -> Result<DerivationType, Bip329Errors>;
+}
+
+pub fn default_derivation_type() -> u8 {
+    3
+}
+
+impl DerivationTypeCodec for DerivationType {
+    fn to_u8(&self) -> u8 {
+        match self {
+            DerivationType::Root => 0,
+            DerivationType::Account(_) => 1,
+            DerivationType::AccountChange(_, _) => 2,
+            DerivationType::AddressIndex(_, _, _) => 3,
+        }
+    }
+    fn from_u8(val: u8) -> Result<Self, Bip329Errors> {
+        match val {
+            0 => Ok(DerivationType::Root),
+            1 => Ok(DerivationType::Account(0)),
+            2 => Ok(DerivationType::AccountChange(0, 0)),
+            3 => Ok(DerivationType::AddressIndex(0, 0, 0)),
+            _ => Err(Bip329Errors::InvalidDerivationType(val)),
+        }
+    }
 }
 
 impl DerivationPath {
@@ -375,19 +415,84 @@ mod tests {
     #[test]
     fn test_try_from_round_trip() {
         let cases = [
-            DerivationPath::new(slip44::SOLANA, DerivationType::Root, DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::SOLANA, DerivationType::Account(0), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::SOLANA, DerivationType::Account(5), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::SOLANA, DerivationType::AccountChange(0, 0), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::SOLANA, DerivationType::AccountChange(3, 1), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::ETHEREUM, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::ETHEREUM, DerivationType::AddressIndex(0, 0, 5), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::ETHEREUM, DerivationType::AddressIndex(1, 0, 10), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::ZILLIQA, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::TRON, DerivationType::AddressIndex(0, 0, 3), DerivationPath::BIP44_PURPOSE, None),
-            DerivationPath::new(slip44::BITCOIN, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP86_PURPOSE, None),
-            DerivationPath::new(slip44::BITCOIN, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP49_PURPOSE, None),
-            DerivationPath::new(slip44::BITCOIN, DerivationType::AddressIndex(0, 0, 0), DerivationPath::BIP84_PURPOSE, None),
+            DerivationPath::new(
+                slip44::SOLANA,
+                DerivationType::Root,
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::SOLANA,
+                DerivationType::Account(0),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::SOLANA,
+                DerivationType::Account(5),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::SOLANA,
+                DerivationType::AccountChange(0, 0),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::SOLANA,
+                DerivationType::AccountChange(3, 1),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::ETHEREUM,
+                DerivationType::AddressIndex(0, 0, 0),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::ETHEREUM,
+                DerivationType::AddressIndex(0, 0, 5),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::ETHEREUM,
+                DerivationType::AddressIndex(1, 0, 10),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::ZILLIQA,
+                DerivationType::AddressIndex(0, 0, 0),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::TRON,
+                DerivationType::AddressIndex(0, 0, 3),
+                DerivationPath::BIP44_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::BITCOIN,
+                DerivationType::AddressIndex(0, 0, 0),
+                DerivationPath::BIP86_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::BITCOIN,
+                DerivationType::AddressIndex(0, 0, 0),
+                DerivationPath::BIP49_PURPOSE,
+                None,
+            ),
+            DerivationPath::new(
+                slip44::BITCOIN,
+                DerivationType::AddressIndex(0, 0, 0),
+                DerivationPath::BIP84_PURPOSE,
+                None,
+            ),
         ];
 
         for dp in &cases {
