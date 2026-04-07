@@ -1,8 +1,8 @@
 use config::key::{ED25519_PUB_KEY_SIZE, PUB_KEY_SIZE};
-use solana_pubkey::Pubkey;
 use errors::keypair::PubKeyError;
 use k256::PublicKey as K256PublicKey;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use solana_pubkey::Pubkey;
 use std::str::FromStr;
 
 use crate::address::Address;
@@ -16,7 +16,7 @@ pub enum PubKey {
     Secp256k1Keccak256([u8; PUB_KEY_SIZE]), // Ethereum
     Secp256k1Bitcoin(([u8; PUB_KEY_SIZE], bitcoin::Network, bitcoin::AddressType)), // Bitcoin
     Secp256k1Tron([u8; PUB_KEY_SIZE]),      // Tron
-    Ed25519Solana(Pubkey), // Solana
+    Ed25519Solana(Pubkey),                  // Solana
 }
 
 impl PubKey {
@@ -29,15 +29,11 @@ impl PubKey {
         Ok(pk_bytes)
     }
 
-    pub fn from_uncompressed_hex(value: &str) -> Result<[u8; PUB_KEY_SIZE]> {
+    pub fn from_uncompressed_hex(value: &str) -> Result<Vec<u8>> {
         let pk_bytes_vec = alloy::hex::decode(value).map_err(|_| PubKeyError::InvalidHex)?;
         let pk = K256PublicKey::from_sec1_bytes(&pk_bytes_vec)
             .map_err(|_| PubKeyError::InvalidLength)?;
-        let pk_bytes: [u8; PUB_KEY_SIZE] = pk
-            .to_sec1_bytes()
-            .to_vec()
-            .try_into()
-            .map_err(|_| PubKeyError::InvalidHex)?;
+        let pk_bytes = pk.to_sec1_bytes().to_vec();
 
         Ok(pk_bytes)
     }
