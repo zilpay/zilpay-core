@@ -3,6 +3,7 @@ mod responses;
 
 use crate::evm::{GasFeeHistory, RequiredTxParams};
 use crate::provider::NetworkProvider;
+use crate::solana::tx_builder::build_sol_transfer_message;
 use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
@@ -118,10 +119,35 @@ impl SolanaOperations for NetworkProvider {
     async fn solana_estimate_params_batch(
         &self,
         tx: &TransactionRequest,
-        _sender: &Address,
+        sender: &Address,
     ) -> Result<RequiredTxParams> {
         let fee = if let TransactionRequest::Solana((sol_tx, _)) = tx {
-            U256::from(self.solana_get_fee_for_message(&sol_tx.message).await?)
+            let message = if sol_tx.message.is_empty() {
+                let Address::Ed25519Solana(pk) = sender else {
+                    return Ok(RequiredTxParams {
+                        gas_price: U256::from(SOLANA_BASE_FEE_LAMPORTS),
+                        max_priority_fee: U256::ZERO,
+                        fee_history: GasFeeHistory::default(),
+                        tx_estimate_gas: U256::from(1u64),
+                        blob_base_fee: U256::ZERO,
+                        nonce: 0,
+                        slow: U256::from(SOLANA_BASE_FEE_LAMPORTS),
+                        market: U256::from(SOLANA_BASE_FEE_LAMPORTS),
+                        fast: U256::from(SOLANA_BASE_FEE_LAMPORTS),
+                        current: U256::from(SOLANA_BASE_FEE_LAMPORTS),
+                    });
+                };
+                let blockhash_str = self.solana_get_latest_blockhash().await?;
+                let blockhash: [u8; 32] = bs58::decode(&blockhash_str)
+                    .into_vec()
+                    .map_err(|e| NetworkErrors::RPCError(e.to_string()))?
+                    .try_into()
+                    .map_err(|_| NetworkErrors::RPCError("blockhash must be 32 bytes".into()))?;
+                build_sol_transfer_message(pk, pk, 0, &blockhash)
+            } else {
+                sol_tx.message.clone()
+            };
+            U256::from(self.solana_get_fee_for_message(&message).await?)
         } else {
             U256::from(SOLANA_BASE_FEE_LAMPORTS)
         };
@@ -480,7 +506,7 @@ mod tests {
         let provider = NetworkProvider::new(gen_sol_devnet_conf());
         let tx =
             TransactionRequest::Solana((SolanaTransaction { message: vec![] }, Default::default()));
-        let sender = Address::Ed25519Solana([0u8; 32].into());
+        let sender = Address::Ed25519Solana([1u8; 32].into());
         let params = provider
             .solana_estimate_params_batch(&tx, &sender)
             .await

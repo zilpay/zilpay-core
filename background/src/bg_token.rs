@@ -332,6 +332,7 @@ mod tests_background_tokens {
         bg_crypto::CryptoOperations, bg_storage::StorageManagement, BackgroundBip39Params,
     };
     use crate::{bg_tx::TransactionsManagement, bg_wallet::WalletManagement};
+    use wallet::wallet_account::AccountManagement;
 
     use config::address::ADDR_LEN;
     use crypto::bip49::{DerivationPath, DerivationTypeCodec};
@@ -1287,6 +1288,19 @@ mod tests_background_tokens {
             .await
             .unwrap();
 
+        let wallet = bg.get_wallet_by_index(0).unwrap();
+        wallet
+            .add_next_bip39_account("sol 3".to_string(), 3, None, "", &argon_seed)
+            .unwrap();
+
+        let data = wallet.get_wallet_data().unwrap();
+        let accs = data.get_accounts().unwrap();
+        assert_eq!(accs.len(), 4);
+        assert_eq!(
+            accs[3].addr.auto_format(),
+            "9Tj3srBSxH7RFRCm8uharreY7ZBS49XSfpwCeYa7Xaqp"
+        );
+
         let signed_tx = wallet
             .sign_transaction(txn_req, 0, &argon_seed, None)
             .await
@@ -1316,14 +1330,13 @@ mod tests_background_tokens {
         let sender_acc = &accs[sender_index];
         dbg!(sender_index, sender_balance);
 
-        let probe_txn = bg
-            .build_token_transfer(sol_token, sender_acc, receiver_addr.clone(), sender_balance)
-            .await
-            .unwrap();
-
         let chain = bg.get_provider(net_config.hash()).unwrap();
+        let empty_sol_tx = TransactionRequest::Solana((
+            SolanaTransaction { message: vec![] },
+            Default::default(),
+        ));
         let fee_params = chain
-            .estimate_params_batch(&probe_txn, &sender_acc.addr, 0, None)
+            .estimate_params_batch(&empty_sol_tx, &sender_acc.addr, 0, None)
             .await
             .unwrap();
         let fee_lamports = u64::try_from(fee_params.gas_price).unwrap();

@@ -4,7 +4,8 @@ use crate::{
     Result, Wallet,
 };
 use cipher::argon2::Argon2Seed;
-use crypto::{bip49::DerivationPath, slip44};
+use crypto::bip49::{DerivationPath, DerivationType};
+use crypto::slip44;
 use errors::wallet::WalletErrors;
 use proto::{pubkey::PubKey, secret_key::SecretKey};
 use rpc::network_config::ChainConfig;
@@ -22,7 +23,8 @@ pub trait AccountManagement {
     fn add_next_bip39_account(
         &self,
         name: String,
-        bip49: &DerivationPath,
+        index: usize,
+        network: Option<bitcoin::Network>,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
     ) -> std::result::Result<(), Self::Error>;
@@ -227,13 +229,16 @@ impl AccountManagement for Wallet {
     fn add_next_bip39_account(
         &self,
         name: String,
-        bip49: &DerivationPath,
+        index: usize,
+        network: Option<bitcoin::Network>,
         passphrase: &str,
         seed_bytes: &Argon2Seed,
     ) -> Result<()> {
         let mut data = self.get_wallet_data()?;
         let m = self.reveal_mnemonic(seed_bytes)?;
         let mnemonic_seed = m.to_seed(passphrase)?;
+        let derivation = DerivationType::with_index(data.derivation_type, index)?;
+        let bip49 = DerivationPath::new(data.slip44, derivation, data.bip, network);
         let has_account = data
             .slip44_accounts
             .get(&data.slip44)
@@ -249,7 +254,7 @@ impl AccountManagement for Wallet {
             return Err(WalletErrors::ExistsAccount(bip49.get_index()));
         }
 
-        let hd_account = AccountV2::from_hd(&mnemonic_seed, name, bip49)?;
+        let hd_account = AccountV2::from_hd(&mnemonic_seed, name, &bip49)?;
 
         data.slip44_accounts
             .get_mut(&data.slip44)
