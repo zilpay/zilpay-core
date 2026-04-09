@@ -19,11 +19,11 @@ type Result<T> = std::result::Result<T, AddressError>;
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Address {
-    Secp256k1Sha256([u8; ADDR_LEN]),           // ZILLIQA
-    Secp256k1Keccak256([u8; ADDR_LEN]),        // Ethereum
-    Secp256k1Bitcoin(Vec<u8>),                 // Bitcoin (UTF-8 encoded address string)
-    Secp256k1Tron([u8; ADDR_LEN]),             // Tron
-    Ed25519Solana(Pubkey), // Solana
+    Secp256k1Sha256([u8; ADDR_LEN]),    // ZILLIQA
+    Secp256k1Keccak256([u8; ADDR_LEN]), // Ethereum
+    Secp256k1Bitcoin(Vec<u8>),          // Bitcoin (UTF-8 encoded address string)
+    Secp256k1Tron([u8; ADDR_LEN]),      // Tron
+    Ed25519Solana(Pubkey),              // Solana
 }
 
 impl Address {
@@ -216,7 +216,8 @@ impl Address {
     }
 
     pub fn to_eth_checksummed(&self) -> Result<String> {
-        let addr = alloy::primitives::Address::from_slice(self.as_ref());
+        let addr = alloy::primitives::Address::try_from(self.as_ref())
+            .map_err(|e| AddressError::InvalidETHAddress(e.to_string()))?;
 
         // TODO: check chain id;
         Ok(addr.to_checksum(None))
@@ -380,7 +381,11 @@ impl std::fmt::Display for Address {
         match self {
             Self::Secp256k1Sha256(bytes) => write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap()),
             Self::Secp256k1Keccak256(bytes) => {
-                write!(f, "{}", alloy::primitives::Address::from_slice(bytes).to_checksum(None))
+                write!(
+                    f,
+                    "{}",
+                    alloy::primitives::Address::from_slice(bytes).to_checksum(None)
+                )
             }
             Self::Secp256k1Bitcoin(_) => write!(f, "{}", self.auto_format()),
             Self::Secp256k1Tron(bytes) => write!(f, "{}", Self::tron_to_base58check(bytes)),
@@ -394,7 +399,11 @@ impl std::fmt::Debug for Address {
         match self {
             Self::Secp256k1Sha256(bytes) => write!(f, "{}", to_bech32(HRP_ZIL, bytes).unwrap()),
             Self::Secp256k1Keccak256(bytes) => {
-                write!(f, "{}", alloy::primitives::Address::from_slice(bytes).to_checksum(None))
+                write!(
+                    f,
+                    "{}",
+                    alloy::primitives::Address::from_slice(bytes).to_checksum(None)
+                )
             }
             Self::Secp256k1Bitcoin(_) => write!(f, "{}", self.auto_format()),
             Self::Secp256k1Tron(bytes) => write!(f, "{}", Self::tron_to_base58check(bytes)),
@@ -930,7 +939,10 @@ mod tests {
         let addr = Address::from_pubkey(&pk).unwrap();
         assert!(matches!(addr, Address::Ed25519Solana(_)));
         assert_eq!(addr.prefix_type(), 3);
-        assert_eq!(addr.auto_format(), "9tKf8Q98FsGKJiM4oqMnTxmYH3fU2qJzSwzc76vgzyBT");
+        assert_eq!(
+            addr.auto_format(),
+            "9tKf8Q98FsGKJiM4oqMnTxmYH3fU2qJzSwzc76vgzyBT"
+        );
     }
 
     #[test]
