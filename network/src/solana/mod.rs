@@ -1,5 +1,5 @@
-pub mod tx_builder;
 mod responses;
+pub mod tx_builder;
 
 use crate::evm::{GasFeeHistory, RequiredTxParams};
 use crate::provider::NetworkProvider;
@@ -7,10 +7,9 @@ use crate::solana::tx_builder::build_sol_transfer_message;
 use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
-use base64::Engine;
 use errors::network::NetworkErrors;
-use history::transaction::HistoricalTransaction;
 use history::status::TransactionStatus;
+use history::transaction::HistoricalTransaction;
 use proto::address::Address;
 use proto::tx::{TransactionReceipt, TransactionRequest};
 use responses::*;
@@ -19,12 +18,16 @@ use rpc::methods::SolanaMethod;
 use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::{ErrorRes, ResultRes};
+use base64::Engine;
 use serde_json::{json, Value};
-use std::time::{SystemTime, UNIX_EPOCH};
+use solana_pubkey::Pubkey;
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 use token::ft::FToken;
 
 const SOLANA_BASE_FEE_LAMPORTS: u64 = 5000;
+const METAPLEX_PROGRAM_ID: &str = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
+const METAPLEX_METADATA_SEED: &[u8] = b"metadata";
 const SOLANA_BLOCK_TIME_SECS: u64 = 1;
 const SOLANA_TX_PENDING_TIMEOUT_SECS: u64 = 600;
 
@@ -53,11 +56,7 @@ pub trait SolanaOperations {
     ) -> Result<()>;
     async fn solana_get_fee_for_message(&self, message: &[u8]) -> Result<u64>;
     async fn solana_check_account_health(&self, address: &str) -> Result<(u64, String)>;
-    async fn solana_ftoken_meta(
-        &self,
-        contract: Address,
-        accounts: &[&Address],
-    ) -> Result<FToken>;
+    async fn solana_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken>;
 }
 
 #[async_trait]
@@ -132,11 +131,9 @@ impl SolanaOperations for NetworkProvider {
             .result
             .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&res.error)))?;
 
-        let info = value
-            .value
-            .ok_or_else(|| NetworkErrors::RPCError(
-                format!("Account {address} not found on-chain")
-            ))?;
+        let info = value.value.ok_or_else(|| {
+            NetworkErrors::RPCError(format!("Account {address} not found on-chain"))
+        })?;
 
         Ok((info.space, info.owner))
     }
@@ -331,7 +328,10 @@ impl SolanaOperations for NetworkProvider {
                     payloads.push(build_get_balance_req(&address_b58));
                     mapping.push((token_idx, acc_idx, true));
                 } else if let Address::Ed25519Solana(mint) = &token.addr {
-                    payloads.push(build_get_token_accounts_req(&address_b58, &mint.to_string()));
+                    payloads.push(build_get_token_accounts_req(
+                        &address_b58,
+                        &mint.to_string(),
+                    ));
                     mapping.push((token_idx, acc_idx, false));
                 }
             }
@@ -359,54 +359,71 @@ impl SolanaOperations for NetworkProvider {
         Ok(())
     }
 
-    async fn solana_ftoken_meta(
-        &self,
-        contract: Address,
-        accounts: &[&Address],
-    ) -> Result<FToken> {
+    async fn solana_ftoken_meta(&self, contract: Address, accounts: &[&Address]) -> Result<FToken> {
         let Address::Ed25519Solana(mint) = contract else {
             return Err(NetworkErrors::RPCError(
                 "Expected Ed25519Solana mint address".to_string(),
             ));
         };
         let mint_b58 = mint.to_string();
-
-        let mut payloads: Vec<Value> = Vec::with_capacity(1 + accounts.len());
-        payloads.push(build_get_account_info_req(&mint_b58));
+        let metadata_pda = metaplex_metadata_pda(&mint);
 
         let mut valid_accounts: Vec<usize> = Vec::with_capacity(accounts.len());
         for (i, account) in accounts.iter().enumerate() {
-            if let Address::Ed25519Solana(pubkey) = account {
-                payloads.push(build_get_token_accounts_req(&pubkey.to_string(), &mint_b58));
+            if let Address::Ed25519Solana(_) = account {
                 valid_accounts.push(i);
             }
         }
 
         let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-        let responses: Vec<ResultRes<Value>> = provider
-            .req(json!(payloads))
+
+        let mint_res: ResultRes<SolanaValueResponse<Option<AccountInfoValue>>> = provider
+            .req(build_get_account_info_req(&mint_b58))
             .await
             .map_err(NetworkErrors::Request)?;
 
-        let decimals = responses[0]
+        let raw_mint = mint_res
             .result
-            .as_ref()
-            .and_then(|v| {
-                serde_json::from_value::<SolanaValueResponse<Option<AccountInfoValue>>>(v.clone())
-                    .ok()
-            })
+            .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&mint_res.error)))?;
+
+        let decimals = raw_mint
+            .value
+            .ok_or_else(|| NetworkErrors::RPCError(format!("Mint account not found: {mint_b58}")))?
+            .data
+            .parsed
+            .info
+            .decimals;
+
+        let meta_res: ResultRes<SolanaValueResponse<Option<RawAccountValue>>> = provider
+            .req(build_get_account_info_base64_req(&metadata_pda))
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let (name, symbol) = meta_res
+            .result
             .and_then(|r| r.value)
-            .map(|v| v.data.parsed.info.decimals)
-            .ok_or_else(|| NetworkErrors::RPCError("SPL mint account not found".to_string()))?;
+            .and_then(|v| {
+                let b64 = v.data.first()?;
+                base64::engine::general_purpose::STANDARD.decode(b64).ok()
+            })
+            .and_then(|bytes| MetaplexMetadata::from_bytes(&bytes))
+            .map(|m| (m.name, m.symbol))
+            .unwrap_or_default();
 
         let mut balances = HashMap::new();
-        for (offset, acc_idx) in valid_accounts.iter().enumerate() {
-            balances.insert(*acc_idx, parse_spl_balance(&responses[1 + offset]));
+        for &acc_idx in &valid_accounts {
+            if let Address::Ed25519Solana(pubkey) = &accounts[acc_idx] {
+                let bal_res: ResultRes<Value> = provider
+                    .req(build_get_token_accounts_req(&pubkey.to_string(), &mint_b58))
+                    .await
+                    .map_err(NetworkErrors::Request)?;
+                balances.insert(acc_idx, parse_spl_balance(&bal_res));
+            }
         }
 
         Ok(FToken {
-            name: String::new(),
-            symbol: String::new(),
+            name,
+            symbol,
             decimals,
             addr: Address::Ed25519Solana(mint),
             logo: None,
@@ -438,6 +455,22 @@ fn build_get_account_info_req(mint_b58: &str) -> Value {
         json!([mint_b58, {"encoding": "jsonParsed"}]),
         SolanaMethod::GetAccountInfo,
     )
+}
+
+fn build_get_account_info_base64_req(address_b58: &str) -> Value {
+    RpcProvider::<ChainConfig>::build_payload(
+        json!([address_b58, {"encoding": "base64"}]),
+        SolanaMethod::GetAccountInfo,
+    )
+}
+
+fn metaplex_metadata_pda(mint: &Pubkey) -> String {
+    let program_id: Pubkey = METAPLEX_PROGRAM_ID.parse().expect("valid metaplex id");
+    let (pda, _) = Pubkey::find_program_address(
+        &[METAPLEX_METADATA_SEED, program_id.as_ref(), mint.as_ref()],
+        &program_id,
+    );
+    pda.to_string()
 }
 
 fn build_get_transaction_req(sig: &str) -> Value {
@@ -494,14 +527,18 @@ mod tests {
     use super::*;
     use proto::solana_tx::SolanaTransaction;
     use proto::tx::TransactionMetadata;
-    use test_data::{gen_sol_devnet_conf, gen_sol_spl_token, gen_sol_token};
+    use test_data::{gen_sol_devnet_conf, gen_sol_mainnet_conf, gen_sol_spl_token, gen_sol_token};
 
     const DEVNET_RICH_ADDRESS: &str = "vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg";
     const DEVNET_USDC_MINT: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
     const DEVNET_USDC_RICH_ADDRESS: &str = "DBD8hAwLDRQkTsu6EqviaYNGKPnsAMmQonxf7AH8ZcFY";
+    const MAINNET_USDC_MINT: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const MAINNET_USDC_RICH_ADDRESS: &str = "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263";
     const DEVNET_ZERO_ADDRESS: &str = "4fYNw3dojWmQ4dXtSGE9epjRGy9GHeo5UCCbg6NbyNjF";
-    const DEVNET_CONFIRMED_TX_SIG: &str = "x7SUrZF6nV97XF1hg2NPZpLimi6StUbpH2nVdGC4jR2ojnnzYQ18y4CpLnCR6JkcH4gCQgW3sobJC2wVcnQE2xR";
-    const DEVNET_FAILED_TX_SIG: &str = "2V2erUdPadyTiFRFS98g6kkXHDVFgWX1ZeDMH67bpsPekm9BaCCkLs6rN15Y6oDeHWETFb5sagfR7syifbWLPMcG";
+    const DEVNET_CONFIRMED_TX_SIG: &str =
+        "x7SUrZF6nV97XF1hg2NPZpLimi6StUbpH2nVdGC4jR2ojnnzYQ18y4CpLnCR6JkcH4gCQgW3sobJC2wVcnQE2xR";
+    const DEVNET_FAILED_TX_SIG: &str =
+        "2V2erUdPadyTiFRFS98g6kkXHDVFgWX1ZeDMH67bpsPekm9BaCCkLs6rN15Y6oDeHWETFb5sagfR7syifbWLPMcG";
 
     #[tokio::test]
     async fn test_solana_get_block_number() {
@@ -609,7 +646,11 @@ mod tests {
         let provider = NetworkProvider::new(gen_sol_devnet_conf());
         let slot = provider.solana_get_current_block_number().await.unwrap();
         dbg!(&slot);
-        assert!(slot > 453_000_000, "Slot should be > 453M on devnet, got: {}", slot);
+        assert!(
+            slot > 453_000_000,
+            "Slot should be > 453M on devnet, got: {}",
+            slot
+        );
     }
 
     #[tokio::test]
@@ -637,7 +678,10 @@ mod tests {
 
         let balance = token.balances.get(&0).unwrap();
         dbg!(balance);
-        assert!(*balance > U256::from(0), "Rich address should have SOL balance");
+        assert!(
+            *balance > U256::from(0),
+            "Rich address should have SOL balance"
+        );
         println!(
             "Balance: {} lamports ({} SOL)",
             balance,
@@ -650,7 +694,10 @@ mod tests {
         let provider = NetworkProvider::new(gen_sol_devnet_conf());
         let mut token = gen_sol_token();
         let zero_account = Address::from_solana_address(DEVNET_ZERO_ADDRESS).unwrap();
-        println!("Querying balance for zero-balance address: {}", DEVNET_ZERO_ADDRESS);
+        println!(
+            "Querying balance for zero-balance address: {}",
+            DEVNET_ZERO_ADDRESS
+        );
 
         provider
             .solana_update_balances(vec![&mut token], &[&zero_account])
@@ -659,7 +706,11 @@ mod tests {
 
         let balance = token.balances.get(&0).unwrap();
         dbg!(balance);
-        assert_eq!(*balance, U256::from(0), "Empty address should have zero balance");
+        assert_eq!(
+            *balance,
+            U256::from(0),
+            "Empty address should have zero balance"
+        );
         println!("Balance confirmed: 0 lamports");
     }
 
@@ -699,7 +750,8 @@ mod tests {
             },
             solana: serde_json::to_string(&json!({
                 "transactionHash": DEVNET_CONFIRMED_TX_SIG
-            })).ok(),
+            }))
+            .ok(),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -717,7 +769,11 @@ mod tests {
         let solana_data = list[0].get_solana().unwrap();
         dbg!(&solana_data);
         dbg!(&list[0].status);
-        assert_eq!(list[0].status, TransactionStatus::Success, "Confirmed tx should be Success");
+        assert_eq!(
+            list[0].status,
+            TransactionStatus::Success,
+            "Confirmed tx should be Success"
+        );
 
         let fee = solana_data.get("fee").and_then(|v| v.as_str());
         assert!(fee.is_some(), "Fee should be set in solana data");
@@ -741,7 +797,8 @@ mod tests {
             },
             solana: serde_json::to_string(&json!({
                 "transactionHash": DEVNET_FAILED_TX_SIG
-            })).ok(),
+            }))
+            .ok(),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -757,7 +814,11 @@ mod tests {
             .unwrap();
 
         dbg!(&list[0].status);
-        assert_eq!(list[0].status, TransactionStatus::Failed, "Failed tx should be Failed status");
+        assert_eq!(
+            list[0].status,
+            TransactionStatus::Failed,
+            "Failed tx should be Failed status"
+        );
 
         let solana_data = list[0].get_solana().unwrap();
         dbg!(&solana_data);
@@ -777,7 +838,8 @@ mod tests {
             },
             solana: serde_json::to_string(&json!({
                 "transactionHash": DEVNET_CONFIRMED_TX_SIG
-            })).ok(),
+            }))
+            .ok(),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -792,14 +854,19 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(list[0].status, TransactionStatus::Success, "Should remain Success");
+        assert_eq!(
+            list[0].status,
+            TransactionStatus::Success,
+            "Should remain Success"
+        );
         println!("Non-pending tx correctly skipped");
     }
 
     #[tokio::test]
     async fn test_solana_estimate_params_batch_devnet() {
         let provider = NetworkProvider::new(gen_sol_devnet_conf());
-        let tx = TransactionRequest::Solana((SolanaTransaction { message: vec![] }, Default::default()));
+        let tx =
+            TransactionRequest::Solana((SolanaTransaction { message: vec![] }, Default::default()));
         let sender = Address::from_solana_address(DEVNET_RICH_ADDRESS).unwrap();
 
         let params = provider
@@ -814,11 +881,22 @@ mod tests {
         assert_eq!(params.fast, U256::from(SOLANA_BASE_FEE_LAMPORTS));
         assert_eq!(params.tx_estimate_gas, U256::from(1u64));
         assert_eq!(params.nonce, 0);
-        println!("Fee params validated: gas_price={} lamports", SOLANA_BASE_FEE_LAMPORTS);
+        println!(
+            "Fee params validated: gas_price={} lamports",
+            SOLANA_BASE_FEE_LAMPORTS
+        );
     }
 
     fn usdc_mint_bytes() -> [u8; 32] {
         bs58::decode(DEVNET_USDC_MINT)
+            .into_vec()
+            .unwrap()
+            .try_into()
+            .unwrap()
+    }
+
+    fn mainnet_usdc_mint_bytes() -> [u8; 32] {
+        bs58::decode(MAINNET_USDC_MINT)
             .into_vec()
             .unwrap()
             .try_into()
@@ -831,7 +909,10 @@ mod tests {
         let provider = NetworkProvider::new(conf.clone());
         let mut token = gen_sol_spl_token(usdc_mint_bytes(), conf.hash());
         let zero_account = Address::from_solana_address(DEVNET_ZERO_ADDRESS).unwrap();
-        println!("Querying SPL USDC balance for zero-balance address: {}", DEVNET_ZERO_ADDRESS);
+        println!(
+            "Querying SPL USDC balance for zero-balance address: {}",
+            DEVNET_ZERO_ADDRESS
+        );
 
         provider
             .solana_update_balances(vec![&mut token], &[&zero_account])
@@ -840,7 +921,11 @@ mod tests {
 
         let balance = token.balances.get(&0).unwrap();
         dbg!(balance);
-        assert_eq!(*balance, U256::ZERO, "Empty address should have zero SPL balance");
+        assert_eq!(
+            *balance,
+            U256::ZERO,
+            "Empty address should have zero SPL balance"
+        );
         println!("SPL USDC balance confirmed: 0");
     }
 
@@ -850,7 +935,10 @@ mod tests {
         let provider = NetworkProvider::new(conf.clone());
         let mut token = gen_sol_spl_token(usdc_mint_bytes(), conf.hash());
         let rich_account = Address::from_solana_address(DEVNET_USDC_RICH_ADDRESS).unwrap();
-        println!("Querying SPL USDC balance for: {}", DEVNET_USDC_RICH_ADDRESS);
+        println!(
+            "Querying SPL USDC balance for: {}",
+            DEVNET_USDC_RICH_ADDRESS
+        );
 
         provider
             .solana_update_balances(vec![&mut token], &[&rich_account])
@@ -859,18 +947,33 @@ mod tests {
 
         let balance = token.balances.get(&0).unwrap();
         dbg!(balance);
-        assert!(*balance > U256::ZERO, "Rich address should have USDC balance");
+        assert!(
+            *balance > U256::ZERO,
+            "Rich address should have USDC balance"
+        );
         println!("SPL USDC balance: {} (raw units)", balance);
+    }
+
+    #[test]
+    fn test_metaplex_pda_mainnet_usdc() {
+        let mainnet_usdc: Pubkey = MAINNET_USDC_MINT.parse().unwrap();
+        let program_id: Pubkey = METAPLEX_PROGRAM_ID.parse().unwrap();
+        let (pda, _) = Pubkey::find_program_address(
+            &[METAPLEX_METADATA_SEED, program_id.as_ref(), mainnet_usdc.as_ref()],
+            &program_id,
+        );
+        assert_eq!(
+            pda.to_string(), "5x38Kp4hvdomTCnCrAny4UtMUt5rQBdB6px2K1Ui45Wq",
+            "PDA mismatch for mainnet USDC"
+        );
     }
 
     #[tokio::test]
     async fn test_solana_ftoken_meta_usdc() {
-        let conf = gen_sol_devnet_conf();
-        let provider = NetworkProvider::new(conf.clone());
-        let mint = Address::Ed25519Solana(usdc_mint_bytes().into());
-        let rich_account = Address::from_solana_address(DEVNET_USDC_RICH_ADDRESS).unwrap();
+        let provider = NetworkProvider::new(gen_sol_mainnet_conf());
+        let mint = Address::Ed25519Solana(mainnet_usdc_mint_bytes().into());
+        let rich_account = Address::from_solana_address(MAINNET_USDC_RICH_ADDRESS).unwrap();
         let zero_account = Address::from_solana_address(DEVNET_ZERO_ADDRESS).unwrap();
-        println!("Fetching SPL metadata for devnet USDC: {}", DEVNET_USDC_MINT);
 
         let ftoken = provider
             .solana_ftoken_meta(mint, &[&rich_account, &zero_account])
@@ -878,17 +981,22 @@ mod tests {
             .unwrap();
 
         dbg!(&ftoken.decimals);
+        dbg!(&ftoken.name);
+        dbg!(&ftoken.symbol);
         dbg!(ftoken.balances.get(&0));
         dbg!(ftoken.balances.get(&1));
-        assert_eq!(ftoken.decimals, 6, "Devnet USDC should have 6 decimals");
+        assert_eq!(ftoken.decimals, 6);
+        assert_eq!(ftoken.name, "USD Coin");
+        assert_eq!(ftoken.symbol, "USDC");
         assert!(!ftoken.native);
-        assert!(*ftoken.balances.get(&0).unwrap() > U256::ZERO, "Rich address should have USDC");
-        assert_eq!(*ftoken.balances.get(&1).unwrap(), U256::ZERO, "Zero address should have no USDC");
-        println!(
-            "SPL ftoken_meta: decimals={}, rich={}, zero={}",
-            ftoken.decimals,
-            ftoken.balances[&0],
-            ftoken.balances[&1]
+        assert!(
+            *ftoken.balances.get(&0).unwrap() > U256::ZERO,
+            "Rich address should have USDC"
+        );
+        assert_eq!(
+            *ftoken.balances.get(&1).unwrap(),
+            U256::ZERO,
+            "Zero address should have no USDC"
         );
     }
 }

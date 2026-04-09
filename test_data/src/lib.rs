@@ -379,6 +379,30 @@ pub fn gen_sol_devnet_conf() -> ChainConfig {
     }
 }
 
+pub fn gen_sol_mainnet_conf() -> ChainConfig {
+    ChainConfig {
+        ftokens: vec![],
+        logo: String::new(),
+        diff_block_time: 0,
+        testnet: None,
+        chain_ids: [501, 0],
+        name: "Solana".to_string(),
+        chain: "SOL".to_string(),
+        short_name: "sol".to_string(),
+        rpc: vec![
+            "https://api.mainnet-beta.solana.com".to_string(),
+            "https://solana-rpc.publicnode.com".to_string(),
+            "https://solana.drpc.org".to_string(),
+            "https://1rpc.io/sol".to_string(),
+        ],
+        features: vec![],
+        slip_44: slip44::SOLANA,
+        ens: None,
+        explorers: vec![],
+        fallback_enabled: false,
+    }
+}
+
 pub fn gen_sol_token() -> FToken {
     FToken {
         rate: 0f64,

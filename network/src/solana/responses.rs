@@ -2,6 +2,51 @@ use serde::Deserialize;
 use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
+pub struct RawAccountValue {
+    pub data: Vec<String>,
+}
+
+const METAPLEX_NAME_MAX: usize = 32;
+const METAPLEX_SYMBOL_MAX: usize = 10;
+
+#[derive(Debug)]
+pub struct MetaplexMetadata {
+    pub name: String,
+    pub symbol: String,
+}
+
+impl MetaplexMetadata {
+    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+        let meta_offset = 1 + 32 + 32;
+        if data.len() < meta_offset + 4 {
+            return None;
+        }
+        let (name, after_name) = read_padded_string(data, meta_offset, METAPLEX_NAME_MAX)?;
+        let (symbol, _) = read_padded_string(data, after_name, METAPLEX_SYMBOL_MAX)?;
+        Some(MetaplexMetadata { name, symbol })
+    }
+}
+
+fn read_padded_string(data: &[u8], offset: usize, max_len: usize) -> Option<(String, usize)> {
+    if data.len() < offset + 4 {
+        return None;
+    }
+    let len = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?) as usize;
+    if len > max_len {
+        return None;
+    }
+    let start = offset + 4;
+    let end = start + len;
+    if data.len() < end {
+        return None;
+    }
+    let s = String::from_utf8_lossy(&data[start..end])
+        .trim_matches('\0')
+        .to_string();
+    Some((s, end))
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TokenAmount {
     pub amount: String,
 }
