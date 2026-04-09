@@ -90,8 +90,8 @@ solana-hash = "4"
 solana-instruction = "3"
 solana-message = { version = "3", features = ["serde", "bincode"] }
 solana-system-interface = { version = "3", features = ["bincode", "std"] }
-spl-token = "9"
-spl-associated-token-account = "8"
+spl-token = { version = "9", features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "8", features = ["no-entrypoint"] }
 
 [dev-dependencies]
 mockito = "1.7.2"
