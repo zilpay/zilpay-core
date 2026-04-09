@@ -12,11 +12,12 @@ use wallet::Wallet;
 
 pub type Result<T> = std::result::Result<T, BackgroundError>;
 
+#[derive(Debug)]
 pub struct BackgroundBip39Params<'a> {
     pub password: &'a SecretString,
-    pub mnemonic_str: &'a str,
+    pub mnemonic_str: &'a str, // TODO: make it SecretString
     pub mnemonic_check: bool,
-    pub passphrase: &'a str,
+    pub passphrase: &'a str, // TODO: make it SecretString
     pub wallet_name: String,
     pub bip: u32,
     pub biometric_type: AuthMethod,
@@ -27,6 +28,7 @@ pub struct BackgroundBip39Params<'a> {
     pub derivation_type: u8,
 }
 
+#[derive(Debug)]
 pub struct BackgroundSKParams<'a> {
     pub password: &'a SecretString,
     pub secret_key: SecretKey,
@@ -38,6 +40,7 @@ pub struct BackgroundSKParams<'a> {
     pub ftokens: Vec<FToken>,
 }
 
+#[derive(Debug)]
 pub struct BackgroundLedgerParams {
     pub ledger_id: Vec<u8>,
     pub accounts: Vec<(u8, Option<PubKey>, Address)>,

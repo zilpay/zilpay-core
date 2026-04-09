@@ -191,7 +191,11 @@ impl AccountManagement for Wallet {
             WalletTypes::SecretPhrase(_) => {
                 let m = self.reveal_mnemonic(seed_bytes)?;
                 let mnemonic_seed = m.to_seed(passphrase)?;
-                let derivation_type = data.derivation_type;
+                let eff_derivation_type = if target_slip44 == slip44::SOLANA {
+                    2
+                } else {
+                    data.derivation_type
+                };
 
                 let mut handles = Vec::new();
                 for (bip, missing) in missing_per_bip {
@@ -202,7 +206,7 @@ impl AccountManagement for Wallet {
                             let mut accounts = Vec::with_capacity(missing.len());
                             for (idx, name) in missing {
                                 let derivation = crypto::bip49::DerivationType::with_index(
-                                    derivation_type,
+                                    eff_derivation_type,
                                     idx,
                                 )?;
                                 let path = DerivationPath::new(target_slip44, derivation, bip, net);
@@ -237,7 +241,12 @@ impl AccountManagement for Wallet {
         let mut data = self.get_wallet_data()?;
         let m = self.reveal_mnemonic(seed_bytes)?;
         let mnemonic_seed = m.to_seed(passphrase)?;
-        let derivation = DerivationType::with_index(data.derivation_type, index)?;
+        let eff_derivation_type = if data.slip44 == slip44::SOLANA {
+            2
+        } else {
+            data.derivation_type
+        };
+        let derivation = DerivationType::with_index(eff_derivation_type, index)?;
         let bip49 = DerivationPath::new(data.slip44, derivation, data.bip, network);
         let has_account = data
             .slip44_accounts

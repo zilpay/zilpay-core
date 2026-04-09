@@ -231,8 +231,13 @@ impl WalletInit for Wallet {
                 handles.push(std::thread::spawn(
                     move || -> std::result::Result<(u32, u32, Vec<AccountV2>), WalletErrors> {
                         let mut accounts = Vec::with_capacity(idxs.len());
+                        let eff_derivation_type = if slip44 == crypto::slip44::SOLANA {
+                            2
+                        } else {
+                            derivation_type
+                        };
                         for (idx, name) in idxs {
-                            let derivation = DerivationType::with_index(derivation_type, idx)?;
+                            let derivation = DerivationType::with_index(eff_derivation_type, idx)?;
                             let path = crypto::bip49::DerivationPath::new(
                                 slip44, derivation, bip, network,
                             );
