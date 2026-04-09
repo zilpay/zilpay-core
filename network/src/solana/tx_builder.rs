@@ -18,6 +18,54 @@ pub fn build_sol_transfer_message(
     bincode::serialize(&msg).expect("serialize")
 }
 
+pub fn adjust_sol_native_transfer_lamports(
+    message_bytes: &[u8],
+    balance: u64,
+    fee: u64,
+) -> Option<Vec<u8>> {
+    use solana_system_interface::instruction::SystemInstruction;
+
+    let msg: Message = bincode::deserialize(message_bytes).ok()?;
+
+    if msg.instructions.len() != 1 {
+        return None;
+    }
+
+    let ix = &msg.instructions[0];
+    let program_key = msg.account_keys.get(ix.program_id_index as usize)?;
+
+    if *program_key != Pubkey::default() {
+        return None;
+    }
+
+    let sys_ix: SystemInstruction = bincode::deserialize(&ix.data).ok()?;
+    let lamports = match sys_ix {
+        SystemInstruction::Transfer { lamports } => lamports,
+        _ => return None,
+    };
+
+    if lamports != balance {
+        return None;
+    }
+
+    let new_lamports = lamports.saturating_sub(fee);
+
+    if new_lamports == 0 || new_lamports >= lamports {
+        return None;
+    }
+
+    let from = msg.account_keys.get(*ix.accounts.first()? as usize)?;
+    let to = msg.account_keys.get(*ix.accounts.get(1)? as usize)?;
+    let blockhash: [u8; 32] = msg.recent_blockhash.to_bytes();
+
+    Some(build_sol_transfer_message(
+        from,
+        to,
+        new_lamports,
+        &blockhash,
+    ))
+}
+
 pub fn build_spl_transfer_message(
     owner: &Pubkey,
     mint: &Pubkey,
@@ -28,15 +76,8 @@ pub fn build_spl_transfer_message(
     let source_ata = get_associated_token_address(owner, mint);
     let dest_ata = get_associated_token_address(to_wallet, mint);
     let hash = Hash::from(*blockhash);
-    let ix = token_transfer(
-        &spl_token::id(),
-        &source_ata,
-        &dest_ata,
-        owner,
-        &[],
-        amount,
-    )
-    .map_err(|e| e.to_string())?;
+    let ix = token_transfer(&spl_token::id(), &source_ata, &dest_ata, owner, &[], amount)
+        .map_err(|e| e.to_string())?;
     let msg = Message::new_with_blockhash(&[ix], Some(owner), &hash);
     Ok(bincode::serialize(&msg).expect("serialize"))
 }
@@ -49,6 +90,24 @@ mod tests {
     const DEVNET_RICH_ADDRESS: &str = "vines1vzrYbzLMRdu58ou5XTby4qAqVRLmqo36NKPTg";
     const DEVNET_USDC_MINT: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
     const DEVNET_USDC_RICH_ATA: &str = "6r6KJLTwFLnJ2czodnEQeiWfAEDw2nkCDsu4AwptU3fm";
+
+    #[test]
+    fn test_adjust_sol_native_transfer_lamports() {
+        let from = Pubkey::new_unique();
+        let to = Pubkey::new_unique();
+        let balance: u64 = 80_574_080;
+        let fee: u64 = 5_000;
+        let msg = build_sol_transfer_message(&from, &to, balance, &[0u8; 32]);
+
+        let adjusted = adjust_sol_native_transfer_lamports(&msg, balance, fee).unwrap();
+        let decoded: SolanaMessage = bincode::deserialize(&adjusted).unwrap();
+        let new_lamports =
+            u64::from_le_bytes(decoded.instructions[0].data[4..12].try_into().unwrap());
+        assert_eq!(new_lamports, balance - fee);
+
+        let partial_msg = build_sol_transfer_message(&from, &to, 1_000_000, &[0u8; 32]);
+        assert!(adjust_sol_native_transfer_lamports(&partial_msg, balance, fee).is_none());
+    }
 
     #[test]
     fn test_build_sol_transfer_message_roundtrip() {

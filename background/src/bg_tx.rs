@@ -6,7 +6,11 @@ use cipher::argon2::Argon2Seed;
 use config::sha::SHA256_SIZE;
 use errors::{background::BackgroundError, tx::TransactionErrors, wallet::WalletErrors};
 use history::{status::TransactionStatus, transaction::HistoricalTransaction};
-use network::{btc::BtcOperations, evm::RequiredTxParams};
+use network::{
+    btc::BtcOperations,
+    evm::RequiredTxParams,
+    solana::tx_builder::adjust_sol_native_transfer_lamports,
+};
 use proto::{
     address::Address,
     pubkey::PubKey,
@@ -295,7 +299,17 @@ pub fn update_tx_from_params(
                 }
             }
         }
-        TransactionRequest::Solana(_) => {}
+        TransactionRequest::Solana((ref mut sol_tx, _)) => {
+            let fee: u64 = params
+                .current
+                .try_into()
+                .map_err(|_| TransactionErrors::ConvertTxError("Fee overflow".to_string()))?;
+            let balance_u64: u64 = balance.try_into().unwrap_or(u64::MAX);
+
+            if let Some(adjusted) = adjust_sol_native_transfer_lamports(&sol_tx.message, balance_u64, fee) {
+                sol_tx.message = adjusted;
+            }
+        }
         TransactionRequest::Bitcoin((ref mut btc_tx, ref metadata)) => {
             if params.current == U256::ZERO {
                 return Ok(());

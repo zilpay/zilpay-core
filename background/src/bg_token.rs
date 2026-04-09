@@ -5,6 +5,7 @@ use crypto::slip44::TRON;
 use errors::background::BackgroundError;
 use network::{
     evm::generate_erc20_transfer_data,
+    solana::SolanaOperations,
     solana::tx_builder::{build_sol_transfer_message, build_spl_transfer_message},
 };
 use proto::{
@@ -240,6 +241,22 @@ impl TokensManagement for Background {
                             "blockhash must be 32 bytes".to_string(),
                         ))
                     })?;
+
+                if token.native {
+                    let from_b58 = from_pk.to_string();
+                    let (data_len, owner) = provider
+                        .solana_check_account_health(&from_b58)
+                        .await
+                        .map_err(BackgroundError::NetworkErrors)?;
+                    let expected_owner = token.addr.auto_format();
+                    if owner != expected_owner || data_len > 0 {
+                        return Err(BackgroundError::TokenError(
+                            errors::token::TokenError::ABIError(format!(
+                                "Account {from_b58} cannot send native SOL: has {data_len} bytes of on-chain data (owner: {owner}). Use a different account."
+                            )),
+                        ));
+                    }
+                }
 
                 let message = if token.native {
                     build_sol_transfer_message(from_pk, &to_pk, amount.to::<u64>(), &blockhash)
@@ -1257,8 +1274,15 @@ mod tests_background_tokens {
         let balance_2 = sol_token.balances.get(&2).copied().unwrap_or(U256::ZERO);
         dbg!(balance_0, balance_1, balance_2);
 
-        let from_account = &accs[0];
-        let to_account = &accs[1].addr.clone();
+        let (from_account, to_account) = if balance_1 > U256::ZERO {
+            (&accs[1], accs[0].addr.clone())
+        } else if balance_2 > U256::ZERO {
+            (&accs[2], accs[0].addr.clone())
+        } else if balance_0 > U256::ZERO {
+            (&accs[0], accs[1].addr.clone())
+        } else {
+            panic!("No funded Solana account for transfer");
+        };
         let amount = U256::from(1_000_000_000u64);
 
         let txn_req = bg

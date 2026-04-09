@@ -52,6 +52,7 @@ pub trait SolanaOperations {
         accounts: &[&Address],
     ) -> Result<()>;
     async fn solana_get_fee_for_message(&self, message: &[u8]) -> Result<u64>;
+    async fn solana_check_account_health(&self, address: &str) -> Result<(u64, String)>;
     async fn solana_ftoken_meta(
         &self,
         contract: Address,
@@ -116,6 +117,30 @@ impl SolanaOperations for NetworkProvider {
             .ok_or_else(|| NetworkErrors::RPCError("blockhash expired".into()))
     }
 
+    async fn solana_check_account_health(&self, address: &str) -> Result<(u64, String)> {
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
+        let payload = RpcProvider::<ChainConfig>::build_payload(
+            json!([address, {"encoding": "base64"}]),
+            SolanaMethod::GetAccountInfo,
+        );
+        let res: ResultRes<SolanaValueResponse<Option<SolanaAccountInfo>>> = provider
+            .req(payload)
+            .await
+            .map_err(NetworkErrors::Request)?;
+
+        let value = res
+            .result
+            .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&res.error)))?;
+
+        let info = value
+            .value
+            .ok_or_else(|| NetworkErrors::RPCError(
+                format!("Account {address} not found on-chain")
+            ))?;
+
+        Ok((info.space, info.owner))
+    }
+
     async fn solana_estimate_params_batch(
         &self,
         tx: &TransactionRequest,
@@ -177,6 +202,7 @@ impl SolanaOperations for NetworkProvider {
             let TransactionReceipt::Solana((ref solana_receipt, _)) = receipt else {
                 continue;
             };
+
             let encoded = base64::engine::general_purpose::STANDARD.encode(solana_receipt.encode());
             payloads.push(build_send_transaction_req(&encoded));
             valid_indices.push(i);

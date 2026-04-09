@@ -68,3 +68,9 @@ pub struct SolanaGetTransactionResult {
     pub meta: Option<SolanaTransactionMeta>,
     pub slot: Option<u64>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SolanaAccountInfo {
+    pub owner: String,
+    pub space: u64,
+}
