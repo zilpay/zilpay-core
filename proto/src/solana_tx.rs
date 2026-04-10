@@ -27,10 +27,12 @@ impl SolanaTransaction {
             _ => return Err(KeyPairError::InvalidEd25519Solana),
         };
 
-        Ok(SolanaTransactionReceipt {
+        let receipt = SolanaTransactionReceipt {
             message: self.message.clone(),
             signature: sig_bytes,
-        })
+        };
+
+        Ok(receipt)
     }
 }
 
@@ -69,7 +71,9 @@ mod tests {
     fn test_solana_tx_sign_and_encode() {
         let keypair = KeyPair::gen_solana().unwrap();
         let message = vec![1u8, 2, 3, 4, 5, 6, 7, 8];
-        let tx = SolanaTransaction { message: message.clone() };
+        let tx = SolanaTransaction {
+            message: message.clone(),
+        };
 
         let receipt = tx.sign(&keypair).unwrap();
 
@@ -85,7 +89,9 @@ mod tests {
     #[test]
     fn test_solana_tx_id() {
         let keypair = KeyPair::gen_solana().unwrap();
-        let tx = SolanaTransaction { message: vec![0u8; 32] };
+        let tx = SolanaTransaction {
+            message: vec![0u8; 32],
+        };
         let receipt = tx.sign(&keypair).unwrap();
 
         let tx_id = receipt.tx_id();
@@ -97,7 +103,9 @@ mod tests {
     #[test]
     fn test_solana_tx_verify() {
         let keypair = KeyPair::gen_solana().unwrap();
-        let tx = SolanaTransaction { message: b"test solana transaction".to_vec() };
+        let tx = SolanaTransaction {
+            message: b"test solana transaction".to_vec(),
+        };
         let receipt = tx.sign(&keypair).unwrap();
 
         assert!(receipt.verify(&keypair).unwrap());
@@ -107,7 +115,9 @@ mod tests {
     fn test_solana_tx_verify_wrong_keypair() {
         let keypair1 = KeyPair::gen_solana().unwrap();
         let keypair2 = KeyPair::gen_solana().unwrap();
-        let tx = SolanaTransaction { message: b"test message".to_vec() };
+        let tx = SolanaTransaction {
+            message: b"test message".to_vec(),
+        };
         let receipt = tx.sign(&keypair1).unwrap();
 
         assert!(!receipt.verify(&keypair2).unwrap());
@@ -116,7 +126,9 @@ mod tests {
     #[test]
     fn test_solana_tx_serde_roundtrip() {
         let keypair = KeyPair::gen_solana().unwrap();
-        let tx = SolanaTransaction { message: vec![0xde, 0xad, 0xbe, 0xef] };
+        let tx = SolanaTransaction {
+            message: vec![0xde, 0xad, 0xbe, 0xef],
+        };
         let receipt = tx.sign(&keypair).unwrap();
 
         let json = serde_json::to_string(&receipt).unwrap();

@@ -11,11 +11,11 @@ pub fn build_sol_transfer_message(
     to: &Pubkey,
     lamports: u64,
     blockhash: &[u8; 32],
-) -> Vec<u8> {
+) -> Result<Vec<u8>, String> {
     let hash = Hash::from(*blockhash);
     let ix = system_transfer(from, to, lamports);
     let msg = Message::new_with_blockhash(&[ix], Some(from), &hash);
-    bincode::serialize(&msg).expect("serialize")
+    bincode::serialize(&msg).map_err(|e| e.to_string())
 }
 
 pub fn adjust_sol_native_transfer_lamports(
@@ -58,12 +58,7 @@ pub fn adjust_sol_native_transfer_lamports(
     let to = msg.account_keys.get(*ix.accounts.get(1)? as usize)?;
     let blockhash: [u8; 32] = msg.recent_blockhash.to_bytes();
 
-    Some(build_sol_transfer_message(
-        from,
-        to,
-        new_lamports,
-        &blockhash,
-    ))
+    build_sol_transfer_message(from, to, new_lamports, &blockhash).ok()
 }
 
 pub fn build_spl_transfer_message(
@@ -79,7 +74,8 @@ pub fn build_spl_transfer_message(
     let ix = token_transfer(&spl_token::id(), &source_ata, &dest_ata, owner, &[], amount)
         .map_err(|e| e.to_string())?;
     let msg = Message::new_with_blockhash(&[ix], Some(owner), &hash);
-    Ok(bincode::serialize(&msg).expect("serialize"))
+
+    bincode::serialize(&msg).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

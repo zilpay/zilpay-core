@@ -126,6 +126,15 @@ impl Address {
         }
     }
 
+    pub fn to_solana_addr(&self) -> Result<solana_pubkey::Pubkey> {
+        match self {
+            Address::Ed25519Solana(data) => {
+                Ok(solana_pubkey::Pubkey::new_from_array(data.to_bytes()))
+            }
+            _ => Err(AddressError::InvalidAddressType),
+        }
+    }
+
     pub fn re_encode_btc_network(&self, new_network: bitcoin::Network) -> Result<Self> {
         match self {
             Address::Secp256k1Bitcoin(_) => {

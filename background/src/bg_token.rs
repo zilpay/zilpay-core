@@ -1,12 +1,13 @@
 use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Background, Result};
 use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
+use config::sha::SHA256_SIZE;
 use crypto::slip44::TRON;
 use errors::background::BackgroundError;
 use network::{
     evm::generate_erc20_transfer_data,
-    solana::SolanaOperations,
     solana::tx_builder::{build_sol_transfer_message, build_spl_transfer_message},
+    solana::SolanaOperations,
 };
 use proto::{
     address::Address,
@@ -214,7 +215,8 @@ impl TokensManagement for Background {
 
                 Ok(txn)
             }
-            Address::Ed25519Solana(from_pk) => {
+            Address::Ed25519Solana(mint_pk) => {
+                let from_pk = &sender.addr.to_solana_addr()?;
                 let Address::Ed25519Solana(to_pk) = to else {
                     return Err(BackgroundError::TokenError(
                         errors::token::TokenError::ABIError(
@@ -228,7 +230,7 @@ impl TokensManagement for Background {
                     .await
                     .map_err(BackgroundError::NetworkErrors)?;
 
-                let blockhash: [u8; 32] = bs58::decode(&blockhash_str)
+                let blockhash: [u8; SHA256_SIZE] = bs58::decode(&blockhash_str)
                     .into_vec()
                     .map_err(|e| {
                         BackgroundError::TokenError(errors::token::TokenError::ABIError(
@@ -260,14 +262,10 @@ impl TokensManagement for Background {
 
                 let message = if token.native {
                     build_sol_transfer_message(from_pk, &to_pk, amount.to::<u64>(), &blockhash)
+                        .map_err(|e| {
+                            BackgroundError::TokenError(errors::token::TokenError::ABIError(e))
+                        })?
                 } else {
-                    let Address::Ed25519Solana(mint_pk) = &token.addr else {
-                        return Err(BackgroundError::TokenError(
-                            errors::token::TokenError::ABIError(
-                                "SPL token must have Solana mint address".to_string(),
-                            ),
-                        ));
-                    };
                     build_spl_transfer_message(
                         from_pk,
                         mint_pk,
@@ -1355,10 +1353,8 @@ mod tests_background_tokens {
         dbg!(sender_index, sender_balance);
 
         let chain = bg.get_provider(net_config.hash()).unwrap();
-        let empty_sol_tx = TransactionRequest::Solana((
-            SolanaTransaction { message: vec![] },
-            Default::default(),
-        ));
+        let empty_sol_tx =
+            TransactionRequest::Solana((SolanaTransaction { message: vec![] }, Default::default()));
         let fee_params = chain
             .estimate_params_batch(&empty_sol_tx, &sender_acc.addr, 0, None)
             .await

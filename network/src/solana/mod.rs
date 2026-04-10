@@ -166,6 +166,7 @@ impl SolanaOperations for NetworkProvider {
                     .try_into()
                     .map_err(|_| NetworkErrors::RPCError("blockhash must be 32 bytes".into()))?;
                 build_sol_transfer_message(pk, pk, 0, &blockhash)
+                    .map_err(|e| NetworkErrors::RPCError(e))?
             } else {
                 sol_tx.message.clone()
             };
@@ -196,11 +197,13 @@ impl SolanaOperations for NetworkProvider {
         let mut valid_indices: Vec<usize> = Vec::with_capacity(txns.len());
 
         for (i, receipt) in txns.iter().enumerate() {
-            let TransactionReceipt::Solana((ref solana_receipt, _)) = receipt else {
+            let TransactionReceipt::Solana((ref solana_receipt, ref _meta)) = receipt else {
                 continue;
             };
 
-            let encoded = base64::engine::general_purpose::STANDARD.encode(solana_receipt.encode());
+            let wire = solana_receipt.encode();
+            let encoded = base64::engine::general_purpose::STANDARD.encode(&wire);
+
             payloads.push(build_send_transaction_req(&encoded));
             valid_indices.push(i);
         }
