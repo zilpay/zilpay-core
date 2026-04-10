@@ -30,9 +30,6 @@ errors = { path = "../errors" }
 ed25519-dalek.workspace = true
 solana-pubkey.workspace = true
 
-[build-dependencies]
-prost-build = "0.13"
-
 [dev-dependencies]
 mockito = "1.5.0"
 test_data = { path = "../test_data" }
