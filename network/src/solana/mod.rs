@@ -13,7 +13,11 @@ use history::status::TransactionStatus;
 use history::transaction::HistoricalTransaction;
 use proto::address::Address;
 use proto::tx::{TransactionReceipt, TransactionRequest};
-use responses::*;
+use responses::{
+    extract_token2022_metadata, AccountInfoValue, BlockhashValue, MetaplexMetadata,
+    RawAccountValue, SolanaAccountInfo, SolanaGetTransactionResult, SolanaValueResponse,
+    TokenAccountEntry,
+};
 use rpc::common::JsonRPC;
 use rpc::methods::SolanaMethod;
 use rpc::network_config::ChainConfig;
@@ -30,6 +34,7 @@ const METAPLEX_PROGRAM_ID: &str = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
 const METAPLEX_METADATA_SEED: &[u8] = b"metadata";
 const SOLANA_BLOCK_TIME_SECS: u64 = 1;
 const SOLANA_TX_PENDING_TIMEOUT_SECS: u64 = 600;
+const SOLANA_TOKEN_LOGO_URL: &str = "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet";
 
 #[async_trait]
 pub trait SolanaOperations {
@@ -389,9 +394,9 @@ impl SolanaOperations for NetworkProvider {
             .result
             .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&mint_res.error)))?;
 
-        let mint_account = raw_mint
-            .value
-            .ok_or_else(|| NetworkErrors::RPCError(format!("Mint account not found: {mint_b58}")))?;
+        let mint_account = raw_mint.value.ok_or_else(|| {
+            NetworkErrors::RPCError(format!("Mint account not found: {mint_b58}"))
+        })?;
         let decimals = mint_account.data.parsed.info.decimals;
         let mint_extensions = mint_account.data.parsed.info.extensions;
 
@@ -429,7 +434,7 @@ impl SolanaOperations for NetworkProvider {
             symbol,
             decimals,
             addr: Address::Ed25519Solana(mint),
-            logo: None,
+            logo: Some(format!("{}/{}/logo.png", SOLANA_TOKEN_LOGO_URL, mint_b58)),
             balances,
             default: false,
             native: false,
@@ -997,6 +1002,10 @@ mod tests {
         assert_eq!(ftoken.name, "USD Coin");
         assert_eq!(ftoken.symbol, "USDC");
         assert!(!ftoken.native);
+        assert_eq!(
+            ftoken.logo.as_deref(),
+            Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png")
+        );
         assert!(
             *ftoken.balances.get(&0).unwrap() > U256::ZERO,
             "Rich address should have USDC"
@@ -1019,7 +1028,17 @@ mod tests {
         dbg!(&ftoken.name);
         dbg!(&ftoken.symbol);
         dbg!(&ftoken.decimals);
-        assert!(!ftoken.name.is_empty(), "pump.fun token name must not be empty");
-        assert!(!ftoken.symbol.is_empty(), "pump.fun token symbol must not be empty");
+        assert!(
+            !ftoken.name.is_empty(),
+            "pump.fun token name must not be empty"
+        );
+        assert!(
+            ftoken.logo.is_some(),
+            "pump.fun token should have logo URL"
+        );
+        assert!(
+            !ftoken.symbol.is_empty(),
+            "pump.fun token symbol must not be empty"
+        );
     }
 }
