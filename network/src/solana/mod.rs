@@ -322,11 +322,12 @@ impl SolanaOperations for NetworkProvider {
         mut tokens: Vec<&mut FToken>,
         accounts: &[&Address],
     ) -> Result<()> {
-        let capacity = tokens.len() * accounts.len();
-        let mut payloads: Vec<Value> = Vec::with_capacity(capacity);
-        let mut mapping: Vec<(usize, usize, bool)> = Vec::with_capacity(capacity);
+        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
 
-        for (token_idx, token) in tokens.iter().enumerate() {
+        for token in tokens.iter_mut() {
+            let mut payloads: Vec<Value> = Vec::new();
+            let mut acc_indices: Vec<usize> = Vec::new();
+
             for (acc_idx, account) in accounts.iter().enumerate() {
                 let Address::Ed25519Solana(pubkey) = account else {
                     continue;
@@ -335,34 +336,39 @@ impl SolanaOperations for NetworkProvider {
 
                 if token.native {
                     payloads.push(build_get_balance_req(&address_b58));
-                    mapping.push((token_idx, acc_idx, true));
+                    acc_indices.push(acc_idx);
                 } else if let Address::Ed25519Solana(mint) = &token.addr {
                     payloads.push(build_get_token_accounts_req(
                         &address_b58,
                         &mint.to_string(),
                     ));
-                    mapping.push((token_idx, acc_idx, false));
+                    acc_indices.push(acc_idx);
                 }
             }
-        }
 
-        if payloads.is_empty() {
-            return Ok(());
-        }
+            if payloads.is_empty() {
+                continue;
+            }
 
-        let provider: RpcProvider<ChainConfig> = RpcProvider::new(&self.config);
-        let responses: Vec<ResultRes<Value>> = provider
-            .req(json!(payloads))
-            .await
-            .map_err(NetworkErrors::Request)?;
+            // One batch per token — all payloads use the same RPC method, which
+            // avoids the "too many requests for a specific RPC call" rate limit
+            // that Solana nodes enforce per method within a batch.
+            let responses: Vec<ResultRes<Value>> = provider
+                .req(json!(payloads))
+                .await
+                .map_err(NetworkErrors::Request)?;
 
-        for (i, (token_idx, acc_idx, is_native)) in mapping.iter().enumerate() {
-            let balance = if *is_native {
-                parse_native_balance(&responses[i])
-            } else {
-                parse_spl_balance(&responses[i])
-            };
-            tokens[*token_idx].balances.insert(*acc_idx, balance);
+            for (i, acc_idx) in acc_indices.iter().enumerate() {
+                if responses[i].result.is_none() {
+                    continue; // RPC error — preserve stored balance
+                }
+                let balance = if token.native {
+                    parse_native_balance(&responses[i])
+                } else {
+                    parse_spl_balance(&responses[i])
+                };
+                token.balances.insert(*acc_idx, balance);
+            }
         }
 
         Ok(())
