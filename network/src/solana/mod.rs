@@ -7,6 +7,7 @@ use crate::solana::tx_builder::build_sol_transfer_message;
 use crate::Result;
 use alloy::primitives::U256;
 use async_trait::async_trait;
+use base64::Engine;
 use errors::network::NetworkErrors;
 use history::status::TransactionStatus;
 use history::transaction::HistoricalTransaction;
@@ -18,7 +19,6 @@ use rpc::methods::SolanaMethod;
 use rpc::network_config::ChainConfig;
 use rpc::provider::RpcProvider;
 use rpc::zil_interfaces::{ErrorRes, ResultRes};
-use base64::Engine;
 use serde_json::{json, Value};
 use solana_pubkey::Pubkey;
 use std::collections::HashMap;
@@ -389,13 +389,11 @@ impl SolanaOperations for NetworkProvider {
             .result
             .ok_or_else(|| NetworkErrors::RPCError(solana_err_msg(&mint_res.error)))?;
 
-        let decimals = raw_mint
+        let mint_account = raw_mint
             .value
-            .ok_or_else(|| NetworkErrors::RPCError(format!("Mint account not found: {mint_b58}")))?
-            .data
-            .parsed
-            .info
-            .decimals;
+            .ok_or_else(|| NetworkErrors::RPCError(format!("Mint account not found: {mint_b58}")))?;
+        let decimals = mint_account.data.parsed.info.decimals;
+        let mint_extensions = mint_account.data.parsed.info.extensions;
 
         let meta_res: ResultRes<SolanaValueResponse<Option<RawAccountValue>>> = provider
             .req(build_get_account_info_base64_req(&metadata_pda))
@@ -411,6 +409,8 @@ impl SolanaOperations for NetworkProvider {
             })
             .and_then(|bytes| MetaplexMetadata::from_bytes(&bytes))
             .map(|m| (m.name, m.symbol))
+            .filter(|(n, s)| !n.is_empty() || !s.is_empty())
+            .or_else(|| extract_token2022_metadata(&mint_extensions))
             .unwrap_or_default();
 
         let mut balances = HashMap::new();
@@ -962,11 +962,16 @@ mod tests {
         let mainnet_usdc: Pubkey = MAINNET_USDC_MINT.parse().unwrap();
         let program_id: Pubkey = METAPLEX_PROGRAM_ID.parse().unwrap();
         let (pda, _) = Pubkey::find_program_address(
-            &[METAPLEX_METADATA_SEED, program_id.as_ref(), mainnet_usdc.as_ref()],
+            &[
+                METAPLEX_METADATA_SEED,
+                program_id.as_ref(),
+                mainnet_usdc.as_ref(),
+            ],
             &program_id,
         );
         assert_eq!(
-            pda.to_string(), "5x38Kp4hvdomTCnCrAny4UtMUt5rQBdB6px2K1Ui45Wq",
+            pda.to_string(),
+            "5x38Kp4hvdomTCnCrAny4UtMUt5rQBdB6px2K1Ui45Wq",
             "PDA mismatch for mainnet USDC"
         );
     }
@@ -1001,5 +1006,20 @@ mod tests {
             U256::ZERO,
             "Zero address should have no USDC"
         );
+    }
+
+    #[tokio::test]
+    async fn test_solana_ftoken_meta_pump() {
+        let provider = NetworkProvider::new(gen_sol_mainnet_conf());
+        let mint =
+            Address::from_solana_address("AsCoZ4io1XeCdKyFo2NB27qZJaupQYpPnEEjT1btpump").unwrap();
+
+        let ftoken = provider.solana_ftoken_meta(mint, &[]).await.unwrap();
+
+        dbg!(&ftoken.name);
+        dbg!(&ftoken.symbol);
+        dbg!(&ftoken.decimals);
+        assert!(!ftoken.name.is_empty(), "pump.fun token name must not be empty");
+        assert!(!ftoken.symbol.is_empty(), "pump.fun token symbol must not be empty");
     }
 }

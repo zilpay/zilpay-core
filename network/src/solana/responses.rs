@@ -78,13 +78,36 @@ pub struct TokenAccountEntry {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct MintExtensionEntry {
+    pub extension: String,
+    pub state: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct MintInfo {
     pub decimals: u8,
+    #[serde(default)]
+    pub extensions: Vec<MintExtensionEntry>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct ParsedMintData {
     pub info: MintInfo,
+}
+
+pub fn extract_token2022_metadata(extensions: &[MintExtensionEntry]) -> Option<(String, String)> {
+    let state = extensions
+        .iter()
+        .find(|e| e.extension == "tokenMetadata")?
+        .state
+        .as_ref()?;
+    let name = state.get("name")?.as_str()?.trim_matches('\0').to_string();
+    let symbol = state.get("symbol")?.as_str()?.trim_matches('\0').to_string();
+    if name.is_empty() && symbol.is_empty() {
+        None
+    } else {
+        Some((name, symbol))
+    }
 }
 
 #[derive(Debug, Deserialize)]

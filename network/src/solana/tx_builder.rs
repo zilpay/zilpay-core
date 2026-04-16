@@ -93,7 +93,7 @@ mod tests {
         let to = Pubkey::new_unique();
         let balance: u64 = 80_574_080;
         let fee: u64 = 5_000;
-        let msg = build_sol_transfer_message(&from, &to, balance, &[0u8; 32]);
+        let msg = build_sol_transfer_message(&from, &to, balance, &[0u8; 32]).unwrap();
 
         let adjusted = adjust_sol_native_transfer_lamports(&msg, balance, fee).unwrap();
         let decoded: SolanaMessage = bincode::deserialize(&adjusted).unwrap();
@@ -101,7 +101,7 @@ mod tests {
             u64::from_le_bytes(decoded.instructions[0].data[4..12].try_into().unwrap());
         assert_eq!(new_lamports, balance - fee);
 
-        let partial_msg = build_sol_transfer_message(&from, &to, 1_000_000, &[0u8; 32]);
+        let partial_msg = build_sol_transfer_message(&from, &to, 1_000_000, &[0u8; 32]).unwrap();
         assert!(adjust_sol_native_transfer_lamports(&partial_msg, balance, fee).is_none());
     }
 
@@ -109,7 +109,7 @@ mod tests {
     fn test_build_sol_transfer_message_roundtrip() {
         let from = Pubkey::new_unique();
         let to = Pubkey::new_unique();
-        let msg = build_sol_transfer_message(&from, &to, 1_000_000, &[0u8; 32]);
+        let msg = build_sol_transfer_message(&from, &to, 1_000_000, &[0u8; 32]).unwrap();
         assert!(!msg.is_empty());
         let decoded: SolanaMessage = bincode::deserialize(&msg).unwrap();
         assert_eq!(decoded.account_keys.len(), 3);
