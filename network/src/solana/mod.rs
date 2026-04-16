@@ -34,7 +34,8 @@ const METAPLEX_PROGRAM_ID: &str = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
 const METAPLEX_METADATA_SEED: &[u8] = b"metadata";
 const SOLANA_BLOCK_TIME_SECS: u64 = 1;
 const SOLANA_TX_PENDING_TIMEOUT_SECS: u64 = 600;
-const SOLANA_TOKEN_LOGO_URL: &str = "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet";
+const SOLANA_TOKEN_LOGO_URL: &str =
+    "https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet";
 
 #[async_trait]
 pub trait SolanaOperations {
@@ -434,7 +435,7 @@ impl SolanaOperations for NetworkProvider {
             symbol,
             decimals,
             addr: Address::Ed25519Solana(mint),
-            logo: Some(format!("{}/{}/logo.png", SOLANA_TOKEN_LOGO_URL, mint_b58)),
+            logo: Some(format!("{SOLANA_TOKEN_LOGO_URL}/{mint_b58}/logo.png")),
             balances,
             default: false,
             native: false,
@@ -1028,14 +1029,12 @@ mod tests {
         dbg!(&ftoken.name);
         dbg!(&ftoken.symbol);
         dbg!(&ftoken.decimals);
+        dbg!(&ftoken.logo);
         assert!(
             !ftoken.name.is_empty(),
             "pump.fun token name must not be empty"
         );
-        assert!(
-            ftoken.logo.is_some(),
-            "pump.fun token should have logo URL"
-        );
+        assert!(ftoken.logo.is_some(), "pump.fun token should have logo URL");
         assert!(
             !ftoken.symbol.is_empty(),
             "pump.fun token symbol must not be empty"
