@@ -3,7 +3,8 @@ use solana_hash::Hash;
 use solana_message::legacy::Message;
 use solana_pubkey::Pubkey;
 use solana_system_interface::instruction::transfer as system_transfer;
-use spl_associated_token_account::get_associated_token_address;
+use spl_associated_token_account::instruction::create_associated_token_account_idempotent;
+use spl_associated_token_account::get_associated_token_address_with_program_id;
 use spl_token::instruction::transfer as token_transfer;
 
 pub fn build_sol_transfer_message(
@@ -67,13 +68,18 @@ pub fn build_spl_transfer_message(
     to_wallet: &Pubkey,
     amount: u64,
     blockhash: &[u8; 32],
+    token_program: &Pubkey,
 ) -> Result<Vec<u8>, String> {
-    let source_ata = get_associated_token_address(owner, mint);
-    let dest_ata = get_associated_token_address(to_wallet, mint);
+    let source_ata = get_associated_token_address_with_program_id(owner, mint, token_program);
+    let dest_ata = get_associated_token_address_with_program_id(to_wallet, mint, token_program);
     let hash = Hash::from(*blockhash);
-    let ix = token_transfer(&spl_token::id(), &source_ata, &dest_ata, owner, &[], amount)
-        .map_err(|e| e.to_string())?;
-    let msg = Message::new_with_blockhash(&[ix], Some(owner), &hash);
+    let create_dest_ata_ix =
+        create_associated_token_account_idempotent(owner, to_wallet, mint, token_program);
+    let transfer_ix =
+        token_transfer(token_program, &source_ata, &dest_ata, owner, &[], amount)
+            .map_err(|e| e.to_string())?;
+    let msg =
+        Message::new_with_blockhash(&[create_dest_ata_ix, transfer_ix], Some(owner), &hash);
 
     bincode::serialize(&msg).map_err(|e| e.to_string())
 }
@@ -120,17 +126,17 @@ mod tests {
         let owner = Pubkey::new_unique();
         let mint = Pubkey::new_unique();
         let to = Pubkey::new_unique();
-        let msg = build_spl_transfer_message(&owner, &mint, &to, 1_000, &[0u8; 32]).unwrap();
+        let msg = build_spl_transfer_message(&owner, &mint, &to, 1_000, &[0u8; 32], &spl_token::id()).unwrap();
         assert!(!msg.is_empty());
         let decoded: SolanaMessage = bincode::deserialize(&msg).unwrap();
-        assert_eq!(decoded.account_keys.len(), 4);
+        assert_eq!(decoded.instructions.len(), 2);
     }
 
     #[test]
     fn test_known_ata_derivation() {
         let owner: Pubkey = DEVNET_RICH_ADDRESS.parse().unwrap();
         let mint: Pubkey = DEVNET_USDC_MINT.parse().unwrap();
-        let ata = get_associated_token_address(&owner, &mint);
+        let ata = get_associated_token_address_with_program_id(&owner, &mint, &spl_token::id());
         assert_eq!(ata.to_string(), DEVNET_USDC_RICH_ATA);
     }
 }

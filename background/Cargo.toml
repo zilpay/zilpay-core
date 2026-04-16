@@ -19,6 +19,7 @@ async-trait.workspace = true
 sha2.workspace = true
 bs58.workspace = true
 secrecy.workspace = true
+solana-pubkey.workspace = true
 
 errors = { path = "../errors" }
 wallet = { path = "../wallet" }

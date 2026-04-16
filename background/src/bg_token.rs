@@ -266,12 +266,24 @@ impl TokensManagement for Background {
                             BackgroundError::TokenError(errors::token::TokenError::ABIError(e))
                         })?
                 } else {
+                    let mint_b58 = mint_pk.to_string();
+                    let (_space, token_program_str) = provider
+                        .solana_check_account_health(&mint_b58)
+                        .await
+                        .map_err(BackgroundError::NetworkErrors)?;
+                    let token_program: solana_pubkey::Pubkey =
+                        token_program_str.parse().map_err(|e: solana_pubkey::ParsePubkeyError| {
+                            BackgroundError::TokenError(errors::token::TokenError::ABIError(
+                                e.to_string(),
+                            ))
+                        })?;
                     build_spl_transfer_message(
                         from_pk,
                         mint_pk,
                         &to_pk,
                         amount.to::<u64>(),
                         &blockhash,
+                        &token_program,
                     )
                     .map_err(|e| {
                         BackgroundError::TokenError(errors::token::TokenError::ABIError(e))
