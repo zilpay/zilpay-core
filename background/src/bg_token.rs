@@ -2,7 +2,7 @@ use crate::{bg_provider::ProvidersManagement, bg_wallet::WalletManagement, Backg
 use alloy::{primitives::U256, rpc::types::TransactionInput};
 use async_trait::async_trait;
 use config::sha::SHA256_SIZE;
-use crypto::slip44::TRON;
+use crypto::slip44::{SOLANA, TRON};
 use errors::background::BackgroundError;
 use network::{
     evm::generate_erc20_transfer_data,
@@ -302,6 +302,8 @@ impl TokensManagement for Background {
                 "https://static.tronscan.org/production/upload/logo/new/{}.png",
                 token_meta.addr.auto_format(),
             ));
+        } else if provider.config.slip_44 == SOLANA {
+            //
         } else if let Some(t) = w.get_ftokens()?.into_iter().next() {
             token_meta.logo = t.logo;
         }
