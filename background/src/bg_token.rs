@@ -335,8 +335,9 @@ impl TokensManagement for Background {
             return Ok(());
         }
 
-        let current_accounts = data.get_accounts()?;
-        let addresses: Vec<&Address> = current_accounts.iter().map(|a| &a.addr).collect();
+        let sel_idx = data.selected_account;
+        let selected_account = data.get_selected_account()?;
+        let addresses = vec![&selected_account.addr];
         let provider = self.get_provider(data.chain_hash)?;
         let matching_tokens: Vec<&mut FToken> = ftokens
             .iter_mut()
@@ -346,6 +347,15 @@ impl TokensManagement for Background {
         provider
             .update_balances(matching_tokens, &addresses)
             .await?;
+
+        // update_balances keys by slice position; remap from 0 to the real account index.
+        if sel_idx != 0 {
+            for token in ftokens.iter_mut() {
+                if let Some(balance) = token.balances.remove(&0) {
+                    token.balances.insert(sel_idx, balance);
+                }
+            }
+        }
 
         w.save_ftokens(&ftokens)?;
 
