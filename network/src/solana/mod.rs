@@ -172,7 +172,7 @@ impl SolanaOperations for NetworkProvider {
                     .try_into()
                     .map_err(|_| NetworkErrors::RPCError("blockhash must be 32 bytes".into()))?;
                 build_sol_transfer_message(pk, pk, 0, &blockhash)
-                    .map_err(|e| NetworkErrors::RPCError(e))?
+                    .map_err(NetworkErrors::RPCError)?
             } else {
                 sol_tx.message.clone()
             };

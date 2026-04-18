@@ -343,7 +343,7 @@ pub fn update_tx_from_params(
                 let dust_limit = metadata
                     .signer
                     .as_ref()
-                    .map(|addr| get_dust_limit(addr))
+                    .map(get_dust_limit)
                     .unwrap_or(546);
 
                 let max_fee_affordable = total_input.saturating_sub(dust_limit);
@@ -385,7 +385,7 @@ pub fn update_tx_from_params(
                 let dust_limit = metadata
                     .signer
                     .as_ref()
-                    .map(|addr| get_dust_limit(addr))
+                    .map(get_dust_limit)
                     .unwrap_or(546);
 
                 if new_change >= dust_limit {
@@ -404,6 +404,7 @@ pub fn update_tx_from_params(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[async_trait]
 pub trait TransactionsManagement {
     type Error;

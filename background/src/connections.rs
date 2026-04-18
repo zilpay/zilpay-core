@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DAppColors {
     pub primary: Option<String>,
@@ -10,7 +10,7 @@ pub struct DAppColors {
     pub text: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Connection {
     // Base fields
@@ -33,32 +33,6 @@ pub struct ConnectionPermissions {
     pub can_request_signatures: bool,
     pub can_suggest_tokens: bool,
     pub can_suggest_transactions: bool,
-}
-
-impl Default for DAppColors {
-    fn default() -> Self {
-        Self {
-            primary: None,
-            secondary: None,
-            background: None,
-            text: None,
-        }
-    }
-}
-
-impl Default for Connection {
-    fn default() -> Self {
-        Self {
-            domain: String::new(),
-            account_indexes: HashSet::new(),
-            favicon: None,
-            title: String::new(),
-            description: None,
-            colors: None,
-            last_connected: 0,
-            permissions: ConnectionPermissions::default(),
-        }
-    }
 }
 
 impl Connection {
@@ -106,6 +80,7 @@ impl Connection {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for ConnectionPermissions {
     fn default() -> Self {
         Self {

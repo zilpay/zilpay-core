@@ -55,6 +55,7 @@ struct FormatConfig<'a> {
     compact: bool,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn format_u256(
     value: U256,
     decimals: u8,

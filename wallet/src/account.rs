@@ -134,12 +134,10 @@ impl AccountV2 {
 
                     Ok((zil_addr, eth_addr))
                 }
-                _ => {
-                    return Err(AccountErrors::InvalidPubKeyType);
-                }
+                _ => Err(AccountErrors::InvalidPubKeyType),
             }
         } else {
-            return Err(AccountErrors::InvalidPubKeyType);
+            Err(AccountErrors::InvalidPubKeyType)
         }
     }
 }
