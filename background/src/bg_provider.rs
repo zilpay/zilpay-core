@@ -160,10 +160,13 @@ impl ProvidersManagement for Background {
             }
         }
 
-        ftokens.retain(|t| !t.native);
-
         for provider_ftoken in &provider.config.ftokens {
-            ftokens.insert(0, provider_ftoken.clone());
+            let exists = ftokens
+                .iter()
+                .any(|t| t.addr == provider_ftoken.addr && t.chain_hash == provider_ftoken.chain_hash);
+            if !exists {
+                ftokens.insert(0, provider_ftoken.clone());
+            }
         }
 
         let new_slip44 = provider.config.slip_44;

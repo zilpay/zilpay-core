@@ -73,7 +73,7 @@ impl TokensManagement for Background {
                 to: Some(token.addr.to_alloy_addr().into()),
                 value: Some(U256::ZERO),
                 nonce: Some(0),
-                gas: Some(549755),
+                gas: None,
                 chain_id: Some(evm_chain_id),
                 input: TransactionInput::new(transfer_data.into()),
                 ..Default::default()
@@ -151,7 +151,7 @@ impl TokensManagement for Background {
                     ZILTransactionRequest {
                         nonce: 0,
                         chain_id: provider.config.chain_ids[1] as u16,
-                        gas_price: 2000000000,
+                        gas_price: 2_000_000_000,
                         gas_limit: 50,
                         to_addr: to,
                         amount: amount.to::<u128>(),
@@ -171,7 +171,7 @@ impl TokensManagement for Background {
                     ZILTransactionRequest {
                         nonce: 0,
                         chain_id: provider.config.chain_ids[1] as u16,
-                        gas_price: 2000000000,
+                        gas_price: 2_000_000_000,
                         gas_limit: 5000,
                         to_addr: token.addr.clone(),
                         amount: 0,
@@ -271,12 +271,13 @@ impl TokensManagement for Background {
                         .solana_check_account_health(&mint_b58)
                         .await
                         .map_err(BackgroundError::NetworkErrors)?;
-                    let token_program: solana_pubkey::Pubkey =
-                        token_program_str.parse().map_err(|e: solana_pubkey::ParsePubkeyError| {
+                    let token_program: solana_pubkey::Pubkey = token_program_str.parse().map_err(
+                        |e: solana_pubkey::ParsePubkeyError| {
                             BackgroundError::TokenError(errors::token::TokenError::ABIError(
                                 e.to_string(),
                             ))
-                        })?;
+                        },
+                    )?;
                     build_spl_transfer_message(
                         from_pk,
                         mint_pk,
@@ -598,7 +599,7 @@ mod tests_background_tokens {
 
         let recipient = "0xEC6bB19886c9D5f5125DfC739362Bf54AA23d51F";
         let to_addr = Address::from_zil_base16(recipient).unwrap();
-        let amount = U256::from(1000000000000u64);
+        let amount = U256::from(1_000_000_000_000_u64);
 
         let wallet = bg.wallets.first().unwrap();
         let account = wallet
@@ -977,7 +978,7 @@ mod tests_background_tokens {
                     signed_zil_tx.pub_key,
                     from_account.pub_key.as_ref().unwrap().as_bytes()
                 );
-                assert_eq!(signed_zil_tx.version, 21823489);
+                assert_eq!(signed_zil_tx.version, 21_823_489);
 
                 let gas_price: u128 = params.gas_price.try_into().unwrap();
                 assert_eq!(signed_zil_tx.gas_price, gas_price.to_be_bytes());
