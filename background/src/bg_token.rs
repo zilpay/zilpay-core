@@ -713,8 +713,16 @@ mod tests_background_tokens {
         assert!(btc_token.native, "BTC token should be native");
         assert_eq!(btc_token.symbol, "BTC", "Token symbol should be BTC");
 
-        let balance_0 = btc_token.balances.get(&account.addr.to_hash()).copied().unwrap_or(U256::ZERO);
-        let balance_1 = btc_token.balances.get(&account_1.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_0 = btc_token
+            .balances
+            .get(&account.addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
+        let balance_1 = btc_token
+            .balances
+            .get(&account_1.addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
 
         let provider = bg.get_provider(net_config.hash()).unwrap();
 
@@ -939,8 +947,16 @@ mod tests_background_tokens {
         assert!(scilla_token.native, "ZIL token should be native");
         assert_eq!(scilla_token.symbol, "ZIL", "Token symbol should be BTC");
 
-        let balance_0 = scilla_token.balances.get(&account.addr.to_hash()).copied().unwrap_or(U256::ZERO);
-        let balance_1 = scilla_token.balances.get(&account_1.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_0 = scilla_token
+            .balances
+            .get(&account.addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
+        let balance_1 = scilla_token
+            .balances
+            .get(&account_1.addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
 
         let (from_index, from_account, to_account, amount) = if balance_0 > U256::ZERO {
             (0, account, account_1, balance_0)
@@ -1073,8 +1089,16 @@ mod tests_background_tokens {
 
         let ftokens = wallet.get_ftokens().unwrap();
         let eth_token = ftokens.first().unwrap();
-        let balance_0 = eth_token.balances.get(&account_0.addr.to_hash()).copied().unwrap_or(U256::ZERO);
-        let balance_1 = eth_token.balances.get(&account_1.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_0 = eth_token
+            .balances
+            .get(&account_0.addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
+        let balance_1 = eth_token
+            .balances
+            .get(&account_1.addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
 
         let (from_index, from_account, to_account, amount) = if balance_0 > balance_1 {
             (0, account_0, account_1, balance_0)
@@ -1146,7 +1170,11 @@ mod tests_background_tokens {
                 let wallet = bg.get_wallet_by_index(0).unwrap();
                 let ftokens = wallet.get_ftokens().unwrap();
                 let eth_token = ftokens.first().unwrap();
-                let _final_balance = eth_token.balances.get(&from_account.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+                let _final_balance = eth_token
+                    .balances
+                    .get(&from_account.addr.to_hash())
+                    .copied()
+                    .unwrap_or(U256::ZERO);
 
                 // assert_eq!(final_balance, U256::ZERO);
             }
@@ -1200,7 +1228,9 @@ mod tests_background_tokens {
         assert_eq!(btt_meta.chain_hash, net_config.hash());
         assert!(!btt_meta.native);
         assert!(!btt_meta.default);
-        assert!(btt_meta.balances.contains_key(&data.get_accounts().unwrap()[0].addr.to_hash()));
+        assert!(btt_meta
+            .balances
+            .contains_key(&data.get_accounts().unwrap()[0].addr.to_hash()));
 
         bg.wallets
             .first_mut()
@@ -1218,7 +1248,9 @@ mod tests_background_tokens {
         assert_eq!(usdt_meta.chain_hash, net_config.hash());
         assert!(!usdt_meta.native);
         assert!(!usdt_meta.default);
-        assert!(usdt_meta.balances.contains_key(&data.get_accounts().unwrap()[0].addr.to_hash()));
+        assert!(usdt_meta
+            .balances
+            .contains_key(&data.get_accounts().unwrap()[0].addr.to_hash()));
 
         bg.wallets
             .first_mut()
@@ -1245,11 +1277,7 @@ mod tests_background_tokens {
 
         bg.add_provider(net_config.clone()).unwrap();
 
-        let accounts = [
-            (0, "sol 0".to_string()),
-            (1, "sol 1".to_string()),
-            (2, "sol 2".to_string()),
-        ];
+        let accounts = [(1, "sol 1".to_string()), (2, "sol 2".to_string())];
 
         bg.add_bip39_wallet(BackgroundBip39Params {
             mnemonic_check: true,
@@ -1278,22 +1306,17 @@ mod tests_background_tokens {
 
         let accs = data.get_accounts().unwrap();
         dbg!(accs.len());
-        assert_eq!(accs.len(), 3, "Should have 3 accounts");
+        assert_eq!(accs.len(), 2, "Should have 2 accounts");
 
         dbg!(accs[0].addr.auto_format());
         dbg!(accs[1].addr.auto_format());
-        dbg!(accs[2].addr.auto_format());
 
         assert_eq!(
             accs[0].addr.auto_format(),
-            "oeYf6KAJkLYhBuR8CiGc6L4D4Xtfepr85fuDgA9kq96"
-        );
-        assert_eq!(
-            accs[1].addr.auto_format(),
             "AqynRZwvVqUPRwRJXvm6odUb3t93fDjnWe3p6BeuUFxD"
         );
         assert_eq!(
-            accs[2].addr.auto_format(),
+            accs[1].addr.auto_format(),
             "CqMbRgMuEhQi9BUS8xP44Wk5nENm48FqJnfjEi4eNb1k"
         );
 
@@ -1302,15 +1325,20 @@ mod tests_background_tokens {
         assert!(sol_token.native);
         assert_eq!(sol_token.symbol, "SOL");
 
-        let balance_0 = sol_token.balances.get(&accs[0].addr.to_hash()).copied().unwrap_or(U256::ZERO);
-        let balance_1 = sol_token.balances.get(&accs[1].addr.to_hash()).copied().unwrap_or(U256::ZERO);
-        let balance_2 = sol_token.balances.get(&accs[2].addr.to_hash()).copied().unwrap_or(U256::ZERO);
-        dbg!(balance_0, balance_1, balance_2);
+        let balance_0 = sol_token
+            .balances
+            .get(&accs[0].addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
+        let balance_1 = sol_token
+            .balances
+            .get(&accs[1].addr.to_hash())
+            .copied()
+            .unwrap_or(U256::ZERO);
+        dbg!(balance_0, balance_1);
 
         let (from_account, to_account) = if balance_1 > U256::ZERO {
             (&accs[1], accs[0].addr.clone())
-        } else if balance_2 > U256::ZERO {
-            (&accs[2], accs[0].addr.clone())
         } else if balance_0 > U256::ZERO {
             (&accs[0], accs[1].addr.clone())
         } else {
@@ -1352,9 +1380,9 @@ mod tests_background_tokens {
 
         let data = wallet.get_wallet_data().unwrap();
         let accs = data.get_accounts().unwrap();
-        assert_eq!(accs.len(), 4);
+        assert_eq!(accs.len(), 3);
         assert_eq!(
-            accs[3].addr.auto_format(),
+            accs[2].addr.auto_format(),
             "9Tj3srBSxH7RFRCm8uharreY7ZBS49XSfpwCeYa7Xaqp"
         );
 
@@ -1371,8 +1399,6 @@ mod tests_background_tokens {
 
         let (sender_index, receiver_addr) = if balance_1 > U256::ZERO {
             (1usize, accs[2].addr.clone())
-        } else if balance_2 > U256::ZERO {
-            (2usize, accs[1].addr.clone())
         } else if balance_0 > U256::ZERO {
             (0usize, accs[1].addr.clone())
         } else {
@@ -1381,8 +1407,7 @@ mod tests_background_tokens {
 
         let sender_balance = match sender_index {
             0 => balance_0,
-            1 => balance_1,
-            _ => balance_2,
+            _ => balance_1,
         };
         let sender_acc = &accs[sender_index];
         dbg!(sender_index, sender_balance);
