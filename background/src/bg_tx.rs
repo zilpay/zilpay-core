@@ -834,14 +834,13 @@ mod tests_background_transactions {
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let ftokens = wallet.get_ftokens().unwrap();
-        let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
-
         let account = data.get_account(0).unwrap();
         assert_eq!(
             account.addr.to_string().to_lowercase(),
             "0x9965507d1a55bcc2695c58ba16fb37d819b0a4dc"
         );
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance = *ftokens.first().unwrap().balances.get(&account.addr.to_hash()).unwrap();
 
         let recipient =
             Address::from_eth_address("0x246C5881E3F109B2aF170F5C773EF969d3da581B").unwrap();
@@ -922,9 +921,9 @@ mod tests_background_transactions {
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let ftokens = wallet.get_ftokens().unwrap();
-        let balance = *ftokens.first().unwrap().balances.get(&0).unwrap();
         let account = data.get_account(0).unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance = *ftokens.first().unwrap().balances.get(&account.addr.to_hash()).unwrap();
 
         let recipient_0 = Address::from_eth_address(anvil_accounts::ACCOUNT_1).unwrap();
         let transfer_request_0 = ETHTransactionRequest {
@@ -1219,12 +1218,11 @@ mod tests_background_transactions {
 
         let wallet = bg.get_wallet_by_index(0).unwrap();
         let data = wallet.get_wallet_data().unwrap();
-        let ftokens = wallet.get_ftokens().unwrap();
-        let balance_0 = *ftokens.first().unwrap().balances.get(&0).unwrap();
-        let balance_1 = *ftokens.first().unwrap().balances.get(&1).unwrap();
-
         let account_0 = data.get_account(0).unwrap();
         let account_1 = data.get_account(1).unwrap();
+        let ftokens = wallet.get_ftokens().unwrap();
+        let balance_0 = ftokens.first().unwrap().balances.get(&account_0.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_1 = ftokens.first().unwrap().balances.get(&account_1.addr.to_hash()).copied().unwrap_or(U256::ZERO);
         assert_eq!(account_0.addr.auto_format(), tron_addresses::ADDR_0);
 
         let (sender_idx, sender, recipient, sender_balance) =

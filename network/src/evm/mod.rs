@@ -327,21 +327,13 @@ impl EvmOperations for NetworkProvider {
                 Address::Secp256k1Sha256(_) => {
                     let balance =
                         process_zil_balance_response(response, account, tokens[*token_idx].native);
-
-                    if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
-                    {
-                        tokens[*token_idx]
-                            .balances
-                            .insert(account_index, U256::from(balance));
-                    }
+                    tokens[*token_idx]
+                        .balances
+                        .insert(account.to_hash(), U256::from(balance));
                 }
                 Address::Secp256k1Keccak256(_) | Address::Secp256k1Tron(_) => {
                     let balance = process_eth_balance_response(response)?;
-
-                    if let Some(account_index) = accounts.iter().position(|&addr| addr == *account)
-                    {
-                        tokens[*token_idx].balances.insert(account_index, balance);
-                    }
+                    tokens[*token_idx].balances.insert(account.to_hash(), balance);
                 }
                 _ => {}
             }
@@ -378,12 +370,7 @@ impl EvmOperations for NetworkProvider {
                 for (i, (_, req_type)) in requests.iter().enumerate().skip(1) {
                     if let RequestType::Balance(account) = req_type {
                         let balance = process_zil_balance_response(&responses[i], account, false);
-
-                        if let Some(account_index) =
-                            accounts.iter().position(|&addr| addr == *account)
-                        {
-                            balances.insert(account_index, U256::from(balance));
-                        }
+                        balances.insert(account.to_hash(), U256::from(balance));
                     }
                 }
 
@@ -427,12 +414,7 @@ impl EvmOperations for NetworkProvider {
                 for ((_, req_type), response) in requests.iter().zip(responses.iter()).skip(3) {
                     if let RequestType::Balance(account) = req_type {
                         let balance = process_eth_balance_response(response)?;
-
-                        if let Some(account_index) =
-                            accounts.iter().position(|&addr| addr == *account)
-                        {
-                            balances.insert(account_index, balance);
-                        }
+                        balances.insert(account.to_hash(), balance);
                     }
                 }
 

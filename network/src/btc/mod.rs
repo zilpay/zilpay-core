@@ -403,7 +403,7 @@ impl BtcOperations for NetworkProvider {
 
         for token in tokens.iter_mut() {
             if token.native {
-                for (account_idx, balance) in balances.iter().enumerate() {
+                for (account, balance) in accounts.iter().zip(balances.iter()) {
                     let confirmed = balance.confirmed;
                     let unconfirmed = if balance.unconfirmed < 0 {
                         0u64
@@ -413,7 +413,7 @@ impl BtcOperations for NetworkProvider {
                     let total_balance = confirmed + unconfirmed;
                     token
                         .balances
-                        .insert(account_idx, U256::from(total_balance));
+                        .insert(account.to_hash(), U256::from(total_balance));
                 }
             }
         }
@@ -471,7 +471,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(btc_token.balances.contains_key(&0));
+        assert!(btc_token.balances.contains_key(&addr.to_hash()));
     }
 
     #[tokio::test]

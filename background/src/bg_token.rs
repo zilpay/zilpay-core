@@ -336,7 +336,6 @@ impl TokensManagement for Background {
             return Ok(());
         }
 
-        let sel_idx = data.selected_account;
         let selected_account = data.get_selected_account()?;
         let addresses = vec![&selected_account.addr];
         let provider = self.get_provider(data.chain_hash)?;
@@ -348,15 +347,6 @@ impl TokensManagement for Background {
         provider
             .update_balances(matching_tokens, &addresses)
             .await?;
-
-        // update_balances keys by slice position; remap from 0 to the real account index.
-        if sel_idx != 0 {
-            for token in ftokens.iter_mut() {
-                if let Some(balance) = token.balances.remove(&0) {
-                    token.balances.insert(sel_idx, balance);
-                }
-            }
-        }
 
         w.save_ftokens(&ftokens)?;
 
@@ -493,8 +483,12 @@ mod tests_background_tokens {
         assert!(!meta.default);
         assert!(!meta.native);
 
-        assert!(meta.balances.contains_key(&0));
-        assert_eq!(meta.balances.get(&0).unwrap().to::<usize>(), 0);
+        let account_key = {
+            let data = bg.wallets[0].get_wallet_data().unwrap();
+            data.get_accounts().unwrap()[0].addr.to_hash()
+        };
+        assert!(meta.balances.contains_key(&account_key));
+        assert_eq!(meta.balances.get(&account_key).unwrap().to::<usize>(), 0);
 
         bg.wallets.first_mut().unwrap().add_ftoken(meta).unwrap();
 
@@ -552,18 +546,34 @@ mod tests_background_tokens {
         let meta = bg.fetch_ftoken_meta(0, token_addr).await.unwrap();
 
         bg.wallets.first_mut().unwrap().add_ftoken(meta).unwrap();
+
+        {
+            let wallet = bg.wallets.first_mut().unwrap();
+            let mut ftokens = wallet.get_ftokens().unwrap();
+            for token in ftokens.iter_mut() {
+                token.balances.clear();
+            }
+            wallet.save_ftokens(&ftokens).unwrap();
+        }
+
         bg.sync_ftokens_balances(0).await.unwrap();
 
         let ftokens = bg.wallets[0].get_ftokens().unwrap();
 
-        for token in ftokens {
-            assert!(token.balances.contains_key(&0));
-            assert!(token.balances.contains_key(&1));
-            assert!(token.balances.contains_key(&2));
-            assert!(token.balances.contains_key(&3));
-            assert!(token.balances.contains_key(&4));
-            assert!(token.balances.contains_key(&5));
-            assert!(token.balances.contains_key(&6));
+        dbg!(&ftokens);
+
+        let selected_key = {
+            let data = bg.wallets[0].get_wallet_data().unwrap();
+            data.get_selected_account().unwrap().addr.to_hash()
+        };
+
+        for token in &ftokens {
+            assert!(
+                token.balances.contains_key(&selected_key),
+                "token {} missing balance for selected account (key {})",
+                token.symbol,
+                selected_key
+            );
         }
     }
 
@@ -703,8 +713,8 @@ mod tests_background_tokens {
         assert!(btc_token.native, "BTC token should be native");
         assert_eq!(btc_token.symbol, "BTC", "Token symbol should be BTC");
 
-        let balance_0 = btc_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
-        let balance_1 = btc_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
+        let balance_0 = btc_token.balances.get(&account.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_1 = btc_token.balances.get(&account_1.addr.to_hash()).copied().unwrap_or(U256::ZERO);
 
         let provider = bg.get_provider(net_config.hash()).unwrap();
 
@@ -929,8 +939,8 @@ mod tests_background_tokens {
         assert!(scilla_token.native, "ZIL token should be native");
         assert_eq!(scilla_token.symbol, "ZIL", "Token symbol should be BTC");
 
-        let balance_0 = scilla_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
-        let balance_1 = scilla_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
+        let balance_0 = scilla_token.balances.get(&account.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_1 = scilla_token.balances.get(&account_1.addr.to_hash()).copied().unwrap_or(U256::ZERO);
 
         let (from_index, from_account, to_account, amount) = if balance_0 > U256::ZERO {
             (0, account, account_1, balance_0)
@@ -1063,8 +1073,8 @@ mod tests_background_tokens {
 
         let ftokens = wallet.get_ftokens().unwrap();
         let eth_token = ftokens.first().unwrap();
-        let balance_0 = eth_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
-        let balance_1 = eth_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
+        let balance_0 = eth_token.balances.get(&account_0.addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_1 = eth_token.balances.get(&account_1.addr.to_hash()).copied().unwrap_or(U256::ZERO);
 
         let (from_index, from_account, to_account, amount) = if balance_0 > balance_1 {
             (0, account_0, account_1, balance_0)
@@ -1136,7 +1146,7 @@ mod tests_background_tokens {
                 let wallet = bg.get_wallet_by_index(0).unwrap();
                 let ftokens = wallet.get_ftokens().unwrap();
                 let eth_token = ftokens.first().unwrap();
-                let _final_balance = *eth_token.balances.get(&from_index).unwrap();
+                let _final_balance = eth_token.balances.get(&from_account.addr.to_hash()).copied().unwrap_or(U256::ZERO);
 
                 // assert_eq!(final_balance, U256::ZERO);
             }
@@ -1190,7 +1200,7 @@ mod tests_background_tokens {
         assert_eq!(btt_meta.chain_hash, net_config.hash());
         assert!(!btt_meta.native);
         assert!(!btt_meta.default);
-        assert!(btt_meta.balances.contains_key(&0));
+        assert!(btt_meta.balances.contains_key(&data.get_accounts().unwrap()[0].addr.to_hash()));
 
         bg.wallets
             .first_mut()
@@ -1208,7 +1218,7 @@ mod tests_background_tokens {
         assert_eq!(usdt_meta.chain_hash, net_config.hash());
         assert!(!usdt_meta.native);
         assert!(!usdt_meta.default);
-        assert!(usdt_meta.balances.contains_key(&0));
+        assert!(usdt_meta.balances.contains_key(&data.get_accounts().unwrap()[0].addr.to_hash()));
 
         bg.wallets
             .first_mut()
@@ -1292,9 +1302,9 @@ mod tests_background_tokens {
         assert!(sol_token.native);
         assert_eq!(sol_token.symbol, "SOL");
 
-        let balance_0 = sol_token.balances.get(&0).copied().unwrap_or(U256::ZERO);
-        let balance_1 = sol_token.balances.get(&1).copied().unwrap_or(U256::ZERO);
-        let balance_2 = sol_token.balances.get(&2).copied().unwrap_or(U256::ZERO);
+        let balance_0 = sol_token.balances.get(&accs[0].addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_1 = sol_token.balances.get(&accs[1].addr.to_hash()).copied().unwrap_or(U256::ZERO);
+        let balance_2 = sol_token.balances.get(&accs[2].addr.to_hash()).copied().unwrap_or(U256::ZERO);
         dbg!(balance_0, balance_1, balance_2);
 
         let (from_account, to_account) = if balance_1 > U256::ZERO {

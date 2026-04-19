@@ -328,7 +328,7 @@ impl SolanaOperations for NetworkProvider {
             let mut payloads: Vec<Value> = Vec::new();
             let mut acc_indices: Vec<usize> = Vec::new();
 
-            for (acc_idx, account) in accounts.iter().enumerate() {
+            for account in accounts.iter() {
                 let Address::Ed25519Solana(pubkey) = account else {
                     continue;
                 };
@@ -336,13 +336,13 @@ impl SolanaOperations for NetworkProvider {
 
                 if token.native {
                     payloads.push(build_get_balance_req(&address_b58));
-                    acc_indices.push(acc_idx);
+                    acc_indices.push(account.to_hash());
                 } else if let Address::Ed25519Solana(mint) = &token.addr {
                     payloads.push(build_get_token_accounts_req(
                         &address_b58,
                         &mint.to_string(),
                     ));
-                    acc_indices.push(acc_idx);
+                    acc_indices.push(account.to_hash());
                 }
             }
 
@@ -427,12 +427,13 @@ impl SolanaOperations for NetworkProvider {
 
         let mut balances = HashMap::new();
         for &acc_idx in &valid_accounts {
-            if let Address::Ed25519Solana(pubkey) = &accounts[acc_idx] {
+            let account = accounts[acc_idx];
+            if let Address::Ed25519Solana(pubkey) = account {
                 let bal_res: ResultRes<Value> = provider
                     .req(build_get_token_accounts_req(&pubkey.to_string(), &mint_b58))
                     .await
                     .map_err(NetworkErrors::Request)?;
-                balances.insert(acc_idx, parse_spl_balance(&bal_res));
+                balances.insert(account.to_hash(), parse_spl_balance(&bal_res));
             }
         }
 
@@ -609,7 +610,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(token.balances.contains_key(&0));
+        assert!(token.balances.contains_key(&zero_account.to_hash()));
     }
 
     #[tokio::test]
@@ -691,7 +692,7 @@ mod tests {
             .await
             .unwrap();
 
-        let balance = token.balances.get(&0).unwrap();
+        let balance = token.balances.get(&rich_account.to_hash()).unwrap();
         dbg!(balance);
         assert!(
             *balance > U256::from(0),
@@ -719,7 +720,7 @@ mod tests {
             .await
             .unwrap();
 
-        let balance = token.balances.get(&0).unwrap();
+        let balance = token.balances.get(&zero_account.to_hash()).unwrap();
         dbg!(balance);
         assert_eq!(
             *balance,
@@ -743,8 +744,8 @@ mod tests {
             .await
             .unwrap();
 
-        let rich_balance = token.balances.get(&0).unwrap();
-        let zero_balance = token.balances.get(&1).unwrap();
+        let rich_balance = token.balances.get(&rich_account.to_hash()).unwrap();
+        let zero_balance = token.balances.get(&zero_account.to_hash()).unwrap();
         dbg!(rich_balance, zero_balance);
 
         assert!(*rich_balance > U256::from(0));
@@ -934,7 +935,7 @@ mod tests {
             .await
             .unwrap();
 
-        let balance = token.balances.get(&0).unwrap();
+        let balance = token.balances.get(&zero_account.to_hash()).unwrap();
         dbg!(balance);
         assert_eq!(
             *balance,
@@ -960,7 +961,7 @@ mod tests {
             .await
             .unwrap();
 
-        let balance = token.balances.get(&0).unwrap();
+        let balance = token.balances.get(&rich_account.to_hash()).unwrap();
         dbg!(balance);
         assert!(
             *balance > U256::ZERO,
@@ -1003,8 +1004,8 @@ mod tests {
         dbg!(&ftoken.decimals);
         dbg!(&ftoken.name);
         dbg!(&ftoken.symbol);
-        dbg!(ftoken.balances.get(&0));
-        dbg!(ftoken.balances.get(&1));
+        dbg!(ftoken.balances.get(&rich_account.to_hash()));
+        dbg!(ftoken.balances.get(&zero_account.to_hash()));
         assert_eq!(ftoken.decimals, 6);
         assert_eq!(ftoken.name, "USD Coin");
         assert_eq!(ftoken.symbol, "USDC");
@@ -1014,11 +1015,11 @@ mod tests {
             Some("https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/logo.png")
         );
         assert!(
-            *ftoken.balances.get(&0).unwrap() > U256::ZERO,
+            *ftoken.balances.get(&rich_account.to_hash()).unwrap() > U256::ZERO,
             "Rich address should have USDC"
         );
         assert_eq!(
-            *ftoken.balances.get(&1).unwrap(),
+            *ftoken.balances.get(&zero_account.to_hash()).unwrap(),
             U256::ZERO,
             "Zero address should have no USDC"
         );

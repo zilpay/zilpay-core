@@ -235,8 +235,8 @@ mod tests_network {
         ];
         let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
-        assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
-        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&account[0].to_hash()).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(&account[1].to_hash()).unwrap() == U256::from(0));
 
         assert_eq!(&ftoken.name, "PancakeSwap Token");
         assert_eq!(&ftoken.symbol, "Cake");
@@ -256,8 +256,8 @@ mod tests_network {
         ];
         let ftoken = provider.ftoken_meta(token_addr, &account).await.unwrap();
 
-        assert!(*ftoken.balances.get(&0).unwrap() > U256::from(0));
-        assert!(*ftoken.balances.get(&1).unwrap() == U256::from(0));
+        assert!(*ftoken.balances.get(&account[0].to_hash()).unwrap() > U256::from(0));
+        assert!(*ftoken.balances.get(&account[1].to_hash()).unwrap() == U256::from(0));
 
         assert_eq!(&ftoken.name, "ZilPay wallet");
         assert_eq!(&ftoken.symbol, "ZLP");
