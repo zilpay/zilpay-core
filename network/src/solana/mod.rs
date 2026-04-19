@@ -920,29 +920,56 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_solana_update_balances_spl_zero_address() {
-        let conf = gen_sol_devnet_conf();
+    async fn test_solana_update_balances() {
+        const BINANCE_WALLET: &str = "DT78gNBH7enTRrAFcag4PAuQbSeemstmtj888w8pkvdf";
+
+        let conf = gen_sol_mainnet_conf();
         let provider = NetworkProvider::new(conf.clone());
-        let mut token = gen_sol_spl_token(usdc_mint_bytes(), conf.hash());
-        let zero_account = Address::from_solana_address(DEVNET_ZERO_ADDRESS).unwrap();
+        let binance_account = Address::from_solana_address(BINANCE_WALLET).unwrap();
+
+        let mut sol = {
+            let mut t = gen_sol_token();
+            t.chain_hash = conf.hash();
+            t
+        };
+
+        let mint = Address::Ed25519Solana(mainnet_usdc_mint_bytes().into());
+        let mut usdc = provider.solana_ftoken_meta(mint, &[]).await.unwrap();
+
+        assert_eq!(usdc.name, "USD Coin");
+        assert_eq!(usdc.symbol, "USDC");
+        assert_eq!(usdc.decimals, 6);
         println!(
-            "Querying SPL USDC balance for zero-balance address: {}",
-            DEVNET_ZERO_ADDRESS
+            "Token meta: {} ({}) decimals={}",
+            usdc.name, usdc.symbol, usdc.decimals
         );
 
         provider
-            .solana_update_balances(vec![&mut token], &[&zero_account])
+            .solana_update_balances(vec![&mut sol, &mut usdc], &[&binance_account])
             .await
             .unwrap();
 
-        let balance = token.balances.get(&zero_account.to_hash()).unwrap();
-        dbg!(balance);
-        assert_eq!(
-            *balance,
-            U256::ZERO,
-            "Empty address should have zero SPL balance"
+        let sol_balance = sol.balances[&binance_account.to_hash()];
+        let usdc_balance = usdc.balances[&binance_account.to_hash()];
+
+        assert!(
+            sol_balance > U256::ZERO,
+            "Binance wallet should have native SOL"
         );
-        println!("SPL USDC balance confirmed: 0");
+        assert!(
+            usdc.balances.contains_key(&binance_account.to_hash()),
+            "USDC balance entry should exist for Binance wallet"
+        );
+        println!(
+            "Binance SOL: {} lamports ({} SOL)",
+            sol_balance,
+            sol_balance / U256::from(1_000_000_000u64)
+        );
+        println!(
+            "Binance USDC: {} raw units ({} USDC)",
+            usdc_balance,
+            usdc_balance / U256::from(1_000_000u64)
+        );
     }
 
     #[tokio::test]
@@ -962,7 +989,7 @@ mod tests {
             .unwrap();
 
         let balance = token.balances.get(&rich_account.to_hash()).unwrap();
-        dbg!(balance);
+        dbg!(&token);
         assert!(
             *balance > U256::ZERO,
             "Rich address should have USDC balance"

@@ -358,9 +358,6 @@ impl Address {
         }
     }
 
-    /// Returns a stable `usize` key derived from the raw address bytes via XOR-fold.
-    /// Chunk size equals `size_of::<usize>()`, so it produces the native word width
-    /// on both 32-bit and 64-bit targets with no truncation.
     pub fn to_hash(&self) -> usize {
         let bytes = self.addr_bytes();
         let chunk = std::mem::size_of::<usize>();
